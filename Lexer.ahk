@@ -95,6 +95,24 @@ class Lexer {
 		
 		return [this.TokenStart, this.Index]
 	}
+	AdvanceThroughNumber() {
+		while (IsDigit(this.Peek())) {
+			this.Advance()
+		}
+		
+		if (this.NextMatches(".")) {
+			while (IsDigit(this.Peek())) {
+				this.Advance()
+			}
+			
+			Type := Tokens.DOUBLE
+		}
+		else {
+			Type := Tokens.INTEGER
+		}
+		
+		this.AddToken(Type, this.SubStr(this.TokenStart, this.Index) + 0)
+	}
 	
 	
 	Start() {
@@ -163,26 +181,12 @@ class Lexer {
 								this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
 							}
 							Default: {
-								while (IsDigit(this.Peek())) {
-									this.Advance()
-								}
-								
-								if (this.NextMatches(".")) {
-									while (IsDigit(this.Peek())) {
-										this.Advance()
-									}
-									
-									Type := Tokens.DOUBLE
-								}
-								else {
-									Type := Tokens.INTEGER
-								}
-								
-								this.AddToken(Type, this.SubStr(this.TokenStart, this.Index) + 0)
+								this.AdvanceThroughNumber()
 							}
 						}
-						
-						
+					}
+					else {
+						this.AdvanceThroughNumber()
 					}
 				}
 			}

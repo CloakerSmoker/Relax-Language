@@ -3,5 +3,5 @@
 #Include Constants.ahk
 #Include Lexer.ahk
 
-Test := new Lexer("0xFF")
+Test := new Lexer("19.89")
 Test.Start()
