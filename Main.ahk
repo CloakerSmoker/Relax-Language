@@ -3,7 +3,7 @@
 #Include Constants.ahk
 #Include Lexer.ahk
 
-Test := new Lexer("19.89`nABC + 9")
+Test := new Lexer("19.89`nABC + 9`ndefine abc(int a) /*ab dasda*/ {hello world}")
 t := Test.Start()
 
 s := ""

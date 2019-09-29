@@ -94,8 +94,13 @@ class Enum {
 	
 		return this.Init(Key)
 	}
+	HasKey(Key) {
+		return this[Key] != ""
+	}
 	Init(Key) {
 		if !(this.InitDone) {
+			this.Values := {}
+			
 			for k, Line in StrSplit(this.Options, "`n", "`r") {
 				TrimmedLine := LTrim(Line)
 				
@@ -103,15 +108,15 @@ class Enum {
 					Continue
 				}
 				
-				this[TrimmedLine] := k
-				this[k] := TrimmedLine
+				this.Values[TrimmedLine] := k
+				this.Values[k] := TrimmedLine
 			}
 			
 			this.InitDone := True
 		}
 	
-		if (this.HasKey(Key)) {
-			return this[Key]
+		if (this.Values.HasKey(Key)) {
+			return this.Values[Key]
 		}
 		
 		return

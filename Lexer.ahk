@@ -9,6 +9,9 @@
 		if (this.Type = Tokens.KEYWORD) {
 			return "KEYWORD: " Keywords[this.Value]
 		}
+		else if (this.Type = Tokens.OPERATOR) {
+			return "OPERATOR: " Tokens[this.Value]
+		}
 		
 		return Tokens[this.Type] ": " this.Value
 	}
@@ -140,11 +143,12 @@ class Lexer {
 					FoundToken := CharacterTokens.Operators[NextCharacter]["NONE"]
 				}
 				
-				this.AddToken(FoundToken)
+				this.AddToken(Tokens.OPERATOR, FoundToken)
 				Continue
 			}
 			else if (CharacterTokens.Misc.HasKey(NextCharacter)) {
 				this.AddToken(CharacterTokens.Misc[NextCharacter])
+				Continue
 			}
 			
 			Switch (NextCharacter) {
@@ -206,7 +210,7 @@ class Lexer {
 						this.Advance()
 					}
 					
-					IdentifierText := this.SubStr(this.Start, this.Index)
+					IdentifierText := this.SubStr(this.TokenStart, this.Index)
 					
 					if (Keywords.HasKey(IdentifierText)) {
 						this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])

@@ -21,6 +21,10 @@
 		POUND
 		NEWLINE
 		
+		
+		
+		OPERATOR
+		
 		BANG
 		BANG_EQUAL
 		
