@@ -99,3 +99,48 @@ class Keywords extends Enum {
 		define
 	)"
 }
+
+
+
+class ASTNode {
+	__New(Params*) {
+		if (Params.Count() != this.Parameters.Count()) {
+			Msgbox, % "Not enough parameters passed to " this.__Class ".__New, " Params.Count() " != " this.Parameters.Count()
+		}
+	
+		for k, v in this.Parameters {
+			this[v] := Params[k]
+		}
+		
+		this.Type := ASTNodeTypes[StrSplit(this.__Class, ".")[3]]
+	}
+}
+
+class ASTNodeTypes extends Enum {
+	static Options := "
+	(
+		DEFINE
+		EXPRESSION
+		
+		IDENTIFER
+		GROUPING
+	)"
+}
+
+class ASTNodes {
+	class Statements {
+		class Define extends ASTNode {
+			static Parameters := ["Name", "ReturnType", "Params", "Body"]
+		}
+	}
+	
+	class Expressions {
+		class Identifier extends ASTNode {
+			static Parameters := ["Name"]
+		}
+		
+		class Grouping extends ASTNode {
+			static Parameters := ["Expressions"]
+		}
+	}
+}
