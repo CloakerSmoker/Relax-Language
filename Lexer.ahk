@@ -82,11 +82,18 @@ class Lexer {
 		Start := this.Index
 		
 		loop {
-			this.Index++
+			this.Advance()
 			; TODO - This doesn't allow for nested things, like nested comments
 		} until (this.SubStr(this.Index - EndLength, this.Index) = End || this.IsAtEnd())
 		
 		return [Start, this.Index - EndLength]
+	}
+	AdvanceThroughFilter(FilterFunction) {
+		while (FilterFunction.Call(this.Peek())) {
+			this.Advance()
+		}
+		
+		return [this.TokenStart, this.Index]
 	}
 	
 	
@@ -144,6 +151,31 @@ class Lexer {
 				}
 				Case CW.IsWhiteSpace(NextCharacter): {
 					; Ignore whitespace
+				}
+				Case CW.IsDigit(NextCharacter): {
+					if (NextCharacter = 0) {
+						Next := this.Next()
+					
+						Switch (Next) {
+							Case "x": {
+								NumberBounds := this.AdvanceThroughFilter(Func("IsHexadecimal"))
+								HexNumber := this.SubStr(NumberBounds[1], NumberBounds[2])
+								this.AddToken(Tokens.INTEGER, Conversions.HexToInt(HexNumber))
+							}
+							Case "b": {
+							
+							}
+							Case "o": {
+							
+							}
+							Case ".": {
+							
+							}
+							Default: {
+							
+							}
+						}
+					}
 				}
 			}
 		} until (this.IsAtEnd())

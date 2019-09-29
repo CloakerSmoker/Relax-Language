@@ -3,5 +3,5 @@
 #Include Constants.ahk
 #Include Lexer.ahk
 
-Test := new Lexer(A_Quote "abc" A_Quote)
+Test := new Lexer("0xFF")
 Test.Start()
