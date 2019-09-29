@@ -15,3 +15,18 @@ MsgBox, % s
 
 Pest := new Parser(Test)
 Pest.Start()
+
+
+
+/*
+Some example code
+
+define Int32 Main(Int32 ArgC, Pointer ArgV) {
+	Int64 Example, Example2 := 0
+	String Text := Format"Hello, {Example}"
+	Print(Text)
+	Text := (String(Example) "hello")
+	return Example2
+}
+
+*/

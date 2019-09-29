@@ -59,10 +59,10 @@
 			return this.ParseKeywordStatement()
 		}
 		else if (Next.Type = Tokens.IDENIFIER && this.Peek(2).Type = Tokens.COLON) {
-			return this.ParseDeclaration()
+			return this.ParseDeclaration() ; TODO - Implement this
 		}
 		else {
-			return this.ParseExpressionStatement()
+			return this.ParseExpressionStatement() ; TODO - Implement this
 		}
 	}
 	ParseKeywordStatement() {
@@ -82,12 +82,16 @@
 					MsgBox, % "Invalid function definition name type " ASTNodeTypes[Name.Type]
 				}
 				
-				Params := this.ParsePrimary()
+				Params := this.ParsePrimary() ; TODO - This is supposed to return a grouping, but since
+				; ParseExpression does not exist, it returns a broken one
 				
 				if (Params.Type != ASTNodeTypes.GROUPING) {
 					MsgBox, % "Invalid function definition parameter group type " ASTNodeTypes[Params.Type]
 				}
+				
+				; TODO - Parse the body of the definition
 			}
+			; TODO - Add the rest of the keywords
 		}
 	}
 	
