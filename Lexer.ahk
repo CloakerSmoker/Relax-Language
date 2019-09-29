@@ -4,6 +4,14 @@
 		this.Value := Value
 		this.Context := Context
 	}
+	
+	Stringify() {
+		if (this.Type = Tokens.KEYWORD) {
+			return "KEYWORD: " Keywords[this.Value]
+		}
+		
+		return Tokens[this.Type] ": " this.Value
+	}
 }
 class Context {
 	__New(Start, End) {
@@ -117,6 +125,7 @@ class Lexer {
 	
 	Start() {
 		loop {
+			this.TokenStart := this.Index
 			NextCharacter := this.Next()
 			
 			if (CharacterTokens.Operators.HasKey(NextCharacter)) {
@@ -167,6 +176,9 @@ class Lexer {
 					
 					this.AddToken(Tokens.String, this.SubStr(StringBounds[1], StringBounds[2]))
 				}
+				Case "`n": {
+					this.AddToken(Tokens.NEWLINE, "\n")
+				}
 				Case CW.IsWhiteSpace(NextCharacter): {
 					; Ignore whitespace
 				}
@@ -189,7 +201,26 @@ class Lexer {
 						this.AdvanceThroughNumber()
 					}
 				}
+				Case CW.IsAlpha(NextCharacter): {
+					while (IsAlphaNumeric(this.Peek())) {
+						this.Advance()
+					}
+					
+					IdentifierText := this.SubStr(this.Start, this.Index)
+					
+					if (Keywords.HasKey(IdentifierText)) {
+						this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])
+					}
+					else {
+						this.AddToken(Tokens.IDENTIFIER, IdentifierText)
+					}
+				}
+				Default: {
+					MsgBox, % "Unexpected character '" NextCharacter "' at position " this.Index
+				}
 			}
 		} until (this.IsAtEnd())
+		
+		return this.Tokens
 	}
 }

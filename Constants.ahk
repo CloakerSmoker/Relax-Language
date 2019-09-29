@@ -19,7 +19,7 @@
 		
 		COMMA
 		POUND
-
+		NEWLINE
 		
 		BANG
 		BANG_EQUAL
@@ -87,4 +87,11 @@ class CharacterTokens {
 					,",": Tokens.COMMA
 					,"#": Tokens.POUND
 					,"~": Tokens.BITWISE_NOT}
+}
+
+class Keywords extends Enum {
+	static Options := "
+	(
+		define
+	)"
 }
