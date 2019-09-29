@@ -119,6 +119,10 @@ class Enum {
 }
 
 class Conversions {
+	static x := {"Filter": Func("IsHexadecimal"), "Converter": Conversions.HexToInt}
+	static b := {"Filter": Func("IsBinary"), "Converter": Conversions.BinToInt}
+	static o := {"Filter": Func("IsOctal"), "Converter": Conversions.OctToInt}
+
 	HexToInt(HexString) {
 		if !(SubStr(HexString, 1, 2) = "0x") {
 			Throw, Exception("HexToInt can not convert non-hex (" HexString ") to int")

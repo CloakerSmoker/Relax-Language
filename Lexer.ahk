@@ -157,24 +157,32 @@ class Lexer {
 						Next := this.Next()
 					
 						Switch (Next) {
-							Case "x": {
-								NumberBounds := this.AdvanceThroughFilter(Func("IsHexadecimal"))
-								HexNumber := this.SubStr(NumberBounds[1], NumberBounds[2])
-								this.AddToken(Tokens.INTEGER, Conversions.HexToInt(HexNumber))
-							}
-							Case "b": {
-							
-							}
-							Case "o": {
-							
-							}
-							Case ".": {
-							
+							Case "x", "b", "o": {
+								NumberBounds := this.AdvanceThroughFilter(Conversions[Next].Filter)
+								Number := this.SubStr(NumberBounds[1], NumberBounds[2])
+								this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
 							}
 							Default: {
-							
+								while (IsDigit(this.Peek())) {
+									this.Advance()
+								}
+								
+								if (this.NextMatches(".")) {
+									while (IsDigit(this.Peek())) {
+										this.Advance()
+									}
+									
+									Type := Tokens.DOUBLE
+								}
+								else {
+									Type := Tokens.INTEGER
+								}
+								
+								this.AddToken(Type, this.SubStr(this.TokenStart, this.Index) + 0)
 							}
 						}
+						
+						
 					}
 				}
 			}
