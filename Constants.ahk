@@ -20,7 +20,7 @@
 		COMMA
 		POUND
 		NEWLINE
-		
+		EOF
 		
 		
 		OPERATOR

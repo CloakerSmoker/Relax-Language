@@ -225,6 +225,8 @@ class Lexer {
 			}
 		} until (this.IsAtEnd())
 		
+		this.AddToken(Tokens.EOF, "EOF")
+		
 		return this.Tokens
 	}
 }
