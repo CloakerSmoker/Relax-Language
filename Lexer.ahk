@@ -39,6 +39,9 @@ class Lexer {
 	Next() {
 		return this.Code[++this.Index]
 	}
+	Previous() {
+		return this.Code[this.Index]
+	}
 	Peek(Offset := 1) {
 		if (this.Index + Offset > this.CodeLength) {
 			return
@@ -80,7 +83,8 @@ class Lexer {
 		
 		loop {
 			this.Index++
-		} until (this.SubStr(this.Index - 2, this.Index - 2 + EndLength) = End || this.IsAtEnd())
+			; TODO - This doesn't allow for nested things, like nested comments
+		} until (this.SubStr(this.Index - EndLength, this.Index) = End || this.IsAtEnd())
 		
 		return [Start, this.Index - EndLength]
 	}
@@ -127,8 +131,19 @@ class Lexer {
 						}
 					}
 				}
-				Case CaseWrapper.IsWhiteSpace(NextCharacter): {
+				Case A_Quote: {
+					this.Index -= 1
+					StringBounds := this.AdvanceThrough(A_Quote, A_Quote)
 					
+					if !(this.Previous() = A_Quote) {
+						MsgBox, % "Unterminated string starting at character " this.TokenStart
+						return
+					}
+					
+					this.AddToken(Tokens.String, this.SubStr(StringBounds[1], StringBounds[2]))
+				}
+				Case CW.IsWhiteSpace(NextCharacter): {
+					; Ignore whitespace
 				}
 			}
 		} until (this.IsAtEnd())

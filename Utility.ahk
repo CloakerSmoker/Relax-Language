@@ -72,9 +72,10 @@ class _CaseWrapper {
 	}
 }
 
-class CaseWrapper extends _CaseWrapper{
-	
-
+class CaseWrapper extends _CaseWrapper {
+}
+; Shorter name for shorter cases
+class CW extends _CaseWrapper {
 }
 
 class Enum {
