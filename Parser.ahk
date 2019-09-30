@@ -70,31 +70,68 @@
 		
 		switch (NextKeyword) {
 			case Keywords.DEFINE: {
-				ReturnType := this.ParsePrimary()
-				
-				if (ReturnType.Type != ASTNodeTypes.IDENIFIER) {
-					MsgBox, % "Invalid function definition return type " ASTNodeTypes[ReturnType.Type]
-				}
-				
-				Name := this.ParsePrimary()
-				
-				if (Name.Type != ASTNodeTypes.IDENIFIER) {
-					MsgBox, % "Invalid function definition name type " ASTNodeTypes[Name.Type]
-				}
-				
-				Params := this.ParsePrimary() ; TODO - This is supposed to return a grouping, but since
-				; ParseExpression does not exist, it returns a broken one
-				
-				if (Params.Type != ASTNodeTypes.GROUPING) {
-					MsgBox, % "Invalid function definition parameter group type " ASTNodeTypes[Params.Type]
-				}
-				
-				; TODO - Parse the body of the definition
+				this.ParseDefine()
 			}
 			; TODO - Add the rest of the keywords
 		}
 	}
+	ParseDefine() {
+		ReturnType := this.ParsePrimary()
+		
+		if (ReturnType.Type != ASTNodeTypes.IDENIFIER) {
+			MsgBox, % "Invalid function definition return type " ASTNodeTypes[ReturnType.Type]
+		}
+		
+		Name := this.ParsePrimary()
+		
+		if (Name.Type != ASTNodeTypes.IDENIFIER) {
+			MsgBox, % "Invalid function definition name type " ASTNodeTypes[Name.Type]
+		}
+		
+		Params := this.ParsePrimary() ; TODO - This is supposed to return a grouping, but since
+		; ParseExpression does not exist, it returns a broken one
+		
+		if (Params.Type != ASTNodeTypes.GROUPING) {
+			MsgBox, % "Invalid function definition parameter group type " ASTNodeTypes[Params.Type]
+		}
+		
+		; TODO - Parse the body of the definition
+		Body := this.ParseBlock()
+		
+		if (Body.Type != ASTNodeTypes.BLOCK) {
+			MsgBox, % "Invalid function definition body type " ASTNodeTypes[Params.Type]
+		}
+		
+		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
+	}
 	
+	
+	ParseExpression() {
+		return this.ParseAssignment()
+	}
+	ParseAssignment() {
+		Left := this.ParseEquality()
+		
+		if (this.NextMatches(Operators.Assignment*)) {
+			Operator := this.Previous()
+			
+			Right := this.ParseAssignment() 
+			
+			Left := new ASTNodes.Expressions.Assignment(Left, Operator, Right)
+		}
+		
+		return Left
+	}
+	ParseEquality() {
+		Left := this.ParseEquality()
+		
+		while (this.NextMatches(Operators.Equality)) {
+			Operator := this.Previous()
+		
+			Right := this.ParseEquality()
+		}
+	
+	}
 	
 	ParsePrimary() {
 		if (this.NextMatches(Tokens.IDENTIFIER)) {

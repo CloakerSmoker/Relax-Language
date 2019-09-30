@@ -93,6 +93,13 @@ class CharacterTokens {
 					,"~": Tokens.BITWISE_NOT}
 }
 
+class Operators {
+	static Assignment := [Tokens.COLON_EQUAL, Tokens.PLUS_EQUALS, Tokens.MINUS_EQUALS, Tokens.DOT_EQUALS, Tokens.TIMES_EQUALS]
+	static Equality   := [Tokens.BANG_EQUAL, Tokens.EQUAL, Tokens.EQUAL_EQUAL]
+	static Comparison := [Tokens.LESS, Tokens.LESS_EQUAL, Tokens.GREATER, Tokens.GREATER_EQUAL]
+}
+
+
 class Keywords extends Enum {
 	static Options := "
 	(
@@ -112,7 +119,8 @@ class ASTNode {
 			this[v] := Params[k]
 		}
 		
-		this.Type := ASTNodeTypes[StrSplit(this.__Class, ".")[3]]
+		this.Type := ASTNodeTypes[StrSplit(this.__Class, ".")[3]] ; Translates ASTNode.Expressions.Identifier into 
+		;  just 'Identifier', and then gets the enum value for 'Identifier'
 	}
 }
 
@@ -124,6 +132,7 @@ class ASTNodeTypes extends Enum {
 		
 		IDENTIFER
 		GROUPING
+		ASSIGNMENT
 	)"
 }
 
@@ -141,6 +150,10 @@ class ASTNodes {
 		
 		class Grouping extends ASTNode {
 			static Parameters := ["Expressions"]
+		}
+		
+		class Assignment extends ASTNode {
+			static Parameters := ["Left", "Operator", "Right"]
 		}
 	}
 }
