@@ -117,7 +117,7 @@
 			
 			Right := this.ParseAssignment() 
 			
-			Left := new ASTNodes.Expressions.Assignment(Left, Operator, Right)
+			Left := new ASTNodes.Expressions.Binary(Left, Operator, Right)
 		}
 		
 		return Left
@@ -125,12 +125,28 @@
 	ParseEquality() {
 		Left := this.ParseEquality()
 		
-		while (this.NextMatches(Operators.Equality)) {
+		while (this.NextMatches(Operators.Equality*)) {
 			Operator := this.Previous()
 		
 			Right := this.ParseEquality()
+			
+			Left := new ASTNodes.Expression.Binary(Left, Operator, Right)
 		}
 	
+		return Left
+	}
+	ParseComparison() {
+		Left := this.ParseConcat()
+		
+		if (this.NextMatches(Operators.Comparison*)) {
+			Operator := this.Previous()
+		
+			Right := this.ParseComparison()
+			
+			Left := new ASTNodes.Expression.Binary(Left, Operator, Right)
+		}
+	
+		return Left
 	}
 	
 	ParsePrimary() {

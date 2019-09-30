@@ -132,7 +132,7 @@ class ASTNodeTypes extends Enum {
 		
 		IDENTIFER
 		GROUPING
-		ASSIGNMENT
+		BINARY
 	)"
 }
 
@@ -152,7 +152,7 @@ class ASTNodes {
 			static Parameters := ["Expressions"]
 		}
 		
-		class Assignment extends ASTNode {
+		class Binary extends ASTNode {
 			static Parameters := ["Left", "Operator", "Right"]
 		}
 	}
