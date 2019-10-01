@@ -4,7 +4,7 @@
 #Include Lexer.ahk
 #Include Parser.ahk
 
-Test := new Lexer("define int32 myfunc() {}")
+Test := new Lexer("5 - (1 + 1)")
 t := Test.Start()
 
 s := ""
@@ -14,7 +14,7 @@ for k, v in t {
 MsgBox, % s
 
 Pest := new Parser(Test)
-Pest.Start()
+a := Pest.ParseExpression()
 
 
 

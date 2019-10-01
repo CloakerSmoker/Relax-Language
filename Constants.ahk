@@ -93,10 +93,56 @@ class CharacterTokens {
 					,"~": Tokens.BITWISE_NOT}
 }
 
+class OperatorClasses {
+	static Assignment := {"Precedence": 0
+						, "Associative": "Right"
+						, "Tokens": [Tokens.COLON_EQUAL, Tokens.PLUS_EQUALS, Tokens.MINUS_EQUALS, Tokens.DOT_EQUALS, Tokens.TIMES_EQUALS]}
+	
+	static Equality   := {"Precedence": 1
+						, "Associative": "Left"
+						, "Tokens": [Tokens.BANG_EQUAL, Tokens.EQUAL, Tokens.EQUAL_EQUAL]}
+						
+	static Comparison := {"Precedence": 2
+						, "Associative": "Right"
+						, "Tokens": [Tokens.LESS, Tokens.LESS_EQUAL, Tokens.GREATER, Tokens.GREATER_EQUAL]}
+						
+	static Concat	  := {"Precedence": 3
+						, "Associative": "Left"
+						, "Tokens": [Tokens.CONCAT]}
+						
+	static Addition	  := {"Precedence": 4
+						, "Associative": "Left"
+						, "Tokens": [Tokens.PLUS, Tokens.MINUS]}
+}
+
 class Operators {
-	static Assignment := [Tokens.COLON_EQUAL, Tokens.PLUS_EQUALS, Tokens.MINUS_EQUALS, Tokens.DOT_EQUALS, Tokens.TIMES_EQUALS]
-	static Equality   := [Tokens.BANG_EQUAL, Tokens.EQUAL, Tokens.EQUAL_EQUAL]
-	static Comparison := [Tokens.LESS, Tokens.LESS_EQUAL, Tokens.GREATER, Tokens.GREATER_EQUAL]
+	Precedence(Operator) {
+		for k, v in OperatorClasses {
+			for k, FoundOperator in v.Tokens {
+				if (Operator.Value = FoundOperator) {
+					return v
+				}
+			}
+		}
+	
+		MsgBox, % "Fuck off"
+	}
+
+	CheckPrecedence(FirstOperator, SecondOperator) {
+		OperatorOne := this.Precedence(FirstOperator)
+		OperatorTwo := this.Precedence(SecondOperator)
+	
+		if (OperatorOne.Associative = "Left" && (OperatorOne.Precedence = OperatorTwo.Precedence)) {
+			return 1
+		}
+		else if (OperatorOne.Precedence < OperatorTwo.Precedence) {
+			return 1
+		}
+		else {
+			return 0
+		}
+	}
+
 }
 
 
@@ -154,6 +200,14 @@ class ASTNodes {
 		
 		class Binary extends ASTNode {
 			static Parameters := ["Left", "Operator", "Right"]
+		}
+		
+		class IntegerLiteral extends ASTNode {
+			static Parameters := ["Value"]
+		}
+		
+		class DoubleLiteral extends ASTNode {
+			static Parameters := ["Value"]
 		}
 	}
 }

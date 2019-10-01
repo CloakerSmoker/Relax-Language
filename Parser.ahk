@@ -105,55 +105,102 @@
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
 	}
 	
-	
 	ParseExpression() {
-		return this.ParseAssignment()
+		return ExpressionParser := this.ExpressionParser(Tokens.NEWLINE)
 	}
-	ParseAssignment() {
-		Left := this.ParseEquality()
+	AddNode(OperandStack, Operators, Operator) {
+		Right := OperandStack.Pop()
+		Left := OperandStack.Pop()
 		
-		if (this.NextMatches(Operators.Assignment*)) {
-			Operator := this.Previous()
-			
-			Right := this.ParseAssignment() 
-			
-			Left := new ASTNodes.Expressions.Binary(Left, Operator, Right)
+		if !(Left && Right) {
+			MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
 		}
 		
-		return Left
+		OperandStack.Push(new ASTNodes.Expressions.Binary(Left, Operator, Right))
 	}
-	ParseEquality() {
-		Left := this.ParseEquality()
-		
-		while (this.NextMatches(Operators.Equality*)) {
-			Operator := this.Previous()
-		
-			Right := this.ParseEquality()
-			
-			Left := new ASTNodes.Expression.Binary(Left, Operator, Right)
-		}
 	
-		return Left
-	}
-	ParseComparison() {
-		Left := this.ParseConcat()
-		
-		if (this.NextMatches(Operators.Comparison*)) {
-			Operator := this.Previous()
-		
-			Right := this.ParseComparison()
-			
-			Left := new ASTNodes.Expression.Binary(Left, Operator, Right)
-		}
+	ExpressionParser(Terminator) {
+		OperandStack := []
+		OperatorStack := []
 	
-		return Left
+		while (this.Peek().Value != Terminator) {
+			Next := this.Next()
+		
+			Switch (Next.Type) {
+				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENIFIER: {
+					OperandStack.Push(Next)
+				}
+				Case Tokens.LEFT_PAREN: {
+					OperatorStack.Push(Next)
+				}
+				Case Tokens.RIGHT_PAREN: {
+					while (OperatorStack.Count()) {
+						NextOperator := OperatorStack.Pop()
+					
+						if (NextOperator.Type = Tokens.LEFT_PAREN) {
+							Continue, 2
+						}
+						else {
+							this.AddNode(OperandStack, OperatorStack, NextOperator)
+						}
+					}
+					
+					MsgBox, % "Unbalenced parens"
+				}
+				Case Tokens.OPERATOR: {
+					Operator := Next
+					
+					while (OperatorStack.Count() != 0) {
+						NextOperator := OperatorStack.Pop()
+						
+						if (NextOperator.Type = Tokens.OPERATOR && Operators.CheckPrecedence(Operator, NextOperator)) {
+							this.AddNode(OperandStack, OperatorStack, NextOperator)
+						}
+						else {
+							OperatorStack.Push(NextOperator)
+							Break
+						}
+					}
+					
+					OperatorStack.Push(Operator)
+				}
+				Default: {
+					Break
+				}
+			}
+		}
+		
+		while (OperatorStack.Count()) {
+			this.AddNode(OperandStack, OperatorStack, OperatorStack.Pop())
+		}
+		
+		return OperandStack
 	}
 	
 	ParsePrimary() {
-		if (this.NextMatches(Tokens.IDENTIFIER)) {
-			return new ASTNodes.Expressions.Identifier(this.Previous())
-		}
+		Next := this.Next()
 	
+		Switch (Next.Value) {
+			Case Tokens.IDENIFIER: {
+				return new ASTNodes.Expressions.Identifier(this.Previous())
+			}
+			Case Tokens.INTEGER: {
+				return new ASTNodes.Expressions.IntegerLiteral(this.Previous())
+			}
+			Case Tokens.DOUBLE: {
+				return new ASTNodes.Expressions.DoubleLiteral(this.Previous())
+			}
+			Case Tokens.LEFT_PAREN: {
+				this.Index--
+				return this.ParseGrouping()
+			}
+			Default: {
+				MsgBox, % "Unexpected token " Next.Context.Start "-" Next.Context.End
+			}
+		}
+	}
+	
+	ParseGrouping() {
 		if (this.NextMatches(Tokens.LEFT_PAREN)) {
 			Expressions := [this.ParseExpression()]
 			

@@ -3,6 +3,7 @@
 		this.Type := Type
 		this.Value := Value
 		this.Context := Context
+		this.HumanReadable := this.Stringify()
 	}
 	
 	Stringify() {
@@ -132,6 +133,8 @@ class Lexer {
 			NextCharacter := this.Next()
 			
 			if (CharacterTokens.Operators.HasKey(NextCharacter)) {
+				FoundToken := ""
+				
 				for OperatorPart, OperatorType in CharacterTokens.Operators[NextCharacter] {
 					if (this.NextMatches(OperatorPart)) {
 						FoundToken := OperatorType
