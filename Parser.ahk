@@ -106,12 +106,12 @@
 	}
 	
 	ParseExpression(Terminators*) {
-		if !IsObject(Terminators) {
+		if ((!IsObject(Terminators)) || (Terminators.Count() = 0)) {
 			Terminators := [Tokens.NEWLINE]
 		}
 	
 	
-		return ExpressionParser := this.ExpressionParser(Terminators)
+		return this.ExpressionParser(Terminators)
 	}
 	AddNode(OperandStack, Operators, Operator) {
 		Right := OperandStack.Pop()
@@ -120,7 +120,7 @@
 		if !(Left && Right) {
 			MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
 		}
-		else if !(Operand) {
+		else if !(Operator) {
 			MsgBox, % "Missing Operator for " Tokens[Left.Value] " around " Operator.Context.Start "-"  Operator.Context.End
 		}
 		
@@ -135,7 +135,7 @@
 			Next := this.Next()
 		
 			Switch (Next.Type) {
-				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENIFIER: {
+				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER: {
 					OperandStack.Push(Next)
 				}
 				Case Tokens.LEFT_PAREN: {
