@@ -105,8 +105,13 @@
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
 	}
 	
-	ParseExpression() {
-		return ExpressionParser := this.ExpressionParser(Tokens.NEWLINE)
+	ParseExpression(Terminators*) {
+		if !IsObject(Terminators) {
+			Terminators := [Tokens.NEWLINE]
+		}
+	
+	
+		return ExpressionParser := this.ExpressionParser(Terminators)
 	}
 	AddNode(OperandStack, Operators, Operator) {
 		Right := OperandStack.Pop()
@@ -115,15 +120,18 @@
 		if !(Left && Right) {
 			MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
 		}
+		else if !(Operand) {
+			MsgBox, % "Missing Operator for " Tokens[Left.Value] " around " Operator.Context.Start "-"  Operator.Context.End
+		}
 		
 		OperandStack.Push(new ASTNodes.Expressions.Binary(Left, Operator, Right))
 	}
 	
-	ExpressionParser(Terminator) {
+	ExpressionParser(Terminators) {
 		OperandStack := []
 		OperatorStack := []
 	
-		while (this.Peek().Value != Terminator) {
+		loop {
 			Next := this.Next()
 		
 			Switch (Next.Type) {
@@ -131,7 +139,14 @@
 					OperandStack.Push(Next)
 				}
 				Case Tokens.LEFT_PAREN: {
-					OperatorStack.Push(Next)
+					if (this.Previous().Type != Tokens.Operator) {
+						this.Index--
+						Params := this.ParseGrouping()
+						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
+					}
+					else {
+						OperatorStack.Push(Next)
+					}
 				}
 				Case Tokens.RIGHT_PAREN: {
 					while (OperatorStack.Count()) {
@@ -168,6 +183,12 @@
 					Break
 				}
 			}
+			
+			for k, Terminator in Terminators {
+				if (this.Check(Terminator)) {
+					Break, 2
+				}
+			}
 		}
 		
 		while (OperatorStack.Count()) {
@@ -202,7 +223,7 @@
 	
 	ParseGrouping() {
 		if (this.NextMatches(Tokens.LEFT_PAREN)) {
-			Expressions := [this.ParseExpression()]
+			Expressions := [this.ParseExpression(Tokens.COMMA, Tokens.RIGHT_PAREN)]
 			
 			while (this.NextMatches(Tokens.COMMA)) {
 				Expressions.Push(this.ParseExpression())

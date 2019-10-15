@@ -142,7 +142,6 @@ class Operators {
 			return 0
 		}
 	}
-
 }
 
 
@@ -178,6 +177,7 @@ class ASTNodeTypes extends Enum {
 		
 		IDENTIFER
 		GROUPING
+		CALL
 		BINARY
 	)"
 }
@@ -208,6 +208,10 @@ class ASTNodes {
 		
 		class DoubleLiteral extends ASTNode {
 			static Parameters := ["Value"]
+		}
+		
+		class Call extends ASTNode {
+			static Parameters := ["Target", "Params"]
 		}
 	}
 }
