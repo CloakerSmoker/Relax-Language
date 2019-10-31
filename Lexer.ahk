@@ -3,10 +3,10 @@
 		this.Type := Type
 		this.Value := Value
 		this.Context := Context
-		this.HumanReadable := this.Stringify()
+		this.HumanReadable := this.Debug()
 	}
 	
-	Stringify() {
+	Debug() {
 		if (this.Type = Tokens.KEYWORD) {
 			return "KEYWORD: " Keywords[this.Value]
 		}
@@ -15,6 +15,17 @@
 		}
 		
 		return Tokens[this.Type] ": " this.Value
+	}
+	
+	Stringify() {
+		if (this.Type = Tokens.KEYWORD) {
+			return Keywords[this.Value]
+		}
+		else if (this.Type = Tokens.OPERATOR) {
+			return Operators.ToString(this)
+		}
+	
+		return this.Value
 	}
 }
 class Context {

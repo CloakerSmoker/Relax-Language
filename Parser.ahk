@@ -1,4 +1,29 @@
 ﻿class Parser {
+	static ExpressionTests := {"A + B + C": "((A + B) + C)"
+							,  "A == B == C": "((A == B) == C)"
+							,  "A := B := 1": "(A := (B := 1))"
+							,  "1 + 2 - 3 * 4 / 5 == 6 := 7": "((((1 + 2) - ((3 * 4) / 5)) == 6) := 7)"
+							,  "0xFF == 0o377 == 0b11111111 == 255": "(((255 == 255) == 255) == 255)"}
+
+	static _ := Parser.Tests()
+	
+	Tests() {
+		if (VAL.DEBUG) {
+			this.RunTests()
+		}
+	}
+	RunTests() {
+		for Input, Output in Parser.ExpressionTests {
+			Lex := new Lexer(Input)
+			Tok := Lex.Start()
+			
+			Par := new Parser(Lex)
+			ParAST := Par.ParseExpression()
+			
+			Assert.String.True(ParAST[1].Stringify(), Output)
+		}
+	}
+
 	__New(Tokenizer) {
 		this.Tokens := Tokenizer.Tokens
 		this.Source := Tokenizer.CodeString

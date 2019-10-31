@@ -209,3 +209,45 @@ class Conversions {
 		return End HexString
 	}
 }
+
+class Assert {
+	True(Condition) {
+		if !(Condition) {
+			Throw, Exception("Assert.True failed in " CallStack(2)[2].Func ".")
+		}
+	}
+	False(Condition) {
+		if (Condition) {
+			Throw, Exception("Assert.False failed in " CallStack(2)[2].Func ".")
+		}
+	}
+	
+	class String {
+		True(StringOne, StringTwo) {
+			if (StringOne != StringTwo) {
+				Throw, Exception("Assert.String.True for `n`t" StringOne "`n`t" StringTwo "`n     failed in " CallStack(2)[2].Func ".")
+			}
+		}
+		False(StringOne, StringTwo) {
+			if (StringOne = StringTwo) {
+				Throw, Exception("Assert.String.False for `n`t" StringOne "`n`t" StringTwo "`n     failed in " CallStack(2)[2].Func ".")
+			}
+		}
+	}
+	
+	Unreachable(Info := "") {
+		Throw, Exception("Assert.Unreachable failed in " CallStack(2)[2].Func "." (Info ? "`nInfo: " Info : ""))
+	}
+}
+
+CallStack(Limit := -1) {
+	Stack := []
+		
+	loop {
+		E := exception("", -A_Index)
+		Stack.Push({"File": E.File, "Line": E.line, "Func": E.What})
+	} until ((A_Index - 1 == Limit) || ((-A_Index . "") == E.What))
+	
+	Stack.RemoveAt(1)
+	return stack
+}

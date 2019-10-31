@@ -1,28 +1,34 @@
-﻿#Include %A_ScriptDir%
+﻿class VAL {
+	static DEBUG := True
+}
+
+#Include %A_ScriptDir%
 #Include Utility.ahk
 #Include Constants.ahk
 #Include Lexer.ahk
 #Include Parser.ahk
 
-Test := new Lexer("1 + !wow - 1")
+Test := new Lexer("0xFF == 0o377 == 0b11111111 == 255")
 t := Test.Start()
 
 s := ""
 for k, v in t {
 	s .= v.Stringify() "`n"
 }
-MsgBox, % s
+;MsgBox, % s
 
 Pest := new Parser(Test)
 a := Pest.ParseExpression()
 
-Gui, New
-Gui, Add, TreeView, w400 h900
-Gui, Show
+MsgBox, % a[1].Stringify()
 
-TV_Delete()
-Start := TV_Add("<AST>",, "Expand")
-AddToTree(Start, a)
+;Gui, New
+;Gui, Add, TreeView, w400 h900
+;Gui, Show
+;
+;TV_Delete()
+;Start := TV_Add("<AST>",, "Expand")
+;AddToTree(Start, a)
 return
 
 AddToTree(Parent, Object) {

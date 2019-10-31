@@ -59,16 +59,16 @@
 		COLON_EQUAL
 		
 		PLUS
-		PLUS_EQUALS
+		PLUS_EQUAL
 		
 		MINUS
-		MINUS_EQUALS
+		MINUS_EQUAL
 		
 		DOT
-		DOT_EQUALS
+		DOT_EQUAL
 		
 		TIMES
-		TIMES_EQUALS
+		TIMES_EQUAL
 		
 		BITWISE_OR
 		LOGICAL_OR
@@ -77,7 +77,9 @@
 		LOGICAL_AND
 		
 		BITWISE_XOR
-		XOR_EQUALS
+		XOR_EQUAL
+		
+		DIVIDE
 		
 	)"
 }
@@ -87,15 +89,16 @@ class CharacterTokens {
 						,"=": {"NONE": Tokens.EQUAL, "=": Tokens.EQUAL_EQUAL}
 						,"<": {"NONE": Tokens.LESS, "=": Tokens.LESS_EQUAL}
 						,">": {"NONE": Tokens.GREATER, "=": Tokens.GREATER_EQUAL, "<": Tokens.CONCAT}
-						,":": {"NONE": Tokens.COLON, "=": Tokens.COLON_EQUALS}
-						,"+": {"NONE": Tokens.PLUS, "+": Tokens.PLUS_PLUS, "=": Tokens.PLUS_EQUALS}
-						,"-": {"NONE": Tokens.MINUS, "-": Tokens.MINUS_MINUS, "=": Tokens.MINUS_EQUALS}
-						,".": {"NONE": Tokens.DOT, "=": Tokens.DOT_EQUALS}
-						,"*": {"NONE": Tokens.TIMES, "=": Tokens.TIMES_EQUALS}
+						,":": {"NONE": Tokens.COLON, "=": Tokens.COLON_EQUAL}
+						,"+": {"NONE": Tokens.PLUS, "+": Tokens.PLUS_PLUS, "=": Tokens.PLUS_EQUAL}
+						,"-": {"NONE": Tokens.MINUS, "-": Tokens.MINUS_MINUS, "=": Tokens.MINUS_EQUAL}
+						,".": {"NONE": Tokens.DOT, "=": Tokens.DOT_EQUAL}
+						,"*": {"NONE": Tokens.TIMES, "=": Tokens.TIMES_EQUAL}
 						,"|": {"NONE": Tokens.BITWISE_OR, "|": Tokens.LOGICAL_OR}
 						,"&": {"NONE": Tokens.BITWISE_AND, "&": Tokens.LOGICAL_AND}
-						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUALS}
-						,"~": {"NONE": Tokens.BITWISE_NOT}}
+						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUAL}
+						,"~": {"NONE": Tokens.BITWISE_NOT}
+						,"/": {"NONE": Tokens.DIVIDE}}
 				
 				
 	static Misc := { "(": Tokens.LEFT_PAREN
@@ -115,7 +118,7 @@ class OperatorClasses {
 
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"
-						, "Tokens": [Tokens.COLON_EQUAL, Tokens.PLUS_EQUALS, Tokens.MINUS_EQUALS, Tokens.DOT_EQUALS, Tokens.TIMES_EQUALS]}
+						, "Tokens": [Tokens.COLON_EQUAL, Tokens.PLUS_EQUAL, Tokens.MINUS_EQUAL, Tokens.DOT_EQUAL, Tokens.TIMES_EQUAL]}
 	
 	static Equality   := {"Precedence": 1
 						, "Associative": "Left"
@@ -132,6 +135,10 @@ class OperatorClasses {
 	static Addition	  := {"Precedence": 4
 						, "Associative": "Left"
 						, "Tokens": [Tokens.PLUS, Tokens.MINUS]}
+						
+	static Division	  := {"Precedence": 5
+						, "Associative": "Left"
+						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES]}
 }
 
 class Operators {
@@ -144,7 +151,28 @@ class Operators {
 			}
 		}
 	
-		MsgBox, % "Fuck off"
+		Assert.Unreachable(this.ToString(Operator))
+	}
+
+	ToString(Operator) {
+		OperatorName := Tokens[Operator.Value]
+		
+		if (SubStr(OperatorName, StrLen(OperatorName) - 1, 1) = "_") {
+			RealName := SubStr(OperatorName, 1, StrLen(OperatorName) - 2)
+			return this.ToString(new Token(Tokens.OPERATOR, Tokens[RealName], Operator.Context))
+		}
+	
+	
+		for Start, Endings in CharacterTokens.Operators {
+			for k, EndingToken in Endings {
+				if (Operator.Value = EndingToken) {
+					return Start (k != "NONE" ? k : "")
+				}
+			}
+		}
+		
+		Assert.Unreachable(SubStr(OperatorName, StrLen(OperatorName) - 2, 1))
+		Assert.Unreachable(Tokens[Operator.Value])
 	}
 
 	CheckPrecedence(FirstOperator, SecondOperator) {
@@ -245,14 +273,33 @@ class ASTNodes {
 		
 		class Grouping extends ASTNode {
 			static Parameters := ["Expressions"]
+			
+			Stringify() {
+				String := "("
+				
+				for k, SubExpression in this.Expressions {
+					String .= SubExpression.Stringify() ", "
+				}
+				
+				return SubStr(String, 1, StrLen(String) - 2) ")"
+			}
 		}
 		
 		class Unary extends ASTNode {
 			static Parameters := ["Operand", "Operator"]
+			
+			Stringify() {
+				return "(" this.Operator.Stringify() this.Operand.Stringify() ")"
+			}
 		}
 		
 		class Binary extends ASTNode {
 			static Parameters := ["Left", "Operator", "Right"]
+			
+			
+			Stringify() {
+				return "(" this.Left.Stringify() " " this.Operator.Stringify() " " this.Right.Stringify() ")"
+			}
 		}
 		
 		class IntegerLiteral extends ASTNode {
