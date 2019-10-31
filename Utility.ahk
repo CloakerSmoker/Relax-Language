@@ -104,7 +104,7 @@ class Enum {
 			for k, Line in StrSplit(this.Options, "`n", "`r") {
 				TrimmedLine := LTrim(Line)
 				
-				if (StrLen(TrimmedLine) = 0) {
+				if (StrLen(TrimmedLine) = 0 || (SubStr(TrimmedLine, 1, 1) = ";")) {
 					Continue
 				}
 				

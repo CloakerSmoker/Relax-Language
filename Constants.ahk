@@ -25,7 +25,19 @@
 		
 		OPERATOR
 		
-		BANG
+		FIRST_PREFIX
+			BANG
+			PLUS
+			MINUS
+			BITWISE_NOT
+		
+			FIRST_POSTFIX
+				; The overlap here is since ++/-- are both pre/postfix
+				PLUS_PLUS
+				MINUS_MINUS
+			LAST_PREFIX
+		LAST_POSTFIX
+		
 		BANG_EQUAL
 		
 		EQUAL
@@ -40,12 +52,8 @@
 		COLON
 		COLON_EQUAL
 		
-		PLUS
-		PLUS_PLUS
 		PLUS_EQUALS
 		
-		MINUS
-		MINUS_MINUS
 		MINUS_EQUALS
 		
 		DOT
@@ -63,7 +71,6 @@
 		BITWISE_XOR
 		XOR_EQUALS
 		
-		BITWISE_NOT
 	)"
 }
 
@@ -141,6 +148,13 @@ class Operators {
 		else {
 			return 0
 		}
+	}
+	
+	IsPostfix(Operator) {
+		return Tokens.FIRST_POSTFIX < Operator.Value && Operator.Value < Tokens.LAST_POSTFIX
+	}
+	IsPrefix(Operator) {
+		return Tokens.FIRST_PREFIX < Operator.Value && Operator.Value < Tokens.LAST_PREFIX
 	}
 }
 
