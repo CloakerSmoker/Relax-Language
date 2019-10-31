@@ -27,16 +27,22 @@
 		
 		FIRST_PREFIX
 			BANG
-			PLUS
-			MINUS
 			BITWISE_NOT
 		
 			FIRST_POSTFIX
 				; The overlap here is since ++/-- are both pre/postfix
 				PLUS_PLUS
 				MINUS_MINUS
-			LAST_PREFIX
-		LAST_POSTFIX
+		LAST_PREFIX
+			LAST_POSTFIX
+		
+		; Operator varients so they can be told apart
+		
+		PLUS_PLUS_L
+		PLUS_PLUS_R
+		
+		MINUS_MINUS_L
+		MINUS_MINUS_R
 		
 		BANG_EQUAL
 		
@@ -52,8 +58,10 @@
 		COLON
 		COLON_EQUAL
 		
+		PLUS
 		PLUS_EQUALS
 		
+		MINUS
 		MINUS_EQUALS
 		
 		DOT
@@ -86,7 +94,8 @@ class CharacterTokens {
 						,"*": {"NONE": Tokens.TIMES, "=": Tokens.TIMES_EQUALS}
 						,"|": {"NONE": Tokens.BITWISE_OR, "|": Tokens.LOGICAL_OR}
 						,"&": {"NONE": Tokens.BITWISE_AND, "&": Tokens.LOGICAL_AND}
-						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUALS}}
+						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUALS}
+						,"~": {"NONE": Tokens.BITWISE_NOT}}
 				
 				
 	static Misc := { "(": Tokens.LEFT_PAREN
@@ -96,11 +105,14 @@ class CharacterTokens {
 					,"[": Tokens.LEFT_BRACKET
 					,"]": Tokens.RIGHT_BRACKET
 					,",": Tokens.COMMA
-					,"#": Tokens.POUND
-					,"~": Tokens.BITWISE_NOT}
+					,"#": Tokens.POUND}
 }
 
 class OperatorClasses {
+	static Prefix	  := {"Precedence": -1
+						, "Associative": "Right"
+						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT]}
+
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"
 						, "Tokens": [Tokens.COLON_EQUAL, Tokens.PLUS_EQUALS, Tokens.MINUS_EQUALS, Tokens.DOT_EQUALS, Tokens.TIMES_EQUALS]}
@@ -149,6 +161,28 @@ class Operators {
 			return 0
 		}
 	}
+	OperandCount(Operator) {
+		if (this.IsPostfix(Operator) || this.IsPrefix(Operator)) {
+			return 1
+		}
+		else {
+			return 2
+		}
+	}
+	
+	EnsurePrefix(Operator) {
+		return this.EnsureXXXfix(Operator, "_L")
+	}
+	EnsurePostfix(Operator) {
+		return this.EnsureXXXfix(Operator, "_R")
+	}
+	EnsureXXXfix(Operator, Form) {
+		if (this.IsPrefix(Operator) && this.IsPostfix(Operator)) {
+			return new Token(Tokens.OPERATOR, Tokens[Tokens[Operator.Value] Form], Operator.Context)
+		}
+		
+		return Operator
+	}
 	
 	IsPostfix(Operator) {
 		return Tokens.FIRST_POSTFIX < Operator.Value && Operator.Value < Tokens.LAST_POSTFIX
@@ -192,6 +226,7 @@ class ASTNodeTypes extends Enum {
 		IDENTIFER
 		GROUPING
 		CALL
+		UNARY
 		BINARY
 	)"
 }
@@ -210,6 +245,10 @@ class ASTNodes {
 		
 		class Grouping extends ASTNode {
 			static Parameters := ["Expressions"]
+		}
+		
+		class Unary extends ASTNode {
+			static Parameters := ["Operand", "Operator"]
 		}
 		
 		class Binary extends ASTNode {

@@ -8,8 +8,11 @@
 	Next() {
 		return this.Tokens[++this.Index]
 	}
-	Previous() {
+	Current() {
 		return this.Tokens[this.Index]
+	}
+	Previous() {
+		return this.Tokens[this.Index - 1]
 	}
 	Consume(Type, Reason) {
 		if !(this.NextMatches(Type)) {
@@ -113,18 +116,31 @@
 	
 		return this.ExpressionParser(Terminators)
 	}
-	AddNode(OperandStack, Operators, Operator) {
-		Right := OperandStack.Pop()
-		Left := OperandStack.Pop()
+	AddNode(OperandStack, OperandCount, Operator) {
+		Operands := []
 		
-		if !(Left && Right) {
-			MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
-		}
-		else if !(Operator) {
-			MsgBox, % "Missing Operator for " Tokens[Left.Value] " around " Operator.Context.Start "-"  Operator.Context.End
+		loop, % OperandCount {
+			NextOperand := OperandStack.Pop()
+			
+			if !(NextOperand) {
+				MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
+			}
+			
+			Operands.Push(NextOperand)
 		}
 		
-		OperandStack.Push(new ASTNodes.Expressions.Binary(Left, Operator, Right))
+		if !(Operator) {
+			MsgBox, % "Missing Operator for " Operands[1].Value " around " Operands[1].Context.Start "-"  Operands[1].Context.End
+		}
+		
+		Switch (OperandCount) {
+			Case 1: {
+				OperandStack.Push(new ASTNodes.Expressions.Unary(Operands[1], Operator))
+			}
+			Case 2: {
+				OperandStack.Push(new ASTNodes.Expressions.Binary(Operands[2], Operator, Operands[1]))
+			}
+		}
 	}
 	
 	ExpressionParser(Terminators) {
@@ -156,7 +172,7 @@
 							Continue, 2
 						}
 						else {
-							this.AddNode(OperandStack, OperatorStack, NextOperator)
+							this.AddNode(OperandStack, 2, NextOperator)
 						}
 					}
 					
@@ -165,11 +181,25 @@
 				Case Tokens.OPERATOR: {
 					Operator := Next
 					
+					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
+						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
+						Continue
+					}
+					else if (Operators.IsPrefix(Operator)) {
+						OperatorStack.Push(Operator)
+						Continue
+					}
+					
 					while (OperatorStack.Count() != 0) {
 						NextOperator := OperatorStack.Pop()
 						
+						if (Operators.IsPrefix(NextOperator)) {
+							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
+							Continue
+						}
+						
 						if (NextOperator.Type = Tokens.OPERATOR && Operators.CheckPrecedence(Operator, NextOperator)) {
-							this.AddNode(OperandStack, OperatorStack, NextOperator)
+							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), NextOperator)
 						}
 						else {
 							OperatorStack.Push(NextOperator)
@@ -192,7 +222,14 @@
 		}
 		
 		while (OperatorStack.Count()) {
-			this.AddNode(OperandStack, OperatorStack, OperatorStack.Pop())
+			NextOperator := OperatorStack.Pop()
+			
+			if (Operators.IsPrefix(NextOperator) && OperandStack.Count() < Operators.OperandCount(NextOperator)) {
+				MsgBox, % "Missing operand for operator " Tokens[NextOperator.Value] " around " NextOperator.Context.Start
+				Continue
+			}
+			
+			this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
 		}
 		
 		return OperandStack

@@ -4,7 +4,7 @@
 #Include Lexer.ahk
 #Include Parser.ahk
 
-Test := new Lexer("abc (1 + 1)")
+Test := new Lexer("1 + !wow - 1")
 t := Test.Start()
 
 s := ""
