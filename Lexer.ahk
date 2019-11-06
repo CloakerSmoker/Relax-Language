@@ -6,12 +6,25 @@
 		this.HumanReadable := this.Debug()
 	}
 	
+	IsOperator() {
+		return Tokens.FIRST_OPERATOR < this.Type && this.Type < Tokens.LAST_OPERATOR
+	}
+	CaseIsOperator() {
+		if (this.IsOperator()) {
+			return this.Type
+		}
+		else {
+			return !this.Type
+		}
+	}
+
+	
 	Debug() {
 		if (this.Type = Tokens.KEYWORD) {
 			return "KEYWORD: " Keywords[this.Value]
 		}
-		else if (this.Type = Tokens.OPERATOR) {
-			return "OPERATOR: " Tokens[this.Value]
+		else if (this.IsOperator()) {
+			return "OPERATOR: " Tokens[this.Type]
 		}
 		
 		return Tokens[this.Type] ": " this.Value
@@ -20,9 +33,6 @@
 	Stringify() {
 		if (this.Type = Tokens.KEYWORD) {
 			return Keywords[this.Value]
-		}
-		else if (this.Type = Tokens.OPERATOR) {
-			return Operators.ToString(this)
 		}
 	
 		return this.Value
@@ -102,14 +112,29 @@ class Lexer {
 		}
 		
 		EndLength := StrLen(End)
-		Start := this.Index
+		StartLength := StrLen(Start)
+		StartIndex := this.Index
+		Depth := 1
 		
 		loop {
 			this.Advance()
-			; TODO - This doesn't allow for nested things, like nested comments
-		} until (this.SubStr(this.Index - EndLength, this.Index) = End || this.IsAtEnd())
+			
+			if (this.SubStr(this.Index - StartLength, this.Index) = Start) {
+				Depth++
+			}
+			else if (this.SubStr(this.Index - EndLength, this.Index) = End) {
+				Depth--
+			}
+			else if (this.IsAtEnd()) {
+				MsgBox, % "Expected closing '" End "' for '" Start "' at " StartIndex " before EOF"
+				Break
+			}
+			else if (Depth = 0) {
+				Break
+			}
+		}
 		
-		return [Start, this.Index - EndLength]
+		return [StartIndex, this.Index - EndLength]
 	}
 	AdvanceThroughFilter(FilterFunction) {
 		while (FilterFunction.Call(this.Peek())) {
@@ -157,7 +182,7 @@ class Lexer {
 					FoundToken := CharacterTokens.Operators[NextCharacter]["NONE"]
 				}
 				
-				this.AddToken(Tokens.OPERATOR, FoundToken)
+				this.AddToken(FoundToken)
 				Continue
 			}
 			else if (CharacterTokens.Misc.HasKey(NextCharacter)) {
@@ -179,7 +204,7 @@ class Lexer {
 							this.AdvanceThrough("//", "`n")
 						}
 						Default: {
-							this.AddToken(Tokens.SLASH)
+							this.AddToken(Tokens.DIVIDE)
 						}
 					}
 				}
@@ -192,7 +217,7 @@ class Lexer {
 						return
 					}
 					
-					this.AddToken(Tokens.String, this.SubStr(StringBounds[1], StringBounds[2]))
+					this.AddToken(Tokens.STRING, this.SubStr(StringBounds[1], StringBounds[2]))
 				}
 				Case "`n": {
 					this.AddToken(Tokens.NEWLINE, "\n")

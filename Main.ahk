@@ -8,7 +8,7 @@
 #Include Lexer.ahk
 #Include Parser.ahk
 
-Test := new Lexer("0xFF == 0o377 == 0b11111111 == 255")
+Test := new Lexer("0xFF == 0o377 == 0b11111111 /* + 9000 - /* 10 */ == 8 */ == 255")
 t := Test.Start()
 
 s := ""

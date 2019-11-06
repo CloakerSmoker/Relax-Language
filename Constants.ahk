@@ -23,7 +23,7 @@
 		EOF
 		
 		
-		OPERATOR
+		FIRST_OPERATOR
 		
 		FIRST_PREFIX
 			BANG
@@ -81,6 +81,7 @@
 		
 		DIVIDE
 		
+		LAST_OPERATOR
 	)"
 }
 
@@ -97,8 +98,7 @@ class CharacterTokens {
 						,"|": {"NONE": Tokens.BITWISE_OR, "|": Tokens.LOGICAL_OR}
 						,"&": {"NONE": Tokens.BITWISE_AND, "&": Tokens.LOGICAL_AND}
 						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUAL}
-						,"~": {"NONE": Tokens.BITWISE_NOT}
-						,"/": {"NONE": Tokens.DIVIDE}}
+						,"~": {"NONE": Tokens.BITWISE_NOT}}
 				
 				
 	static Misc := { "(": Tokens.LEFT_PAREN
@@ -141,11 +141,15 @@ class OperatorClasses {
 						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES]}
 }
 
+IsOperator(OperatorType) {
+	return Tokens.FIRST_OPERATOR < OperatorType && OperatorType < Tokens.LAST_OPERATOR
+}
+
 class Operators {
 	Precedence(Operator) {
 		for k, v in OperatorClasses {
 			for k, FoundOperator in v.Tokens {
-				if (Operator.Value = FoundOperator) {
+				if (Operator.Type = FoundOperator) {
 					return v
 				}
 			}
@@ -155,24 +159,25 @@ class Operators {
 	}
 
 	ToString(Operator) {
-		OperatorName := Tokens[Operator.Value]
+		return Operator.Value
+	
+		OperatorName := Tokens[Operator.Type]
 		
 		if (SubStr(OperatorName, StrLen(OperatorName) - 1, 1) = "_") {
 			RealName := SubStr(OperatorName, 1, StrLen(OperatorName) - 2)
-			return this.ToString(new Token(Tokens.OPERATOR, Tokens[RealName], Operator.Context))
+			return this.ToString(new Token(Tokens[RealName], Operator.Value, Operator.Context))
 		}
 	
 	
 		for Start, Endings in CharacterTokens.Operators {
 			for k, EndingToken in Endings {
-				if (Operator.Value = EndingToken) {
+				if (Operator.Type = EndingToken) {
 					return Start (k != "NONE" ? k : "")
 				}
 			}
 		}
 		
-		Assert.Unreachable(SubStr(OperatorName, StrLen(OperatorName) - 2, 1))
-		Assert.Unreachable(Tokens[Operator.Value])
+		Assert.Unreachable(Tokens[Operator.Type])
 	}
 
 	CheckPrecedence(FirstOperator, SecondOperator) {
@@ -206,17 +211,17 @@ class Operators {
 	}
 	EnsureXXXfix(Operator, Form) {
 		if (this.IsPrefix(Operator) && this.IsPostfix(Operator)) {
-			return new Token(Tokens.OPERATOR, Tokens[Tokens[Operator.Value] Form], Operator.Context)
+			return new Token(Tokens[Tokens[Operator.Type] Form], Operator.Value, Operator.Context)
 		}
 		
 		return Operator
 	}
 	
 	IsPostfix(Operator) {
-		return Tokens.FIRST_POSTFIX < Operator.Value && Operator.Value < Tokens.LAST_POSTFIX
+		return Tokens.FIRST_POSTFIX < Operator.Type && Operator.Type < Tokens.LAST_POSTFIX
 	}
 	IsPrefix(Operator) {
-		return Tokens.FIRST_PREFIX < Operator.Value && Operator.Value < Tokens.LAST_PREFIX
+		return Tokens.FIRST_PREFIX < Operator.Type && Operator.Type < Tokens.LAST_PREFIX
 	}
 }
 

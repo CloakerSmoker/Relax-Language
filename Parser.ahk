@@ -21,6 +21,11 @@
 			ParAST := Par.ParseExpression()
 			
 			Assert.String.True(ParAST[1].Stringify(), Output)
+		
+			Lex := ""
+			Tok := ""
+			Par := ""
+			ParAST := ""
 		}
 	}
 
@@ -135,7 +140,7 @@
 	
 	ParseExpression(Terminators*) {
 		if ((!IsObject(Terminators)) || (Terminators.Count() = 0)) {
-			Terminators := [Tokens.NEWLINE]
+			Terminators := [Tokens.NEWLINE, Tokens.EOF]
 		}
 	
 	
@@ -148,7 +153,7 @@
 			NextOperand := OperandStack.Pop()
 			
 			if !(NextOperand) {
-				MsgBox, % "Missing Operand for " Tokens[Operator.Value] " around " Operator.Context.Start "-"  Operator.Context.End
+				MsgBox, % "Missing Operand for " Operator.Stringify() " around " Operator.Context.Start "-"  Operator.Context.End
 			}
 			
 			Operands.Push(NextOperand)
@@ -178,6 +183,7 @@
 			Switch (Next.Type) {
 				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER: {
 					OperandStack.Push(Next)
+					Continue
 				}
 				Case Tokens.LEFT_PAREN: {
 					if (this.Previous().Type != Tokens.Operator) {
@@ -188,6 +194,8 @@
 					else {
 						OperatorStack.Push(Next)
 					}
+					
+					Continue
 				}
 				Case Tokens.RIGHT_PAREN: {
 					while (OperatorStack.Count()) {
@@ -203,7 +211,7 @@
 					
 					MsgBox, % "Unbalenced parens"
 				}
-				Case Tokens.OPERATOR: {
+				Case Next.CaseIsOperator(): {
 					Operator := Next
 					
 					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
@@ -223,7 +231,7 @@
 							Continue
 						}
 						
-						if (NextOperator.Type = Tokens.OPERATOR && Operators.CheckPrecedence(Operator, NextOperator)) {
+						if (NextOperator.IsOperator() && Operators.CheckPrecedence(Operator, NextOperator)) {
 							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), NextOperator)
 						}
 						else {
@@ -233,9 +241,13 @@
 					}
 					
 					OperatorStack.Push(Operator)
+					Continue
 				}
 				Default: {
-					Break
+					; This isn't a character that should be in this expression, but it might be the terminator, so we drop the
+					;  index to point at the character again, and run it through the terminator check below before
+					;   breaking/erroring
+					this.Index-- 
 				}
 			}
 			
@@ -244,6 +256,9 @@
 					Break, 2
 				}
 			}
+			
+			MsgBox, % "Unexpected character '" Next.Stringify() "' in expression around " Next.Context.Start
+			Break
 		}
 		
 		while (OperatorStack.Count()) {
