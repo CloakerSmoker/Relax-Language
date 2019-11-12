@@ -273,7 +273,7 @@ class ASTNodes {
 			static Parameters := ["Expression"]
 			
 			Stringify() {
-				return this.Expression.Stringify() "`n"
+				return this.Expression.Stringify() ";"
 			}
 		}
 	}

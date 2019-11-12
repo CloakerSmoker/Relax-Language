@@ -8,7 +8,14 @@
 #Include Lexer.ahk
 #Include Parser.ahk
 
-Test := new Lexer("0xFF == 0o377 == 0b11111111 /* + 9000 - /* 10 */ == 8 */ == 255")
+Code = 
+(
+define Int64: Fn(Int32: a) {
+	return 1
+}
+)
+
+Test := new Lexer(Code)
 t := Test.Start()
 
 s := ""
@@ -18,7 +25,7 @@ for k, v in t {
 ;MsgBox, % s
 
 Pest := new Parser(Test)
-a := Pest.ParseExpression()
+a := Pest.Start()
 
 MsgBox, % a[1].Stringify()
 

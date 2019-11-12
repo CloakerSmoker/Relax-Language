@@ -20,12 +20,7 @@
 			Par := new Parser(Lex)
 			ParAST := Par.ParseExpression()
 			
-			Assert.String.True(ParAST[1].Stringify(), Output)
-		
-			Lex := ""
-			Tok := ""
-			Par := ""
-			ParAST := ""
+			Assert.String.True(ParAST.Stringify(), Output)
 		}
 	}
 
@@ -70,7 +65,7 @@
 		return this.Tokens[this.Index + Count]
 	}
 	AtEOF() {
-		return this.Peek().Type = Tokens.EOF
+		return (this.Peek().Type = Tokens.EOF || this.Peek(0).Type = Tokens.EOF)
 	}
 	Start() {
 		return this.ParseProgram()
@@ -95,7 +90,7 @@
 			return this.ParseDeclaration() ; TODO - Implement this
 		}
 		else {
-			return this.ParseExpressionStatement() ; TODO - Implement this
+			return this.ParseExpressionStatement()
 		}
 	}
 	ParseKeywordStatement() {
@@ -137,8 +132,14 @@
 	}
 	
 	ParseExpressionStatement() {
+		Expression := this.ParseExpression()
 		
-	
+		if (this.NextMatches(Tokens.NEWLINE) || this.NextMatches(Tokens.EOF)) {
+			return new ASTNodes.Statements.ExpressionLine(Expression)
+		}
+		else {
+			Throw, Exception("Unexpected expression terminator: '" this.Next().Stringify() "'.")
+		}
 	}
 	
 	ParseExpression(Terminators*) {
@@ -147,7 +148,7 @@
 		}
 	
 	
-		return this.ExpressionParser(Terminators)
+		return this.ExpressionParser(Terminators)[1]
 	}
 	AddNode(OperandStack, OperandCount, Operator) {
 		Operands := []
