@@ -57,6 +57,13 @@
 	Check(Type) {
 		return this.Peek().Type = Type
 	}
+	Ignore(Type) {
+		if (this.Check(Type)) {
+			this.Next()
+		}
+		
+		return true
+	}
 	Peek(Count := 1) {
 		if (this.Index + Count > this.Tokens.Count()) {
 			return false
@@ -65,7 +72,7 @@
 		return this.Tokens[this.Index + Count]
 	}
 	AtEOF() {
-		return (this.Peek().Type = Tokens.EOF || this.Peek(0).Type = Tokens.EOF)
+		return (this.Peek().Type = Tokens.EOF)
 	}
 	Start() {
 		return this.ParseProgram()
@@ -86,7 +93,7 @@
 		if (Next.Type = Tokens.KEYWORD) {
 			return this.ParseKeywordStatement()
 		}
-		else if (Next.Type = Tokens.IDENIFIER && this.Peek().Type = Tokens.COLON) {
+		else if (Next.Type = Tokens.IDENTIFIER && this.Peek().Type = Tokens.COLON) {
 			return this.ParseDeclaration() ; TODO - Implement this
 		}
 		else {
@@ -98,7 +105,7 @@
 		
 		Switch (NextKeyword) {
 			Case Keywords.DEFINE: {
-				this.ParseDefine()
+				return this.ParseDefine()
 			}
 			; TODO - Add the rest of the keywords
 		}
@@ -106,22 +113,18 @@
 	ParseDefine() {
 		ReturnType := this.ParsePrimary()
 		
-		if (ReturnType.Type != ASTNodeTypes.IDENIFIER) {
+		if (ReturnType.Type != Tokens.IDENTIFIER) {
 			Throw, Exception("Invalid function definition return type " ASTNodeTypes[ReturnType.Type])
 		}
 		
 		Name := this.ParsePrimary()
 		
-		if (Name.Type != ASTNodeTypes.IDENIFIER) {
+		if (Name.Type != Tokens.IDENTIFIER) {
 			Throw, Exception("Invalid function definition name type " ASTNodeTypes[Name.Type])
 		}
 		
-		Params := this.ParsePrimary()
-		
-		if (Params.Type != ASTNodeTypes.GROUPING) {
-			Throw, Exception("Invalid function definition parameter group type " ASTNodeTypes[Params.Type])
-		}
-		
+		Params := this.ParseParamGrouping()
+
 		Body := this.ParseBlock()
 		
 		if (Body.Type != ASTNodeTypes.BLOCK) {
@@ -129,6 +132,22 @@
 		}
 		
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
+	}
+	
+	ParseParamGrouping() {
+		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
+		Pairs := [[this.ParsePrimary(), this.ParsePrimary()]]
+		
+		while (this.NextMatches(Tokens.COMMA)) {
+			Pair := []
+			Pair.Push(this.ParsePrimary()) ; Type
+			Pair.Push(this.ParsePrimary()) ; Name
+			Pairs.Push(Pair)
+		}
+	
+		this.Consume(Tokens.RIGHT_PAREN, "Parameter groupings require closing ')'.")
+		
+		return Pairs
 	}
 	
 	ParseExpressionStatement() {
@@ -140,6 +159,24 @@
 		else {
 			Throw, Exception("Unexpected expression terminator: '" this.Next().Stringify() "'.")
 		}
+	}
+	
+	ParseBlock() {
+		Statements := []
+		this.Ignore(Tokens.NEWLINE)
+		this.Consume(Tokens.LEFT_BRACE, "Block expected, but did not have opening '{'.")
+		this.Ignore(Tokens.NEWLINE)
+		
+		while !(this.NextMatches(Tokens.RIGHT_BRACE)) {
+			Statements.Push(this.ParseStatement())
+			this.Ignore(Tokens.NEWLINE)
+			
+			if (this.AtEOF()) {
+				Break
+			}
+		}
+		
+		return Statements
 	}
 	
 	ParseExpression(Terminators*) {
@@ -282,15 +319,15 @@
 	ParsePrimary() {
 		Next := this.Next()
 	
-		Switch (Next.Value) {
-			Case Tokens.IDENIFIER: {
-				return new ASTNodes.Expressions.Identifier(this.Previous())
+		Switch (Next.Type) {
+			Case Tokens.IDENTIFIER: {
+				return this.Current()
 			}
 			Case Tokens.INTEGER: {
-				return new ASTNodes.Expressions.IntegerLiteral(this.Previous())
+				return this.Current()
 			}
 			Case Tokens.DOUBLE: {
-				return new ASTNodes.Expressions.DoubleLiteral(this.Previous())
+				return this.Current()
 			}
 			Case Tokens.LEFT_PAREN: {
 				this.Index--

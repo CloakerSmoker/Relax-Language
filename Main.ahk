@@ -10,7 +10,7 @@
 
 Code = 
 (
-define Int64: Fn(Int32: a) {
+define Int64 Fn(Int32 a) {
 	return 1
 }
 )
@@ -79,8 +79,8 @@ AddToTree(Parent, Object) {
 /*
 Some example code
 
-define Int32: Main(Int64: ArgC, Pointer: ArgV) {
-	Int64: Example := 0
+define Int32 Main(Int64 ArgC, Pointer ArgV) {
+	Int64 Example := 0
 	String Text := Format"Hello, {Example}"
 	Print(Text)
 

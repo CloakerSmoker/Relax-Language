@@ -267,7 +267,25 @@ class ASTNodeTypes extends Enum {
 class ASTNodes {
 	class Statements {
 		class Define extends ASTNode {
-			static Parameters := ["Name", "ReturnType", "Params", "Body"]
+			static Parameters := ["ReturnType", "Name", "Params", "Body"]
+			
+			Stringify() {
+				String := "Define " this.ReturnType.Value " " this.Name.Value "("
+			
+				for k, Pair in this.Params {
+					String .= Pair[1].Value " " Pair[2].Value ", "
+				}
+			
+				String := SubStr(String, 1, StrLen(String) - 2)
+				String .= ") {`n"
+				
+				for k, Line in this.Body {
+					String .= "`t" Line.Stringify()
+				}
+				
+				String .= "`n};"
+				return String
+			}
 		}
 		class ExpressionLine extends ASTNode {
 			static Parameters := ["Expression"]
