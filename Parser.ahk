@@ -91,7 +91,7 @@
 		if (Next.Type = Tokens.KEYWORD) {
 			return this.ParseKeywordStatement()
 		}
-		else if (Next.Type = Tokens.IDENIFIER && this.Peek(2).Type = Tokens.COLON) {
+		else if (Next.Type = Tokens.IDENIFIER && this.Peek().Type = Tokens.COLON) {
 			return this.ParseDeclaration() ; TODO - Implement this
 		}
 		else {
@@ -101,8 +101,8 @@
 	ParseKeywordStatement() {
 		NextKeyword := this.Next().Value
 		
-		switch (NextKeyword) {
-			case Keywords.DEFINE: {
+		Switch (NextKeyword) {
+			Case Keywords.DEFINE: {
 				this.ParseDefine()
 			}
 			; TODO - Add the rest of the keywords
@@ -112,30 +112,33 @@
 		ReturnType := this.ParsePrimary()
 		
 		if (ReturnType.Type != ASTNodeTypes.IDENIFIER) {
-			MsgBox, % "Invalid function definition return type " ASTNodeTypes[ReturnType.Type]
+			Throw, Exception("Invalid function definition return type " ASTNodeTypes[ReturnType.Type])
 		}
 		
 		Name := this.ParsePrimary()
 		
 		if (Name.Type != ASTNodeTypes.IDENIFIER) {
-			MsgBox, % "Invalid function definition name type " ASTNodeTypes[Name.Type]
+			Throw, Exception("Invalid function definition name type " ASTNodeTypes[Name.Type])
 		}
 		
-		Params := this.ParsePrimary() ; TODO - This is supposed to return a grouping, but since
-		; ParseExpression does not exist, it returns a broken one
+		Params := this.ParsePrimary()
 		
 		if (Params.Type != ASTNodeTypes.GROUPING) {
-			MsgBox, % "Invalid function definition parameter group type " ASTNodeTypes[Params.Type]
+			Throw, Exception("Invalid function definition parameter group type " ASTNodeTypes[Params.Type])
 		}
 		
-		; TODO - Parse the body of the definition
 		Body := this.ParseBlock()
 		
 		if (Body.Type != ASTNodeTypes.BLOCK) {
-			MsgBox, % "Invalid function definition body type " ASTNodeTypes[Params.Type]
+			Throw, Exception("Invalid function definition body type " ASTNodeTypes[Params.Type])
 		}
 		
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
+	}
+	
+	ParseExpressionStatement() {
+		
+	
 	}
 	
 	ParseExpression(Terminators*) {

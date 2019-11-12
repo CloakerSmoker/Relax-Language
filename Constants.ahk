@@ -254,7 +254,7 @@ class ASTNodeTypes extends Enum {
 	static Options := "
 	(
 		DEFINE
-		EXPRESSION
+		EXPRESSIONLINE
 		
 		IDENTIFER
 		GROUPING
@@ -269,13 +269,16 @@ class ASTNodes {
 		class Define extends ASTNode {
 			static Parameters := ["Name", "ReturnType", "Params", "Body"]
 		}
+		class ExpressionLine extends ASTNode {
+			static Parameters := ["Expression"]
+			
+			Stringify() {
+				return this.Expression.Stringify() "`n"
+			}
+		}
 	}
 	
 	class Expressions {
-		class Identifier extends ASTNode {
-			static Parameters := ["Name"]
-		}
-		
 		class Grouping extends ASTNode {
 			static Parameters := ["Expressions"]
 			
@@ -305,14 +308,6 @@ class ASTNodes {
 			Stringify() {
 				return "(" this.Left.Stringify() " " this.Operator.Stringify() " " this.Right.Stringify() ")"
 			}
-		}
-		
-		class IntegerLiteral extends ASTNode {
-			static Parameters := ["Value"]
-		}
-		
-		class DoubleLiteral extends ASTNode {
-			static Parameters := ["Value"]
 		}
 		
 		class Call extends ASTNode {
