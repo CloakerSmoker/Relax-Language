@@ -79,12 +79,15 @@ AddToTree(Parent, Object) {
 /*
 Some example code
 
-define Int32 Main(Int64 ArgC, Pointer ArgV) {
-	Int64 Example := 0
-	String Text := Format"Hello, {Example}"
-	Print(Text)
-
-	return Example
+define Int64 Add(Int64 NumberOne, Int64 NumberTwo) {
+	return NumberOne + NumberTwo
 }
 
 */
+
+
+; Each function should be compiled seperately, parameters are variables
+;  Variables live on the stack
+
+; Return can just be compiled to `mov rax, %result%; add rsp, %LocalVars%; pop rbp; ret`
+;  which doesn't require any block related stuff (besides type checking in functions)
