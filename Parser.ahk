@@ -107,6 +107,15 @@
 			Case Keywords.DEFINE: {
 				return this.ParseDefine()
 			}
+			Case Keywords.RETURN: {
+				return new ASTNodes.Statements.Return(this.ParseExpressionStatement().Expression)
+			}
+			Case Keywords.IF: {
+				return this.ParseIf()
+			}
+			Case Keywords.ELSE: {
+				Throw, Exception("Unexpected ELSE")
+			}
 			; TODO - Add the rest of the keywords
 		}
 	}
@@ -159,6 +168,25 @@
 		else {
 			Throw, Exception("Unexpected expression terminator: '" this.Next().Stringify() "'.")
 		}
+	}
+	
+	ParseIf() {
+		Group := [new ASTNodes.Statements.If(this.ParseExpression(Tokens.LEFT_BRACE), this.ParseBlock())]
+	
+		while (this.Ignore(Tokens.NEWLINE) && this.Peek().Value = Keywords.ELSE) {
+			this.Next()
+		
+			if (this.Peek().Value = Keywords.IF) {
+				this.Next()
+				Group.Push(new ASTNodes.Statements.If(this.ParseExpression(Tokens.LEFT_BRACE), this.ParseBlock()))
+			}
+			else {
+				Group.Push(new ASTNodes.Statements.If(new Token(Tokens.INTEGER, True, {}), this.ParseBlock()))
+				Break
+			}
+		}
+	
+		return new ASTNodes.Statements.IfGroup(Group)
 	}
 	
 	ParseBlock() {
@@ -220,14 +248,15 @@
 	
 		loop {
 			Next := this.Next()
+			Unexpected := True
 		
 			Switch (Next.Type) {
 				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER: {
 					OperandStack.Push(Next)
-					Continue
+					Unexpected := False
 				}
 				Case Tokens.LEFT_PAREN: {
-					if (this.Previous().Type != Tokens.Operator) {
+					if (this.Previous().Type = Tokens.IDENTIFIER) {
 						this.Index--
 						Params := this.ParseGrouping()
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
@@ -236,7 +265,7 @@
 						OperatorStack.Push(Next)
 					}
 					
-					Continue
+					Unexpected := False
 				}
 				Case Tokens.RIGHT_PAREN: {
 					while (OperatorStack.Count()) {
@@ -249,19 +278,17 @@
 							this.AddNode(OperandStack, 2, NextOperator)
 						}
 					}
-					
-					MsgBox, % "Unbalenced parens"
 				}
 				Case Next.CaseIsOperator(): {
 					Operator := Next
 					
 					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
-						Continue
+						Unexpected := False
 					}
 					else if (Operators.IsPrefix(Operator)) {
 						OperatorStack.Push(Operator)
-						Continue
+						Unexpected := False
 					}
 					
 					while (OperatorStack.Count() != 0) {
@@ -269,7 +296,7 @@
 						
 						if (Operators.IsPrefix(NextOperator)) {
 							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
-							Continue
+							Unexpected := False
 						}
 						
 						if (NextOperator.IsOperator() && Operators.CheckPrecedence(Operator, NextOperator)) {
@@ -282,7 +309,7 @@
 					}
 					
 					OperatorStack.Push(Operator)
-					Continue
+					Unexpected := False
 				}
 				Default: {
 					; This isn't a character that should be in this expression, but it might be the terminator, so we drop the
@@ -298,8 +325,10 @@
 				}
 			}
 			
-			MsgBox, % "Unexpected character '" Next.Stringify() "' in expression around " Next.Context.Start
-			Break
+			if (Unexpected) {
+				MsgBox, % "Unexpected character '" Next.Stringify() "' in expression around " Next.Context.Start
+				Break
+			}
 		}
 		
 		while (OperatorStack.Count()) {

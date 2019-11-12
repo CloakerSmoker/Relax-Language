@@ -230,6 +230,9 @@ class Keywords extends Enum {
 	static Options := "
 	(
 		define
+		return
+		if
+		else
 	)"
 }
 
@@ -255,6 +258,9 @@ class ASTNodeTypes extends Enum {
 	(
 		DEFINE
 		EXPRESSIONLINE
+		RETURN
+		IFGROUP
+		IF
 		
 		IDENTIFER
 		GROUPING
@@ -280,18 +286,56 @@ class ASTNodes {
 				String .= ") {`n"
 				
 				for k, Line in this.Body {
-					String .= "`t" Line.Stringify()
+					String .= Line.Stringify("`t")
 				}
 				
-				String .= "`n};"
+				String .= "`n" Indent "};`n"
 				return String
 			}
 		}
 		class ExpressionLine extends ASTNode {
 			static Parameters := ["Expression"]
 			
-			Stringify() {
-				return this.Expression.Stringify() ";"
+			Stringify(Indent := "") {
+				return Indent this.Expression.Stringify() ";"
+			}
+		}
+		class Return extends ASTNode {
+			static Parameters := ["Expression"]
+			
+			Stringify(Indent := "") {
+				return Indent "return " this.Expression.Stringify() ";"
+			}
+		}
+		class IfGroup extends ASTNode {
+			static Parameters := ["Options"] ; An array of if nodes
+		
+			Stringify(Indent := "") {
+				String := ""
+				
+				for k, v in this.Options {
+					String .= v.Stringify(Indent)
+				}
+				
+				return Indent SubStr(String, StrLen(Indent) + 5 + 1)
+			}
+		}
+		class If extends ASTNode {
+			static Parameters := ["Condition", "Body"]
+		
+			Stringify(Indent := "") {
+				String := Indent "else if "
+				String .= this.Condition.Stringify()
+			
+				String .= " {`n"
+				
+				for k, Line in this.Body {
+					String .= Indent Line.Stringify(Indent "`t")
+				}
+				
+				String .= Indent "`n" Indent "};`n"
+				
+				return String
 			}
 		}
 	}

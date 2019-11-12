@@ -10,8 +10,13 @@
 
 Code = 
 (
-define Int64 Fn(Int32 a) {
-	return 1
+define Int64 Min(Int64 NumberOne, Int64 NumberTwo) {
+	if (NumberOne < NumberTwo) {
+		return NumberOne
+	}
+	else {
+		return NumberTwo
+	}
 }
 )
 
