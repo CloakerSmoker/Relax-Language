@@ -53,6 +53,9 @@
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
+			CG.Move(RSI, 0)
+			CG.Move(RDI, 1)
+			
 			this.FunctionParameters(DefineAST.Params)
 			
 			for k, Statement in DefineAST.Body {
@@ -84,7 +87,7 @@
 			Switch (Pair[1].Value) {
 				Case "Int64": {
 					this.AddVariable(Count - k, Pair[2].Value)
-					this.CodeGen.Move(R14, Count - k)
+					this.CodeGen.Move(R14, k - 1)
 					this.CodeGen.Move_SIB_R64(SIB(8, R14, R15), FirstFour[k])
 					Size += 8
 				}
@@ -104,18 +107,44 @@
 	}
 	
 	CompileBinary(Expression) {
+		this.Compile(Expression.Left)
+		this.Compile(Expression.Right)
+		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RBX)
+		this.CodeGen.Cmp(RAX, RBX)
+	
 		Switch (Expression.Operator.Type) {
 			Case Tokens.PLUS: {
-				this.Compile(Expression.Left)
-				this.Compile(Expression.Right)
-				this.CodeGen.Pop(RAX)
-				this.CodeGen.Pop(RBX)
 				this.CodeGen.Add(RAX, RBX)
-				this.CodeGen.Push(RAX)
+			}
+			Case Tokens.MINUS: {
+				this.CodeGen.Sub(RAX, RBX)
+			}
+			Case Tokens.EQUAL: {
+				this.CodeGen.Move(RAX, RSI)
+				this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
+			}
+			Case Tokens.LESS: {
+				this.CodeGen.Move(RAX, RSI)
+				this.CodeGen.C_Move_L_R64_R64(RAX, RDI)
+			}
+			Case Tokens.LESS_EQUAL: {
+				this.CodeGen.Move(RAX, RSI)
+				this.CodeGen.C_Move_LE_R64_R64(RAX, RDI)
+			}
+			Case Tokens.GREATER: {
+				this.CodeGen.Move(RAX, RSI)
+				this.CodeGen.C_Move_G_R64_R64(RAX, RDI)
+			}
+			Case Tokens.GREATER_EQUAL: {
+				this.CodeGen.Move(RAX, RSI)
+				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
 			}
 			Default: {
 				Throw, Exception("Operator '" Expression.Operator.Stringify() "' is not implemented for compiling.")
 			}
 		}
+		
+		this.CodeGen.Push(RAX)
 	}
 }

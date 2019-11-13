@@ -305,6 +305,25 @@ class X64CodeGen {
 		
 		this.Pop(Dummy)
 	}
+	
+	C_Move_E_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x44], RegisterOne, RegisterTwo)
+	}
+	C_Move_NE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x45], RegisterOne, RegisterTwo)
+	}
+	C_Move_L_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x4C], RegisterOne, RegisterTwo)
+	}
+	C_Move_LE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x4E], RegisterOne, RegisterTwo)
+	}
+	C_Move_G_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x4F], RegisterOne, RegisterTwo)
+	}
+	C_Move_GE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x4D], RegisterOne, RegisterTwo)
+	}
 
 	Lea_R64_SIB(Register, SIB) {
 		; Lea r64,r/m64
