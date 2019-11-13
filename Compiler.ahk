@@ -17,7 +17,16 @@
 		
 		Index := this.Variables[Name]
 		
-		this.CodeGen.Move(R10, Index)
+		if (Index = 0) {
+			this.CodeGen.Move(R10, RSI)
+		}
+		else if (Index = 1) {
+			this.CodeGen.Move(R10, RDI)
+		}
+		else {
+			this.CodeGen.SmallMove(R10, Index)
+		}
+		
 		this.CodeGen.Move(R11, SIB(8, R10, R15))
 		this.CodeGen.Push(R11)
 	}
@@ -53,8 +62,8 @@
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
-			CG.Move(RSI, 0)
-			CG.Move(RDI, 1)
+			CG.SmallMove(RSI, 0)
+			CG.SmallMove(RDI, 1)
 			
 			this.FunctionParameters(DefineAST.Params)
 			
@@ -87,7 +96,17 @@
 			Switch (Pair[1].Value) {
 				Case "Int64": {
 					this.AddVariable(Count - k, Pair[2].Value)
-					this.CodeGen.Move(R14, k - 1)
+					
+					if (k - 1 = 0) {
+						this.CodeGen.Move(R14, RSI)
+					}
+					else if (k - 1 = 1) {
+						this.CodeGen.Move(R14, RDI)
+					}
+					else {
+						this.CodeGen.SmallMove(R14, k - 1)
+					}
+					
 					this.CodeGen.Move_SIB_R64(SIB(8, R14, R15), FirstFour[k])
 					Size += 8
 				}

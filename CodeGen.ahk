@@ -261,6 +261,12 @@ class X64CodeGen {
 		static R14 := {"Type": "R64", "Number": 6, "Requires": {"REX": REX.B}}
 		static R15 := {"Type": "R64", "Number": 7, "Requires": {"REX": REX.B}}
 	}
+	
+	
+	SmallMove(Register, Integer) {
+		this.REXOpcodeMod([0xC7], {"Number": 0}, Register)
+		this.SplitIntoBytes32(Integer)
+	}
 
 	Move_R64_I64(Register, Integer) {
 		; MOV r64, imm64
@@ -382,7 +388,10 @@ class X64CodeGen {
 	}
 	
 	Push_R64(Register) {
-		this.REX(REX.W, Register.Requires.REX)
+		if (Register.Requires.REX) {
+			this.REX(Register.Requires.REX)
+		}
+		
 		this.PushByte(0x50 + Register.Number)
 	}
 	Push_I32(Integer) {
@@ -401,7 +410,10 @@ class X64CodeGen {
 	}
 	
 	Pop_R64(Register) {
-		this.REX(REX.W, Register.Requires.REX)
+		if (Register.Requires.REX) {
+			this.REX(Register.Requires.REX)
+		}
+		
 		this.PushByte(0x58 + Register.Number)
 	}
 	
