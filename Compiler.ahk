@@ -7,7 +7,7 @@
 			return this.CompileToken(Something)
 		}
 	
-		return this["Compile" Something.Type].Call(this, Something)
+		return this["Compile" ASTNodeTypes[Something.Type]].Call(this, Something)
 	}
 	
 	GetVariable(Name) {
@@ -40,6 +40,7 @@
 	}
 	
 	CompileFunction(DefineAST) {
+		this.Variables := {}
 		ParamSizes := this.FunctionParameters(DefineAST.Params)
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		
@@ -48,23 +49,34 @@
 	
 		CG.Push(RBP)
 		CG.Move(RBP, RSP)
-			CG.Sub(RSP, ParamSizes)
-			CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
+			if (ParamSizes != 0) {
+				CG.Sub(RSP, ParamSizes)
+				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
+			}
 			
 			for k, Statement in DefineAST.Body {
 				this.Compile(Statement)
 			}
 			
-			CG.Add(RSP, ParamSizes)
-		CG.Pop(RBP)
-		CG.Return()
+			if (ParamSizes != 0) {
+				CG.Add(RSP, ParamSizes)
+			}
+		CG.Label("__Return")
+		this.Leave()
+		
+		return CG
 	}
+	Leave() {
+		this.CodeGen.Pop(RBP)
+		this.CodeGen.Return()
+	}
+	
 	FunctionParameters(Pairs) {
 		Size := 0
 		Count := Pairs.Count()
 		
 		for k, Pair in Pairs {
-			Switch (Pair[1]) {
+			Switch (Pair[1].Value) {
 				Case "Int64": {
 					this.AddVariable(Count - k, Pair[2])
 					Size += 8
@@ -81,7 +93,7 @@
 	CompileReturn(Statement) {
 		this.Compile(Statement.Expression)
 		this.CodeGen.Pop(RAX)
-		this.CodeGen.Return()
+		this.CodeGen.JMP("__Return")
 	}
 	
 	CompileBinary(Expression) {

@@ -282,7 +282,10 @@ class ASTNodes {
 					String .= Pair[1].Value " " Pair[2].Value ", "
 				}
 			
-				String := SubStr(String, 1, StrLen(String) - 2)
+				if (this.Params.Count()) {
+					String := SubStr(String, 1, StrLen(String) - 2)
+				}
+					
 				String .= ") {`n"
 				
 				for k, Line in this.Body {

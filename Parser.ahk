@@ -145,7 +145,13 @@
 	
 	ParseParamGrouping() {
 		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
-		Pairs := [[this.ParsePrimary(), this.ParsePrimary()]]
+		
+		try {
+			Pairs := [[this.ParsePrimary(), this.ParsePrimary()]]
+		}
+		catch {
+			Pairs := []
+		}
 		
 		while (this.NextMatches(Tokens.COMMA)) {
 			Pair := []
@@ -363,7 +369,8 @@
 				return this.ParseGrouping()
 			}
 			Default: {
-				MsgBox, % "Unexpected token " Next.Context.Start "-" Next.Context.End
+				this.Index--
+				Throw, Exception("Unexpected token " Next.Stringify() " around " Next.Context.Start "-" Next.Context.End)
 			}
 		}
 	}

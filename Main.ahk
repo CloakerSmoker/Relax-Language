@@ -7,16 +7,13 @@
 #Include Constants.ahk
 #Include Lexer.ahk
 #Include Parser.ahk
+#Include CodeGen.ahk
+#Include Compiler.ahk
 
 Code = 
 (
-define Int64 Min(Int64 NumberOne, Int64 NumberTwo) {
-	if (NumberOne < NumberTwo) {
-		return NumberOne
-	}
-	else {
-		return NumberTwo
-	}
+define Int64 Test() {
+	return 69
 }
 )
 
@@ -33,6 +30,10 @@ Pest := new Parser(Test)
 a := Pest.Start()
 
 MsgBox, % a[1].Stringify()
+
+C := new Compiler(Test)
+G := C.CompileFunction(a[1])
+MsgBox, % "Generated code: `n" (Clipboard := G.Stringify()) "`nResult: " G.Execute() 
 
 ;Gui, New
 ;Gui, Add, TreeView, w400 h900
