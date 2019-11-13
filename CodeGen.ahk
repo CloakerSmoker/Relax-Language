@@ -282,6 +282,13 @@ class X64CodeGen {
 		
 		this.REXOpcodeModSIB([0x8B], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
 	}
+	Move_SIB_R64(SIB, Register) {
+		; MOV r/m64,r64
+		; REX.W + 89 /r
+		
+		this.Lea_R64_SIB(R11, SIB)
+		this.REXOpcodeMod([0x89], Register, R11, Mode.RToPtr)
+	}
 	Move_R8_SIB(Register, SIB) {
 		; REX.W + 0F B6 /r
 		; MOVZX r64, r/m8

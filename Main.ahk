@@ -12,8 +12,8 @@
 
 Code = 
 (
-define Int64 Test() {
-	return 69
+define Int64 Test(Int64 Value) {
+	return Value + 1
 }
 )
 
@@ -33,7 +33,7 @@ MsgBox, % a[1].Stringify()
 
 C := new Compiler(Test)
 G := C.CompileFunction(a[1])
-MsgBox, % "Generated code: `n" (Clipboard := G.Stringify()) "`nResult: " G.Execute() 
+MsgBox, % "Generated code: `n" (Clipboard := G.Stringify())  "`nResult: " G.Execute("Ptr", 69) 
 
 ;Gui, New
 ;Gui, Add, TreeView, w400 h900

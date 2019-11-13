@@ -41,9 +41,8 @@
 	
 	CompileFunction(DefineAST) {
 		this.Variables := {}
-		ParamSizes := this.FunctionParameters(DefineAST.Params)
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
-		
+		ParamSizes := DefineAST.Params.Count() * 8
 		CG := this.CodeGen := new X64CodeGen()
 		
 	
@@ -54,14 +53,18 @@
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
+			this.FunctionParameters(DefineAST.Params)
+			
 			for k, Statement in DefineAST.Body {
 				this.Compile(Statement)
 			}
 			
-			if (ParamSizes != 0) {
-				CG.Add(RSP, ParamSizes)
-			}
 		CG.Label("__Return")
+		
+		if (ParamSizes != 0) {
+			CG.Add(RSP, ParamSizes)
+		}
+		
 		this.Leave()
 		
 		return CG
@@ -72,13 +75,17 @@
 	}
 	
 	FunctionParameters(Pairs) {
+		static FirstFour := [RCX, RDX, R8, R9]
+	
 		Size := 0
 		Count := Pairs.Count()
 		
 		for k, Pair in Pairs {
 			Switch (Pair[1].Value) {
 				Case "Int64": {
-					this.AddVariable(Count - k, Pair[2])
+					this.AddVariable(Count - k, Pair[2].Value)
+					this.CodeGen.Move(R14, Count - k)
+					this.CodeGen.Move_SIB_R64(SIB(8, R14, R15), FirstFour[k])
 					Size += 8
 				}
 				Default: {
