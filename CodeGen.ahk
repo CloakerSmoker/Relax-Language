@@ -262,6 +262,9 @@ class X64CodeGen {
 		static R15 := {"Type": "R64", "Number": 7, "Requires": {"REX": REX.B}}
 	}
 	
+	; TODO: Redo this entire thing, so instruction sizes can change dynamically during linking
+	;  ex: removing duplicate instructions shouldn't clobber relative jumps
+	;  ex: changing jumps to use 8bit offsets instead of 32 shouln't clobber other jumps
 	
 	SmallMove(Register, Integer) {
 		;this.XOR_R64_R64(Register, Register)

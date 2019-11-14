@@ -265,7 +265,7 @@
 					this.Index--
 					Params := this.ParseGrouping()
 				
-					if (this.Previous().Type = Tokens.IDENTIFIER) {
+					if (this.Previous().Type = Tokens.IDENTIFIER && (OperandStack.Count() > 0)) {
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
 					}
 					else {

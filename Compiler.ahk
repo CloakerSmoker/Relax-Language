@@ -191,6 +191,16 @@
 		this.CodeGen.Push(RAX)
 	}
 	
+	CompileGrouping(Expression) {
+		for k, v in Expression.Expressions {
+			this.Compile(v)
+		
+			if (k != 1) {
+				this.CodeGen.Pop(RAX)
+			}
+		}
+	}
+	
 	CompileCall(Expression) {
 		if (Expression.Target.Value = "Deref") {
 			return this.CompileDeref(Expression.Params.Expressions)
