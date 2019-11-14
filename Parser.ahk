@@ -287,14 +287,32 @@
 				}
 				Case Next.CaseIsOperator(): {
 					Operator := Next
+					DontPush := False
 					
-					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
+					if (Operator.Type = Tokens.COLON) {
+						Param := OperandStack.Pop()
+						Name := this.Next()
+						
+						if (Param.Type != Tokens.IDENTIFIER) {
+							Throw, Exception("Invalid (come up with a name for this) value: " Param.Stringify())
+						}
+						else if (Name.Type != Tokens.IDENTIFIER) {
+							Throw, Exception("Invalid name for (come up with a name): " Name.Stringify())
+						}
+						
+						Params := this.ParseGrouping()
+						Params.Expressions.InsertAt(1, Param)
+						
+						OperandStack.Push(new ASTNodes.Expressions.Call(Name, Params))
+						DontPush := True
+					}
+					else if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
-						Unexpected := False
+						DontPush := True
 					}
 					else if (Operators.IsPrefix(Operator)) {
 						OperatorStack.Push(Operator)
-						Unexpected := False
+						DontPush := True
 					}
 					
 					while (OperatorStack.Count() != 0) {
@@ -314,7 +332,10 @@
 						}
 					}
 					
-					OperatorStack.Push(Operator)
+					if !(DontPush) {
+						OperatorStack.Push(Operator)
+					}
+					
 					Unexpected := False
 				}
 				Default: {

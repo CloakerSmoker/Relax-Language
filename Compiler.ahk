@@ -95,7 +95,7 @@
 		for k, Pair in Pairs {
 			Switch (Pair[1].Value) {
 				Case "Int64": {
-					this.AddVariable(Count - k, Pair[2].Value)
+					this.AddVariable(k - 1, Pair[2].Value)
 					
 					if (k - 1 = 0) {
 						this.CodeGen.Move(R14, RSI)
@@ -161,6 +161,27 @@
 			}
 			Default: {
 				Throw, Exception("Operator '" Expression.Operator.Stringify() "' is not implemented for compiling.")
+			}
+		}
+		
+		this.CodeGen.Push(RAX)
+	}
+	
+	CompileCall(Expression) {
+		if (Expression.Target.Value = "Deref") {
+			return this.CompileDeref(Expression.Params.Expressions)
+		}
+		
+		Throw, Exception("Function: " Expression.Target.Stringify() " not callable.")
+	}
+	
+	CompileDeref(Params) {
+		this.Compile(Params[1])
+		this.CodeGen.Pop(RBX)
+	
+		Switch (Params[2].Value) {
+			Case "Byte": {
+				this.CodeGen.MoveSX_R64_RI8(RAX, RBX)
 			}
 		}
 		

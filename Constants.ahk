@@ -369,7 +369,6 @@ class ASTNodes {
 		class Binary extends ASTNode {
 			static Parameters := ["Left", "Operator", "Right"]
 			
-			
 			Stringify() {
 				return "(" this.Left.Stringify() " " this.Operator.Stringify() " " this.Right.Stringify() ")"
 			}
@@ -377,6 +376,10 @@ class ASTNodes {
 		
 		class Call extends ASTNode {
 			static Parameters := ["Target", "Params"]
+			
+			Stringify() {
+				return this.Target.Stringify() this.Params.Stringify()
+			}
 		}
 	}
 }

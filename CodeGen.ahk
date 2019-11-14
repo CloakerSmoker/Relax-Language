@@ -289,6 +289,16 @@ class X64CodeGen {
 		this.Mod(Mode.RToR, 6, Register.Number)
 		this.PushByte(Byte)
 	}
+	
+	MoveSX_R64_RI32(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x63], RegisterOne, RegisterTwo, Mode.RToPtr)
+	}
+	MoveSX_R64_RI16(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xBF], RegisterOne, RegisterTwo, Mode.RToPtr)
+	}
+	MoveSX_R64_RI8(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, Mode.RToPtr)
+	}
 
 	Move_R64_I64(Register, Integer) {
 		; MOV r64, imm64
