@@ -389,6 +389,11 @@
 		if (this.NextMatches(Tokens.LEFT_PAREN)) {
 			Expressions := [this.ParseExpression(Tokens.COMMA, Tokens.RIGHT_PAREN)]
 			
+			if (Expressions[1].Count() < 1) {
+				this.Consume(Tokens.RIGHT_PAREN, "Expression groupings must have a closing paren")
+				return new ASTNodes.Expressions.Grouping([])
+			}
+			
 			while (this.NextMatches(Tokens.COMMA)) {
 				Expressions.Push(this.ParseExpression(Tokens.COMMA, Tokens.RIGHT_PAREN))
 			}

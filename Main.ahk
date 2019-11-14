@@ -13,17 +13,19 @@
 Code = 
 (
 define Int64 Add(Int64 ValueOne, Int64 ValueTwo) {
-	if (0) {
-		return 55
-	}
-	else if (0) {
-		return 99
-	}
-	else {
-		return 101
-	}
+	return ValueOne:Address()
 }
 )
+
+;	if (0) {
+;		return 55
+;	}
+;	else if (0) {
+;		return 99
+;	}
+;	else {
+;		return 101
+;	}
 
 Test := new Lexer(Code)
 t := Test.Start()

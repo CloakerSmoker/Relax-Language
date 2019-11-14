@@ -10,7 +10,7 @@
 		return this["Compile" ASTNodeTypes[Something.Type]].Call(this, Something)
 	}
 	
-	GetVariable(Name) {
+	GetVariablePrelude(Name) {
 		if !(this.Variables.HasKey(Name)) {
 			Throw, Exception("Variable '" Name "' not found.")
 		}
@@ -18,18 +18,30 @@
 		Index := this.Variables[Name]
 		
 		if (Index = 0) {
-			this.CodeGen.Move(R10, RSI)
+			return RSI
 		}
 		else if (Index = 1) {
-			this.CodeGen.Move(R10, RDI)
+			return RDI
 		}
 		else {
 			this.CodeGen.SmallMove(R10, Index)
+			return R10
 		}
+	}
+	
+	GetVariable(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
 		
-		this.CodeGen.Move(R11, SIB(8, R10, R15))
+		this.CodeGen.Move(R11, SIB(8, IndexRegister, R15))
 		this.CodeGen.Push(R11)
 	}
+	GetVariableAddress(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
+		
+		this.CodeGen.Lea(R11, SIB(8, IndexRegister, R15))
+		this.CodeGen.Push(R11)
+	}
+	
 	AddVariable(RSPIndex, Name) {
 		this.Variables[Name] := RSPIndex
 	}
@@ -98,16 +110,17 @@
 					this.AddVariable(k - 1, Pair[2].Value)
 					
 					if (k - 1 = 0) {
-						this.CodeGen.Move(R14, RSI)
+						IndexRegister := RSI
 					}
 					else if (k - 1 = 1) {
-						this.CodeGen.Move(R14, RDI)
+						IndexRegister := RDI
 					}
 					else {
 						this.CodeGen.SmallMove(R14, k - 1)
+						IndexRegister := R14
 					}
 					
-					this.CodeGen.Move_SIB_R64(SIB(8, R14, R15), FirstFour[k])
+					this.CodeGen.Move_SIB_R64(SIB(8, IndexRegister, R15), FirstFour[k])
 					Size += 8
 				}
 				Default: {
@@ -207,6 +220,9 @@
 		}
 		else if (Expression.Target.Value = "Put") {
 			return this.CompilePut(Expression.Params.Expressions)
+		}
+		else if (Expression.Target.Value = "Address") {
+			return this.GetVariableAddress(Expression.Params.Expressions[1].Value)
 		}
 		
 		Throw, Exception("Function: " Expression.Target.Stringify() " not callable.")
