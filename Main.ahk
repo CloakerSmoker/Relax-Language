@@ -13,7 +13,7 @@
 Code = 
 (
 define Int64 Add(Int64 ValueOne, Int64 ValueTwo) {
-	return ValueOne > ValueTwo
+	return ValueOne + 69 + ValueTwo 
 }
 )
 
@@ -33,4 +33,4 @@ MsgBox, % a[1].Stringify()
 
 C := new Compiler(Test)
 G := C.CompileFunction(a[1])
-MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Ptr", 60, "Ptr", 9) 
+MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Ptr", 60, "Ptr", 9)

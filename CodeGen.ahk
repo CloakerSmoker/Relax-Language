@@ -264,8 +264,30 @@ class X64CodeGen {
 	
 	
 	SmallMove(Register, Integer) {
+		;this.XOR_R64_R64(Register, Register)
+		;this.XOR_R64_I8(Register, Byte & 0xFF)
+	
 		this.REXOpcodeMod([0xC7], {"Number": 0}, Register)
 		this.SplitIntoBytes32(Integer)
+	}
+	
+	XOR_R64_R64(RegisterOne, RegisterTwo) {
+		if (RegisterOne.Requires.REX || RegisterTwo.Requires.REX) {
+			this.REX(REX.W, RegisterOne.Requires.REX, RegisterTwo.Requires.REX)
+		}
+	
+		this.PushByte(0x33)
+		this.Mod(Mode.RToR, RegisterOne.Number, RegisterTwo.Number)
+		;this.REXOpcodeMod([0x33], RegisterOne, RegisterTwo)
+	}
+	XOR_R64_I8(Register, Byte) {
+		if (Register.Requires.REX) {
+			this.REX(Register.Requires.REX)
+		}
+		
+		this.PushByte(0x83)
+		this.Mod(Mode.RToR, 6, Register.Number)
+		this.PushByte(Byte)
 	}
 
 	Move_R64_I64(Register, Integer) {
