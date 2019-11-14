@@ -119,6 +119,30 @@
 		return Size
 	}
 	
+	CompileIfGroup(Statement) {
+		static Index := 0
+		
+		ThisIndex := Index++
+	
+		for k, ElseIf in Statement.Options {
+			this.CodeGen.Label("__If__" Index)
+			this.Compile(ElseIf.Condition)
+			this.CodeGen.Pop(RAX)
+			this.CodeGen.Cmp(RAX, RSI)
+			this.CodeGen.JE("__If__" Index + 1)
+			
+			for k, Line in ElseIf.Body {
+				this.Compile(Line)
+			}
+			
+			this.CodeGen.Jmp("__If__" ThisIndex "__End")
+			Index++
+		}
+	
+		this.CodeGen.Label("__If__" Index)
+		this.CodeGen.Label("__If__" ThisIndex "__End")
+	}
+	
 	CompileReturn(Statement) {
 		this.Compile(Statement.Expression)
 		this.CodeGen.Pop(RAX)

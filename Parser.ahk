@@ -215,7 +215,7 @@
 	
 	ParseExpression(Terminators*) {
 		if ((!IsObject(Terminators)) || (Terminators.Count() = 0)) {
-			Terminators := [Tokens.NEWLINE, Tokens.EOF]
+			Terminators := [Tokens.NEWLINE, Tokens.EOF, Tokens.LEFT_BRACE]
 		}
 	
 	
@@ -262,28 +262,17 @@
 					Unexpected := False
 				}
 				Case Tokens.LEFT_PAREN: {
+					this.Index--
+					Params := this.ParseGrouping()
+				
 					if (this.Previous().Type = Tokens.IDENTIFIER) {
-						this.Index--
-						Params := this.ParseGrouping()
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
 					}
 					else {
-						OperatorStack.Push(Next)
+						OperandStack.Push(Params)
 					}
 					
 					Unexpected := False
-				}
-				Case Tokens.RIGHT_PAREN: {
-					while (OperatorStack.Count()) {
-						NextOperator := OperatorStack.Pop()
-					
-						if (NextOperator.Type = Tokens.LEFT_PAREN) {
-							Continue, 2
-						}
-						else {
-							this.AddNode(OperandStack, 2, NextOperator)
-						}
-					}
 				}
 				Case Next.CaseIsOperator(): {
 					Operator := Next

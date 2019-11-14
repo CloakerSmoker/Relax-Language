@@ -236,6 +236,8 @@ class Lexer {
 								this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
 							}
 							Default: {
+								this.Index -= 2 
+								; Roll back by the 0, and whatever .Next returned, so we start AdvanceThroughNumber at the right index
 								this.AdvanceThroughNumber()
 							}
 						}

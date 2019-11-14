@@ -13,7 +13,15 @@
 Code = 
 (
 define Int64 Add(Int64 ValueOne, Int64 ValueTwo) {
-	return ValueOne:Put(ValueTwo, Short)
+	if (0) {
+		return 55
+	}
+	else if (1) {
+		return 99
+	}
+	else {
+		return 101
+	}
 }
 )
 
