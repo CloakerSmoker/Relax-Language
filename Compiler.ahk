@@ -171,6 +171,9 @@
 		if (Expression.Target.Value = "Deref") {
 			return this.CompileDeref(Expression.Params.Expressions)
 		}
+		else if (Expression.Target.Value = "Put") {
+			return this.CompilePut(Expression.Params.Expressions)
+		}
 		
 		Throw, Exception("Function: " Expression.Target.Stringify() " not callable.")
 	}
@@ -180,11 +183,50 @@
 		this.CodeGen.Pop(RBX)
 	
 		Switch (Params[2].Value) {
-			Case "Byte": {
+			Case "Byte", "Int8": {
 				this.CodeGen.MoveSX_R64_RI8(RAX, RBX)
+			}
+			Case "Short", "Int16": {
+				this.CodeGen.MoveSX_R64_RI16(RAX, RBX)
+			}
+			Case "Long", "Int32": {
+				this.CodeGen.MoveSX_R64_RI32(RAX, RBX)
+			}
+			Case "LongLong", "Int64": {
+				this.CodeGen.Move_R64_RI64(RAX, RBX)
+			}
+			Default: {
+				Throw, Exception("Un-supported deref type: '" Params[2].Stringify() "'.")
 			}
 		}
 		
 		this.CodeGen.Push(RAX)
+	}
+	
+	CompilePut(Params) {
+		this.Compile(Params[1])
+		this.CodeGen.Pop(RAX)
+		
+		this.Compile(Params[2])
+		this.CodeGen.Pop(RBX)
+		
+		Switch (Params[3].Value) {
+			Case "Byte", "Int8": {
+				this.CodeGen.Move_RI8_R64(RAX, RBX)
+				this.CodeGen.Push(1)
+			}
+			Case "Short", "Int16": {
+				this.CodeGen.Move_RI16_R64(RAX, RBX)
+				this.CodeGen.Push(2)
+			}
+			Case "Long", "Int32": {
+				this.CodeGen.Move_RI32_R64(RAX, RBX)
+				this.CodeGen.Push(4)
+			}
+			Case "LongLong", "Int64": {
+				this.CodeGen.Move_RI64_R64(RAX, RBX)
+				this.CodeGen.Push(8)
+			}
+		}
 	}
 }

@@ -299,6 +299,29 @@ class X64CodeGen {
 	MoveSX_R64_RI8(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, Mode.RToPtr)
 	}
+	
+	Move_RI8_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x88], RegisterTwo, RegisterOne, Mode.RToPtr) ; Op1 = rm(dest), Op2 = r(source)
+	}
+	Move_RI16_R64(RegisterOne, RegisterTwo) {
+		this.PushByte(0x66) ; Legacy opcode size prefix, now using 16 bit instead of 32
+		this.PushByte(0x89) ; Opcode
+		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
+	}
+	Move_RI32_R64(RegisterOne, RegisterTwo) {
+		this.PushByte(0x89) ; Opcode
+		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
+	}
+	Move_RI64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, Mode.RToPtr)
+	}
+	
+	Move_R64_RI64(DestRegister, SourceRegister) {
+		; MOV r64,r/m64
+		; REX.W + 8B /r
+	
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, Mode.RToPtr)
+	}
 
 	Move_R64_I64(Register, Integer) {
 		; MOV r64, imm64
