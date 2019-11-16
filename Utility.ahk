@@ -1,5 +1,99 @@
 ﻿global A_Quote := """"
 
+PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
+	Message := ""
+	TokenContext := Token.Context
+	
+	TokenText := TokenContext.ExtractFrom(Source)
+	Lines := StrSplit(Source, "`n", "`r")
+	
+	PreviousLinesLength := 0
+	
+	for k, v in Lines {
+		LineLength := StrLen(StrReplace(v, "`t", "    ")) + 2
+		
+		if (PreviousLinesLength + LineLength > TokenContext.Start) {
+			Break
+		}
+		else {
+			PreviousLinesLength += LineLength
+		}
+	}
+	
+	
+	TokenLine := StrReplace(Lines[TokenContext.Line], "`t", "    ")
+
+
+	Message .= Phase " Error: " LongText "`n"
+	
+	if (TokenContext.Line != 1) {
+		Message .= " " (TokenContext.Line + 1) " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
+	}
+	
+	Message .= " " TokenContext.Line " | " TokenLine
+	
+	;TokenStart := InStr(TokenLine, TokenText)
+	;MsgBox, % TokenContext.Start "`n" PreviousLinesLength "`n" (TokenContext.Start) - PreviousLinesLength "`n" SubStr(Source, PreviousLinesLength) "`n" SubStr(TokenLine, (TokenContext.Start) - PreviousLinesLength)
+	;TokenStart := (TokenContext.Start + TokenContext.Line) - PreviousLinesLength
+	TokenStart := InStr(TokenLine, TokenText, True, TokenContext.Start - PreviousLinesLength)
+	TokenEnd := StrLen(TokenText)
+	
+	Message .= "`n   |-"
+	
+	loop, % TokenStart - 1 {
+		Message .= "-"
+	}
+	
+	loop, % TokenEnd {
+		Message .= "^"
+	}
+
+	Message .= "`n   | "
+	
+	loop, % TokenStart - 1 {
+		Message .= " "
+	}
+	
+	if (ShortText) {
+		Message .= "|: " ShortText
+	}
+	else {
+		Message .= "|: HERE"
+	}
+	
+	if (Help) {
+		Message .= "`nHelp: " Help
+	}
+	
+	Message .= "`n{Enter} to continue."
+	
+	Gui, ShowError:New
+	Gui, ShowError:Font, s10, Terminal
+	Gui, ShowError:Add, Text, w700, % Message
+	Gui, ShowError:Show
+	
+	KeyWait, Enter, D
+	
+	Gui, ShowError:Destroy
+	
+	Throw, Exception(Message)
+}
+
+ShowError(Exception) {
+	Text := Exception.Message
+	Token := Exception.What
+	Source := Exception.Extra
+
+	
+	
+}
+
+; %Phase% Error: %LongText%
+;  %ErrorLine - 1% | %Lines[ErrorLine - 1]%
+;  %ErrorLine - 0% | %Lines[ErrorLine - 0]%
+;
+;
+
 IsDigit(Character) {
 	return Asc(Character) >= Asc("0") && Asc(Character) <= Asc("9") 
 }

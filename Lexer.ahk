@@ -39,18 +39,20 @@
 	}
 }
 class Context {
-	__New(Start, End) {
+	__New(Start, End, Line := 0) {
 		this.Start := Start
 		this.End := End
+		this.Line := Line
 	}
 	Merge(OtherContext) {
 		NewStart := Min(OtherContext.Start, this.Start)
 		NewEnd := Max(OtherContext.End, this.End)
+		NewLine := Min(OtherContext.Line, this.Line)
 
-		return new Context(NewStart, NewEnd)
+		return new Context(NewStart, NewEnd, NewLine)
 	}
 	ExtractFrom(String) {
-		return SubStr(this.Start, this.End - this.Start)
+		return SubStr(String, this.Start + 1, this.End - this.Start)
 	}
 }
 
@@ -62,6 +64,8 @@ class Lexer {
 		this.Index := 0
 		this.TokenStart := 0
 		this.Tokens := []
+		
+		this.LineNumber := 1
 	}
 	IsAtEnd() {
 		return this.Index >= this.CodeLength
@@ -70,7 +74,13 @@ class Lexer {
 		return this.Next()
 	}
 	Next() {
-		return this.Code[++this.Index]
+		Next := this.Code[++this.Index]
+		
+		if (Next = "`n") {
+			this.LineNumber++
+		}
+		
+		return Next
 	}
 	Previous() {
 		return this.Code[this.Index]
@@ -92,7 +102,7 @@ class Lexer {
 	}
 	AddToken(Type, Value := false) {
 		Value := Value ? Value : this.SubStr(this.TokenStart, this.Index)
-		Context := new Context(this.TokenStart, this.Index)
+		Context := new Context(this.TokenStart, this.Index, this.LineNumber)
 		this.Tokens.Push(new Token(Type, Value, Context))
 	}
 	SubStr(From, To) {
@@ -220,7 +230,9 @@ class Lexer {
 					this.AddToken(Tokens.STRING, this.SubStr(StringBounds[1], StringBounds[2]))
 				}
 				Case "`n": {
-					this.AddToken(Tokens.NEWLINE, "\n")
+					if (this.Tokens[this.Tokens.Count()].Type != Tokens.NEWLINE) {
+						this.AddToken(Tokens.NEWLINE, "\n")
+					}
 				}
 				Case CW.IsWhiteSpace(NextCharacter): {
 					; Ignore whitespace

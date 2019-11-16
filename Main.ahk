@@ -1,5 +1,5 @@
 ﻿class VAL {
-	static DEBUG := True
+	static DEBUG := False
 }
 
 #Include %A_ScriptDir%
@@ -10,10 +10,18 @@
 #Include CodeGen.ahk
 #Include Compiler.ahk
 
+; TODO: CodeGen linking rewrite
+; TODO: Loops
+; TODO: Shorter Add/Sub encodings
+; TODO: (Related to 1) Shorter Jmp encodings
+
+
+
+
 Code = 
 (
-define Int64 Add(Int64 ValueOne, Int64 ValueTwo) {
-	return ValueOne:Address()
+define Int64 Test(Int64 ValueOne, Int99 ValueTwo) {
+	return (ValueOne + 2):Put(69, Byte)
 }
 )
 

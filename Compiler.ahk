@@ -55,7 +55,11 @@
 				this.GetVariable(TargetToken.Value)
 			}
 			Default: {
-				Throw, Exception("Token '" TargetToken.Stringify() "' can not be compiled.")
+				PrettyError("Compile"
+						   ,"Token '" TargetToken.Stringify() "' can not be compiled."
+						   ,"Is not implemented in the compiler."
+						   ,TargetToken
+						   ,this.Tokenizer.CodeString)
 			}
 		}
 	}
@@ -124,7 +128,12 @@
 					Size += 8
 				}
 				Default: {
-					Throw, Exception("Invalid parameter type: '" Pair[1] "'.")
+					PrettyError("Compile"
+							   ,"Invalid parameter type: '" Pair[1].Stringify() "'."
+							   ,""
+							   ,Pair[1]
+							   ,this.Tokenizer.CodeString
+							   ,"Int64 is currently the only parameter type.")
 				}
 			}
 		}
@@ -197,7 +206,11 @@
 				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
 			}
 			Default: {
-				Throw, Exception("Operator '" Expression.Operator.Stringify() "' is not implemented for compiling.")
+				PrettyError("Compile"
+						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the compiler."
+						   ,""
+						   ,Expression.Operator
+						   ,this.Tokenizer.CodeString)
 			}
 		}
 		
@@ -225,7 +238,12 @@
 			return this.GetVariableAddress(Expression.Params.Expressions[1].Value)
 		}
 		
-		Throw, Exception("Function: " Expression.Target.Stringify() " not callable.")
+		PrettyError("Compile"
+				   ,"Function '" Expression.Target.Stringify() "' is not callable."
+				   ,""
+				   ,Expression.Operator
+				   ,this.Tokenizer.CodeString
+				   ,"Only inbuilt functions are currently callable")
 	}
 	
 	CompileDeref(Params) {

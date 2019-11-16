@@ -300,7 +300,7 @@ class ASTNodes {
 			static Parameters := ["Expression"]
 			
 			Stringify(Indent := "") {
-				return Indent this.Expression.Stringify() ";"
+				return Indent this.Expression.Stringify() ";`n"
 			}
 		}
 		class Return extends ASTNode {
@@ -333,7 +333,7 @@ class ASTNodes {
 				String .= " {`n"
 				
 				for k, Line in this.Body {
-					String .= Indent Line.Stringify(Indent "`t")
+					String .= Line.Stringify(Indent "`t")
 				}
 				
 				String .= Indent "`n" Indent "};`n"

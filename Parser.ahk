@@ -29,6 +29,7 @@
 		this.Source := Tokenizer.CodeString
 	
 		this.Index := 0
+		this.CriticalError := False
 	}
 	Next() {
 		return this.Tokens[++this.Index]
@@ -41,7 +42,13 @@
 	}
 	Consume(Type, Reason) {
 		if !(this.NextMatches(Type)) {
-			MsgBox, % Reason
+				Next := this.Next()
+		
+				PrettyError("Parse"
+						   ,Reason
+						   ,""
+						   ,Next
+						   ,this.Source)
 		}
 	}
 	NextMatches(Types*) {
@@ -85,19 +92,29 @@
 			Statements.Push(NextStatement)
 		}
 		
+		if (this.CriticalError) {
+			Throw, Exception("Critical error while parsing, aborting...")
+		}
+		
 		return Statements
 	}
 	ParseStatement() {
 		Next := this.Peek()
 	
-		if (Next.Type = Tokens.KEYWORD) {
-			return this.ParseKeywordStatement()
+		try {
+			if (Next.Type = Tokens.KEYWORD) {
+				return this.ParseKeywordStatement()
+			}
+			else if (Next.Type = Tokens.IDENTIFIER && this.Peek().Type = Tokens.COLON) {
+				; TODO (FIRST) - Decide on a declaration format
+				return this.ParseDeclaration() ; TODO - Implement this
+			}
+			else {
+				return this.ParseExpressionStatement()
+			}
 		}
-		else if (Next.Type = Tokens.IDENTIFIER && this.Peek().Type = Tokens.COLON) {
-			return this.ParseDeclaration() ; TODO - Implement this
-		}
-		else {
-			return this.ParseExpressionStatement()
+		catch E {
+			this.CriticalError := True
 		}
 	}
 	ParseKeywordStatement() {
@@ -114,7 +131,14 @@
 				return this.ParseIf()
 			}
 			Case Keywords.ELSE: {
-				Throw, Exception("Unexpected ELSE")
+				Else := this.Current()
+				
+				PrettyError("Parse"
+						   ,"Unexpected ELSE"
+						   ,"Not part of an if-statement."
+						   ,Else
+						   ,this.Source
+						   ,"The line above this probably terminates the IF statement this ELSE should be a part of.")
 			}
 			; TODO - Add the rest of the keywords
 		}
@@ -123,22 +147,30 @@
 		ReturnType := this.ParsePrimary()
 		
 		if (ReturnType.Type != Tokens.IDENTIFIER) {
-			Throw, Exception("Invalid function definition return type " ASTNodeTypes[ReturnType.Type])
+			PrettyError("Parse"
+					   ,"Invalid function definition return type '" ReturnType.Stringify() "'."
+					   ,"IDENTIFIER expected."
+					   ,ReturnType
+					   ,this.Source
+					   ,"You might have a spelling error in your return type.")
 		}
 		
 		Name := this.ParsePrimary()
 		
 		if (Name.Type != Tokens.IDENTIFIER) {
-			Throw, Exception("Invalid function definition name type " ASTNodeTypes[Name.Type])
+			PrettyError("Parse"
+					   ,"Invalid function name '" Name.Stringify() "', expected IDENTIFIER."
+					   ,"Expected an identifier."
+					   ,Name
+					   ,this.Source
+					   ,"Function names must be identifiers, not numbers or quoted strings.")
+		
+			;Throw, Exception("Invalid function name '" Name.Stringify() "', expected IDENTIFIER.", Name)
 		}
 		
 		Params := this.ParseParamGrouping()
 
 		Body := this.ParseBlock()
-		
-		if (Body.Type != ASTNodeTypes.BLOCK) {
-			Throw, Exception("Invalid function definition body type " ASTNodeTypes[Params.Type])
-		}
 		
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
 	}
@@ -172,7 +204,14 @@
 			return new ASTNodes.Statements.ExpressionLine(Expression)
 		}
 		else {
-			Throw, Exception("Unexpected expression terminator: '" this.Next().Stringify() "'.")
+			Next := this.Next()
+		
+			PrettyError("Parse"
+					   ,"Unexpected expression terminator '" Next.Stringify() "'."
+					   ,"Should be \n or EOF"
+					   ,Next
+					   ,this.Source
+					   ,"You might have included two expression statements on a single line (I have no clue how though).")
 		}
 	}
 	
@@ -198,7 +237,7 @@
 	ParseBlock() {
 		Statements := []
 		this.Ignore(Tokens.NEWLINE)
-		this.Consume(Tokens.LEFT_BRACE, "Block expected, but did not have opening '{'.")
+		this.Consume(Tokens.LEFT_BRACE, "Expected block, got '" this.Peek().Stringify() "' instead.")
 		this.Ignore(Tokens.NEWLINE)
 		
 		while !(this.NextMatches(Tokens.RIGHT_BRACE)) {
@@ -228,14 +267,22 @@
 			NextOperand := OperandStack.Pop()
 			
 			if !(NextOperand) {
-				MsgBox, % "Missing Operand for " Operator.Stringify() " around " Operator.Context.Start "-"  Operator.Context.End
+				PrettyError("Parse"
+						   ,"Missing operand for operator '" Operator.Stringify() "'."
+						   ,"Needs another operand."
+						   ,Operator
+						   ,this.Source)
 			}
 			
 			Operands.Push(NextOperand)
 		}
 		
 		if !(Operator) {
-			MsgBox, % "Missing Operator for " Operands[1].Value " around " Operands[1].Context.Start "-"  Operands[1].Context.End
+			PrettyError("Parse"
+					   ,"Missing operator for operand '" Operands[1].Stringify() "'."
+					   ,"Needs an operator."
+					   ,Operands[1]
+					   ,this.Source)
 		}
 		
 		Switch (OperandCount) {
@@ -282,11 +329,8 @@
 						Param := OperandStack.Pop()
 						Name := this.Next()
 						
-						if (Param.Type != Tokens.IDENTIFIER) {
-							Throw, Exception("Invalid (come up with a name for this) value: " Param.Stringify())
-						}
-						else if (Name.Type != Tokens.IDENTIFIER) {
-							Throw, Exception("Invalid name for (come up with a name): " Name.Stringify())
+						if (Name.Type != Tokens.IDENTIFIER) {
+							Throw, Exception("Invalid name for (come up with a name): '" Name.Stringify() "'.", Name)
 						}
 						
 						Params := this.ParseGrouping()
@@ -342,8 +386,12 @@
 			}
 			
 			if (Unexpected) {
-				MsgBox, % "Unexpected character '" Next.Stringify() "' in expression around " Next.Context.Start
-				Break
+				this.Index++
+				PrettyError("Parse"
+						   ,"Unexpected character '" Next.Stringify() "' in expression."
+						   ,""
+						   ,Next
+						   ,this.Source)
 			}
 		}
 		
@@ -351,11 +399,24 @@
 			NextOperator := OperatorStack.Pop()
 			
 			if (Operators.IsPrefix(NextOperator) && OperandStack.Count() < Operators.OperandCount(NextOperator)) {
-				MsgBox, % "Missing operand for operator " Tokens[NextOperator.Value] " around " NextOperator.Context.Start
-				Continue
+				PrettyError("Parse"
+						   ,"Missing operand for operator '" NextOperator.Stringify() "'."
+						   ,"Needs another operand."
+						   ,NextOperator
+						   ,this.Source)
 			}
 			
 			this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
+		}
+		
+		if (OperandStack.Count() > 1) {
+			Operand := OperandStack.Pop()
+		
+			PrettyError("Parse"
+					   ,"Missing operator for operand '" Operand.Stringify() "'."
+					   ,"Needs an operator."
+					   ,Operand
+					   ,this.Source)
 		}
 		
 		return OperandStack
@@ -380,7 +441,12 @@
 			}
 			Default: {
 				this.Index--
-				Throw, Exception("Unexpected token " Next.Stringify() " around " Next.Context.Start "-" Next.Context.End)
+				
+				PrettyError("Parse"
+						   ,"Unexpected token '" Next.Stringify() "'."
+						   ,""
+						   ,Next
+						   ,this.Source)
 			}
 		}
 	}
@@ -401,6 +467,16 @@
 			this.Consume(Tokens.RIGHT_PAREN, "Expression groupings must have a closing paren")
 			
 			return new ASTNodes.Expressions.Grouping(Expressions)
+		}
+		else {
+			Next := this.Next()
+		
+			PrettyError("Parse"
+					  , "Expression grouping expected, got '" Next.Stringify() "' instead."
+					  , " '(' expected."
+					  , Next
+					  , this.Source
+					  , "You might be missing an open/close paren, or have whitespace between a name and '('.")
 		}
 	}
 }
