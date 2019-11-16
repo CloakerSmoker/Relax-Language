@@ -27,14 +27,11 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	Message .= Phase " Error: " LongText "`n"
 	
 	if (TokenContext.Line != 1) {
-		Message .= " " (TokenContext.Line + 1) " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
+		Message .= " " (TokenContext.Line - 1) " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
 	}
 	
 	Message .= " " TokenContext.Line " | " TokenLine
-	
-	;TokenStart := InStr(TokenLine, TokenText)
-	;MsgBox, % TokenContext.Start "`n" PreviousLinesLength "`n" (TokenContext.Start) - PreviousLinesLength "`n" SubStr(Source, PreviousLinesLength) "`n" SubStr(TokenLine, (TokenContext.Start) - PreviousLinesLength)
-	;TokenStart := (TokenContext.Start + TokenContext.Line) - PreviousLinesLength
+
 	TokenStart := InStr(TokenLine, TokenText, True, TokenContext.Start - PreviousLinesLength)
 	TokenEnd := StrLen(TokenText)
 	
@@ -55,10 +52,7 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	}
 	
 	if (ShortText) {
-		Message .= "|: " ShortText
-	}
-	else {
-		Message .= "|: HERE"
+		Message .= "|> " ShortText
 	}
 	
 	if (Help) {
@@ -69,7 +63,7 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	
 	Gui, ShowError:New
 	Gui, ShowError:Font, s10, Terminal
-	Gui, ShowError:Add, Text, w700, % Message
+	Gui, ShowError:Add, Text, w800, % Message
 	Gui, ShowError:Show
 	
 	KeyWait, Enter, D

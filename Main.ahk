@@ -20,8 +20,8 @@
 
 Code = 
 (
-define Int64 Test(Int64 ValueOne, Int99 ValueTwo) {
-	return (ValueOne + 2):Put(69, Byte)
+define Int64 Test(Int64 ValueOne, Int64 ValueTwo) {
+	return (ValueOne + 2):Ptut t(69, Byte)
 }
 )
 
@@ -66,3 +66,6 @@ MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Str
 ;  cast(small, int64)
 
 ; ptr:Put(Value, Type)
+
+
+; asm { Move_R64_R64(RAX, RAX) }

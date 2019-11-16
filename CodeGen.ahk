@@ -483,6 +483,37 @@ class X64CodeGen {
 		this.PushByte(0xC3)
 	}
 	
+	FLD_RM64(Register) {
+		this.PushByte(0xDD)
+		this.Mod(Mode.SIBToR, 0, Register.Number)
+	}
+	FLD_1() {
+		this.PushByte(0xD9)
+		this.PushByte(0xE8)
+	}
+	FLD_LG2() {
+		this.PushByte(0xD9)
+		this.PushByte(0xEC)
+	}
+	FXCH() {
+		this.PushByte(0xD9)
+		this.PushByte(0xC9)
+	}
+	FYL2X() {
+		this.PushByte(0xD9)
+		this.PushByte(0xF1)
+	}
+	FST() {
+		this.PushByte(0xDD)
+		this.Mod(Mode.SIBToR, 2, RCX.Number)
+	}
+	Ret_I8(Byte) {
+		this.PushByte(0xC2)
+		this.PushByte(Byte)
+	}
+	
+	
+	
 	Stringify() {
 		this.Link()
 	
