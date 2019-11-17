@@ -20,7 +20,7 @@
 
 Code = 
 (
-define Int64 Test(Int64 ValueOne, Int64 ValueTwo) {
+define 1 Test(Int64 ValueOne, Double ValueTwo) {
 	return (ValueOne + 2):Put(69, Byte)
 }
 )

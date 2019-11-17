@@ -27,6 +27,7 @@
 	__New(Tokenizer) {
 		this.Tokens := Tokenizer.Tokens
 		this.Source := Tokenizer.CodeString
+		this.Typing := new Typing()
 	
 		this.Index := 0
 		this.CriticalError := False
@@ -84,6 +85,19 @@
 	Start() {
 		return this.ParseProgram()
 	}
+	EnsureValidType(TypeToken) {
+		if !(this.Typing.IsValidType(TypeToken.Value)) {
+			PrettyError("Type"
+					   ,"Invalid type '" TypeToken.Stringify() "'."
+					   ,"Not a valid type name."
+					   ,TypeToken
+					   ,this.Source)
+		}
+		
+		return TypeToken
+	}
+	
+	
 	ParseProgram() {
 		Statements := []
 	
@@ -144,16 +158,7 @@
 		}
 	}
 	ParseDefine() {
-		ReturnType := this.ParsePrimary()
-		
-		if (ReturnType.Type != Tokens.IDENTIFIER) {
-			PrettyError("Parse"
-					   ,"Invalid function definition return type '" ReturnType.Stringify() "'."
-					   ,"IDENTIFIER expected."
-					   ,ReturnType
-					   ,this.Source
-					   ,"You might have a spelling error in your return type.")
-		}
+		ReturnType := this.EnsureValidType(this.ParsePrimary())
 		
 		Name := this.ParsePrimary()
 		
@@ -164,8 +169,6 @@
 					   ,Name
 					   ,this.Source
 					   ,"Function names must be identifiers, not numbers or quoted strings.")
-		
-			;Throw, Exception("Invalid function name '" Name.Stringify() "', expected IDENTIFIER.", Name)
 		}
 		
 		Params := this.ParseParamGrouping()
@@ -179,15 +182,19 @@
 		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
 		
 		try {
-			Pairs := [[this.ParsePrimary(), this.ParsePrimary()]]
+			Type := this.ParsePrimary()
+			Name := this.ParsePrimary()
+			Pairs := [[Type, Name]]
 		}
 		catch {
 			Pairs := []
 		}
 		
+		this.EnsureValidType(Type)
+		
 		while (this.NextMatches(Tokens.COMMA)) {
 			Pair := []
-			Pair.Push(this.ParsePrimary()) ; Type
+			Pair.Push(this.EnsureValidType(this.ParsePrimary())) ; Type
 			Pair.Push(this.ParsePrimary()) ; Name
 			Pairs.Push(Pair)
 		}
@@ -483,7 +490,9 @@
 
 class Typing {
 	class TypeSet {
-		static Pointer := {"Name": "Pointer", "Next": "Pointer", "Precision": 65, "Escape": {"Int64": 1}}
+		static Pointer := {"Name": "Pointer", "Next": "Pointer", "Precision": 65
+							, "Escape": {"Int64": 1}
+							, "Exclude": {"Float": 1, "Double": 1, "Int8": 1, "Int16": 1, "Int32": 1}}
 	
 		static Int64   := {"Name": "Int64", "Next": "Int8" , "Precision": 64, "Escape": {"Double": 1, "Pointer": 1}}
 		static Int32   := {"Name": "Int32", "Next": "Int64", "Precision": 32, "Escape": {"Float": 1}}
@@ -495,13 +504,29 @@ class Typing {
 	
 	}
 	
+	__New() {
+		this.Variables := {}
+	}
+	
 	ResultType(LeftType, RightType) {
+		if (LeftType.Exclude.HasKey(RightType.Name) || RightType.Exclude.HasKey(LeftType.Name)) {
+			Throw, Exception("Invalid")
+		}
+	
 		if (LeftType.Precision > RightType.Precision) {
 			return LeftType
 		}
 		else {
 			return RightType
 		}
+	}
+	
+	GetVariableType(Name) {
+		return this.Variables[Name]
+	}
+	
+	AddVariable(Type, Name) {
+		this.Variables[Name] := this.GetType(Type)
 	}
 	
 	IsValidType(Name) {

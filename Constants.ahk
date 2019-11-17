@@ -99,8 +99,8 @@ class CharacterTokens {
 						,"&": {"NONE": Tokens.BITWISE_AND, "&": Tokens.LOGICAL_AND}
 						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUAL}
 						,"~": {"NONE": Tokens.BITWISE_NOT}}
-				
-				
+	
+	
 	static Misc := { "(": Tokens.LEFT_PAREN
 					,")": Tokens.RIGHT_PAREN
 					,"{": Tokens.LEFT_BRACE
