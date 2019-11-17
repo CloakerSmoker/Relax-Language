@@ -21,7 +21,7 @@
 Code = 
 (
 define Int64 Test(Int64 ValueOne, Int64 ValueTwo) {
-	return (ValueOne + 2):Ptut t(69, Byte)
+	return (ValueOne + 2):Put(69, Byte)
 }
 )
 

@@ -480,3 +480,88 @@
 		}
 	}
 }
+
+class Typing {
+	class TypeSet {
+		static Pointer := {"Name": "Pointer", "Next": "Pointer", "Precision": 65, "Escape": {"Int64": 1}}
+	
+		static Int64   := {"Name": "Int64", "Next": "Int8" , "Precision": 64, "Escape": {"Double": 1, "Pointer": 1}}
+		static Int32   := {"Name": "Int32", "Next": "Int64", "Precision": 32, "Escape": {"Float": 1}}
+		static Int16   := {"Name": "Int16", "Next": "Int32", "Precision": 16}
+		static Int8    := {"Name": "Int8" , "Next": "Int16", "Precision": 8 }
+		
+		static Double  := {"Name": "Double", "Next": "Float" , "Precision": 65, "Escape": {"Int64": 1}}
+		static Float   := {"Name": "Float" , "Next": "Double", "Precision": 33, "Escape": {"Int32": 1}}
+	
+	}
+	
+	ResultType(LeftType, RightType) {
+		if (LeftType.Precision > RightType.Precision) {
+			return LeftType
+		}
+		else {
+			return RightType
+		}
+	}
+	
+	IsValidType(Name) {
+		try {
+			this.GetType(Name)
+			return True
+		}
+		catch {
+			return False
+		}
+	}
+	
+	CastPath(FromType, ToType) {
+		NextType := FromType
+		Path := []
+		
+		loop {
+			NextName := NextType.Next
+			TempType := this.GetType(NextName)
+			Path.Push(NextName)
+		
+			if (TempType.Name = ToType.Name) {
+				return Path
+			}
+			else if (TempType.Name = FromType.Name) {
+				Break
+			}
+			else {
+				NextType := TempType
+			}
+		}
+		
+		; If we haven't returned by here, then the cast requires a int->float/float->int jump
+		
+		NextType := FromType
+		Path := []
+		
+		loop {
+			NextName := NextType.Next
+			TempType := this.GetType(NextName)
+			Path.Push(NextName)
+			
+			if (TempType.Escape.HasKey(ToType.Name)) {
+				Path.Push(ToType.Name)
+				return Path
+			}
+			else {
+				NextType := TempType
+			}
+		}
+		
+		Throw, Exception("No cast possible")
+	}
+	
+	GetType(TypeName) {
+		if (this.TypeSet.HasKey(TypeName)) {
+			return this.TypeSet[TypeName]
+		}
+		else {
+			Throw, Exception("Invalid type")
+		}
+	}
+}
