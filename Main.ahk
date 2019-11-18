@@ -12,16 +12,13 @@
 
 ; TODO: CodeGen linking rewrite
 ; TODO: Loops
-; TODO: Shorter Add/Sub encodings
 ; TODO: (Related to 1) Shorter Jmp encodings
-
-
 
 
 Code = 
 (
-define Int64 Test(Int64 ValueOne, Int64 ValueTwo) {
-	return ValueTwo != 69
+define Double Test(Int64 ValueOne, Float ValueTwo) {
+	return ValueTwo
 }
 )
 
@@ -49,14 +46,14 @@ a := Pest.Start()
 
 MsgBox, % a[1].Stringify()
 
-C := new Compiler(Test)
+C := new Compiler(Test, Pest.Typing)
 G := C.CompileFunction(a[1])
 
 VarSetCapacity(M, 8, 0)
 NumPut(0, &M + 0, 0, "Char")
 
-MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Ptr", &M, "Ptr", 69)
-;MsgBox, % NumGet(&M + 0, 0, "Short")
+MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Int", 10, "Double", 6.9, "Double")
+MsgBox, % NumGet(&M + 0, 0, "Short")
 ; deref cptr as char
 ; char(cptr)
 ; cptr:deref(char)

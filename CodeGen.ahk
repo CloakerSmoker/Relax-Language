@@ -90,6 +90,29 @@ class R15 {
 	static Number := 7
 }
 
+
+class XMM0  { 
+	static Type := "R64"
+	static Requires := {"REX": REX.None}
+	static Number := 0 
+}
+class XMM1  {
+	static Type := "R64"
+	static Requires := {"REX": REX.None}
+	static Number := 1
+}
+class XMM2  {
+	static Type := "R64"
+	static Requires := {"REX": REX.None}
+	static Number := 2
+}
+class XMM3  {
+	static Type := "R64"
+	static Requires := {"REX": REX.None}
+	static Number := 3
+}
+
+
 class Mode {
 	static RToR := 3
 	static SIBToR := 0
@@ -107,6 +130,13 @@ SplitIntoBytes32(Integer) {
 	}
 	
 	return Array
+}
+
+IntToI(IntNumber) {
+	return StrReplace(IntNumber, "Int", "I")
+}
+IToInt(INumber) {
+	return StrReplace(INumber, "I", "Int")
 }
 
 class X64CodeGen {
@@ -358,8 +388,7 @@ class X64CodeGen {
 		; MOV r/m64,r64
 		; REX.W + 89 /r
 		
-		this.Lea_R64_SIB(R11, SIB)
-		this.REXOpcodeMod([0x89], Register, R11, Mode.RToPtr)
+		this.REXOpcodeModSIB([0x89], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
 	}
 	Move_R8_SIB(Register, SIB) {
 		; REX.W + 0F B6 /r
@@ -536,6 +565,10 @@ class X64CodeGen {
 		this.PushByte(0xC3)
 	}
 	
+	
+	; It looks like I need to use SIMD and XMM for floats
+	;  so all this is pointless, feelsbadman
+	
 	FLD_RM64(Register) {
 		this.PushByte(0xDD)
 		this.Mod(Mode.SIBToR, 0, Register.Number)
@@ -560,6 +593,18 @@ class X64CodeGen {
 		this.PushByte(0xDD)
 		this.Mod(Mode.SIBToR, 2, RCX.Number)
 	}
+	
+	Move_SIB_XMM(SIB, Register) {
+		; For some ungodly reason, this instruction takes a REX prefix mid-opcode, and R10 is mapped to R9, and R11 is mapped to R10
+		this.PushByte(0xF2)
+		this.REXOpcodeModSIB([0x0F, 0x11], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+	}
+	Move_XMM_SIB(Register, SIB) {
+		this.PushByte(0xF2)
+		this.REXOpcodeModSIB([0x0F, 0x10], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+	}
+	
+	
 	Ret_I8(Byte) {
 		this.PushByte(0xC2)
 		this.PushByte(Byte & 0xFF)
@@ -610,7 +655,6 @@ class X64CodeGen {
 		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", this.Bytes.Count(), "UInt", 0x20, "UInt*", OldProtection)
 		
 		Params.InsertAt(1, pMemory)
-		Params.Push("Int64") ; Return type
 		
 		ReturnValue := DllCall(Params*)
 		

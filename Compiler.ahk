@@ -1,6 +1,7 @@
 ﻿class Compiler {
-	__New(Tokenizer) {
+	__New(Tokenizer, Typingizer) {
 		this.Tokenizer := Tokenizer
+		this.Typing := Typingizer
 	}
 	Compile(Something) {
 		if (Something.__Class = "Token") {
@@ -33,6 +34,7 @@
 		IndexRegister := this.GetVariablePrelude(Name)
 		
 		this.CodeGen.Push(SIB(8, IndexRegister, R15))
+		return this.Typing.GetVariableType(Name)
 	}
 	GetVariableAddress(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
@@ -49,7 +51,9 @@
 		Switch (TargetToken.Type) {
 			Case Tokens.INTEGER: {
 				this.CodeGen.Push(TargetToken.Value)
-				return this.Typing.GetType("Int64")
+				ShortTypeName := this.CodeGen.NumberSizeOf(TargetToken.Value, False)
+				FullTypeName := IToInt(ShortTypeName)
+				return this.Typing.GetType(FullTypeName)
 			}
 			Case Tokens.IDENTIFIER: {
 				return this.GetVariable(TargetToken.Value)
@@ -103,39 +107,41 @@
 	}
 	
 	FunctionParameters(Pairs) {
-		static FirstFour := [RCX, RDX, R8, R9]
+		static IntFirstFour := [RCX, RDX, R8, R9]
+		static XMMFirstFour := [XMM0, XMM1, XMM2, XMM3]
 	
 		Size := 0
 		Count := Pairs.Count()
 		
 		for k, Pair in Pairs {
-			Switch (Pair[1].Value) {
-				Case "Int64": {
-					this.AddVariable(k - 1, Pair[2].Value)
-					
-					if (k - 1 = 0) {
-						IndexRegister := RSI
-					}
-					else if (k - 1 = 1) {
-						IndexRegister := RDI
-					}
-					else {
-						this.CodeGen.SmallMove(R14, k - 1)
-						IndexRegister := R14
-					}
-					
-					this.CodeGen.Move_SIB_R64(SIB(8, IndexRegister, R15), FirstFour[k])
-					Size += 8
-				}
-				Default: {
-					PrettyError("Compile"
-							   ,"Invalid parameter type: '" Pair[1].Stringify() "'."
-							   ,""
-							   ,Pair[1]
-							   ,this.Tokenizer.CodeString
-							   ,"Int64 is currently the only parameter type.")
-				}
+			Type := Pair[1].Value
+
+			TrueIndex := k - 1
+			
+			this.AddVariable(TrueIndex, Pair[2].Value)
+			this.Typing.AddVariable(Type, Pair[2].Value)
+			
+			if (TrueIndex = 0) {
+				IndexRegister := RSI
 			}
+			else if (TrueIndex = 1) {
+				IndexRegister := RDI
+			}
+			else {
+				this.CodeGen.SmallMove(R14, TrueIndex)
+				IndexRegister := R14
+			}
+			
+			IndexSIB := SIB(8, IndexRegister, R15)
+
+			if (Type = "Double" || Type = "Float") {
+				this.CodeGen.Move_SIB_XMM(IndexSIB, XMMFirstFour[TrueIndex + 1])
+			}
+			else {
+				this.CodeGen.Move_SIB_R64(IndexSIB, IntFirstFour[TrueIndex + 1])
+			}
+			
+			Size += 8
 		}
 	
 		return Size
@@ -167,16 +173,33 @@
 	
 	CompileReturn(Statement) {
 		this.Compile(Statement.Expression)
+		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 		this.CodeGen.Pop(RAX)
 		this.CodeGen.JMP("__Return")
 	}
 	
 	CompileBinary(Expression) {
+		; Thonking time:
+		;  To mix types in the middle of an expression, get the result type, cast both operands to that type, and then do the operation with just that type
+		
+	
 		LeftType := this.Compile(Expression.Left)
 		RightType := this.Compile(Expression.Right)
+		
+		Try {
+			ResultType := this.Typing.ResultType(LeftType, RightType)
+		}
+		Catch E {
+			PrettyError("Compile"
+					   ,"The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible."
+					   ,""
+					   ,Expression.Operator
+					   ,this.Tokenizer.CodeString)
+		}
+		
 		this.CodeGen.Pop(RAX)
 		this.CodeGen.Pop(RBX)
-		
+
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
 			this.CodeGen.Move(RAX, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
@@ -221,12 +244,16 @@
 	
 	CompileGrouping(Expression) {
 		for k, v in Expression.Expressions {
-			this.Compile(v)
-		
-			if (k != 1) {
+			if (k = 1) {
+				ResultType := this.Compile(v)
+			}
+			else {
+				this.Compile(v)
 				this.CodeGen.Pop(RAX)
 			}
 		}
+		
+		return ResultType
 	}
 	
 	CompileCall(Expression) {
@@ -249,21 +276,38 @@
 	}
 	
 	CompileDeref(Params) {
-		this.Compile(Params[1])
+		PointerType := this.Compile(Params[1])
+		
+		if (PointerType.Name != "Pointer") {
+			PrettyError("Compile"
+					   ,":Deref requires an operand of type Pointer, not '" PointerType.Name "'."
+					   ,"Not a pointer"
+					   ,Params[1]
+					   ,this.Tokenizer.CodeString)
+		}
+		
 		this.CodeGen.Pop(RBX)
 	
-		Switch (Params[2].Value) {
-			Case "Byte", "Int8": {
+		ResultType := this.Typing.GetType(Params[2].Value)
+	
+		Switch (ResultType.Precision) {
+			Case 8: {
 				this.CodeGen.MoveSX_R64_RI8(RAX, RBX)
 			}
-			Case "Short", "Int16": {
+			Case 16: {
 				this.CodeGen.MoveSX_R64_RI16(RAX, RBX)
 			}
-			Case "Long", "Int32": {
+			Case 32: {
 				this.CodeGen.MoveSX_R64_RI32(RAX, RBX)
 			}
-			Case "LongLong", "Int64": {
+			Case 33: {
+				; TODO same as below
+			}
+			Case 64: {
 				this.CodeGen.Move_R64_RI64(RAX, RBX)
+			}
+			Case 65: {
+				; TODO - Implement for more than a test
 			}
 			Default: {
 				Throw, Exception("Un-supported deref type: '" Params[2].Stringify() "'.")
@@ -271,32 +315,46 @@
 		}
 		
 		this.CodeGen.Push(RAX)
+		return ResultType
 	}
 	
 	CompilePut(Params) {
-		this.Compile(Params[1])
+		PointerType := this.Compile(Params[1])
+		
+		if (PointerType.Name != "Pointer") {
+			PrettyError("Compile"
+					   ,":Put requires an operand of type Pointer, not '" PointerType.Name "'."
+					   ,"Not a pointer"
+					   ,Params[1]
+					   ,this.Tokenizer.CodeString)
+		}
+		
 		this.CodeGen.Pop(RAX)
 		
 		this.Compile(Params[2])
 		this.CodeGen.Pop(RBX)
 		
-		Switch (Params[3].Value) {
-			Case "Byte", "Int8": {
+		PutType := this.Typing.GetType(Params[3].Value)
+		
+		Switch (PutType.Precision) {
+			Case 8: {
 				this.CodeGen.Move_RI8_R64(RAX, RBX)
 				this.CodeGen.Push(1)
 			}
-			Case "Short", "Int16": {
+			Case 16: {
 				this.CodeGen.Move_RI16_R64(RAX, RBX)
 				this.CodeGen.Push(2)
 			}
-			Case "Long", "Int32": {
+			Case 32: {
 				this.CodeGen.Move_RI32_R64(RAX, RBX)
 				this.CodeGen.Push(4)
 			}
-			Case "LongLong", "Int64": {
+			Case 64: {
 				this.CodeGen.Move_RI64_R64(RAX, RBX)
 				this.CodeGen.Push(8)
 			}
 		}
+		
+		return this.Typing.GetType("Int64")
 	}
 }
