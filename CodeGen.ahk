@@ -121,11 +121,15 @@ class X64CodeGen {
 		}
 	}
 	__Call(Key, Params*) {
+		Base := ObjGetBase(this)
+		
+		if (Base.HasKey(Key)) {
+			return Base[Key].Call(this, Params*)
+		}
+	
 		if (Params.Count() = 2) {
-			Base := ObjGetBase(this)
-			
 			if (IsNumber(Params[2])) {
-				Params[2] := {"Type": "I64", "Value": Params[2]}
+				Params[2] := {"Type": this.NumberSizeOf(Params[2], False), "Value": Params[2]}
 			}
 			
 			FunctionName := Key "_" Params[1].Type "_" Params[2].Type
@@ -133,14 +137,8 @@ class X64CodeGen {
 			if (Base.HasKey(FunctionName)) {
 				return Base[FunctionName].Call(this, Params[1], Params[2])
 			}
-			else if (IsNumber(Params[2].Value)) {
-				Params[2].Type := "I32"
-				
-				FunctionName := Key "_" Params[1].Type "_" Params[2].Type
-
-				if (Base.HasKey(FunctionName)) {
-					return Base[FunctionName].Call(this, Params[1], Params[2])
-				}
+			else {
+				Throw, Exception("No method: " FunctionName)
 			}
 		}
 	}
@@ -212,8 +210,6 @@ class X64CodeGen {
 		this.Mod((NewMode = "None" ? Mode.RToR : NewMode), DestRegister.Number, SourceRegister.Number)
 	}
 	REXOpcodeModSIB(Opcode, Register, Scale, IndexRegister, BaseRegister, NewMode := "None") {
-		static EncodedScales := {8: 3, 4: 2, 2: 1, 1: 0}
-	
 		Prefix := [REX.W, BaseRegister.Requires.REX]
 		
 		if (Register.Requires.REX = REX.B) {
@@ -231,14 +227,16 @@ class X64CodeGen {
 		}
 	
 		this.Mod((NewMode = "None" ? Mode.SIBToR : NewMode), Register.Number, Mode.SIB)
-		this.SIB(EncodedScales[Scale], IndexRegister.Number, BaseRegister.Number)
+		this.SIB(Scale, IndexRegister.Number, BaseRegister.Number)
 	}
 	
 	Mod(Mode := 3, Register := 0, RM := 0) {
 		this.PushByte((Mode << 6) | (Register << 3) | RM)
 	}
 	SIB(Scale, Index, Base) {
-		this.PushByte((Scale << 6) | (Index << 3) | Base)
+		static EncodedScales := {8: 3, 4: 2, 2: 1, 1: 0}
+	
+		this.PushByte((EncodedScales[Scale] << 6) | (Index << 3) | Base)
 	}
 	
 	
@@ -267,11 +265,21 @@ class X64CodeGen {
 	;  ex: changing jumps to use 8bit offsets instead of 32 shouln't clobber other jumps
 	
 	SmallMove(Register, Integer) {
-		;this.XOR_R64_R64(Register, Register)
-		;this.XOR_R64_I8(Register, Byte & 0xFF)
+		if (Integer = 0) {
+			this.XOR_R64_R64(Register, Register)
+		}
+		else if (Integer = 1) {
+			this.XOR_R64_R64(Register, Register)
+			this.Inc_R64(Register)
+		}
+		else {
+			this.REXOpcodeMod([0xC7], {"Number": 0}, Register)
+			this.SplitIntoBytes32(Integer)
+		}
+	}
 	
-		this.REXOpcodeMod([0xC7], {"Number": 0}, Register)
-		this.SplitIntoBytes32(Integer)
+	Inc_R64(Register) {
+		this.REXOpcodeMod([0xFF], {"Number": 0}, Register)
 	}
 	
 	XOR_R64_R64(RegisterOne, RegisterTwo) {
@@ -422,6 +430,19 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x81], {"Number": 0}, Register, Mode.RToR)
 		this.SplitIntoBytes32(Integer.Value)
 	}
+	Add_R64_I16(Register, Integer) {
+		this.REXOpcodeMod([0x81], {"Number": 0}, Register, Mode.RToR)
+		this.PushByte(Integer.Value & 0x00FF)
+		this.PushByte(Integer.Value & 0xFF00)
+	}
+	Add_R64_I8(Register, Byte) {
+		this.REXOpcodeMod([0x80], {"Number": 0}, Register, Mode.RToR)
+		this.PushByte(Byte.Value & 0xFF)
+	}
+	
+	
+	
+	
 	Sub_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo)
 	}
@@ -429,13 +450,21 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x81], {"Number": 5}, Register, Mode.RToR)
 		this.SplitIntoBytes32(Integer.Value)
 	}
-	
+	Sub_R64_I16(Register, Integer) {
+		this.REXOpcodeMod([0x81], {"Number": 5}, Register, Mode.RToR)
+		this.PushByte(Integer.Value & 0x00FF)
+		this.PushByte(Integer.Value & 0xFF00)
+	}
+	Sub_R64_I8(Register, Byte) {
+		this.REXOpcodeMod([0x80], {"Number": 5}, Register, Mode.RToR)
+		this.PushByte(Byte.Value & 0xFF)
+	}
 	
 	Push(Operand) {
 		Base := ObjGetBase(this)
 	
 		if (IsNumber(Operand)) {
-			Operand := {"Type": "I32", "Value": Operand}
+			Operand := {"Type": this.NumberSizeOf(Operand, False), "Value": Operand}
 		}
 	
 		if !(Base.HasKey("Push_" Operand.Type)) {
@@ -445,6 +474,16 @@ class X64CodeGen {
 		Base["Push_" Operand.Type].Call(this, Operand)
 	}
 	
+	Push_SIB(SIB) {
+		if (SIB.IndexRegister.Requires.REX || SIB.BaseRegister.Requires.REX) {
+			this.REX(SIB.IndexRegister.Requires.REX, SIB.BaseRegister.Requires.REX)
+		}
+	
+		this.PushByte(0xFF)
+		this.Mod(Mode.SIBToR, 6, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
+	
+	}
 	Push_R64(Register) {
 		if (Register.Requires.REX) {
 			this.REX(Register.Requires.REX)
@@ -452,9 +491,23 @@ class X64CodeGen {
 		
 		this.PushByte(0x50 + Register.Number)
 	}
+	Push_I64(Integer) {
+		this.Move_R64_I64(RAX, Integer)
+		this.Push(RAX)
+	}
 	Push_I32(Integer) {
 		this.PushByte(0x68)
 		this.SplitIntoBytes32(Integer.Value)
+	}
+	Push_I16(Integer) {
+		this.PushByte(0x66) ; Legacy operand prefix (16 bits)
+		this.PushByte(0x68)
+		this.PushByte(Integer.Value & 0x00FF)
+		this.PushByte(Integer.Value & 0xFF00)
+	}
+	Push_I8(Byte) {
+		this.PushByte(0x6A)
+		this.PushByte(Byte.Value & 0xFF)
 	}
 	
 	Pop(Operand) {
@@ -509,10 +562,29 @@ class X64CodeGen {
 	}
 	Ret_I8(Byte) {
 		this.PushByte(0xC2)
-		this.PushByte(Byte)
+		this.PushByte(Byte & 0xFF)
 	}
 	
+	NumberSizeOf(Number, ReturnNumber := true) {
+		static Sizes := {8: "I8", 16: "I16", 32: "I32", 64: "I64"}
 	
+		loop 64 {
+			NextBit := Number & (1 << (64 - A_Index))
+		
+			if (NextBit) {
+				Length := A_Index - 1
+				break
+			}
+		}
+		
+		NewLength := 64 - Length
+		
+		while !(Sizes.HasKey(NewLength)) {
+			NewLength++
+		}
+		
+		return (ReturnNumber ? NewLength : Sizes[NewLength])
+	}
 	
 	Stringify() {
 		this.Link()
@@ -538,6 +610,7 @@ class X64CodeGen {
 		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", this.Bytes.Count(), "UInt", 0x20, "UInt*", OldProtection)
 		
 		Params.InsertAt(1, pMemory)
+		Params.Push("Int64") ; Return type
 		
 		ReturnValue := DllCall(Params*)
 		

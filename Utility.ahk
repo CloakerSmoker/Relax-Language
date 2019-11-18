@@ -138,9 +138,15 @@ IsOctal(Character) {
 }
 
 IsNumber(Value) {
-	if Value is number
+	if Value is Integer
 		return true
 	
+	return false
+}
+IsFloat(Value) {
+	if Value is Float
+		return true
+
 	return false
 }
 

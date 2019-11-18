@@ -139,6 +139,18 @@ class OperatorClasses {
 	static Division	  := {"Precedence": 5
 						, "Associative": "Left"
 						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES]}
+						
+	IsClass(OperatorToken, ClassNames*) {
+		for k, ClassName in ClassNames {
+			for TokenNumber, PotentialToken in OperatorClasses[ClassName].Tokens {
+				if (OperatorToken.Type = PotentialToken) {
+					return True
+				}
+			}
+		}
+		
+		return False
+	}
 }
 
 IsOperator(OperatorType) {

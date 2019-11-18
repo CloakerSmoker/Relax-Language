@@ -32,8 +32,7 @@
 	GetVariable(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
 		
-		this.CodeGen.Move(R11, SIB(8, IndexRegister, R15))
-		this.CodeGen.Push(R11)
+		this.CodeGen.Push(SIB(8, IndexRegister, R15))
 	}
 	GetVariableAddress(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
@@ -50,9 +49,10 @@
 		Switch (TargetToken.Type) {
 			Case Tokens.INTEGER: {
 				this.CodeGen.Push(TargetToken.Value)
+				return this.Typing.GetType("Int64")
 			}
 			Case Tokens.IDENTIFIER: {
-				this.GetVariable(TargetToken.Value)
+				return this.GetVariable(TargetToken.Value)
 			}
 			Default: {
 				PrettyError("Compile"
@@ -172,11 +172,15 @@
 	}
 	
 	CompileBinary(Expression) {
-		this.Compile(Expression.Left)
-		this.Compile(Expression.Right)
+		LeftType := this.Compile(Expression.Left)
+		RightType := this.Compile(Expression.Right)
 		this.CodeGen.Pop(RAX)
 		this.CodeGen.Pop(RBX)
-		this.CodeGen.Cmp(RAX, RBX)
+		
+		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
+			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
+			this.CodeGen.Move(RAX, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
+		}
 	
 		Switch (Expression.Operator.Type) {
 			Case Tokens.PLUS: {
@@ -186,23 +190,21 @@
 				this.CodeGen.Sub(RAX, RBX)
 			}
 			Case Tokens.EQUAL: {
-				this.CodeGen.Move(RAX, RSI)
 				this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
 			}
+			Case Tokens.BANG_EQUAL: {
+				this.CodeGen.C_Move_NE_R64_R64(RAX, RDI)
+			}
 			Case Tokens.LESS: {
-				this.CodeGen.Move(RAX, RSI)
 				this.CodeGen.C_Move_L_R64_R64(RAX, RDI)
 			}
 			Case Tokens.LESS_EQUAL: {
-				this.CodeGen.Move(RAX, RSI)
 				this.CodeGen.C_Move_LE_R64_R64(RAX, RDI)
 			}
 			Case Tokens.GREATER: {
-				this.CodeGen.Move(RAX, RSI)
 				this.CodeGen.C_Move_G_R64_R64(RAX, RDI)
 			}
 			Case Tokens.GREATER_EQUAL: {
-				this.CodeGen.Move(RAX, RSI)
 				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
 			}
 			Default: {
