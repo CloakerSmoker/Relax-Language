@@ -613,15 +613,33 @@ class X64CodeGen {
 		this.FISTP_SIB(SIB(8, RSI, RSP))
 	}
 	
+	; Note to self: Make sure you use encodings that use ST(0) as the dest, and ST(1) as the source
+	;  otherwise expressions will evaluate like (RIGHT %OPERATOR% LEFT) instead of (LEFT %OPERATOR% RIGHT)
+
 	FAddP() {
-		this.PushByte(0xDE)
+		this.PushByte(0xD8)
 		this.PushByte(0xC1)
 	}
-	
+	FSubP() {
+		this.PushByte(0xD8)
+		this.PushByte(0xE1)
+	}
+	FMulP() {
+		this.PushByte(0xD8)
+		this.PushByte(0xC9)
+	}
+	FDivP() {
+		this.PushByte(0xD8)
+		this.PushByte(0xF1)
+	}
 	
 	FLD_1() {
 		this.PushByte(0xD9)
 		this.PushByte(0xE8)
+	}
+	FLD_0() {
+		this.PushByte(0xD9)
+		this.PushByte(0xEE)
 	}
 	FLD_LG2() {
 		this.PushByte(0xD9)

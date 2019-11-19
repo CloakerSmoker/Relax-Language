@@ -223,15 +223,60 @@
 		this.Cast(LeftType, ResultType)
 		this.CodeGen.FLD_Stack()
 		this.CodeGen.Pop(RAX)
+		
+		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
+			this.CodeGen.Cmp(RAX, RBX) ; Comparisons are done as integers, since x87 equality checks are a nightmare
+		}
 	
 		Switch (Expression.Operator.Type) {
 			Case Tokens.PLUS: {
 				this.CodeGen.FAddP()
 			}
+			Case Tokens.MINUS: {
+				this.CodeGen.FSubP()
+			}
+			Case Tokens.TIMES: {
+				this.CodeGen.FMulP()
+			}
+			Case Tokens.DIVIDE: {
+				this.CodeGen.FDivP()
+			}
+			Case Tokens.EQUAL: {
+				this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
+			}
+			Case Tokens.BANG_EQUAL: {
+				this.CodeGen.C_Move_NE_R64_R64(RAX, RDI)
+			}
+			Case Tokens.LESS: {
+				this.CodeGen.C_Move_L_R64_R64(RAX, RDI) ; WARNING, ALL COMPARISIONS BELOW HERE MIGHT BE WRONG. Since floats are just used as ints for the comparisons
+			}
+			Case Tokens.LESS_EQUAL: {
+				this.CodeGen.C_Move_LE_R64_R64(RAX, RDI)
+			}
+			Case Tokens.GREATER: {
+				this.CodeGen.C_Move_G_R64_R64(RAX, RDI)
+			}
+			Case Tokens.GREATER_EQUAL: {
+				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
+			}
+			Default: {
+				PrettyError("Compile"
+						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the dblbin compiler."
+						   ,""
+						   ,Expression.Operator
+						   ,this.Tokenizer.CodeString)
+			}
 		}
 		
-		this.CodeGen.Push(RAX) ; Push RAX
-		this.CodeGen.FSTP_Stack() ; But then use the stack space from pushing RAX to store the actual result
+		this.CodeGen.Push(RAX)
+		
+		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
+			ResultType := this.Typing.GetType("Int8")
+		}
+		else {
+			this.CodeGen.FSTP_Stack() ; Use the stack space from pushing RAX to store the actual result
+		}
+		
 		return ResultType
 	}
 	
@@ -284,7 +329,7 @@
 			}
 			Default: {
 				PrettyError("Compile"
-						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the compiler."
+						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the intbin compiler."
 						   ,""
 						   ,Expression.Operator
 						   ,this.Tokenizer.CodeString)
