@@ -456,16 +456,16 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo)
 	}
 	Add_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 0}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x81], {"Number": 0}, Register)
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Add_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 0}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x81], {"Number": 0}, Register)
 		this.PushByte(Integer.Value & 0x00FF)
 		this.PushByte(Integer.Value & 0xFF00)
 	}
 	Add_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"Number": 0}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x80], {"Number": 0}, Register)
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
@@ -476,18 +476,31 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo)
 	}
 	Sub_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 5}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x81], {"Number": 5}, Register)
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Sub_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 5}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x81], {"Number": 5}, Register)
 		this.PushByte(Integer.Value & 0x00FF)
 		this.PushByte(Integer.Value & 0xFF00)
 	}
 	Sub_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"Number": 5}, Register, Mode.RToR)
+		this.REXOpcodeMod([0x80], {"Number": 5}, Register)
 		this.PushByte(Byte.Value & 0xFF)
 	}
+	
+	CDQ() {
+		this.REX(REX.W)
+		this.PushByte(0x99)
+	}
+	IMul_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xAF], RegisterOne, RegisterTwo)
+	}
+	IDiv_RAX_R64(Register) {
+		this.CDQ()
+		this.REXOpcodeMod([0xF7], {"Number": 7}, Register)
+	}
+	
 	
 	Push(Operand) {
 		Base := ObjGetBase(this)

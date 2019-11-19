@@ -81,6 +81,8 @@
 		
 		DIVIDE
 		
+		MOD
+		
 		LAST_OPERATOR
 	)"
 }
@@ -98,7 +100,8 @@ class CharacterTokens {
 						,"|": {"NONE": Tokens.BITWISE_OR, "|": Tokens.LOGICAL_OR}
 						,"&": {"NONE": Tokens.BITWISE_AND, "&": Tokens.LOGICAL_AND}
 						,"^": {"NONE": Tokens.BITWISE_XOR, "=": Tokens.XOR_EQUAL}
-						,"~": {"NONE": Tokens.BITWISE_NOT}}
+						,"~": {"NONE": Tokens.BITWISE_NOT}
+						,"%": {"NONE": Tokens.MOD}}
 	
 	
 	static Misc := { "(": Tokens.LEFT_PAREN
@@ -138,7 +141,7 @@ class OperatorClasses {
 						
 	static Division	  := {"Precedence": 5
 						, "Associative": "Left"
-						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES]}
+						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES, Tokens.MOD]}
 						
 	IsClass(OperatorToken, ClassNames*) {
 		for k, ClassName in ClassNames {

@@ -155,8 +155,8 @@
 		for k, ElseIf in Statement.Options {
 			this.CodeGen.Label("__If__" Index)
 			this.Compile(ElseIf.Condition)
-			this.CodeGen.Pop(RAX)
-			this.CodeGen.Cmp(RAX, RSI)
+			this.CodeGen.Pop(RCX)
+			this.CodeGen.Cmp(RCX, RSI)
 			this.CodeGen.JE("__If__" Index + 1)
 			
 			for k, Line in ElseIf.Body {
@@ -186,6 +186,9 @@
 		LeftType := this.Compile(Expression.Left)
 		RightType := this.Compile(Expression.Right)
 		
+		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RAX)
+		
 		Try {
 			ResultType := this.Typing.ResultType(LeftType, RightType)
 		}
@@ -196,9 +199,6 @@
 					   ,Expression.Operator
 					   ,this.Tokenizer.CodeString)
 		}
-		
-		this.CodeGen.Pop(RAX)
-		this.CodeGen.Pop(RBX)
 
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
@@ -211,6 +211,16 @@
 			}
 			Case Tokens.MINUS: {
 				this.CodeGen.Sub(RAX, RBX)
+			}
+			Case Tokens.TIMES: {
+				this.CodeGen.IMul_R64_R64(RAX, RBX)
+			}
+			Case Tokens.DIVIDE: {
+				this.CodeGen.IDiv_RAX_R64(RBX)
+			}
+			Case Tokens.MOD: {
+				this.CodeGen.IDiv_RAX_R64(RBX)
+				this.CodeGen.Move(RAX, RDX)
 			}
 			Case Tokens.EQUAL: {
 				this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
@@ -249,7 +259,7 @@
 			}
 			else {
 				this.Compile(v)
-				this.CodeGen.Pop(RAX)
+				this.CodeGen.Pop(RDX)
 			}
 		}
 		
@@ -286,25 +296,25 @@
 					   ,this.Tokenizer.CodeString)
 		}
 		
-		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RCX)
 	
 		ResultType := this.Typing.GetType(Params[2].Value)
 	
 		Switch (ResultType.Precision) {
 			Case 8: {
-				this.CodeGen.MoveSX_R64_RI8(RAX, RBX)
+				this.CodeGen.MoveSX_R64_RI8(RDX, RCX)
 			}
 			Case 16: {
-				this.CodeGen.MoveSX_R64_RI16(RAX, RBX)
+				this.CodeGen.MoveSX_R64_RI16(RDX, RCX)
 			}
 			Case 32: {
-				this.CodeGen.MoveSX_R64_RI32(RAX, RBX)
+				this.CodeGen.MoveSX_R64_RI32(RDX, RCX)
 			}
 			Case 33: {
 				; TODO same as below
 			}
 			Case 64: {
-				this.CodeGen.Move_R64_RI64(RAX, RBX)
+				this.CodeGen.Move_R64_RI64(RDX, RCX)
 			}
 			Case 65: {
 				; TODO - Implement for more than a test
@@ -314,7 +324,7 @@
 			}
 		}
 		
-		this.CodeGen.Push(RAX)
+		this.CodeGen.Push(RDX)
 		return ResultType
 	}
 	
@@ -329,28 +339,28 @@
 					   ,this.Tokenizer.CodeString)
 		}
 		
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RCX)
 		
 		this.Compile(Params[2])
-		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RDX)
 		
 		PutType := this.Typing.GetType(Params[3].Value)
 		
 		Switch (PutType.Precision) {
 			Case 8: {
-				this.CodeGen.Move_RI8_R64(RAX, RBX)
+				this.CodeGen.Move_RI8_R64(RCX, RDX)
 				this.CodeGen.Push(1)
 			}
 			Case 16: {
-				this.CodeGen.Move_RI16_R64(RAX, RBX)
+				this.CodeGen.Move_RI16_R64(RCX, RDX)
 				this.CodeGen.Push(2)
 			}
 			Case 32: {
-				this.CodeGen.Move_RI32_R64(RAX, RBX)
+				this.CodeGen.Move_RI32_R64(RCX, RDX)
 				this.CodeGen.Push(4)
 			}
 			Case 64: {
-				this.CodeGen.Move_RI64_R64(RAX, RBX)
+				this.CodeGen.Move_RI64_R64(RCX, RDX)
 				this.CodeGen.Push(8)
 			}
 		}
