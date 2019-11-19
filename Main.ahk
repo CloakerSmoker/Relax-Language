@@ -18,7 +18,7 @@
 Code = 
 ( % 
 define Double Test(Double Param) {
-	return Param + 2.0
+	return Param + 2 + 5
 }
 )
 

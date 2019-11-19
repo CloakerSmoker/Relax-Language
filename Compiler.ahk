@@ -203,26 +203,26 @@
 					   ,this.Tokenizer.CodeString)
 		}
 		
-		this.Cast(LeftType, ResultType)
-		this.Cast(RightType, ResultType)
-		
-		this.CompileTypeExpression(ResultType, Expression)
+		return this.CompileTypeExpression(ResultType, Expression, LeftType, RightType, ResultType)
 	}
 	
-	CompileTypeExpression(Type, Expression) {
+	CompileTypeExpression(Type, Params*) {
 		if (Type.Name = "Double") {
-			this.CompileBinaryDouble(Expression)
+			return this.CompileBinaryDouble(Params*)
 		}
 		else {
-			this.CompileBinaryInt64(Expression)
+			return this.CompileBinaryInt64(Params*)
 		}
 	}
 	
-	CompileBinaryDouble(Expression) {
-		this.CodeGen.FLD_Stack()
-		this.CodeGen.Pop(RAX)
+	CompileBinaryDouble(Expression, LeftType, RightType, ResultType) {
+		this.Cast(RightType, ResultType)
 		this.CodeGen.FLD_Stack()
 		this.CodeGen.Pop(RBX)
+		
+		this.Cast(LeftType, ResultType)
+		this.CodeGen.FLD_Stack()
+		this.CodeGen.Pop(RAX)
 	
 		Switch (Expression.Operator.Type) {
 			Case Tokens.PLUS: {
@@ -232,10 +232,14 @@
 		
 		this.CodeGen.Push(RAX) ; Push RAX
 		this.CodeGen.FSTP_Stack() ; But then use the stack space from pushing RAX to store the actual result
+		return ResultType
 	}
 	
-	CompileBinaryInt64(Expression) {
+	CompileBinaryInt64(Expression, LeftType, RightType, ResultType) {
+		this.Cast(RightType, ResultType)
 		this.CodeGen.Pop(RBX)
+	
+		this.Cast(LeftType, ResultType)
 		this.CodeGen.Pop(RAX)
 	
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
@@ -288,6 +292,7 @@
 		}
 		
 		this.CodeGen.Push(RAX)
+		return ResultType
 	}
 	
 	CompileGrouping(Expression) {
@@ -364,14 +369,16 @@
 	
 	
 	Cast_I64_Double() {
-		this.Push(RAX)
+		this.CodeGen.Push(RAX)
 		this.CodeGen.FILD_Stack()
-		this.Pop(RAX)
+		this.CodeGen.FSTP_Stack()
+		this.CodeGen.Pop(RAX)
 	}
 	Cast_Double_I64() {
-		this.Push(RAX)
+		this.CodeGen.Push(RAX)
 		this.CodeGen.FISTP_Stack()
-		this.Pop(RAX)
+		this.CodeGen.FSTP_Stack()
+		this.CodeGen.Pop(RAX)
 	}
 	
 	Cast_I32_Float() {

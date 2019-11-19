@@ -558,6 +558,9 @@ class Typing {
 			else if (TempType.Name = FromType.Name) {
 				Break
 			}
+			else if !(TempType) {
+				Break
+			}
 			else {
 				NextType := TempType
 			}
@@ -586,11 +589,15 @@ class Typing {
 	}
 	
 	GetType(TypeName) {
+		if !(TypeName) {
+			return
+		}
+	
 		if (this.TypeSet.HasKey(TypeName)) {
 			return this.TypeSet[TypeName]
 		}
 		else {
-			Throw, Exception("Invalid type")
+			Throw, Exception("Invalid type: " TypeName)
 		}
 	}
 }
