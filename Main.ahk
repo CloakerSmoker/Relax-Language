@@ -17,8 +17,8 @@
 
 Code = 
 ( % 
-define Int64 Test(Int64 ValueOne, Float ValueTwo) {
-	return ValueOne % 2
+define Double Test(Double Param) {
+	return Param + 2.0
 }
 )
 
@@ -52,7 +52,7 @@ G := C.CompileFunction(a[1])
 VarSetCapacity(M, 8, 0)
 NumPut(0, &M + 0, 0, "Char")
 
-MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Int", 11, "Double", 6.9, "Int")
+MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Double", 6.9, "Double")
 MsgBox, % NumGet(&M + 0, 0, "Short")
 ; deref cptr as char
 ; char(cptr)

@@ -32,9 +32,11 @@
 	
 	GetVariable(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
-		
+		Type := this.Typing.GetVariableType(Name)
+	
 		this.CodeGen.Push(SIB(8, IndexRegister, R15))
-		return this.Typing.GetVariableType(Name)
+		
+		return Type
 	}
 	GetVariableAddress(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
@@ -54,6 +56,10 @@
 				ShortTypeName := this.CodeGen.NumberSizeOf(TargetToken.Value, False)
 				FullTypeName := IToInt(ShortTypeName)
 				return this.Typing.GetType(FullTypeName)
+			}
+			Case Tokens.DOUBLE: {
+				this.CodeGen.Push(FloatToBinaryInt(TargetToken.Value))				
+				return this.Typing.GetType("Double")
 			}
 			Case Tokens.IDENTIFIER: {
 				return this.GetVariable(TargetToken.Value)
@@ -186,9 +192,6 @@
 		LeftType := this.Compile(Expression.Left)
 		RightType := this.Compile(Expression.Right)
 		
-		this.CodeGen.Pop(RBX)
-		this.CodeGen.Pop(RAX)
-		
 		Try {
 			ResultType := this.Typing.ResultType(LeftType, RightType)
 		}
@@ -199,7 +202,42 @@
 					   ,Expression.Operator
 					   ,this.Tokenizer.CodeString)
 		}
-
+		
+		this.Cast(LeftType, ResultType)
+		this.Cast(RightType, ResultType)
+		
+		this.CompileTypeExpression(ResultType, Expression)
+	}
+	
+	CompileTypeExpression(Type, Expression) {
+		if (Type.Name = "Double") {
+			this.CompileBinaryDouble(Expression)
+		}
+		else {
+			this.CompileBinaryInt64(Expression)
+		}
+	}
+	
+	CompileBinaryDouble(Expression) {
+		this.CodeGen.FLD_Stack()
+		this.CodeGen.Pop(RAX)
+		this.CodeGen.FLD_Stack()
+		this.CodeGen.Pop(RBX)
+	
+		Switch (Expression.Operator.Type) {
+			Case Tokens.PLUS: {
+				this.CodeGen.FAddP()
+			}
+		}
+		
+		this.CodeGen.Push(RAX) ; Push RAX
+		this.CodeGen.FSTP_Stack() ; But then use the stack space from pushing RAX to store the actual result
+	}
+	
+	CompileBinaryInt64(Expression) {
+		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RAX)
+	
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
 			this.CodeGen.Move(RAX, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
@@ -265,6 +303,90 @@
 		
 		return ResultType
 	}
+	
+	
+	Cast(TypeOne, TypeTwo, StackLess := False) {
+		if (TypeOne.Name = TypeTwo.Name) {
+			return
+		}
+	
+		; Parameter should be on the stack
+		; RAX is the only register used for casts
+		; StackLess param is for when the operand is already in RAX, otherwise RAX is loaded with the first thing on the stack
+		
+		if !(StackLess) {
+			this.CodeGen.Pop(RAX)
+		}
+		
+		Base := ObjGetBase(this)
+		Path := this.Typing.CastPath(TypeOne, TypeTwo)
+		
+		for k, v in Path {
+			if !(Path[k + 1]) {
+				Break
+			}
+		
+			Name := "Cast_" IntToI(v) "_" IntToI(Path[k + 1])
+		
+			if (Base.HasKey(Name)) {
+				Base[Name].Call(this)
+			}
+			else {
+				Throw, Exception("Invalid cast: " Name)
+			}
+		}
+		
+		if !(StackLess) {
+			this.CodeGen.Push(RAX)
+		}
+	}
+	
+	Cast_I8_I16() {
+		this.CodeGen.CBWE()
+	}
+	Cast_I16_I32() {
+		this.CodeGen.CWDE()
+	}
+	Cast_I32_I64() {
+		this.CodeGen.CDQE()
+	}
+	Cast_I64_I8() {
+		this.Cast(this.Typing.GetType("Int8"), this.Typing.GetType("Int64"), True)
+	}
+	
+	
+	Cast_I64_Pointer() {
+		return ; Lmao
+	}
+	Cast_Pointer_I64() {
+		return ; These are some really useful casts
+	}
+	
+	
+	Cast_I64_Double() {
+		this.Push(RAX)
+		this.CodeGen.FILD_Stack()
+		this.Pop(RAX)
+	}
+	Cast_Double_I64() {
+		this.Push(RAX)
+		this.CodeGen.FISTP_Stack()
+		this.Pop(RAX)
+	}
+	
+	Cast_I32_Float() {
+	
+	}
+	Cast_Float_I32() {
+		
+	}
+	
+	
+	
+	
+	
+	
+	
 	
 	CompileCall(Expression) {
 		if (Expression.Target.Value = "Deref") {

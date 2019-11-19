@@ -579,13 +579,46 @@ class X64CodeGen {
 	}
 	
 	
-	; It looks like I need to use SIMD and XMM for floats
-	;  so all this is pointless, feelsbadman
-	
-	FLD_RM64(Register) {
+	FLD_SIB(SIB) {
 		this.PushByte(0xDD)
-		this.Mod(Mode.SIBToR, 0, Register.Number)
+		this.Mod(Mode.SIBToR, 0, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
 	}
+	FILD_SIB(SIB) {
+		this.PushByte(0xDF)
+		this.Mod(Mode.SIBToR, 5, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
+	}
+	FSTP_SIB(SIB) {
+		this.PushByte(0xDD)
+		this.Mod(Mode.SIBToR, 3, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
+	}
+	FISTP_SIB(SIB) {
+		this.PushByte(0xDF)
+		this.Mod(Mode.SIBToR, 7, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
+	}
+	
+	FLD_Stack() {
+		this.FLD_SIB(SIB(8, RSI, RSP))
+	}
+	FILD_Stack() {
+		this.FILD_SIB(SIB(8, RSI, RSP)) ; Helpers. They assume that RSI is 0
+	}
+	FSTP_Stack() {
+		this.FSTP_SIB(SIB(8, RSI, RSP))
+	}
+	FISTP_Stack() {
+		this.FISTP_SIB(SIB(8, RSI, RSP))
+	}
+	
+	FAddP() {
+		this.PushByte(0xDE)
+		this.PushByte(0xC1)
+	}
+	
+	
 	FLD_1() {
 		this.PushByte(0xD9)
 		this.PushByte(0xE8)
@@ -622,6 +655,19 @@ class X64CodeGen {
 		this.PushByte(0xC2)
 		this.PushByte(Byte & 0xFF)
 	}
+	
+	CBWE() {
+		this.PushByte(0x66) ; Legacy operand size, 16 bits
+		this.PushByte(0x98) ; Opcode
+	}
+	CWDE() {
+		this.PushByte(0x98)
+	}
+	CDQE() {
+		this.REX(REX.W)
+		this.PushByte(0x98)
+	}
+	
 	
 	NumberSizeOf(Number, ReturnNumber := true) {
 		static Sizes := {8: "I8", 16: "I16", 32: "I32", 64: "I64"}
@@ -690,6 +736,12 @@ class X64CodeGen {
 		MCode.Functions[Name] := {"pCode": pMemory, "Size": this.Bytes.Count()}
 		MCode[Name] := Func("DllCall").Bind(pMemory)
 	}
+}
+
+FloatToBinaryInt(Float) {
+	VarSetCapacity(Buffer, 8, 0)
+	NumPut(Float, &Buffer + 0, 0, "Double")
+	return NumGet(&Buffer + 0, 0, "UInt64")
 }
 
 class _MCode {

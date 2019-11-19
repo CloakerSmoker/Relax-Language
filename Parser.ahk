@@ -540,6 +540,10 @@ class Typing {
 	}
 	
 	CastPath(FromType, ToType) {
+		if (FromType.Name = ToType.Name) {
+			return []
+		}
+	
 		NextType := FromType
 		Path := []
 		
