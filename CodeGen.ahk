@@ -218,12 +218,27 @@ class X64CodeGen {
 		Prefix := REX.Prefix
 		
 		for k, v in Params {
-			Prefix |= v
+			if (v != "") {
+				Prefix |= v
+			}
 		}
 		
 		this.PushByte(Prefix)
 	}
-	REXOpcodeMod(Opcode, DestRegister, SourceRegister, NewMode := "None") {
+	
+	REXOpcode(OpcodeParts, REXParts) {
+		for k, v in REXParts {
+			if (v) {
+				this.REX(REXParts*)
+				Break
+			}
+		}
+		
+		for k, Part in OpcodeParts {
+			this.PushByte(Part)
+		}
+	}
+	REXOpcodeMod1(Opcode, DestRegister, SourceRegister, NewMode := "None") {
 		Prefix := [REX.W, SourceRegister.Requires.REX] ; If the source needs REX.B, then add it to our prefix
 		
 		if (DestRegister.Requires.REX = REX.B) {
@@ -239,25 +254,43 @@ class X64CodeGen {
 		
 		this.Mod((NewMode = "None" ? Mode.RToR : NewMode), DestRegister.Number, SourceRegister.Number)
 	}
-	REXOpcodeModSIB(Opcode, Register, Scale, IndexRegister, BaseRegister, NewMode := "None") {
-		Prefix := [REX.W, BaseRegister.Requires.REX]
+	
+	REXOpcodeMod(Opcode, DestRegister, SourceRegister, Options := "") {
+		NewMode := (Options.Mode != "") ? Options.Mode : Mode.RToR
 		
-		if (Register.Requires.REX = REX.B) {
-			Prefix.Push(REX.R)
-		}
-		
-		if (IndexRegister.Requires.REX = REX.B) {
-			Prefix.Push(REX.X)
-		}
-		
-		this.REX(Prefix*)
-		
-		for k, Part in Opcode {
-			this.PushByte(Part)
+		REXParts := IsObject(Options.REX) ? Options.REX : []
+	
+		if (DestRegister.OpcodeExtension != "") {
+			; When a instruction has an opcode extension, it lives in R/M of the ModRM byte
+			;  so we can just convert .OpcodeExtension into .Number to make things a bit more readable
+			DestRegister := {"Number": DestRegister.OpcodeExtension}
 		}
 	
-		this.Mod((NewMode = "None" ? Mode.SIBToR : NewMode), Register.Number, Mode.SIB)
-		this.SIB(Scale, IndexRegister.Number, BaseRegister.Number)
+		REXParts.Push(SourceRegister.Requires.REX) ; If the source needs REX.B, then add it to our prefix
+		
+		if (DestRegister.Requires.REX = REX.B) {
+			; If the DestRegister requies REX.B, then we add REX.R, since REX.R functions as REX.B for the RM feild of ModRM
+			REXParts.Push(REX.R)
+		}
+	
+		this.REXOpcode(Opcode, REXParts)
+		this.Mod(NewMode, DestRegister.Number, SourceRegister.Number)
+	}
+	REXOpcodeModSIB(Opcode, Register, SIB, Options := "") {
+		REXParts := IsObject(Options.REX) ? Options.REX : []
+		REXParts.Push(SIB.BaseRegister.Requires.REX)
+		
+		if (Register.Requires.REX = REX.B) {
+			REXParts.Push(REX.R)
+		}
+		if (SIB.IndexRegister.Requires.REX = REX.B) {
+			REXParts.Push(REX.X)
+		}
+		
+		this.REXOpcodeMod(Opcode, Register, {"Number": Mode.SIB}, {"REX": REXParts, "Mode": Mode.SIBToR})
+		;this.REXOpcode(Opcode, REXParts)
+		;this.Mod(NewMode, Register.Number, Mode.SIB)
+		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
 	}
 	
 	Mod(Mode := 3, Register := 0, RM := 0) {
@@ -303,23 +336,23 @@ class X64CodeGen {
 			this.Inc_R64(Register)
 		}
 		else {
-			this.REXOpcodeMod([0xC7], {"Number": 0}, Register)
+			this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
 			this.SplitIntoBytes32(Integer)
 		}
 	}
 	
 	Inc_R64(Register) {
-		this.REXOpcodeMod([0xFF], {"Number": 0}, Register)
+		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 0}, Register)
 	}
 	
 	XOR_R64_R64(RegisterOne, RegisterTwo) {
-		if (RegisterOne.Requires.REX || RegisterTwo.Requires.REX) {
-			this.REX(REX.W, RegisterOne.Requires.REX, RegisterTwo.Requires.REX)
-		}
-	
-		this.PushByte(0x33)
-		this.Mod(Mode.RToR, RegisterOne.Number, RegisterTwo.Number)
-		;this.REXOpcodeMod([0x33], RegisterOne, RegisterTwo)
+		;if (RegisterOne.Requires.REX || RegisterTwo.Requires.REX) {
+		;	this.REX(REX.W, RegisterOne.Requires.REX, RegisterTwo.Requires.REX)
+		;}
+		;
+		;this.PushByte(0x33)
+		;this.Mod(Mode.RToR, RegisterOne.Number, RegisterTwo.Number)
+		this.REXOpcodeMod([0x33], RegisterOne, RegisterTwo)
 	}
 	XOR_R64_I8(Register, Byte) {
 		if (Register.Requires.REX) {
@@ -332,17 +365,17 @@ class X64CodeGen {
 	}
 	
 	MoveSX_R64_RI32(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x63], RegisterOne, RegisterTwo, Mode.RToPtr)
+		this.REXOpcodeMod([0x63], RegisterOne, RegisterTwo, {"Mode": Mode.RToPtr})
 	}
 	MoveSX_R64_RI16(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x0F, 0xBF], RegisterOne, RegisterTwo, Mode.RToPtr)
+		this.REXOpcodeMod([0x0F, 0xBF], RegisterOne, RegisterTwo, {"Mode": Mode.RToPtr})
 	}
 	MoveSX_R64_RI8(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, Mode.RToPtr)
+		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, {"Mode": Mode.RToPtr})
 	}
 	
 	Move_RI8_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x88], RegisterTwo, RegisterOne, Mode.RToPtr) ; Op1 = rm(dest), Op2 = r(source)
+		this.REXOpcodeMod([0x88], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr}) ; Op1 = rm(dest), Op2 = r(source)
 	}
 	Move_RI16_R64(RegisterOne, RegisterTwo) {
 		this.PushByte(0x66) ; Legacy opcode size prefix, now using 16 bit instead of 32
@@ -354,14 +387,14 @@ class X64CodeGen {
 		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
 	}
 	Move_RI64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, Mode.RToPtr)
+		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr})
 	}
 	
 	Move_R64_RI64(DestRegister, SourceRegister) {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
 	
-		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, Mode.RToPtr)
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})
 	}
 
 	Move_R64_I64(Register, Integer) {
@@ -376,25 +409,25 @@ class X64CodeGen {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
 	
-		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister)
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W]})
 	}
 	Move_R64_SIB(Register, SIB) {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
 		
-		this.REXOpcodeModSIB([0x8B], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x8B], Register, SIB, {"REX": [REX.W]})
 	}
 	Move_SIB_R64(SIB, Register) {
 		; MOV r/m64,r64
 		; REX.W + 89 /r
 		
-		this.REXOpcodeModSIB([0x89], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x89], Register, SIB, {"REX": [REX.W]})
 	}
 	Move_R8_SIB(Register, SIB) {
 		; REX.W + 0F B6 /r
 		; MOVZX r64, r/m8
 		
-		this.REXOpcodeModSIB([0x0F, 0xB6], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x0F, 0xB6], Register, SIB, {"REX": [REX.W]})
 	}
 	Move_I64_R64(Address, Register) {	
 		Dummy := (Register.Number = RAX.Number) ? RBX : RAX
@@ -402,7 +435,7 @@ class X64CodeGen {
 		this.Push(Dummy)
 		this.Move_R64_I64(Dummy, I64(Address))
 	
-		this.REXOpcodeMod([0x89], Register, Dummy, Mode.RToPtr)
+		this.REXOpcodeMod([0x89], Register, Dummy, {"Mode": Mode.RToPtr})
 		
 		this.Pop(Dummy)
 	}
@@ -430,7 +463,7 @@ class X64CodeGen {
 		; Lea r64,r/m64
 		; REX.W + 8D /r
 		
-		this.REXOpcodeModSIB([0x8D], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x8D], Register, SIB, {"REX": [REX.W]})
 	}
 	
 	JMP(Name) {
@@ -453,19 +486,19 @@ class X64CodeGen {
 	}
 	
 	Add_R64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo)
+		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	Add_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 0}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register)
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Add_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 0}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register)
 		this.PushByte(Integer.Value & 0x00FF)
 		this.PushByte(Integer.Value & 0xFF00)
 	}
 	Add_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"Number": 0}, Register)
+		this.REXOpcodeMod([0x80], {"OpcodeExtension": 0}, Register)
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
@@ -476,16 +509,16 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo)
 	}
 	Sub_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 5}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Sub_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"Number": 5}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Integer.Value & 0x00FF)
 		this.PushByte(Integer.Value & 0xFF00)
 	}
 	Sub_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"Number": 5}, Register)
+		this.REXOpcodeMod([0x80], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
@@ -498,7 +531,7 @@ class X64CodeGen {
 	}
 	IDiv_RAX_R64(Register) {
 		this.CDQ()
-		this.REXOpcodeMod([0xF7], {"Number": 7}, Register)
+		this.REXOpcodeMod([0xF7], {"OpcodeExtension": 7}, Register)
 	}
 	
 	
@@ -517,13 +550,15 @@ class X64CodeGen {
 	}
 	
 	Push_SIB(SIB) {
-		if (SIB.IndexRegister.Requires.REX || SIB.BaseRegister.Requires.REX) {
-			this.REX(SIB.IndexRegister.Requires.REX, SIB.BaseRegister.Requires.REX)
-		}
+		;if (SIB.IndexRegister.Requires.REX || SIB.BaseRegister.Requires.REX) {
+		;	this.REX(SIB.IndexRegister.Requires.REX, SIB.BaseRegister.Requires.REX)
+		;}
+		
+		this.REXOpcodeModSIB([0xFF], {"OpcodeExtension": 6}, SIB)
 	
-		this.PushByte(0xFF)
-		this.Mod(Mode.SIBToR, 6, Mode.SIB)
-		this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
+		;this.PushByte(0xFF)
+		;this.Mod(Mode.SIBToR, 6, Mode.SIB)
+		;this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
 	
 	}
 	Push_R64(Register) {
@@ -661,11 +696,11 @@ class X64CodeGen {
 	Move_SIB_XMM(SIB, Register) {
 		; For some ungodly reason, this instruction takes a REX prefix mid-opcode, and R10 is mapped to R9, and R11 is mapped to R10
 		this.PushByte(0xF2)
-		this.REXOpcodeModSIB([0x0F, 0x11], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x0F, 0x11], Register, SIB)
 	}
 	Move_XMM_SIB(Register, SIB) {
 		this.PushByte(0xF2)
-		this.REXOpcodeModSIB([0x0F, 0x10], Register, SIB.Scale, SIB.IndexRegister, SIB.BaseRegister)
+		this.REXOpcodeModSIB([0x0F, 0x10], Register, SIB)
 	}
 	
 	
