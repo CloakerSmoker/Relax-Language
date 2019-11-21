@@ -335,6 +335,9 @@ class X64CodeGen {
 			this.XOR_R64_R64(Register, Register)
 			this.Inc_R64(Register)
 		}
+		;else if (Integer <= 0xFF) { ; Invokes the idiot instruction, never uncomment
+		;	this.Move_R64_I8(Register, Integer)
+		;}
 		else {
 			this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
 			this.SplitIntoBytes32(Integer)
@@ -362,6 +365,18 @@ class X64CodeGen {
 		this.PushByte(0x83)
 		this.Mod(Mode.RToR, 6, Register.Number)
 		this.PushByte(Byte)
+	}
+	
+	Move_R64_SIB_I8(Register, SIB) {
+		; The raw encoding of this is much shorter for moving bytes into registers, but it doesn't take an imm8, so it's nearly useless
+		this.REXOpcodeModSIB([0x0F, 0xBE], Register, SIB, {"REX": [REX.W]})
+	}
+	
+	Move_R64_I8(Register, Integer) {
+		; what a stupid mistake of an instruction. It doesn't touch the top 50+ bits, just the low 8, which is ~~totally useless~~ great
+		Throw, Exception("Don't use the idiot instruction.")
+		this.REXOpcode([0xB0 + Register.Number], [Register.Requires.REX])
+		this.PushByte(Integer.Value)
 	}
 	
 	MoveSX_R64_RI32(RegisterOne, RegisterTwo) {
@@ -489,29 +504,27 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	Add_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.W])
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Add_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register)
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Integer.Value & 0x00FF)
 		this.PushByte(Integer.Value & 0xFF00)
 	}
 	Add_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"OpcodeExtension": 0}, Register)
+		this.REXOpcodeMod([0x80], {"OpcodeExtension": 0}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
 	
-	
-	
 	Sub_R64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo)
+		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	Sub_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.W]})
 		this.SplitIntoBytes32(Integer.Value)
-	}
+	}	
 	Sub_R64_I16(Register, Integer) {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Integer.Value & 0x00FF)
