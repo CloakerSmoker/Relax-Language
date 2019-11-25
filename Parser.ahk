@@ -8,7 +8,7 @@
 	static _ := Parser.Tests()
 	
 	Tests() {
-		if (VAL.DEBUG) {
+		if (Config.DEBUG) {
 			this.RunTests()
 		}
 	}
@@ -51,6 +51,8 @@
 						   ,Next
 						   ,this.Source)
 		}
+		
+		return this.Current()
 	}
 	NextMatches(Types*) {
 		for k, Type in Types {
@@ -97,20 +99,89 @@
 		return TypeToken
 	}
 	
+	AddFunction(Node) {
+		FunctionName := Node.Name.Value
+		
+		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
+			PrettyError("Parse"
+					   ,"Duplicate defintion"
+					   ,""
+					   ,Node.Name
+					   ,this.Source)
+		}
+	
+		this.CurrentProgram.Functions[FunctionName] := Node
+	}
 	
 	ParseProgram() {
-		Statements := []
+		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}}
 	
 		while !(this.AtEOF()) {
+			Peek := this.Peek()
+			
+			if (Peek.Type = Tokens.KEYWORD && Peek.Value = Keywords.DLLIMPORT) {
+				this.ParseImport()
+				Continue
+			}
+		
 			NextStatement := this.ParseStatement()
-			Statements.Push(NextStatement)
+			
+			if (NextStatement.Type = ASTNodeTypes.ExpressionLine && NextStatement.Expression = "") {
+				Continue
+			}
+			
+			if (NextStatement.Type != ASTNodeTypes.Define) {
+				StatementError(NextStatement.Stringify(), "Must be a Define, or DllImport statement.")
+			}
+			
+			this.AddFunction(NextStatement)
 		}
 		
 		if (this.CriticalError) {
 			Throw, Exception("Critical error while parsing, aborting...")
 		}
 		
-		return Statements
+		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals)
+	}
+	ParseImport() {
+		this.Next()
+		
+		ReturnType := this.EnsureValidType(this.ParsePrimary())
+		
+		Name := this.ParsePrimary()
+		
+		if (Name.Type != Tokens.IDENTIFIER) {
+			PrettyError("Parse"
+					,"Invalid DllImport name '" Name.Stringify() "', expected IDENTIFIER."
+					,"Expected an identifier."
+					,Name
+					,this.Source
+					,"Function names must be identifiers, not numbers or quoted strings.")
+		}
+		
+		Params := this.ParseGrouping().Expressions
+		
+		for k, Param in Params {
+			this.EnsureValidType(Param)
+		}
+		
+		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
+		DllName := this.Consume(Tokens.IDENTIFIER, "DllImport file names must be IDENTIFIERs").Value
+		
+		if (this.NextMatches(Tokens.DOT)) {
+			this.Next()
+		}
+		
+		this.Consume(Tokens.COMMA, "DllImport bodies must follow the format {FILENAME, FUNCTIONNAME}")
+		FunctionName := this.Consume(Tokens.IDENTIFIER, "DllImport function names must be IDENTIFIERs").Value
+		
+		this.Consume(Tokens.RIGHT_BRACE, "DllImport bodies require a closeing '}'")
+		
+		if !(this.NextMatches(Tokens.NEWLINE, Tokens.EOF)) {
+			this.Consume(Tokens.NEWLINE, "DllImport statements must be followed by \n.")
+		}
+		
+		this.AddFunction(new ASTNodes.Statements.DllImport(ReturnType, Name, Params, DllName, FunctionName))
 	}
 	ParseStatement() {
 		Next := this.Peek()
@@ -119,7 +190,7 @@
 			if (Next.Type = Tokens.KEYWORD) {
 				return this.ParseKeywordStatement()
 			}
-			else if (Next.Type = Tokens.IDENTIFIER && this.Peek().Type = Tokens.COLON) {
+			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
 				; TODO (FIRST) - Decide on a declaration format
 				return this.ParseDeclaration() ; TODO - Implement this
 			}
@@ -131,6 +202,24 @@
 			this.CriticalError := True
 		}
 	}
+	ParseDeclaration() {
+		Type := this.Consume(Tokens.IDENTIFIER, "It is impossible to get this error")
+	
+		if !(IsObject(this.CurrentProgram.CurrentFunction)) {
+			PrettyError("Parse"
+					   ,"Unexpected declaration"
+					   ,"Not in a function body."
+					   ,this.Current()
+					   ,this.Source)
+		}
+	
+		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
+		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
+		
+		this.Index--
+		return this.ParseExpressionStatement()
+	}
+	
 	ParseKeywordStatement() {
 		NextKeyword := this.Next().Value
 		
@@ -173,9 +262,12 @@
 		
 		Params := this.ParseParamGrouping()
 
+		Locals := {}
+		this.CurrentProgram.CurrentFunction := Locals
+		
 		Body := this.ParseBlock()
 		
-		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body)
+		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals)
 	}
 	
 	ParseParamGrouping() {

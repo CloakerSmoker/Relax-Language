@@ -504,7 +504,7 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	Add_R64_I32(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.W])
+		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.W]})
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Add_R64_I16(Register, Integer) {

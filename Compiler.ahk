@@ -74,11 +74,28 @@
 		}
 	}
 	
+	CompileProgram(Program) {
+		this.CodeGen := new X64CodeGen()
+		Current := this.CurrentProgram := {"Node": Program, "Offsets": {}}
+		GlobalSize := 0
+		
+		for FunctionName, FunctionDefine in Program.Functions {
+			this.Compile(FunctionDefine)
+			Current.Offsets[FunctionName] := GlobalSize
+			GlobalSize++
+		}
+		
+		for k, GlobalVariable in Program.Globals {
+			Current.Offsets[GlobalVariable[1].Value] := GlobalSize
+			GlobalSize++
+		}
+	}
+	
 	CompileFunction(DefineAST) {
 		this.Variables := {}
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		ParamSizes := DefineAST.Params.Count() * 8
-		CG := this.CodeGen := new X64CodeGen()
+		CG := this.CodeGen
 		
 	
 		CG.Push(RBP)

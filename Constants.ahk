@@ -245,6 +245,7 @@ class Keywords extends Enum {
 	static Options := "
 	(
 		define
+		dllimport
 		return
 		if
 		else
@@ -272,6 +273,7 @@ class ASTNodeTypes extends Enum {
 	static Options := "
 	(
 		DEFINE
+		DLLIMPORT
 		EXPRESSIONLINE
 		RETURN
 		IFGROUP
@@ -287,8 +289,46 @@ class ASTNodeTypes extends Enum {
 
 class ASTNodes {
 	class Statements {
+		class Program extends ASTNode {
+			static Parameters := ["Functions", "Globals"]
+		
+			Stringify() {
+				String := "/* " Config.VERSION " */`n"
+				
+				for k, GlobalVariable in this.Imports {
+					String .= GlobalVariable[1] " " GlobalVariable[2]
+				}
+				
+				for k, FunctionDefine in this.Functions {
+					String .= FunctionDefine.Stringify()
+				}
+			
+				return String
+			}
+		}
+	
+	
+		class DllImport extends ASTNode {
+			static Parameters := ["ReturnType", "Name", "Params", "DllName", "FunctionName"]
+		
+			Stringify() {
+				String := "DllImport " this.ReturnType.Value " " this.Name.Value "("
+				
+				for k, ParamType in this.Params {
+					String .= ParamType.Value ", "
+				}
+			
+				if (this.Params.Count()) {
+					String := SubStr(String, 1, StrLen(String) - 2)
+				}
+				
+				String .= ") {" this.DllName ".dll, " this.FunctionName "};`n"
+				return String
+			}
+		}
+	
 		class Define extends ASTNode {
-			static Parameters := ["ReturnType", "Name", "Params", "Body"]
+			static Parameters := ["ReturnType", "Name", "Params", "Body", "Locals"]
 			
 			Stringify() {
 				String := "Define " this.ReturnType.Value " " this.Name.Value "("
@@ -302,6 +342,10 @@ class ASTNodes {
 				}
 					
 				String .= ") {`n"
+				
+				for LocalName, LocalType in this.Locals {
+					String .= "`t" LocalType " " LocalName ";`n"
+				}
 				
 				for k, Line in this.Body {
 					String .= Line.Stringify("`t")

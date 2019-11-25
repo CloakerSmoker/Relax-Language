@@ -61,6 +61,14 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	
 	Message .= "`n{Enter} to continue."
 	
+	ShowError(Message)
+}
+
+StatementError(Statement, Message) {
+	ShowError("Error: " Message "`n" Statement)
+}
+
+ShowError(Message) {
 	Gui, ShowError:New
 	Gui, ShowError:Font, s10, Terminal
 	Gui, ShowError:Add, Text, w800, % Message
@@ -71,15 +79,6 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	Gui, ShowError:Destroy
 	
 	Throw, Exception(Message)
-}
-
-ShowError(Exception) {
-	Text := Exception.Message
-	Token := Exception.What
-	Source := Exception.Extra
-
-	
-	
 }
 
 ; %Phase% Error: %LongText%

@@ -1,5 +1,6 @@
-﻿class VAL {
-	static DEBUG := False
+﻿class Config {
+	static DEBUG := True
+	static VERSION := "0.1.0"
 }
 
 #Include %A_ScriptDir%
@@ -14,10 +15,14 @@
 ; TODO: Loops
 ; TODO: (Related to 1) Shorter Jmp encodings
 
+; DllImport Int64 MsgBox(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxW}
 
 Code = 
 ( % 
+
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
+	Int64 FirstLocal := 99
+
 	return P3
 }
 )
@@ -44,17 +49,19 @@ for k, v in t {
 Pest := new Parser(Test)
 a := Pest.Start()
 
-MsgBox, % a[1].Stringify()
+MsgBox, % a.Stringify()
 
 C := new Compiler(Test, Pest.Typing)
-G := C.CompileFunction(a[1])
+G := C.Compile(a)
 
 VarSetCapacity(M, 8, 0)
 NumPut(0, &M + 0, 0, "Char")
 
 MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Int64", 6, "Int", 9, "Int", 1, "Int64")
 MsgBox, % NumGet(&M + 0, 0, "Short")
-; deref cptr as char
+
+
+
 ; char(cptr)
 ; cptr:deref(char)
 ;  deref(cptr, char)
@@ -64,5 +71,5 @@ MsgBox, % NumGet(&M + 0, 0, "Short")
 
 ; ptr:Put(Value, Type)
 
-
+; dllimport Int64 MessageBox(Int64, Pointer) {user32.dll, MessageBoxA}
 ; asm { Move_R64_R64(RAX, RAX) }
