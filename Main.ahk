@@ -21,11 +21,15 @@ Code =
 ( % 
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
-	Int64 FirstLocal := 99
-
 	return P3
 }
+define Int64 Test2(Int64 P1, Int64 P2, Int64 P3) {
+	return P1
+}
 )
+
+; 	Int64 FirstLocal := 99
+
 
 ;	if (0) {
 ;		return 55
@@ -52,13 +56,15 @@ a := Pest.Start()
 MsgBox, % a.Stringify()
 
 C := new Compiler(Test, Pest.Typing)
-G := C.Compile(a)
+G := C.CompileProgram(a)
 
-VarSetCapacity(M, 8, 0)
-NumPut(0, &M + 0, 0, "Char")
+MsgBox, % G.CallFunction("Test2", 99, 22, 33)
 
-MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Int64", 6, "Int", 9, "Int", 1, "Int64")
-MsgBox, % NumGet(&M + 0, 0, "Short")
+;VarSetCapacity(M, 8, 0)
+;NumPut(0, &M + 0, 0, "Char")
+;
+;MsgBox, % "Input:`n" a[1].Stringify() "`nGenerated code: `n" (Clipboard := G.Stringify()) "`nResult (60, 9): " G.Execute("Int64", 6, "Int", 9, "Int", 1, "Int64")
+;MsgBox, % NumGet(&M + 0, 0, "Short")
 
 
 

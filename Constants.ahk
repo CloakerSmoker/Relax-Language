@@ -442,3 +442,45 @@ class ASTNodes {
 		}
 	}
 }
+
+class CompiledProgram {
+	__New(ProgramNode, CodeGen, FunctionOffsets) {
+		this.Node := ProgramNode
+		this.CodeGen := CodeGen
+		this.Offsets := FunctionOffsets
+		
+		CodeGen.Link()
+	
+		pMemory := this.pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", CodeGen.Index(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
+		
+		for k, v in CodeGen.Bytes {
+			NumPut(v, pMemory + 0, A_Index - 1, "Char")
+		}
+		
+		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", CodeGen.Index(), "UInt", 0x20, "UInt*", OldProtection)
+	}
+	__Delete() {
+		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", this.CodeGen.Index(), "UInt", 0x00008000)
+	}
+	
+	CallFunction(Name, Params*) {
+		TypedParams := []
+		
+		for k, ParamPair in this.Node.Functions[Name].Params {
+			TypedParams.Push(ParamPair[1].Value)
+			TypedParams.Push(Params[k])
+		}
+		
+		TypedParams.Push(this.Node.Functions[Name].ReturnType.Value)
+		
+		Offset := this.Offsets[Name]
+		
+		if (Offset = "") {
+			Throw, Exception("Function " Name " not found.")
+		}
+		
+		return DllCall(this.pMemory + Offset, TypedParams*)
+	}
+
+
+}

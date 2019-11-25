@@ -76,28 +76,25 @@
 	
 	CompileProgram(Program) {
 		this.CodeGen := new X64CodeGen()
-		Current := this.CurrentProgram := {"Node": Program, "Offsets": {}}
-		GlobalSize := 0
+		Current := this.CurrentProgram := {"Node": Program, "FunctionOffsets": {}}
+		FunctionOffset := 0
 		
 		for FunctionName, FunctionDefine in Program.Functions {
-			this.Compile(FunctionDefine)
-			Current.Offsets[FunctionName] := GlobalSize
-			GlobalSize++
+			Current.FunctionOffsets[FunctionName] := FunctionOffset
+			this.Compile(FunctionDefine) ; Compile a function starting from FunctionOffset
+			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
 		
-		for k, GlobalVariable in Program.Globals {
-			Current.Offsets[GlobalVariable[1].Value] := GlobalSize
-			GlobalSize++
-		}
+		return new CompiledProgram(Program, this.CodeGen, Current.FunctionOffsets)
 	}
 	
-	CompileFunction(DefineAST) {
+	CompileDefine(DefineAST) {
 		this.Variables := {}
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		ParamSizes := DefineAST.Params.Count() * 8
 		CG := this.CodeGen
 		
-	
+		;CG.Label(DefineAST.Name.Value)
 		CG.Push(RBP)
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
