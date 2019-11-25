@@ -75,6 +75,7 @@
 	}
 	
 	CompileProgram(Program) {
+		this.FunctionIndex := 0
 		this.CodeGen := new X64CodeGen()
 		Current := this.CurrentProgram := {"Node": Program, "FunctionOffsets": {}}
 		FunctionOffset := 0
@@ -89,6 +90,7 @@
 	}
 	
 	CompileDefine(DefineAST) {
+		this.FunctionIndex++
 		this.Variables := {}
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		ParamSizes := DefineAST.Params.Count() * 8
@@ -111,7 +113,7 @@
 				this.Compile(Statement)
 			}
 			
-		CG.Label("__Return")
+		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
 			CG.Add(RSP, ParamSizes)
@@ -195,7 +197,7 @@
 		this.Compile(Statement.Expression)
 		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 		this.CodeGen.Pop(RAX)
-		this.CodeGen.JMP("__Return")
+		this.CodeGen.JMP("__Return" this.FunctionIndex)
 	}
 	
 	CompileBinary(Expression) {

@@ -23,8 +23,8 @@ Code =
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	return P3
 }
-define Int64 Test2(Int64 P1, Int64 P2, Int64 P3) {
-	return P1
+define Double Test2(Int64 P1, Int64 P2, Double P3) {
+	return (P3 * 2) / 3
 }
 )
 
@@ -58,7 +58,9 @@ MsgBox, % a.Stringify()
 C := new Compiler(Test, Pest.Typing)
 G := C.CompileProgram(a)
 
-MsgBox, % G.CallFunction("Test2", 99, 22, 33)
+MsgBox, % G.CodeGen.Stringify()
+
+MsgBox, % G.CallFunction("Test2", 99, 22, 3.0)
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")
