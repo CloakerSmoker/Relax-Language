@@ -30,6 +30,11 @@
 		}
 	}
 	
+	SetVariable(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
+		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15))
+	}
+	
 	GetVariable(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
 		Type := this.Typing.GetVariableType(Name)
@@ -252,10 +257,8 @@
 					   ,Expression.Operator
 					   ,this.Tokenizer.CodeString)
 		}
-		
-		this.CodeGen.Pop(RBX)
-		this.GetVariableAddress(Expression.Left.Value)
-		this.CodeGen.Pop(RAX)
+	
+		this.CodeGen.Push(SIB(8, RSI, RSP)) ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
 	
 		if (Type.Name = "Double") {
 			this.CompileDoubleAssignment(Expression, VariableType, RightType)
@@ -263,8 +266,6 @@
 		else {
 			this.CompileInt64Assignment(Expression, VariableType, RightType)
 		}
-		
-		this.CodeGen.Push(RBX)
 		
 		return RightType
 	}
@@ -281,7 +282,7 @@
 	CompileDoubleAssignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
-				this.CodeGen.Move_RI64_R64(RAX, RBX)
+				this.SetVariable(Expression.Left.Value)
 			}
 		}
 	}
@@ -289,7 +290,7 @@
 	CompileInt64Assignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
-				this.CodeGen.Move_RI64_R64(RAX, RBX)
+				this.SetVariable(Expression.Left.Value)
 			}
 		}
 	}

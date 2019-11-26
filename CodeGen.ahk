@@ -129,11 +129,22 @@ class X64CodeGen {
 			this.XOR_R64_R64(Register, Register)
 			this.Inc_R64(Register)
 		}
+		;else if (Integer <= 0xFF) {
+		;	this.XOR_R64_R64(Register, Register)
+		;	this.Add_R64_I8(Register, {"Value": Integer})
+		;}
 		else {
 			this.Move_R64_I32(Register, {"Value": Integer})
 		}
 	}
 	
+	; Calls START
+	
+	Call_RI64(Register) {
+		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 2}, Register)
+	}
+	
+	; Calls END
 	;============================
 	; XORs START
 	
@@ -178,10 +189,9 @@ class X64CodeGen {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
 	
-		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W], "Mode": Mode.RToPtr})
 	}
 	Move_SIB_XMM(SIB, Register) {
-		; For some ungodly reason, this instruction takes a REX prefix mid-opcode, and R10 is mapped to R9, and R11 is mapped to R10
 		this.PushByte(0xF2)
 		this.REXOpcodeModSIB([0x0F, 0x11], Register, SIB)
 	}
@@ -220,6 +230,9 @@ class X64CodeGen {
 	
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.Rex])
 		this.SplitIntoBytes64(Integer.Value) ; io
+	}
+	Move_R64_I32R(Register, RawInteger) {
+		return this.Move_R64_I32(Register, {"Value": RawInteger})
 	}
 	Move_R64_I32(Register, Integer) {
 		this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
@@ -380,16 +393,7 @@ class X64CodeGen {
 	}
 	
 	Push_SIB(SIB) {
-		;if (SIB.IndexRegister.Requires.REX || SIB.BaseRegister.Requires.REX) {
-		;	this.REX(SIB.IndexRegister.Requires.REX, SIB.BaseRegister.Requires.REX)
-		;}
-		
 		this.REXOpcodeModSIB([0xFF], {"OpcodeExtension": 6}, SIB)
-	
-		;this.PushByte(0xFF)
-		;this.Mod(Mode.SIBToR, 6, Mode.SIB)
-		;this.SIB(SIB.Scale, SIB.IndexRegister.Number, SIB.BaseRegister.Number)
-	
 	}
 	Push_R64(Register) {
 		if (Register.Requires.REX) {
@@ -437,6 +441,9 @@ class X64CodeGen {
 		}
 		
 		this.PushByte(0x58 + Register.Number)
+	}
+	Pop_SIB(SIB) {
+		this.REXOpcodeModSIB([0x8F], {"OpcodeExtension": 0}, SIB)
 	}
 	
 	; Pop instructions END
@@ -741,17 +748,17 @@ class R8  {
 class R9  {
 	static Type := "R64"
 	static Requires := {"REX": REX.B}
-	static Number := 3
+	static Number := 1
 }
 class R10 {
 	static Type := "R64"
 	static Requires := {"REX": REX.B}
-	static Number := 1
+	static Number := 2
 }
 class R11 {
 	static Type := "R64"
 	static Requires := {"REX": REX.B}
-	static Number := 2
+	static Number := 3
 }
 class R12 {
 	static Type := "R64"
