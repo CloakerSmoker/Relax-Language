@@ -21,12 +21,17 @@ Code =
 ( % 
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
-	return P3
-}
-define Double Test2(Int64 P1, Int64 P2, Double P3) {
-	return (P3 * 2) / 3
+	Int64 Sum
+	Sum := 10
+	Int64 NewSum := Sum * 99
+	
+	return NewSum
 }
 )
+
+;define Double Test2(Int64 P1, Int64 P2, Double P3) {
+;	return (P3 * 2) / 3
+;}
 
 ; 	Int64 FirstLocal := 99
 
@@ -58,9 +63,9 @@ MsgBox, % a.Stringify()
 C := new Compiler(Test, Pest.Typing)
 G := C.CompileProgram(a)
 
-MsgBox, % G.CodeGen.Stringify()
+MsgBox, % (Clipboard := G.CodeGen.Stringify())
 
-MsgBox, % G.CallFunction("Test2", 99, 22, 3.0)
+MsgBox, % G.CallFunction("Test", 99, 22, 4)
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")

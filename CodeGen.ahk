@@ -207,7 +207,7 @@ class X64CodeGen {
 		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
 	}
 	Move_RI64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr})
+		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr, "REX": [REX.W]})
 	}
 	
 	; Register to (in register) pointer moves END

@@ -32,7 +32,7 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	
 	Message .= " " TokenContext.Line " | " TokenLine
 
-	TokenStart := InStr(TokenLine, TokenText, True, TokenContext.Start - PreviousLinesLength)
+	TokenStart := InStr(TokenLine, TokenText, True, TokenContext.Start - PreviousLinesLength - 5)
 	TokenEnd := StrLen(TokenText)
 	
 	Message .= "`n   |-"

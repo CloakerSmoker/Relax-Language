@@ -93,14 +93,19 @@
 		this.FunctionIndex++
 		this.Variables := {}
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
-		ParamSizes := DefineAST.Params.Count() * 8
+		ParamSizes := DefineAST.Params.Count()
 		CG := this.CodeGen
+		
+		for LocalName, LocalType in DefineAST.Locals {
+			this.AddVariable(ParamSizes++, LocalName)
+			this.Typing.AddVariable(LocalType, LocalName)
+		}
 		
 		;CG.Label(DefineAST.Name.Value)
 		CG.Push(RBP)
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
-				CG.Sub(RSP, ParamSizes)
+				CG.Sub(RSP, ParamSizes * 8)
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
@@ -116,7 +121,7 @@
 		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
-			CG.Add(RSP, ParamSizes)
+			CG.Add(RSP, ParamSizes * 8)
 		}
 		
 		this.Leave()
@@ -169,6 +174,11 @@
 		return Size
 	}
 	
+	CompileExpressionLine(Statement) {
+		this.Compile(Statement.Expression)
+		this.CodeGen.Pop(RAX)
+	}
+	
 	CompileIfGroup(Statement) {
 		static Index := 0
 		
@@ -204,9 +214,16 @@
 		; Thonking time:
 		;  To mix types in the middle of an expression, get the result type, cast both operands to that type, and then do the operation with just that type
 		
-	
-		LeftType := this.Compile(Expression.Left)
-		RightType := this.Compile(Expression.Right)
+		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
+		
+		if (IsAssignment) {
+			RightType := this.Compile(Expression.Right)
+			LeftType := this.Typing.GetVariableType(Expression.Left.Value)
+		}
+		else {
+			LeftType := this.Compile(Expression.Left)
+			RightType := this.Compile(Expression.Right)
+		}
 		
 		Try {
 			ResultType := this.Typing.ResultType(LeftType, RightType)
@@ -219,7 +236,30 @@
 					   ,this.Tokenizer.CodeString)
 		}
 		
-		return this.CompileTypeExpression(ResultType, Expression, LeftType, RightType, ResultType)
+		if (IsAssignment) {
+			return this.CompileTypeAssignment(ResultType, Expression, LeftType, RightType)
+		}
+		else {
+			return this.CompileTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
+		}
+	}
+	
+	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
+		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
+			PrettyError("Type"
+					   ,"The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " ."
+					   ,""
+					   ,Expression.Operator
+					   ,this.Tokenizer.CodeString)
+		}
+		
+	
+		if (Type.Name = "Double") {
+			return this.CompileDoubleAssignment(Expression, VariableType, RightType)
+		}
+		else {
+			return this.CompileInt64Assignment(Expression, VariableType, RightType)
+		}
 	}
 	
 	CompileTypeExpression(Type, Params*) {
@@ -229,6 +269,24 @@
 		else {
 			return this.CompileBinaryInt64(Params*)
 		}
+	}
+	
+	CompileDoubleAssignment() {
+
+	}
+	
+	CompileInt64Assignment(Expression, VariableType, RightType) {
+		this.CodeGen.Pop(RBX)
+		this.GetVariableAddress(Expression.Left.Value)
+		this.CodeGen.Pop(RAX)
+		
+		Switch (Expression.Operator.Type) {
+			Case Tokens.COLON_EQUAL: {
+				this.CodeGen.Move_RI64_R64(RAX, RBX)
+			}
+		}
+		
+		this.CodeGen.Push(RBX)
 	}
 	
 	CompileBinaryDouble(Expression, LeftType, RightType, ResultType) {
