@@ -24,6 +24,12 @@ SplitIntoBytes32(Integer) {
 	
 	return Array
 }
+SplitIntoBytes64(Integer) {
+	FirstFour := SplitIntoBytes32((Integer & 0x00000000FFFFFFFF) >> 0)
+	LastFour := SplitIntoBytes32((Integer & 0x7FFFFFFF00000000) >> 32)
+
+	return [FirstFour[1], FirstFour[2], FirstFour[3], FirstFour[4], LastFour[1], LastFour[2], LastFour[3], LastFour[4]]
+}
 
 IntToI(IntNumber) {
 	return StrReplace(IntNumber, "Int", "I")
@@ -570,6 +576,17 @@ class X64CodeGen {
 	
 	; RAX size conversion instructions END
 	;============================
+	; Magic helper pseudo-instructions
+	
+	DllCall(DllFile, DllFunction) {
+		this.Push(RAX)
+		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
+		this.DllFunctionPlaceholder(DllFile, DllFunction)
+		this.Call_RI64(RAX)
+		this.Pop(RAX)
+	}
+	
+	;============================
 
 	__Call(Key, Params*) {
 		Base := ObjGetBase(this)
@@ -607,15 +624,38 @@ class X64CodeGen {
 		this.PushByte(0x00)
 		this.PushByte(0x00)
 	}
+	DllFunctionPlaceholder(DllFile, DllFunction) {
+		this.Bytes.Push(["Dll", DllFile, DllFunction])
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+	}
 	Link() {
 		for Index, Byte in this.Bytes {
-			if (IsObject(Byte) && Byte[1] = "Label") {
-				TargetIndex := this.Labels[Byte[2]]
-				CurrentIndex := (Index + 4) - 1
-				Offset := TargetIndex - CurrentIndex
-			
-				for k, v in SplitIntoBytes32(Offset) {
-					this.Bytes[Index + k - 1] := v
+			if (IsObject(Byte)) {
+				Switch (Byte[1]) {
+					Case "Label": {
+						TargetIndex := this.Labels[Byte[2]]
+						CurrentIndex := (Index + 4) - 1
+						Offset := TargetIndex - CurrentIndex
+					
+						for k, v in SplitIntoBytes32(Offset) {
+							this.Bytes[Index + k - 1] := v
+						}
+					}
+					Case "Dll": {
+						hDllFile := DllCall("GetModuleHandle", "Str", Byte[2], "Ptr")
+						pSomeFunction := DllCall("GetProcAddress", "Ptr", hDllFile, "AStr", Byte[3], "Ptr")
+						
+						for k, v in SplitIntoBytes64(pSomeFunction) {
+							this.Bytes[Index + k - 1] := v
+						}
+					}
 				}
 			}
 		}

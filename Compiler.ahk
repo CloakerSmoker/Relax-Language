@@ -528,8 +528,30 @@
 			return this.CompilePut(Expression.Params.Expressions)
 		}
 		else if (Expression.Target.Value = "Address") {
-			return this.GetVariableAddress(Expression.Params.Expressions[1].Value)
+			this.GetVariableAddress(Expression.Params.Expressions[1].Value)
+			return this.Typing.GetType("Pointer")
 		}
+		
+		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
+			static ParamRegisters := [R9, R8, RDX, RCX]
+		
+			for k, ParamValue in Expression.Params.Expressions {
+				this.Compile(ParamValue)
+			}
+			
+			loop, % 4 - k {
+				this.CodeGen.Push(0)
+			}
+			
+			for k, Register in ParamRegisters {
+				this.CodeGen.Pop(Register)
+			}
+		
+			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+				return this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+			}
+		}
+		
 		
 		PrettyError("Compile"
 				   ,"Function '" Expression.Target.Stringify() "' is not callable."

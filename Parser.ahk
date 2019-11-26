@@ -409,9 +409,10 @@
 				}
 				Case Tokens.LEFT_PAREN: {
 					this.Index--
+					OldPrevious := this.Current()
 					Params := this.ParseGrouping()
 				
-					if (this.Previous().Type = Tokens.IDENTIFIER && (OperandStack.Count() > 0)) {
+					if (OperandStack[OperandStack.Count()].Type = Tokens.IDENTIFIER) {
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
 					}
 					else {

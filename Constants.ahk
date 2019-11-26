@@ -117,7 +117,7 @@ class CharacterTokens {
 class OperatorClasses {
 	static Prefix	  := {"Precedence": -1
 						, "Associative": "Right"
-						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT]}
+						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.COLON]}
 
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"

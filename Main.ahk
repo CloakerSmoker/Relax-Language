@@ -20,12 +20,21 @@
 Code = 
 ( % 
 
-define Double Test(Int64 P1, Int64 P2, Int64 P3) {
-	Double NewSum := P1 * 2.0
-	return NewSum
+DllImport Int64 MessageBeep(Int32) {User32.dll, MessageBeep}
+DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
+
+define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
+	Int64 B := 0
+	Int64 A := 0x49494948
+	Int64 C := 0
+	Pointer P := A:Address()
+
+	return MessageBoxA(0, A:Address(), 0, 0) ; TODO :Address() only works with the P := line, fix it
 }
 )
-; 
+
+; Pointer S := "hello":Store()
+;  Pointer P := MessageBoxA(0, A:Address(), 0, 0)
 ;define Double Test2(Int64 P1, Int64 P2, Double P3) {
 ;	return (P3 * 2) / 3
 ;}
