@@ -253,13 +253,20 @@
 					   ,this.Tokenizer.CodeString)
 		}
 		
+		this.CodeGen.Pop(RBX)
+		this.GetVariableAddress(Expression.Left.Value)
+		this.CodeGen.Pop(RAX)
 	
 		if (Type.Name = "Double") {
-			return this.CompileDoubleAssignment(Expression, VariableType, RightType)
+			this.CompileDoubleAssignment(Expression, VariableType, RightType)
 		}
 		else {
-			return this.CompileInt64Assignment(Expression, VariableType, RightType)
+			this.CompileInt64Assignment(Expression, VariableType, RightType)
 		}
+		
+		this.CodeGen.Push(RBX)
+		
+		return RightType
 	}
 	
 	CompileTypeExpression(Type, Params*) {
@@ -271,22 +278,20 @@
 		}
 	}
 	
-	CompileDoubleAssignment() {
-
-	}
-	
-	CompileInt64Assignment(Expression, VariableType, RightType) {
-		this.CodeGen.Pop(RBX)
-		this.GetVariableAddress(Expression.Left.Value)
-		this.CodeGen.Pop(RAX)
-		
+	CompileDoubleAssignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
 				this.CodeGen.Move_RI64_R64(RAX, RBX)
 			}
 		}
-		
-		this.CodeGen.Push(RBX)
+	}
+	
+	CompileInt64Assignment(Expression, VariableType, RightType) {
+		Switch (Expression.Operator.Type) {
+			Case Tokens.COLON_EQUAL: {
+				this.CodeGen.Move_RI64_R64(RAX, RBX)
+			}
+		}
 	}
 	
 	CompileBinaryDouble(Expression, LeftType, RightType, ResultType) {

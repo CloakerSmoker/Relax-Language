@@ -20,15 +20,12 @@
 Code = 
 ( % 
 
-define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
-	Int64 Sum
-	Sum := 10
-	Int64 NewSum := Sum * 99
-	
+define Double Test(Int64 P1, Int64 P2, Int64 P3) {
+	Double NewSum := P1 * 2.0
 	return NewSum
 }
 )
-
+; 
 ;define Double Test2(Int64 P1, Int64 P2, Double P3) {
 ;	return (P3 * 2) / 3
 ;}

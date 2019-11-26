@@ -218,7 +218,7 @@ class X64CodeGen {
 		; MOV r64, imm64
 		; REX.W + B8+ rd io
 	
-		this.REXOpcode([REX.W, Register.Requires.Rex], [0xB8 + Register.Number])
+		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.Rex])
 		this.SplitIntoBytes64(Integer.Value) ; io
 	}
 	Move_R64_I32(Register, Integer) {
