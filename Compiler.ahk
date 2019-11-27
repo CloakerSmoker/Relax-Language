@@ -1,4 +1,43 @@
 ﻿class Compiler {
+
+	; How it works:
+	;  Programs:
+	;   A program is passed, and each function inside of that program is compiled
+	;  Functions:
+	;   For each parameter + local, stack space is allocated
+	;   For each line in the body, compile the line
+	;  Lines:
+	;   Expression Statements:
+	;    Compile the line's expression, but with a Pop instruction at the end to clear the expression's return value
+	;
+	;  Expressions:
+	;   Expressions are compiled by compiling both sides of the operator, and then compiling the equal instruction for the 
+	;    - Operator. Each compiled expression is expected to push it's resulting value back onto the stack
+	;    - so the next expression/construct up in the AST can use the return value
+	;
+	;   The operands of an operator can be tokens (numerical literals), identifiers, or other expressions
+	;    Tokens:
+	;     If the token is a number, it is just pushed onto the stack, otherwise it is an error
+	;    Identifiers:
+	;     The identifier is ensured to be a variable name, and then the variable contents are read off of the stack
+	;      - By using R15 as a base for all variables, so a constant index can be used to read any given variable
+	;    Expressions:
+	;     The expressions are simply compiled, which will be a recursive process until a child expression has two 
+	;      - Non-Expression operands
+	;   Types:
+	;    Each expression related CompileXXXX method will return the type of it's output value, in order for type checking to 
+	;     - Work
+	;   Assignments:
+	;	 Assignments are handled seperately, since they function differently. An assignment is compiled by compiling the right
+	;     - side value first, and then popping the resulting value from the right side expression into the memory
+	;     - where the left-side variable lives
+	;
+	;  DllImports:
+	;   DllImports are just functions with extra steps, all of the same pre-processing happens with a function call, but 
+	;    - instead of linking against an offset to a second local function, the calls are linked to a const(ish) pointer
+	;    - to the given function, gathered by `GetProcAddress`
+	
+
 	__New(Tokenizer, Typingizer) {
 		this.Tokenizer := Tokenizer
 		this.Typing := Typingizer
@@ -109,6 +148,7 @@
 		
 		if (Mod(ParamSizes, 2) != 1) {
 			ParamSizes++
+			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
 		;CG.Label(DefineAST.Name.Value)
@@ -540,36 +580,43 @@
 		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 		
-			this.CodeGen.Move_R64_R64(RAX, RSP)
-			this.CodeGen.SmallMove(RBX, 16)
+			; This all aligns the stack to 16 bytes at runtime
+			;  After the IDiv, RDX contains the remainder, and if the remainder is 0, then the stack is already aligned, so we need
+			;   to break alignment so our pushed RIP (from the call instruction) will re-align the stack
 			
-			this.CodeGen.Move_R64_R64(RDX, RSI)
-			this.CodeGen.IDiv_RAX_R64(RBX)
-			this.CodeGen.Move_R64_R64(RBX, RSI)
-			this.CodeGen.SmallMove(RAX, 8)
+			this.CodeGen.Move_R64_R64(RAX, RSP) ; RAX := RSP
+			this.CodeGen.SmallMove(RBX, 16) ; RBX := 16
 			
-			this.CodeGen.Cmp(RDX, RSI)
-			this.CodeGen.C_Move_NE_R64_R64(RBX, RAX)
-			this.CodeGen.Sub_R64_R64(RSP, RBX)
+			this.CodeGen.Move_R64_R64(RDX, RSI) ; RDX := 0
+			this.CodeGen.IDiv_RAX_R64(RBX) ; RAX, RDX := RAX(/RSP) / RBX(/16)
+			this.CodeGen.Move_R64_R64(RBX, RSI) ; RBX := 0
+			this.CodeGen.SmallMove(RAX, 8) ; RAX := 8
+			
+			this.CodeGen.Cmp(RDX, RSI) ; if (RDX = 0) {
+			this.CodeGen.C_Move_NE_R64_R64(RBX, RAX) ; RBX := RAX(/8) }
+			this.CodeGen.Sub_R64_R64(RSP, RBX) ; RSP -= RBX(0 or 8 depending on RDX)
+		
 		
 			for k, ParamValue in Expression.Params.Expressions {
-				this.Compile(ParamValue)
+				this.Compile(ParamValue) ; For each param being passed, compile it (get it on the stack)
 			}
 			
 			loop, % 4 - k {
-				this.CodeGen.Push(0)
+				this.CodeGen.Push(0) ; For when we have less than 4 params, push a 0 for each unpassed param
 			}
 			
 			for k, Register in ParamRegisters {
-				this.CodeGen.Pop(Register)
+				; Then pop each compiled param into it's specific register
+				this.CodeGen.Pop(Register) ; TODO - Add stack passed-params
 			}
 		
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
-				this.Add_R64_R64(RSP, RBX)
-				this.CodeGen.Push(RAX)
-				return this.Typing.GetType(FunctionNode.ReturnType.Value)
 			}
+			
+			this.Add_R64_R64(RSP, RBX) ; Free the dummy space used to align the stack
+			this.CodeGen.Push(RAX) ; Push the return value
+			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}
 		
 		
