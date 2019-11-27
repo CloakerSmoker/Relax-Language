@@ -26,10 +26,9 @@ DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, Messa
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Int64 B := 0
 	Int64 A := 0x49494948
-	Int64 C := 0
-	Pointer P := A:Address()
+	Int64 aA := 123
 
-	return MessageBoxA(0, A:Address(), 0, 0) ; TODO :Address() only works with the P := line, fix it
+	return (6 + MessageBoxA(0, A:Address(), 0, 0))
 }
 )
 
@@ -71,7 +70,7 @@ G := C.CompileProgram(a)
 
 MsgBox, % (Clipboard := G.CodeGen.Stringify())
 
-MsgBox, % G.CallFunction("Test", 99, 22, 4)
+MsgBox, % "Result:" G.CallFunction("Test", 99, 22, 4)
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")

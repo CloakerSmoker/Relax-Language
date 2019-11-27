@@ -99,6 +99,7 @@
 		this.Variables := {}
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		ParamSizes := DefineAST.Params.Count()
+		
 		CG := this.CodeGen
 		
 		for LocalName, LocalType in DefineAST.Locals {
@@ -106,11 +107,15 @@
 			this.Typing.AddVariable(LocalType, LocalName)
 		}
 		
+		if (Mod(ParamSizes, 2) != 1) {
+			ParamSizes++
+		}
+		
 		;CG.Label(DefineAST.Name.Value)
 		CG.Push(RBP)
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
-				CG.Sub(RSP, ParamSizes * 8)
+				CG.Sub_R64_I32(RSP, {"Value": ParamSizes * 8})
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
@@ -126,7 +131,7 @@
 		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
-			CG.Add(RSP, ParamSizes * 8)
+			CG.Add_R64_I32(RSP, {"Value": ParamSizes * 8})
 		}
 		
 		this.Leave()
@@ -535,6 +540,18 @@
 		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 		
+			this.CodeGen.Move_R64_R64(RAX, RSP)
+			this.CodeGen.SmallMove(RBX, 16)
+			
+			this.CodeGen.Move_R64_R64(RDX, RSI)
+			this.CodeGen.IDiv_RAX_R64(RBX)
+			this.CodeGen.Move_R64_R64(RBX, RSI)
+			this.CodeGen.SmallMove(RAX, 8)
+			
+			this.CodeGen.Cmp(RDX, RSI)
+			this.CodeGen.C_Move_NE_R64_R64(RBX, RAX)
+			this.CodeGen.Sub_R64_R64(RSP, RBX)
+		
 			for k, ParamValue in Expression.Params.Expressions {
 				this.Compile(ParamValue)
 			}
@@ -548,7 +565,10 @@
 			}
 		
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
-				return this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+				this.Add_R64_R64(RSP, RBX)
+				this.CodeGen.Push(RAX)
+				return this.Typing.GetType(FunctionNode.ReturnType.Value)
 			}
 		}
 		

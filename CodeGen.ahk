@@ -578,12 +578,10 @@ class X64CodeGen {
 	;============================
 	; Magic helper pseudo-instructions
 	
-	DllCall(DllFile, DllFunction) {
-		this.Push(RAX)
+	DllCall(DllFile, DllFunction) {	
 		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
 		this.DllFunctionPlaceholder(DllFile, DllFunction)
 		this.Call_RI64(RAX)
-		this.Pop(RAX)
 	}
 	
 	;============================
