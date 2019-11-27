@@ -108,6 +108,10 @@
 			Case Tokens.IDENTIFIER: {
 				return this.GetVariable(TargetToken.Value)
 			}
+			Case Tokens.STRING: {
+				this.CodeGen.Push_String_Pointer(TargetToken.Value)
+				return this.Typing.GetType("Pointer")
+			}
 			Default: {
 				PrettyError("Compile"
 						   ,"Token '" TargetToken.Stringify() "' can not be compiled."
@@ -614,7 +618,7 @@
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			
-			this.Add_R64_R64(RSP, RBX) ; Free the dummy space used to align the stack
+			this.CodeGen.Add_R64_R64(RSP, RBX) ; Free the dummy space used to align the stack
 			this.CodeGen.Push(RAX) ; Push the return value
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}

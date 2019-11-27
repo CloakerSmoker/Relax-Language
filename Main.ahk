@@ -25,13 +25,16 @@ DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, Messa
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Int64 B := 0
-	Int64 A := 0x49494948
+	Pointer P := "Hello world!"
+	Pointer S := "This works!"
 	Int64 aA := 123
 
-	return (6 + MessageBoxA(0, A:Address(), 0, 0))
+	MessageBoxA(0, P, S, 0)
+
+	return P
 }
 )
-
+; (6 + MessageBoxA(0, P, 0, 0))
 ; Pointer S := "hello":Store()
 ;  Pointer P := MessageBoxA(0, A:Address(), 0, 0)
 ;define Double Test2(Int64 P1, Int64 P2, Double P3) {

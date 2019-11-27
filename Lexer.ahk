@@ -34,6 +34,9 @@
 		if (this.Type = Tokens.KEYWORD) {
 			return Keywords[this.Value]
 		}
+		else if (this.Type = Tokens.STRING) {
+			return A_Quote this.Value A_Quote
+		}
 	
 		return this.Value
 	}
@@ -129,17 +132,26 @@ class Lexer {
 		loop {
 			this.Advance()
 			
-			if (this.SubStr(this.Index - StartLength, this.Index) = Start) {
-				Depth++
+			if (Start != End) {
+				if (this.SubStr(this.Index - StartLength, this.Index) = Start) {
+					Depth++
+				}
+				else if (this.SubStr(this.Index - EndLength, this.Index) = End) {
+					Depth--
+				}
+				else if (Depth = 0) {
+					Break
+				}
 			}
-			else if (this.SubStr(this.Index - EndLength, this.Index) = End) {
-				Depth--
+			else {
+				if (this.SubStr(this.Index - StartLength, this.Index) = End) {
+					Break
+				}
+			
 			}
-			else if (this.IsAtEnd()) {
+			
+			if (this.IsAtEnd()) {
 				MsgBox, % "Expected closing '" End "' for '" Start "' at " StartIndex " before EOF"
-				Break
-			}
-			else if (Depth = 0) {
 				Break
 			}
 		}

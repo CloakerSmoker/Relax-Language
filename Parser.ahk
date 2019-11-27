@@ -403,7 +403,7 @@
 			Unexpected := True
 		
 			Switch (Next.Type) {
-				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER: {
+				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER, Tokens.STRING: {
 					OperandStack.Push(Next)
 					Unexpected := False
 				}

@@ -583,6 +583,19 @@ class X64CodeGen {
 		this.DllFunctionPlaceholder(DllFile, DllFunction)
 		this.Call_RI64(RAX)
 	}
+	Push_String_Pointer(String) {
+		static HEAP_ZERO_MEMORY := 0x00000008
+		static hProcessHeap := DllCall("GetProcessHeap")
+		
+		pMemory := DllCall("HeapAlloc", "Ptr", hProcessHeap, "UInt", HEAP_ZERO_MEMORY, "UInt", StrLen(String) + 1)
+		StrPut(String, pMemory, StrLen(String) + 1, "UTF-8")
+
+		OnExit(Func("DllCall").Bind("HeapFree", "Ptr", hProcessHeap, "UInt", 0, "Ptr", pMemory))
+		
+		this.Move_R64_I64(RAX, I64(pMemory))
+		this.Push(RAX)
+	}
+	
 	
 	;============================
 
