@@ -131,17 +131,13 @@ class X64CodeGen {
 		if (Integer = 0) {
 			this.XOR_R64_R64(Register, Register)
 		}
-		else if (Integer = 1) {
-			this.XOR_R64_R64(Register, Register)
-			this.Inc_R64(Register)
-		}
-		;else if (Integer <= 0xFF) {
-		;	this.XOR_R64_R64(Register, Register)
-		;	this.Add_R64_I8(Register, {"Value": Integer})
-		;}
 		else {
-			this.Move_R64_I32(Register, {"Value": Integer})
+			this.Push(Integer)
+			this.Pop(Register)
 		}
+		;else {
+		;	this.Move_R64_I32(Register, {"Value": Integer})
+		;}
 	}
 	
 	; Calls START
@@ -333,8 +329,22 @@ class X64CodeGen {
 	Inc_R64(Register) {
 		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 0}, Register)
 	}
+	
+	SmallAdd(Register, Number) {
+		this.SmallMove(RAX, Number)
+		
+		if (Number <= 0xFFFFFFFF) {
+			this.Add_R64_R32(Register, RAX)
+		}
+		else {
+			this.Add_R64_R64(Register, RAX)
+		}
+	}
 	Add_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
+	Add_R64_R32(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo)
 	}
 	Add_R64_I32(Register, Integer) {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.W]})
@@ -350,8 +360,21 @@ class X64CodeGen {
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
+	SmallSub(Register, Number) {
+		this.SmallMove(RAX, Number)
+		
+		if (Number <= 0xFFFFFFFF) {
+			this.Sub_R64_R32(Register, RAX)
+		}
+		else {
+			this.Sub_R64_R64(Register, RAX)
+		}
+	}
 	Sub_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
+	Sub_R64_R32(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo)
 	}
 	Sub_R64_I32(Register, Integer) {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.W]})

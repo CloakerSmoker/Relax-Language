@@ -160,7 +160,7 @@
 		CG.Push(RBP), this.StackDepth++
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
-				CG.Sub_R64_I32(RSP, {"Value": ParamSizes * 8}), this.StackDepth += ParamSizes
+				CG.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
@@ -176,7 +176,7 @@
 		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
-			CG.Add_R64_I32(RSP, {"Value": ParamSizes * 8}), this.StackDepth -= ParamSizes
+			CG.SmallSub(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
 		}
 		
 		this.Leave()
@@ -645,7 +645,7 @@
 				}
 			}
 			
-			this.CodeGen.Sub_R64_I32(RSP, I64(0x20)), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
+			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
 		
 			for k, ParamValue in Params {
 				if (k > 4) {
@@ -673,14 +673,14 @@
 			
 			for k, Register in ParamRegisters {
 				; Then pop each compiled param into it's specific register
-				this.CodeGen.Pop(Register), this.StackDepth-- ; TODO - Add stack passed-params
+				this.CodeGen.Pop(Register), this.StackDepth--
 			}
 		
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			
-			this.CodeGen.Add_R64_I32(RSP, I64((StackParamSpace * 8) + 0x20)), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params
+			this.CodeGen.SmallAdd(RSP, (StackParamSpace * 8) + 0x20), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params
 			
 			this.CodeGen.Push(RAX), this.StackDepth++ ; Push the return value
 			
