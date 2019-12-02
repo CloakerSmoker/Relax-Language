@@ -71,14 +71,14 @@
 	
 	SetVariable(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
-		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15))
+		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15)), this.StackDepth--
 	}
 	
 	GetVariable(Name) {
 		IndexRegister := this.GetVariablePrelude(Name)
 		Type := this.Typing.GetVariableType(Name)
 	
-		this.CodeGen.Push(SIB(8, IndexRegister, R15))
+		this.CodeGen.Push(SIB(8, IndexRegister, R15)), this.StackDepth++
 		
 		return Type
 	}
@@ -86,7 +86,7 @@
 		IndexRegister := this.GetVariablePrelude(Name)
 		
 		this.CodeGen.Lea(R11, SIB(8, IndexRegister, R15))
-		this.CodeGen.Push(R11)
+		this.CodeGen.Push(R11), this.StackDepth++
 	}
 	
 	AddVariable(RSPIndex, Name) {
@@ -96,20 +96,20 @@
 	CompileToken(TargetToken) {
 		Switch (TargetToken.Type) {
 			Case Tokens.INTEGER: {
-				this.CodeGen.Push(TargetToken.Value)
+				this.CodeGen.Push(TargetToken.Value), this.StackDepth++
 				ShortTypeName := this.CodeGen.NumberSizeOf(TargetToken.Value, False)
 				FullTypeName := IToInt(ShortTypeName)
 				return this.Typing.GetType(FullTypeName)
 			}
 			Case Tokens.DOUBLE: {
-				this.CodeGen.Push(FloatToBinaryInt(TargetToken.Value))				
+				this.CodeGen.Push(FloatToBinaryInt(TargetToken.Value)), this.StackDepth++
 				return this.Typing.GetType("Double")
 			}
 			Case Tokens.IDENTIFIER: {
 				return this.GetVariable(TargetToken.Value)
 			}
 			Case Tokens.STRING: {
-				this.CodeGen.Push_String_Pointer(TargetToken.Value)
+				this.CodeGen.Push_String_Pointer(TargetToken.Value), this.StackDepth++
 				return this.Typing.GetType("Pointer")
 			}
 			Default: {
@@ -140,6 +140,7 @@
 	CompileDefine(DefineAST) {
 		this.FunctionIndex++
 		this.Variables := {}
+		this.StackDepth := 0
 		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
 		ParamSizes := DefineAST.Params.Count()
 		
@@ -156,10 +157,10 @@
 		}
 		
 		;CG.Label(DefineAST.Name.Value)
-		CG.Push(RBP)
+		CG.Push(RBP), this.StackDepth++
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
-				CG.Sub_R64_I32(RSP, {"Value": ParamSizes * 8})
+				CG.Sub_R64_I32(RSP, {"Value": ParamSizes * 8}), this.StackDepth += ParamSizes
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
@@ -175,7 +176,7 @@
 		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
-			CG.Add_R64_I32(RSP, {"Value": ParamSizes * 8})
+			CG.Add_R64_I32(RSP, {"Value": ParamSizes * 8}), this.StackDepth -= ParamSizes
 		}
 		
 		this.Leave()
@@ -183,7 +184,12 @@
 		return CG
 	}
 	Leave() {
-		this.CodeGen.Pop(RBP)
+		this.CodeGen.Pop(RBP), this.StackDepth--
+		
+		if (this.StackDepth != 0) {
+			Throw, Exception("Unbalenced stack ops")
+		}
+		
 		this.CodeGen.Return()
 	}
 	
@@ -230,7 +236,7 @@
 	
 	CompileExpressionLine(Statement) {
 		this.Compile(Statement.Expression)
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
 	
 	CompileIfGroup(Statement) {
@@ -241,7 +247,7 @@
 		for k, ElseIf in Statement.Options {
 			this.CodeGen.Label("__If__" Index)
 			this.Compile(ElseIf.Condition)
-			this.CodeGen.Pop(RCX)
+			this.CodeGen.Pop(RCX), this.StackDepth--
 			this.CodeGen.Cmp(RCX, RSI)
 			this.CodeGen.JE("__If__" Index + 1)
 			
@@ -260,7 +266,7 @@
 	CompileReturn(Statement) {
 		this.Compile(Statement.Expression)
 		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 		this.CodeGen.JMP("__Return" this.FunctionIndex)
 	}
 	
@@ -307,7 +313,7 @@
 					   ,this.Tokenizer.CodeString)
 		}
 	
-		this.CodeGen.Push(SIB(8, RSI, RSP)) ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
+		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
 	
 		if (Type.Name = "Double") {
 			this.CompileDoubleAssignment(Expression, VariableType, RightType)
@@ -347,11 +353,11 @@
 	CompileBinaryDouble(Expression, LeftType, RightType, ResultType) {
 		this.Cast(RightType, ResultType)
 		this.CodeGen.FLD_Stack()
-		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RBX), this.StackDepth--
 		
 		this.Cast(LeftType, ResultType)
 		this.CodeGen.FLD_Stack()
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; Comparisons are done as integers, since x87 equality checks are a nightmare
@@ -397,7 +403,7 @@
 			}
 		}
 		
-		this.CodeGen.Push(RAX)
+		this.CodeGen.Push(RAX), this.StackDepth++
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			ResultType := this.Typing.GetType("Int8")
@@ -411,10 +417,10 @@
 	
 	CompileBinaryInt64(Expression, LeftType, RightType, ResultType) {
 		this.Cast(RightType, ResultType)
-		this.CodeGen.Pop(RBX)
+		this.CodeGen.Pop(RBX), this.StackDepth--
 	
 		this.Cast(LeftType, ResultType)
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 	
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
@@ -465,7 +471,7 @@
 			}
 		}
 		
-		this.CodeGen.Push(RAX)
+		this.CodeGen.Push(RAX), this.StackDepth++
 		return ResultType
 	}
 	
@@ -476,7 +482,7 @@
 			}
 			else {
 				this.Compile(v)
-				this.CodeGen.Pop(RDX)
+				this.CodeGen.Pop(RDX), this.StackDepth--
 			}
 		}
 		
@@ -494,7 +500,7 @@
 		; StackLess param is for when the operand is already in RAX, otherwise RAX is loaded with the first thing on the stack
 		
 		if !(StackLess) {
-			this.CodeGen.Pop(RAX)
+			this.CodeGen.Pop(RAX), this.StackDepth--
 		}
 		
 		Base := ObjGetBase(this)
@@ -516,7 +522,7 @@
 		}
 		
 		if !(StackLess) {
-			this.CodeGen.Push(RAX)
+			this.CodeGen.Push(RAX), this.StackDepth++
 		}
 	}
 	
@@ -543,16 +549,16 @@
 	
 	
 	Cast_I64_Double() {
-		this.CodeGen.Push(RAX)
+		this.CodeGen.Push(RAX), this.StackDepth++
 		this.CodeGen.FILD_Stack()
 		this.CodeGen.FSTP_Stack()
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
 	Cast_Double_I64() {
-		this.CodeGen.Push(RAX)
+		this.CodeGen.Push(RAX), this.StackDepth++
 		this.CodeGen.FISTP_Stack()
 		this.CodeGen.FSTP_Stack()
-		this.CodeGen.Pop(RAX)
+		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
 	
 	Cast_I32_Float() {
@@ -583,22 +589,13 @@
 		
 		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
-		
-			; This all aligns the stack to 16 bytes at runtime
-			;  After the IDiv, RDX contains the remainder, and if the remainder is 0, then the stack is already aligned, so we need
-			;   to break alignment so our pushed RIP (from the call instruction) will re-align the stack
 			
-			this.CodeGen.Move_R64_R64(RAX, RSP) ; RAX := RSP
-			this.CodeGen.SmallMove(RBX, 16) ; RBX := 16
+			StackParamSpace := 0 ; Remembers how much stack space to free after the call
 			
-			this.CodeGen.Move_R64_R64(RDX, RSI) ; RDX := 0
-			this.CodeGen.IDiv_RAX_R64(RBX) ; RAX, RDX := RAX(/RSP) / RBX(/16)
-			this.CodeGen.SmallMove(RBX, 0) ; RBX := 0
-			this.CodeGen.SmallMove(RAX, 8) ; RAX := 8
-			
-			this.CodeGen.Cmp(RDX, RSI) ; if (RDX = 0) {
-			this.CodeGen.C_Move_NE_R64_R64(RBX, RAX) ; RBX := RAX(/8) }
-			this.CodeGen.Sub_R64_R64(RSP, RBX) ; RSP -= RBX(0 or 8 depending on RDX)
+			if (Mod(this.StackDepth, 1) != 1) {
+				; Breaks stack alignment
+				this.CodeGen.Push(0), this.StackDepth++, StackParamSpace++
+			}
 		
 			; As of right here, the stack is unaligned, and something like
 			
@@ -615,9 +612,7 @@
 			; RSP + (3 * 8) Shadow space
 			; RSP + (0 * 8) Shadow space (4 bytes total)
 			
-			; So, below we need to adjust the stack to be like that
-		
-			StackParamSpace := 0 ; Remembers how much stack space to free after the call
+			; Along with Mod(RSP, 16) = 8. So, below we need to adjust the stack to be like that
 		
 			Params := Expression.Params.Expressions
 		
@@ -626,7 +621,7 @@
 			
 				if (Mod(Params.Count(), 2) != 1) {
 					StackParamSpace++ ; If we have an even number of params, add an extra to break stack alignment
-					this.Push(0)
+					this.CodeGen.Push(0), this.StackDepth++
 				}
 			
 				loop, % Params.Count() - 4 {
@@ -650,7 +645,7 @@
 				}
 			}
 			
-			this.CodeGen.Sub_R64_I32(RSP, I64(0x20)) ; Allocate shadow space (below the stack parameters)
+			this.CodeGen.Sub_R64_I32(RSP, I64(0x20)), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
 		
 			for k, ParamValue in Params {
 				if (k > 4) {
@@ -673,22 +668,21 @@
 			}
 			
 			loop, % 4 - k {
-				this.CodeGen.Push(0) ; For when we have less than 4 params, push a 0 for each unpassed param
+				this.CodeGen.Push(0), this.StackDepth++ ; For when we have less than 4 params, push a 0 for each unpassed param
 			}
 			
 			for k, Register in ParamRegisters {
 				; Then pop each compiled param into it's specific register
-				this.CodeGen.Pop(Register) ; TODO - Add stack passed-params
+				this.CodeGen.Pop(Register), this.StackDepth-- ; TODO - Add stack passed-params
 			}
 		
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			
-			this.CodeGen.Add_R64_I32(RSP, I64((StackParamSpace * 8) + 0x20)) ; Free shadow space + any stack params
+			this.CodeGen.Add_R64_I32(RSP, I64((StackParamSpace * 8) + 0x20)), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params
 			
-			this.CodeGen.Add_R64_R64(RSP, RBX) ; Free the dummy space used to align the stack
-			this.CodeGen.Push(RAX) ; Push the return value
+			this.CodeGen.Push(RAX), this.StackDepth++ ; Push the return value
 			
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}

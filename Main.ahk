@@ -28,7 +28,7 @@ DllImport Int64 CreateFileA(Pointer, Int32, Int32, Pointer, Int32, Int32, Int32)
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Pointer P := "C:\Users\Connor\Desktop\a.txt"
 	
-	return CreateFileA(P, 0xC0000000, 0x03, 0, 2, 0, 0)
+	return CreateFileA(P, 0xC0000000, 0x03, 0, 2, 0)
 }
 )
 ; (6 + MessageBoxA(0, P, 0, 0))
