@@ -593,16 +593,83 @@
 			
 			this.CodeGen.Move_R64_R64(RDX, RSI) ; RDX := 0
 			this.CodeGen.IDiv_RAX_R64(RBX) ; RAX, RDX := RAX(/RSP) / RBX(/16)
-			this.CodeGen.Move_R64_R64(RBX, RSI) ; RBX := 0
+			this.CodeGen.SmallMove(RBX, 0) ; RBX := 0
 			this.CodeGen.SmallMove(RAX, 8) ; RAX := 8
 			
 			this.CodeGen.Cmp(RDX, RSI) ; if (RDX = 0) {
 			this.CodeGen.C_Move_NE_R64_R64(RBX, RAX) ; RBX := RAX(/8) }
 			this.CodeGen.Sub_R64_R64(RSP, RBX) ; RSP -= RBX(0 or 8 depending on RDX)
 		
+			; As of right here, the stack is unaligned, and something like
+			
+			; RSP + (1 * 8) Garbage Data
+			; RSP + (0 * 8) Optional Padding to make Mod(RSP, 16) = 8
 		
-			for k, ParamValue in Expression.Params.Expressions {
-				this.Compile(ParamValue) ; For each param being passed, compile it (get it on the stack)
+			; And we need
+			
+			; RSP + (7 * 8) Garbage Data
+			; RSP + (6 * 8) Optional Padding to make Mod(RSP, 16) = 8
+			; RSP + (6 * 8) Optional Padding for even numbers of params
+			; RSP + (5 * 8) Param 5
+			; RSP + (4 * 8) Param N
+			; RSP + (3 * 8) Shadow space
+			; RSP + (0 * 8) Shadow space (4 bytes total)
+			
+			; So, below we need to adjust the stack to be like that
+		
+			StackParamSpace := 0 ; Remembers how much stack space to free after the call
+		
+			Params := Expression.Params.Expressions
+		
+			if (Params.Count() > 4) {
+				; If we have 4+ params, then some need to be dumped onto the stack
+			
+				if (Mod(Params.Count(), 2) != 1) {
+					StackParamSpace++ ; If we have an even number of params, add an extra to break stack alignment
+					this.Push(0)
+				}
+			
+				loop, % Params.Count() - 4 {
+					ParamNumber := Params.Count() - (A_Index - 1) ; Stack params are passed right to left, so the real index of this param needs to be calculated
+				
+					ParamType := this.Compile(Params[ParamNumber])
+					RequiredType := this.Typing.GetType(FunctionNode.Params[ParamNumber].Value)
+					
+					try {
+						this.Cast(ParamType, RequiredType) ; A quick param type check
+					}
+					catch E {
+						PrettyError("Compile"
+								,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber "."
+								,""
+								,ParamValue.Stringify()
+								,this.Tokenizer.CodeString)
+					}
+					
+					StackParamSpace++ ; Increment the number of Int64s to free from the stack
+				}
+			}
+			
+			this.CodeGen.Sub_R64_I32(RSP, I64(0x20)) ; Allocate shadow space (below the stack parameters)
+		
+			for k, ParamValue in Params {
+				if (k > 4) {
+					Break ; Only put the first four params into registers, the others are already on the stack
+				}
+			
+				ParamType := this.Compile(ParamValue)
+				RequiredType := this.Typing.GetType(FunctionNode.Params[k].Value)
+				
+				try {
+					this.Cast(ParamType, RequiredType) ; Another quick type check
+				}
+				catch E {
+					PrettyError("Compile"
+							   ,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k "."
+							   ,""
+							   ,ParamValue.Stringify()
+							   ,this.Tokenizer.CodeString)
+				}
 			}
 			
 			loop, % 4 - k {
@@ -618,8 +685,11 @@
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			
+			this.CodeGen.Add_R64_I32(RSP, I64((StackParamSpace * 8) + 0x20)) ; Free shadow space + any stack params
+			
 			this.CodeGen.Add_R64_R64(RSP, RBX) ; Free the dummy space used to align the stack
 			this.CodeGen.Push(RAX) ; Push the return value
+			
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}
 		
