@@ -1,6 +1,6 @@
 ﻿class Config {
 	static DEBUG := True
-	static VERSION := "0.1.0"
+	static VERSION := "0.1.1"
 }
 
 #Include %A_ScriptDir%
@@ -27,6 +27,7 @@ DllImport Int64 CreateFileA(Pointer, Int32, Int32, Pointer, Int32, Int32, Int32)
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Pointer P := "C:\Users\Connor\Desktop\a.txt"
+	Int64 A
 	
 	return CreateFileA(P, 0xC0000000, 0x03, 0, 2, 0)
 }

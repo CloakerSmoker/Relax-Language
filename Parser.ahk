@@ -216,8 +216,13 @@
 		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
 		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
 		
-		this.Index--
-		return this.ParseExpressionStatement()
+		if (this.NextMatches(Tokens.NEWLINE)) {
+			return new ASTNodes.None()
+		}
+		else {
+			this.Index--
+			return this.ParseExpressionStatement()
+		}
 	}
 	
 	ParseKeywordStatement() {

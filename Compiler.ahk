@@ -46,8 +46,13 @@
 		if (Something.__Class = "Token") {
 			return this.CompileToken(Something)
 		}
+		
+		MsgBox, % IsObject(Something) "`n" Something.__Class
 	
 		return this["Compile" ASTNodeTypes[Something.Type]].Call(this, Something)
+	}
+	CompileNone() {
+		return
 	}
 	
 	GetVariablePrelude(Name) {
@@ -176,7 +181,7 @@
 		CG.Label("__Return" this.FunctionIndex)
 		
 		if (ParamSizes != 0) {
-			CG.SmallSub(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+			CG.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
 		}
 		
 		this.Leave()

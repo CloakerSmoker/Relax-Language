@@ -272,6 +272,8 @@ class ASTNode {
 class ASTNodeTypes extends Enum {
 	static Options := "
 	(
+		NONE
+	
 		DEFINE
 		DLLIMPORT
 		EXPRESSIONLINE
@@ -288,6 +290,14 @@ class ASTNodeTypes extends Enum {
 }
 
 class ASTNodes {
+	class None extends ASTNode {
+		static Parameters := []
+	
+		Stringify() {
+			return ""
+		}
+	}
+
 	class Statements {
 		class Program extends ASTNode {
 			static Parameters := ["Functions", "Globals"]
