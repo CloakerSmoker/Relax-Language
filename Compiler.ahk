@@ -46,8 +46,6 @@
 		if (Something.__Class = "Token") {
 			return this.CompileToken(Something)
 		}
-		
-		MsgBox, % IsObject(Something) "`n" Something.__Class
 	
 		return this["Compile" ASTNodeTypes[Something.Type]].Call(this, Something)
 	}
@@ -192,7 +190,7 @@
 		this.CodeGen.Pop(RBP), this.StackDepth--
 		
 		if (this.StackDepth != 0) {
-			Throw, Exception("Unbalenced stack ops")
+			Throw, Exception("Unbalenced stack ops, " this.StackDepth)
 		}
 		
 		this.CodeGen.Return()
@@ -268,6 +266,33 @@
 		this.CodeGen.Label("__If__" ThisIndex "__End")
 	}
 	
+	CompileForLoop(Statement) {
+		static Index := 0
+		
+		ThisIndex := Index++
+		
+		this.Compile(Statement.Init)
+		this.CodeGen.Pop(RCX), this.StackDepth--
+		
+		this.CodeGen.Label("__For__" ThisIndex)
+		
+		this.Compile(Statement.Condition)
+		this.CodeGen.Pop(RCX), this.StackDepth--
+		
+		this.CodeGen.Cmp(RCX, RSI)
+		this.CodeGen.JE("__For__" ThisIndex "__End")
+		
+		for k, Line in Statement.Body {
+			this.Compile(Line)
+		}
+		
+		this.Compile(Statement.Step)
+		this.CodeGen.Pop(RCX), this.StackDepth--
+		this.CodeGen.Jmp("__For__" ThisIndex)
+		
+		this.CodeGen.Label("__For__" ThisIndex "__End")
+	}
+	
 	CompileReturn(Statement) {
 		this.Compile(Statement.Expression)
 		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
@@ -305,7 +330,7 @@
 			return this.CompileTypeAssignment(ResultType, Expression, LeftType, RightType)
 		}
 		else {
-			return this.CompileTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
+			return this.CompileBinaryTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
 		}
 	}
 	
@@ -317,9 +342,9 @@
 					   ,Expression.Operator
 					   ,this.Tokenizer.CodeString)
 		}
-	
+		
 		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
-	
+		
 		if (Type.Name = "Double") {
 			this.CompileDoubleAssignment(Expression, VariableType, RightType)
 		}
@@ -330,7 +355,7 @@
 		return RightType
 	}
 	
-	CompileTypeExpression(Type, Params*) {
+	CompileBinaryTypeExpression(Type, Params*) {
 		if (Type.Name = "Double") {
 			return this.CompileBinaryDouble(Params*)
 		}

@@ -100,6 +100,10 @@
 	}
 	
 	AddFunction(Node) {
+		if (Node.Type = ASTNodeTypes.None) {
+			return
+		}
+	
 		FunctionName := Node.Name.Value
 		
 		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
@@ -117,24 +121,7 @@
 		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}}
 	
 		while !(this.AtEOF()) {
-			Peek := this.Peek()
-			
-			if (Peek.Type = Tokens.KEYWORD && Peek.Value = Keywords.DLLIMPORT) {
-				this.ParseImport()
-				Continue
-			}
-		
-			NextStatement := this.ParseStatement()
-			
-			if (NextStatement.Type = ASTNodeTypes.ExpressionLine && NextStatement.Expression = "") {
-				Continue
-			}
-			
-			if (NextStatement.Type != ASTNodeTypes.Define) {
-				StatementError(NextStatement.Stringify(), "Must be a Define, or DllImport statement.")
-			}
-			
-			this.AddFunction(NextStatement)
+			this.AddFunction(this.ParseProgramStatement())
 		}
 		
 		if (this.CriticalError) {
@@ -143,113 +130,27 @@
 		
 		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals)
 	}
-	ParseImport() {
-		this.Next()
-		
-		ReturnType := this.EnsureValidType(this.ParsePrimary())
-		
-		Name := this.ParsePrimary()
-		
-		if (Name.Type != Tokens.IDENTIFIER) {
-			PrettyError("Parse"
-					,"Invalid DllImport name '" Name.Stringify() "', expected IDENTIFIER."
-					,"Expected an identifier."
-					,Name
-					,this.Source
-					,"Function names must be identifiers, not numbers or quoted strings.")
-		}
-		
-		Params := this.ParseGrouping().Expressions
-		
-		for k, Param in Params {
-			this.EnsureValidType(Param)
-		}
-		
-		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
-		DllName := this.Consume(Tokens.IDENTIFIER, "DllImport file names must be IDENTIFIERs").Value
-		
-		if (this.NextMatches(Tokens.DOT)) {
-			this.Next()
-		}
-		
-		this.Consume(Tokens.COMMA, "DllImport bodies must follow the format {FILENAME, FUNCTIONNAME}")
-		FunctionName := this.Consume(Tokens.IDENTIFIER, "DllImport function names must be IDENTIFIERs").Value
-		
-		this.Consume(Tokens.RIGHT_BRACE, "DllImport bodies require a closeing '}'")
-		
-		if !(this.NextMatches(Tokens.NEWLINE, Tokens.EOF)) {
-			this.Consume(Tokens.NEWLINE, "DllImport statements must be followed by \n.")
-		}
-		
-		this.AddFunction(new ASTNodes.Statements.DllImport(ReturnType, Name, Params, DllName, FunctionName))
-	}
-	ParseStatement() {
-		Next := this.Peek()
+	ParseProgramStatement() {
+		Next := this.Next() ; A program is a list of DllImports/Defines, so this will only handle those two, and error for anything else
 	
-		try {
-			if (Next.Type = Tokens.KEYWORD) {
-				return this.ParseKeywordStatement()
-			}
-			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
-				; TODO (FIRST) - Decide on a declaration format
-				return this.ParseDeclaration() ; TODO - Implement this
-			}
-			else {
-				return this.ParseExpressionStatement()
-			}
-		}
-		catch E {
-			this.CriticalError := True
-		}
-	}
-	ParseDeclaration() {
-		Type := this.Consume(Tokens.IDENTIFIER, "It is impossible to get this error")
-	
-		if !(IsObject(this.CurrentProgram.CurrentFunction)) {
-			PrettyError("Parse"
-					   ,"Unexpected declaration"
-					   ,"Not in a function body."
-					   ,this.Current()
-					   ,this.Source)
-		}
-	
-		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
-		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
-		
-		if (this.NextMatches(Tokens.NEWLINE)) {
-			return new ASTNodes.None()
-		}
-		else {
-			this.Index--
-			return this.ParseExpressionStatement()
-		}
-	}
-	
-	ParseKeywordStatement() {
-		NextKeyword := this.Next().Value
-		
-		Switch (NextKeyword) {
-			Case Keywords.DEFINE: {
+		if (Next.Type = Tokens.KEYWORD) {
+			if (Next.Value = Keywords.DEFINE) {
 				return this.ParseDefine()
 			}
-			Case Keywords.RETURN: {
-				return new ASTNodes.Statements.Return(this.ParseExpressionStatement().Expression)
+			else if (Next.Value = Keywords.DLLIMPORT) {
+				return this.ParseImport()
 			}
-			Case Keywords.IF: {
-				return this.ParseIf()
-			}
-			Case Keywords.ELSE: {
-				Else := this.Current()
-				
-				PrettyError("Parse"
-						   ,"Unexpected ELSE"
-						   ,"Not part of an if-statement."
-						   ,Else
-						   ,this.Source
-						   ,"The line above this probably terminates the IF statement this ELSE should be a part of.")
-			}
-			; TODO - Add the rest of the keywords
 		}
+		else if (Next.Type = Tokens.NEWLINE) {
+			return new ASTNodes.None()
+		}
+		
+		PrettyError("Parse"
+				   ,"All top-level statements must be either DllImport or Define."
+				   ,"Should be inside of a Define statement."
+				   ,Next
+				   ,this.Source
+				   ,"Code outside of function defintions is invalid")
 	}
 	ParseDefine() {
 		ReturnType := this.EnsureValidType(this.ParsePrimary())
@@ -273,6 +174,109 @@
 		Body := this.ParseBlock()
 		
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals)
+	}
+	ParseImport() {
+		ReturnType := this.EnsureValidType(this.ParsePrimary())
+		
+		Name := this.ParsePrimary()
+		
+		if (Name.Type != Tokens.IDENTIFIER) {
+			PrettyError("Parse"
+					   ,"Invalid DllImport name '" Name.Stringify() "', expected IDENTIFIER."
+					   ,"Expected an identifier."
+					   ,Name
+					   ,this.Source
+					   ,"Function names must be identifiers, not numbers or quoted strings.")
+		}
+		
+		Params := this.ParseGrouping().Expressions
+		
+		for k, Param in Params {
+			this.EnsureValidType(Param)
+		}
+		
+		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
+		DllName := this.Consume(Tokens.IDENTIFIER, "DllImport file names must be IDENTIFIERs").Value
+		
+		if (this.NextMatches(Tokens.DOT)) {
+			; When there is a dot after a DLL file name, it's the '.dll` extension, and since 'dll' is grouped into an identifier, we can just call .Next() to skip over it
+			; TODO - Maybe add validation that this text is actually 'dll'
+			this.Next()
+		}
+		
+		this.Consume(Tokens.COMMA, "DllImport bodies must follow the format {FILENAME, FUNCTIONNAME}")
+		FunctionName := this.Consume(Tokens.IDENTIFIER, "DllImport function names must be IDENTIFIERs").Value
+		
+		this.Consume(Tokens.RIGHT_BRACE, "DllImport bodies require a closeing '}'")
+		
+		if !(this.NextMatches(Tokens.NEWLINE, Tokens.EOF)) {
+			this.Consume(Tokens.NEWLINE, "DllImport statements must be followed by \n.")
+		}
+		
+		return new ASTNodes.Statements.DllImport(ReturnType, Name, Params, DllName, FunctionName)
+	}
+	ParseStatement() {
+		; Handles all statement types that are only valid inside of Define statements
+	
+		Next := this.Peek()
+	
+		try {
+			if (Next.Type = Tokens.KEYWORD) {
+				return this.ParseKeywordStatement()
+			}
+			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
+				; TODO (FIRST) - Decide on a declaration format
+				return this.ParseDeclaration()
+			}
+			else {
+				return this.ParseExpressionStatement()
+			}
+		}
+		catch E {
+			this.CriticalError := True
+		}
+	}
+	ParseDeclaration() {
+		Type := this.Consume(Tokens.IDENTIFIER, "It is impossible to get this error")
+	
+		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
+		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
+		
+		if (this.NextMatches(Tokens.NEWLINE)) {
+			return new ASTNodes.None()
+		}
+		else {
+			this.Index--
+			return this.ParseExpressionStatement()
+		}
+	}
+	
+	ParseKeywordStatement() {
+		NextKeyword := this.Next().Value
+		
+		Switch (NextKeyword) {
+			Case Keywords.RETURN: {
+				return new ASTNodes.Statements.Return(this.ParseExpressionStatement().Expression)
+			}
+			Case Keywords.IF: {
+				return this.ParseIf()
+			}
+			Case Keywords.ELSE: {
+				Else := this.Current()
+				
+				PrettyError("Parse"
+						   ,"Unexpected ELSE"
+						   ,"Not part of an if-statement."
+						   ,Else
+						   ,this.Source
+						   ,"The line above this probably terminates the IF statement this ELSE should be a part of.")
+			}
+			Case Keywords.FOR: {
+				return this.ParseFor()
+			
+			}
+			; TODO - Add the rest of the keywords
+		}
 	}
 	
 	ParseParamGrouping() {
@@ -299,6 +303,30 @@
 		this.Consume(Tokens.RIGHT_PAREN, "Parameter groupings require closing ')'.")
 		
 		return Pairs
+	}
+	
+	ParseFor() {
+		this.Consume(Tokens.LEFT_PAREN, "For loops require a '(' after 'for'.")
+		
+		if (this.Typing.IsValidType(this.Peek().Value) && this.Peek(2).Type = Tokens.IDENTIFIER) {
+			Type := this.Next()
+			Name := this.Peek()
+			
+			this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
+		}
+		
+		Init := this.ParseExpression(Tokens.COMMA)
+		this.Consume(Tokens.COMMA, "For loops must follow the format 'for(Init, Condition, Step)'.")
+		
+		Condition := this.ParseExpression(Tokens.COMMA)
+		this.Consume(Tokens.COMMA, "For loops must follow the format 'for(Init, Condition, Step)'.")
+		
+		Step := this.ParseExpression(Tokens.COMMA, Tokens.RIGHT_PAREN)
+		this.Consume(Tokens.RIGHT_PAREN, "For loops require a closing ')'.")
+		
+		Body := this.ParseBlock()
+		
+		return new ASTNodes.Statements.ForLoop(Init, Condition, Step, Body)
 	}
 	
 	ParseExpressionStatement() {

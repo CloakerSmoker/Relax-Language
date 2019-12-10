@@ -331,13 +331,13 @@ class X64CodeGen {
 	}
 	
 	SmallAdd(Register, Number) {
-		this.SmallMove(RAX, Number)
+		this.SmallMove(RBX, Number)
 		
 		if (Number <= 0xFFFFFFFF) {
-			this.Add_R64_R32(Register, RAX)
+			this.Add_R64_R32(Register, RBX)
 		}
 		else {
-			this.Add_R64_R64(Register, RAX)
+			this.Add_R64_R64(Register, RBX)
 		}
 	}
 	Add_R64_R64(RegisterOne, RegisterTwo) {
@@ -361,13 +361,13 @@ class X64CodeGen {
 	}
 	
 	SmallSub(Register, Number) {
-		this.SmallMove(RAX, Number)
+		this.SmallMove(RBX, Number)
 		
 		if (Number <= 0xFFFFFFFF) {
-			this.Sub_R64_R32(Register, RAX)
+			this.Sub_R64_R32(Register, RBX)
 		}
 		else {
-			this.Sub_R64_R64(Register, RAX)
+			this.Sub_R64_R64(Register, RBX)
 		}
 	}
 	Sub_R64_R64(RegisterOne, RegisterTwo) {

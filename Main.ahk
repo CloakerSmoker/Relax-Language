@@ -19,19 +19,29 @@
 
 Code = 
 ( % 
-
-DllImport Int64 MessageBeep(Int32) {User32.dll, MessageBeep}
 DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
-DllImport Int64 Lock() {User32.dll, LockWorkStation}
-DllImport Int64 CreateFileA(Pointer, Int32, Int32, Pointer, Int32, Int32, Int32) {Kernel32.dll, CreateFileA}
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
-	Pointer P := "C:\Users\Connor\Desktop\a.txt"
-	Int64 A
+	Pointer TitleText := "This is a message box"
+	Pointer BodyText := "This is the body of the message box"
 	
-	return CreateFileA(P, 0xC0000000, 0x03, 0, 2, 0)
+	for (Int64 i := 0, i <= P2, i++) {
+		MessageBoxA(0, TitleText, BodyText, 0)
+	}
+	
+	return 0
 }
 )
+
+;	for (Int64 i := 0, i <= P2, i++) {
+;		MessageBoxA(0, TitleText, BodyText, 0)
+;	}
+
+;DllImport Int64 MessageBeep(Int32) {User32.dll, MessageBeep}
+;DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
+;DllImport Int64 Lock() {User32.dll, LockWorkStation}
+;DllImport Int64 CreateFileA(Pointer, Int32, Int32, Pointer, Int32, Int32, Int32) {Kernel32.dll, CreateFileA}
+
 ; (6 + MessageBoxA(0, P, 0, 0))
 ; Pointer S := "hello":Store()
 ;  Pointer P := MessageBoxA(0, A:Address(), 0, 0)
@@ -57,9 +67,9 @@ t := Test.Start()
 
 s := ""
 for k, v in t {
-	s .= v.Stringify() "`n"
+	s .= v.Debug() "`n"
 }
-;MsgBox, % s
+MsgBox, % s
 
 Pest := new Parser(Test)
 a := Pest.Start()
@@ -71,7 +81,7 @@ G := C.CompileProgram(a)
 
 MsgBox, % (Clipboard := G.CodeGen.Stringify())
 
-MsgBox, % "Result:" G.CallFunction("Test", 99, 22, 4) "`n" A_LastError
+MsgBox, % "Result: " G.CallFunction("Test", 99, 22, 4) "`n" A_LastError
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")

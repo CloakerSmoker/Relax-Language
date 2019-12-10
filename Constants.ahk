@@ -36,7 +36,7 @@
 		LAST_PREFIX
 			LAST_POSTFIX
 		
-		; Operator varients so they can be told apart
+		; Operator variants so they can be told apart
 		
 		PLUS_PLUS_L
 		PLUS_PLUS_R
@@ -249,6 +249,7 @@ class Keywords extends Enum {
 		return
 		if
 		else
+		for
 	)"
 }
 
@@ -264,8 +265,9 @@ class ASTNode {
 			this[v] := Params[k]
 		}
 		
-		this.Type := ASTNodeTypes[StrSplit(this.__Class, ".")[3]] ; Translates ASTNode.Expressions.Identifier into 
-		;  just 'Identifier', and then gets the enum value for 'Identifier'
+		ClassNameParts := StrSplit(this.__Class, ".")
+		this.Type := ASTNodeTypes[ClassNameParts[ClassNameParts.Count()]] ; Translates ASTNode.Expressions.Identifier into 
+		; just 'Identifier', and then gets the enum value for 'Identifier'
 	}
 }
 
@@ -280,6 +282,7 @@ class ASTNodeTypes extends Enum {
 		RETURN
 		IFGROUP
 		IF
+		FORLOOP
 		
 		IDENTIFER
 		GROUPING
@@ -365,6 +368,22 @@ class ASTNodes {
 				return String
 			}
 		}
+		
+		class ForLoop extends ASTNode {
+			static Parameters := ["Init", "Condition", "Step", "Body"]
+		
+			Stringify(Indent := "") {
+				String := Indent "For (" this.Init.Stringify() ", " this.Condition.Stringify() ", " this.Step.Stringify() ") {`n"
+			
+				for k, Line in this.Body {
+					String .= Line.Stringify(Indent "`t")
+				}
+				
+				String .= "`n" Indent "};`n"
+				return String
+			}
+		}
+		
 		class ExpressionLine extends ASTNode {
 			static Parameters := ["Expression"]
 			
@@ -431,7 +450,12 @@ class ASTNodes {
 			static Parameters := ["Operand", "Operator"]
 			
 			Stringify() {
-				return "(" this.Operator.Stringify() this.Operand.Stringify() ")"
+				if (InStr(Tokens[this.Operator.Type], "_R")) {
+					return "(" this.Operand.Stringify() this.Operator.Stringify() ")"
+				}
+				else {
+					return "(" this.Operator.Stringify() this.Operand.Stringify() ")"
+				}
 			}
 		}
 		
