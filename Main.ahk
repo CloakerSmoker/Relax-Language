@@ -1,6 +1,6 @@
 ﻿class Config {
 	static DEBUG := True
-	static VERSION := "0.1.1"
+	static VERSION := "0.1.2"
 }
 
 #Include %A_ScriptDir%
@@ -25,7 +25,7 @@ define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Pointer TitleText := "This is a message box"
 	Pointer BodyText := "This is the body of the message box"
 	
-	for (Int64 i := 0, i <= P2, i++) {
+	for (Int64 i := 0, i <= 1, i++) {
 		MessageBoxA(0, TitleText, BodyText, 0)
 	}
 	
@@ -81,7 +81,7 @@ G := C.CompileProgram(a)
 
 MsgBox, % (Clipboard := G.CodeGen.Stringify())
 
-MsgBox, % "Result: " G.CallFunction("Test", 99, 22, 4) "`n" A_LastError
+MsgBox, % "Result: " G.CallFunction("Test", 99, 1, 4) "`n" A_LastError
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")

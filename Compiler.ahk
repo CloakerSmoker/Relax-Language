@@ -333,6 +333,41 @@
 			return this.CompileBinaryTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
 		}
 	}
+	CompileUnary(Expression) {
+		Operator := Expression.Operator
+		OperatorString := Operator.Stringify()
+		
+		if (OperatorString = "--" || OperatorString = "++") {
+			VariableIndexRegister := this.GetVariablePrelude(Expression.Operand.Value)
+			
+			Switch (Operator.Type) {
+				Case Tokens.PLUS_PLUS_L: {
+					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+					this.GetVariable(Expression.Operand.Value)
+				}
+				Case Tokens.PLUS_PLUS_R: {
+					this.GetVariable(Expression.Operand.Value)
+					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+				}
+				Case Tokens.MINUS_MINUS_L: {
+					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+					this.GetVariable(Expression.Operand.Value)
+				}
+				Case Tokens.MINUS_MINUS_R: {
+					this.GetVariable(Expression.Operand.Value)
+					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+				}
+			}
+			
+			return this.GetVariableType(Expression.Operand.Value)
+		}
+		
+		PrettyError("Compile"
+				   ,"Unary operator " OperatorString " is not implemented in the compiler."
+				   ,""
+				   ,Operator
+				   ,this.Tokenizer.CodeString)
+	}
 	
 	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
 		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
