@@ -1,40 +1,65 @@
 ﻿global A_Quote := """"
 
 PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
-	Message := ""
 	TokenContext := Token.Context
 	
 	TokenText := TokenContext.ExtractFrom(Source)
+	
 	Lines := StrSplit(Source, "`n", "`r")
-	
-	PreviousLinesLength := 0
-	
-	for k, v in Lines {
-		LineLength := StrLen(StrReplace(v, "`t", "    ")) + 2
-		
-		if (PreviousLinesLength + LineLength > TokenContext.Start) {
-			Break
-		}
-		else {
-			PreviousLinesLength += LineLength
-		}
-	}
-	
-	
-	TokenLine := StrReplace(Lines[TokenContext.Line], "`t", "    ")
 
+	TokenLine := Lines[TokenContext.Line]
 
+	Message := ""
 	Message .= Phase " Error: " LongText "`n"
 	
 	if (TokenContext.Line != 1) {
 		Message .= " " (TokenContext.Line - 1) " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
 	}
 	
-	Message .= " " TokenContext.Line " | " TokenLine
-
-	TokenStart := InStr(TokenLine, TokenText, True, TokenContext.Start - PreviousLinesLength - 5)
+	TokenLineText := TokenText
+	TokenLineStart := TokenContext.Start
+	TabCount := 0
+	
+	loop {
+		NextCharacter := SubStr(Source, TokenLineStart, 1)
+		
+		;MsgBox, % TokenLineStart "`n" SubStr(Source, TokenLineStart)
+	
+		if (NextCharacter = "`n" || TokenLineStart = 0) {
+			TokenStart := A_Index
+			Break
+		}
+		else if (NextCharacter = "`t") {
+			TokenLineText := "    " TokenLineText
+			TabCount++
+			TokenLineStart--
+		}
+		else {
+			TokenLineText := NextCharacter TokenLineText
+			TokenLineStart--
+		}
+	}
+	
+	loop {
+		NextCharacter := SubStr(Source, TokenContext.End + A_Index, 1)
+	
+		if (NextCharacter = "`n") {
+			Break
+		}
+		else if (NextCharacter = "`t") {
+			TokenLineText .= "    "
+			TabCount++
+			TokenLineStart--
+		}
+		else {
+			TokenLineText .= NextCharacter 
+		}
+	} until (A_Index >= StrLen(Source))
+	
+	TokenStart := (TokenStart - TabCount) + (TabCount * 4)
 	TokenEnd := StrLen(TokenText)
 	
+	Message .= " " TokenContext.Line " | " TokenLineText	
 	Message .= "`n   |-"
 	
 	loop, % TokenStart - 1 {

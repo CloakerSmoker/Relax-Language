@@ -1,29 +1,4 @@
 ﻿class Parser {
-	static ExpressionTests := {"A + B + C": "((A + B) + C)"
-							,  "A == B == C": "((A == B) == C)"
-							,  "A := B := 1": "(A := (B := 1))"
-							,  "1 + 2 - 3 * 4 / 5 == 6 := 7": "((((1 + 2) - ((3 * 4) / 5)) == 6) := 7)"
-							,  "0xFF == 0o377 == 0b11111111 == 255": "(((255 == 255) == 255) == 255)"}
-
-	static _ := Parser.Tests()
-	
-	Tests() {
-		if (Config.DEBUG) {
-			this.RunTests()
-		}
-	}
-	RunTests() {
-		for Input, Output in Parser.ExpressionTests {
-			Lex := new Lexer(Input)
-			Tok := Lex.Start()
-			
-			Par := new Parser(Lex)
-			ParAST := Par.ParseExpression()
-			
-			Assert.String.True(ParAST.Stringify(), Output)
-		}
-	}
-
 	__New(Tokenizer) {
 		this.Tokens := Tokenizer.Tokens
 		this.Source := Tokenizer.CodeString
@@ -32,96 +7,33 @@
 		this.Index := 0
 		this.CriticalError := False
 	}
-	Next() {
-		return this.Tokens[++this.Index]
-	}
-	Current() {
-		return this.Tokens[this.Index]
-	}
-	Previous() {
-		return this.Tokens[this.Index - 1]
-	}
-	Consume(Type, Reason) {
-		if !(this.NextMatches(Type)) {
-				Next := this.Next()
-		
-				PrettyError("Parse"
-						   ,Reason
-						   ,""
-						   ,Next
-						   ,this.Source)
-		}
-		
-		return this.Current()
-	}
-	NextMatches(Types*) {
-		for k, Type in Types {
-			if (this.Check(Type)) {
-				this.Next()
-				return True
-			}
-		}
-		
-		return False
-	}
-	Check(Type) {
-		return this.Peek().Type = Type
-	}
-	Ignore(Type) {
-		if (this.Check(Type)) {
+	
+	UnwindTo(Tokens*) {
+		while !(this.NextMatches(Tokens*)) {
 			this.Next()
 		}
-		
-		return true
 	}
-	Peek(Count := 1) {
-		if (this.Index + Count > this.Tokens.Count()) {
-			return false
-		}
-		
-		return this.Tokens[this.Index + Count]
+	UnwindToBlockClose() {
+		this.UnwindTo(Tokens.RIGHT_BRACE)
 	}
-	AtEOF() {
-		return (this.Peek().Type = Tokens.EOF)
+	UnwindToNextLine() {
+		this.UnwindTo(Tokens.NEWLINE, Tokens.EOF)
 	}
+	
 	Start() {
 		return this.ParseProgram()
-	}
-	EnsureValidType(TypeToken) {
-		if !(this.Typing.IsValidType(TypeToken.Value)) {
-			PrettyError("Type"
-					   ,"Invalid type '" TypeToken.Stringify() "'."
-					   ,"Not a valid type name."
-					   ,TypeToken
-					   ,this.Source)
-		}
-		
-		return TypeToken
-	}
-	
-	AddFunction(Node) {
-		if (Node.Type = ASTNodeTypes.None) {
-			return
-		}
-	
-		FunctionName := Node.Name.Value
-		
-		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
-			PrettyError("Parse"
-					   ,"Duplicate defintion"
-					   ,""
-					   ,Node.Name
-					   ,this.Source)
-		}
-	
-		this.CurrentProgram.Functions[FunctionName] := Node
 	}
 	
 	ParseProgram() {
 		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}}
 	
 		while !(this.AtEOF()) {
-			this.AddFunction(this.ParseProgramStatement())
+			try {
+				this.AddFunction(this.ParseProgramStatement())
+			}
+			catch E {
+				this.CriticalError := True
+			}
 		}
 		
 		if (this.CriticalError) {
@@ -145,6 +57,7 @@
 			return new ASTNodes.None()
 		}
 		
+		this.UnwindToNextLine()
 		PrettyError("Parse"
 				   ,"All top-level statements must be either DllImport or Define."
 				   ,"Should be inside of a Define statement."
@@ -158,6 +71,7 @@
 		Name := this.ParsePrimary()
 		
 		if (Name.Type != Tokens.IDENTIFIER) {
+			this.UnwindToBlockClose()
 			PrettyError("Parse"
 					   ,"Invalid function name '" Name.Stringify() "', expected IDENTIFIER."
 					   ,"Expected an identifier."
@@ -181,6 +95,7 @@
 		Name := this.ParsePrimary()
 		
 		if (Name.Type != Tokens.IDENTIFIER) {
+			this.UnwindToNextLine()
 			PrettyError("Parse"
 					   ,"Invalid DllImport name '" Name.Stringify() "', expected IDENTIFIER."
 					   ,"Expected an identifier."
@@ -225,8 +140,7 @@
 				return this.ParseKeywordStatement()
 			}
 			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
-				; TODO (FIRST) - Decide on a declaration format
-				return this.ParseDeclaration()
+				return this.ParseDeclaration() ; The declaration format is TypeName VarName (ExpressionLine|\n)
 			}
 			else {
 				return this.ParseExpressionStatement()
@@ -245,9 +159,19 @@
 		if (this.NextMatches(Tokens.NEWLINE)) {
 			return new ASTNodes.None()
 		}
-		else {
-			this.Index--
+		else if (this.NextMatches(Tokens.COLON_EQUAL)) {
+			this.Index -= 2
 			return this.ParseExpressionStatement()
+		}
+		else {
+			ErrorToken := this.Next()
+		
+			this.UnwindToNextLine()
+			PrettyError("Parse"
+					   ,"Declarations can only be followed by ':=' to initialize the declared variable."
+					   ,"Not ':='."
+					   ,ErrorToken
+					   ,this.Source)
 		}
 	}
 	
@@ -264,6 +188,7 @@
 			Case Keywords.ELSE: {
 				Else := this.Current()
 				
+				this.UnwindToBlockClose()
 				PrettyError("Parse"
 						   ,"Unexpected ELSE"
 						   ,"Not part of an if-statement."
@@ -275,7 +200,6 @@
 				return this.ParseFor()
 			
 			}
-			; TODO - Add the rest of the keywords
 		}
 	}
 	
@@ -338,6 +262,7 @@
 		else {
 			Next := this.Next()
 		
+			this.UnwindToNextLine()
 			PrettyError("Parse"
 					   ,"Unexpected expression terminator '" Next.Stringify() "'."
 					   ,"Should be \n or EOF"
@@ -519,7 +444,7 @@
 			}
 			
 			if (Unexpected) {
-				this.Index++
+				this.UnwindToBlockClose()
 				PrettyError("Parse"
 						   ,"Unexpected character '" Next.Stringify() "' in expression."
 						   ,""
@@ -603,14 +528,128 @@
 		}
 		else {
 			Next := this.Next()
-		
+			
+			this.UnwindToNextLine()
 			PrettyError("Parse"
 					  , "Expression grouping expected, got '" Next.Stringify() "' instead."
-					  , " '(' expected."
+					  , "'(' expected."
 					  , Next
 					  , this.Source
 					  , "You might be missing an open/close paren, or have whitespace between a name and '('.")
 		}
+	}
+	
+	; Tests
+	
+	static ExpressionTests := {"A + B + C": "((A + B) + C)"
+							,  "A == B == C": "((A == B) == C)"
+							,  "A := B := 1": "(A := (B := 1))"
+							,  "1 + 2 - 3 * 4 / 5 == 6 := 7": "((((1 + 2) - ((3 * 4) / 5)) == 6) := 7)"
+							,  "0xFF == 0o377 == 0b11111111 == 255": "(((255 == 255) == 255) == 255)"}
+
+	static _ := Parser.Tests()
+	
+	Tests() {
+		if (Config.DEBUG) {
+			this.RunTests()
+		}
+	}
+	RunTests() {
+		for Input, Output in Parser.ExpressionTests {
+			Lex := new Lexer(Input)
+			Tok := Lex.Start()
+			
+			Par := new Parser(Lex)
+			ParAST := Par.ParseExpression()
+			
+			Assert.String.True(ParAST.Stringify(), Output)
+		}
+	}
+	
+	; Helper methods
+	
+	EnsureValidType(TypeToken) {
+		if !(this.Typing.IsValidType(TypeToken.Value)) {
+			PrettyError("Type"
+					   ,"Invalid type '" TypeToken.Stringify() "'."
+					   ,"Not a valid type name."
+					   ,TypeToken
+					   ,this.Source)
+		}
+		
+		return TypeToken
+	}
+	
+	AddFunction(Node) {
+		if (Node.Type = ASTNodeTypes.None) {
+			return
+		}
+	
+		FunctionName := Node.Name.Value
+		
+		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
+			this.UnwindToBlockClose()
+			PrettyError("Parse"
+					   ,"Duplicate defintion"
+					   ,""
+					   ,Node.Name
+					   ,this.Source)
+		}
+	
+		this.CurrentProgram.Functions[FunctionName] := Node
+	}
+	Next() {
+		return this.Tokens[++this.Index]
+	}
+	Current() {
+		return this.Tokens[this.Index]
+	}
+	Previous() {
+		return this.Tokens[this.Index - 1]
+	}
+	Consume(Type, Reason) {
+		if !(this.NextMatches(Type)) {
+			Next := this.Next()
+			
+			this.UnwindToNextLine()
+			PrettyError("Parse"
+					   ,Reason
+					   ,""
+					   ,Next
+					   ,this.Source)
+		}
+		
+		return this.Current()
+	}
+	NextMatches(Types*) {
+		for k, Type in Types {
+			if (this.Check(Type)) {
+				this.Next()
+				return True
+			}
+		}
+		
+		return False
+	}
+	Check(Type) {
+		return this.Peek().Type = Type
+	}
+	Ignore(Type) {
+		if (this.Check(Type)) {
+			this.Next()
+		}
+		
+		return true
+	}
+	Peek(Count := 1) {
+		if (this.Index + Count > this.Tokens.Count()) {
+			return false
+		}
+		
+		return this.Tokens[this.Index + Count]
+	}
+	AtEOF() {
+		return (this.Peek().Type = Tokens.EOF)
 	}
 }
 

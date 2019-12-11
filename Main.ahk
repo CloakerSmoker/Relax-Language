@@ -1,6 +1,6 @@
 ﻿class Config {
 	static DEBUG := True
-	static VERSION := "0.1.2"
+	static VERSION := "0.1.3"
 }
 
 #Include %A_ScriptDir%
@@ -24,8 +24,9 @@ DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, Messa
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
 	Pointer TitleText := "This is a message box"
 	Pointer BodyText := "This is the body of the message box"
+	Int64 i
 	
-	for (Int64 i := 0, i <= 1, i++) {
+	for (i := 0, i <= 1, i++) {
 		MessageBoxA(0, TitleText, BodyText, 0)
 	}
 	
@@ -69,7 +70,7 @@ s := ""
 for k, v in t {
 	s .= v.Debug() "`n"
 }
-MsgBox, % s
+;MsgBox, % s
 
 Pest := new Parser(Test)
 a := Pest.Start()
