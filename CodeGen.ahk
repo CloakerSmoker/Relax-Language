@@ -145,6 +145,10 @@ class X64CodeGen {
 	Call_RI64(Register) {
 		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 2}, Register)
 	}
+	Call_Label(Name) {
+		this.PushByte(0xE8)
+		this.LabelPlaceholder(Name)
+	}
 	
 	; Calls END
 	;============================

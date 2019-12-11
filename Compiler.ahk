@@ -159,7 +159,7 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		;CG.Label(DefineAST.Name.Value)
+		CG.Label("__define__" DefineAST.Name.Value)
 		CG.Push(RBP), this.StackDepth++
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
@@ -698,6 +698,21 @@
 		
 			Params := Expression.Params.Expressions
 		
+			if (Params.Count() > FunctionNode.Params.Count()) {
+				PrettyError("Compile"
+						   ,"Too many parameters passed to function."
+						   ,"Takes " FunctionNode.Params.Count() " parameters."
+						   ,Expression.Target
+						   ,this.Tokenizer.CodeString)
+			}
+			else if (Params.Count() < FunctionNode.Params.Count()) {
+				PrettyError("Compile"
+						   ,"Not enough parameters passed to function."
+						   ,"Takes " FunctionNode.Params.Count() " parameters."
+						   ,Expression.Target
+						   ,this.Tokenizer.CodeString)
+			}
+		
 			if (Params.Count() > 4) {
 				; If we have 4+ params, then some need to be dumped onto the stack
 			
@@ -710,7 +725,7 @@
 					ParamNumber := Params.Count() - (A_Index - 1) ; Stack params are passed right to left, so the real index of this param needs to be calculated
 				
 					ParamType := this.Compile(Params[ParamNumber])
-					RequiredType := this.Typing.GetType(FunctionNode.Params[ParamNumber].Value)
+					RequiredType := this.Typing.GetType(FunctionNode.Params[ParamNumber][1].Value)
 					
 					try {
 						this.Cast(ParamType, RequiredType) ; A quick param type check
@@ -735,7 +750,7 @@
 				}
 			
 				ParamType := this.Compile(ParamValue)
-				RequiredType := this.Typing.GetType(FunctionNode.Params[k].Value)
+				RequiredType := this.Typing.GetType(FunctionNode.Params[k][1].Value)
 				
 				try {
 					this.Cast(ParamType, RequiredType) ; Another quick type check
@@ -760,6 +775,9 @@
 		
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+			}
+			else if (FunctionNode.Type = ASTNodeTypes.Define) {
+				this.CodeGen.Call_Label("__define__" Expression.Target.Value)
 			}
 			
 			this.CodeGen.SmallAdd(RSP, (StackParamSpace * 8) + 0x20), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params

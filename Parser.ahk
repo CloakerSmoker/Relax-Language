@@ -108,6 +108,8 @@
 		
 		for k, Param in Params {
 			this.EnsureValidType(Param)
+			Params[k] := [Param] ; Convert an array of type names into an array of arrays of type names + (empty) var names
+			; this is so the compiler can type check an import and define in the same way
 		}
 		
 		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
@@ -215,7 +217,7 @@
 			Pairs := []
 		}
 		
-		this.EnsureValidType(Type)
+		this.EnsureValidType(Type) ; Done outside of the try so any invalid type errors are still shown
 		
 		while (this.NextMatches(Tokens.COMMA)) {
 			Pair := []
