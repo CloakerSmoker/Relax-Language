@@ -1,6 +1,6 @@
 ﻿class Config {
 	static DEBUG := True
-	static VERSION := "0.1.3"
+	static VERSION := "0.1.4"
 }
 
 #Include %A_ScriptDir%
@@ -12,27 +12,25 @@
 #Include Compiler.ahk
 
 ; TODO: CodeGen linking rewrite
-; TODO: Loops
 ; TODO: (Related to 1) Shorter Jmp encodings
-
-; DllImport Int64 MsgBox(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxW}
 
 Code = 
 ( % 
 DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
 
-define Int64 Test(Int64 P1, Int64 P2, Int64 P3) {
+define Int64 Test(Int64 P1, Int64 P2, Int64 P3, Int64 P4, Int64 P5) {
 	Pointer TitleText := "This is a message box"
 	Pointer BodyText := "This is the body of the message box"
-	Int64 i
 	
-	for (i := 0, i <= 1, i++) {
+	for (Int64 i := 0, i <= P4, i++) {
 		MessageBoxA(0, TitleText, BodyText, 0)
 	}
 	
 	return 0
 }
 )
+
+
 
 ;	for (Int64 i := 0, i <= P2, i++) {
 ;		MessageBoxA(0, TitleText, BodyText, 0)
@@ -82,7 +80,7 @@ G := C.CompileProgram(a)
 
 MsgBox, % (Clipboard := G.CodeGen.Stringify())
 
-MsgBox, % "Result: " G.CallFunction("Test", 99, 1, 4) "`n" A_LastError
+MsgBox, % "Result: " G.CallFunction("Test", 99, 1, 4, 3, 4) "`n" A_LastError
 
 ;VarSetCapacity(M, 8, 0)
 ;NumPut(0, &M + 0, 0, "Char")

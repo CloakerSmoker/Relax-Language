@@ -199,17 +199,15 @@
 	FunctionParameters(Pairs) {
 		static IntFirstFour := [RCX, RDX, R8, R9]
 		static XMMFirstFour := [XMM0, XMM1, XMM2, XMM3]
-	
-		Size := 0
-		Count := Pairs.Count()
 		
 		for k, Pair in Pairs {
 			Type := Pair[1].Value
+			Name := Pair[2].Value
 
 			TrueIndex := k - 1
 			
-			this.AddVariable(TrueIndex, Pair[2].Value)
-			this.Typing.AddVariable(Type, Pair[2].Value)
+			this.AddVariable(TrueIndex, Name)
+			this.Typing.AddVariable(Type, Name)
 			
 			if (TrueIndex = 0) {
 				IndexRegister := RSI
@@ -232,9 +230,28 @@
 			}
 			
 			Size += 8
+			
+			if (A_Index = 4) {
+				Break
+			}
 		}
-	
-		return Size
+		
+		if (Pairs.Count() > 4) {
+			this.CodeGen.Move(R12, RBP)
+		
+			loop, % Pairs.Count() - 4 {
+				Pair := Pairs[A_Index + 4]
+				TrueIndex := (A_Index - 1) + 4
+				
+				this.AddVariable(TrueIndex, Pair[2].Value)
+				this.Typing.AddVariable(Pair[1].Value, Pair[2].Value)
+				
+				this.CodeGen.SmallMove(R11, (TrueIndex - 4) + 2 + 4)
+				this.CodeGen.Move_R64_SIB(RBX, SIB(8, R11, R12)) ; TrueIndex = the param number, to get the pushed param, we need to skip over 2 bytes of (our) saved RBP and return addr, then 4 bytes of shadow space
+				this.CodeGen.SmallMove(R11, TrueIndex)
+				this.CodeGen.Move_SIB_R64(SIB(8, R11, R15), RBX)
+			}
+		}
 	}
 	
 	CompileExpressionLine(Statement) {
