@@ -144,9 +144,8 @@
 		this.FunctionIndex++
 		this.Variables := {}
 		this.StackDepth := 0
-		; TODO - Add type checking (Duh) and type check .ReturnType against Int64/EAX
+
 		ParamSizes := DefineAST.Params.Count()
-		
 		CG := this.CodeGen
 		
 		for LocalName, LocalType in DefineAST.Locals {
@@ -159,7 +158,9 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		CG.Label("__define__" DefineAST.Name.Value)
+		; TODO - Save all GPRs here, and load them inside of .Leave, otherwise we clobber saved values that parent functions might need (aka any other functions we compile, since R15 is a *bit* important)
+		
+		CG.Label("__Define__" DefineAST.Name.Value)
 		CG.Push(RBP), this.StackDepth++
 		CG.Move(RBP, RSP)
 			if (ParamSizes != 0) {
@@ -186,6 +187,13 @@
 		
 		return CG
 	}
+	PushA() {
+		; TODO - implent this
+	}
+	PopA() {
+		
+	}
+	
 	Leave() {
 		this.CodeGen.Pop(RBP), this.StackDepth--
 		
@@ -199,6 +207,13 @@
 	FunctionParameters(Pairs) {
 		static IntFirstFour := [RCX, RDX, R8, R9]
 		static XMMFirstFour := [XMM0, XMM1, XMM2, XMM3]
+		
+		; x64 calling convention has the first four params in RCX(|XMM0), RDX(|XMM1), R8(|XMM2), R9(|XMM3)
+		;  and the rest dumped onto the stack before the shadow space, and the return address/saved RBP
+		;   so, FunctionEntryRBP aka FunctionEntryRSP + 2 (saved return address + saved RBP) + 4 = Start of stack params.
+		;  However, variadic functions are still sort of ???
+		
+		; Because of these rules, after parameter 4, we need to use RBP as a base, and (ParamNumber - 4) + 2 + 4 as an offset into the stack for the parameter's value
 		
 		for k, Pair in Pairs {
 			Type := Pair[1].Value
@@ -229,27 +244,25 @@
 				this.CodeGen.Move_SIB_R64(IndexSIB, IntFirstFour[TrueIndex + 1])
 			}
 			
-			Size += 8
-			
 			if (A_Index = 4) {
 				Break
 			}
 		}
 		
 		if (Pairs.Count() > 4) {
-			this.CodeGen.Move(R12, RBP)
+			this.CodeGen.Move(R12, RBP) ; Save RBP into R12, since RBP/13 can't be used as SIB.Base
 		
 			loop, % Pairs.Count() - 4 {
 				Pair := Pairs[A_Index + 4]
-				TrueIndex := (A_Index - 1) + 4
+				TrueIndex := (A_Index - 1) + 4 ; Get the actual (0 index) parameter number
 				
 				this.AddVariable(TrueIndex, Pair[2].Value)
-				this.Typing.AddVariable(Pair[1].Value, Pair[2].Value)
+				this.Typing.AddVariable(Pair[1].Value, Pair[2].Value) ; Register the variable
 				
-				this.CodeGen.SmallMove(R11, (TrueIndex - 4) + 2 + 4)
-				this.CodeGen.Move_R64_SIB(RBX, SIB(8, R11, R12)) ; TrueIndex = the param number, to get the pushed param, we need to skip over 2 bytes of (our) saved RBP and return addr, then 4 bytes of shadow space
-				this.CodeGen.SmallMove(R11, TrueIndex)
-				this.CodeGen.Move_SIB_R64(SIB(8, R11, R15), RBX)
+				this.CodeGen.SmallMove(R11, (TrueIndex - 4) + 2 + 4) ; Store the index into the stack into R11, so we can use it in a SIB
+				this.CodeGen.Move_R64_SIB(RBX, SIB(8, R11, R12)) ; Load the parameter value from the stack, into RBX
+				this.CodeGen.SmallMove(R11, TrueIndex) ; Load the actual index of the parameter into R11
+				this.CodeGen.Move_SIB_R64(SIB(8, R11, R15), RBX) ; Finally store the loaded value of the parameter into this function's parameter space
 			}
 		}
 	}

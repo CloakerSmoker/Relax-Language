@@ -19,20 +19,20 @@ Code =
 DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
 
 define Int64 Test(Int64 P1, Int64 P2, Int64 P3, Int64 P4, Int64 P5) {
-	Pointer TitleText := "This is a message box"
-	Pointer BodyText := "This is the body of the message box"
+	Test2(0, P1, P2)
 	
-	for (Int64 i := 0, i <= P4, i++) {
-		Test2(0, TitleText, BodyText)
-	}
+	return P1
+}
+define Int64 Test2(Int64 P1, Int64 T1, Pointer T2) {
+	T1 := 999
 	
 	return 0
 }
-define Int64 Test2(Int64 P1, Pointer T1, Pointer T2) {
-	MessageBoxA(0, T1, T2, 0)
-	return P1 + 20
-}
 )
+
+;	for (Int64 i := 0, i <= P4, i++) {
+;		Test2(0, TitleText, BodyText)
+;	}
 
 Test := new Lexer(Code)
 t := Test.Start()
