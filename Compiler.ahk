@@ -161,8 +161,8 @@
 		; TODO - Save all GPRs here, and load them inside of .Leave, otherwise we clobber saved values that parent functions might need (aka any other functions we compile, since R15 is a *bit* important)
 		
 		CG.Label("__Define__" DefineAST.Name.Value)
-		CG.Push(RBP), this.StackDepth++
-		CG.Move(RBP, RSP)
+		
+		this.PushA()
 			if (ParamSizes != 0) {
 				CG.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
 				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
@@ -177,31 +177,39 @@
 				this.Compile(Statement)
 			}
 			
-		CG.Label("__Return" this.FunctionIndex)
+			CG.Label("__Return" this.FunctionIndex)
 		
-		if (ParamSizes != 0) {
-			CG.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
-		}
-		
-		this.Leave()
-		
-		return CG
-	}
-	PushA() {
-		; TODO - implent this
-	}
-	PopA() {
-		
-	}
-	
-	Leave() {
-		this.CodeGen.Pop(RBP), this.StackDepth--
+			if (ParamSizes != 0) {
+				CG.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+			}
+		this.PopA()
 		
 		if (this.StackDepth != 0) {
 			Throw, Exception("Unbalenced stack ops, " this.StackDepth)
 		}
 		
 		this.CodeGen.Return()
+		
+		return CG
+	}
+	
+	static PushSavedRegisters := [RCX, RDX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15]
+	static PopSavedRegisters := [R15, R14, R13, R12, R11, R10, R9, R8, RDI, RSI, RDX, RCX]
+	
+	PushA() {
+		this.CodeGen.Push(RBP), this.StackDepth++
+		this.CodeGen.Move(RBP, RSP)
+		
+		for k, RegisterToPush in this.PushSavedRegisters {
+			this.CodeGen.Push(RegisterToPush), this.StackDepth++
+		}
+	}
+	PopA() {
+		for k, RegisterToPop in this.PopSavedRegisters {
+			this.CodeGen.Pop(RegisterToPop), this.StackDepth--
+		}
+
+		this.CodeGen.Pop(RBP), this.StackDepth--
 	}
 	
 	FunctionParameters(Pairs) {

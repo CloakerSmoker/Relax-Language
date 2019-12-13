@@ -327,8 +327,8 @@ class ASTNodes {
 			Stringify() {
 				String := "DllImport " this.ReturnType.Value " " this.Name.Value "("
 				
-				for k, ParamType in this.Params {
-					String .= ParamType.Value ", "
+				for k, Param in this.Params {
+					String .= Param[1].Value ", "
 				}
 			
 				if (this.Params.Count()) {

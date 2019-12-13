@@ -450,10 +450,8 @@ class X64CodeGen {
 		this.SplitIntoBytes32(Integer.Value)
 	}
 	Push_I16(Integer) {
-		this.PushByte(0x66) ; Legacy operand prefix (16 bits)
-		this.PushByte(0x68)
-		this.PushByte(Integer.Value & 0x00FF)
-		this.PushByte(Integer.Value & 0xFF00)
+		this.Push_I32(Integer) 
+		; This used to use the PUSH imm16 (68 iw) encodings, but it turns out that PUSHW increments RSP by 4, while PUSH imm8 and PUSH imm32 increment by 8
 	}
 	Push_I8(Byte) {
 		this.PushByte(0x6A)
