@@ -22,8 +22,6 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	
 	loop {
 		NextCharacter := SubStr(Source, TokenLineStart, 1)
-		
-		;MsgBox, % TokenLineStart "`n" SubStr(Source, TokenLineStart)
 	
 		if (NextCharacter = "`n" || TokenLineStart = 0) {
 			TokenStart := A_Index

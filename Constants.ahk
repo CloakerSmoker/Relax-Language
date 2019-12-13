@@ -156,8 +156,67 @@ class OperatorClasses {
 	}
 }
 
-IsOperator(OperatorType) {
-	return Tokens.FIRST_OPERATOR < OperatorType && OperatorType < Tokens.LAST_OPERATOR
+class Token {
+	__New(Type, Value, Context) {
+		this.Type := Type
+		this.Value := Value
+		this.Context := Context
+		this.HumanReadable := this.Debug()
+	}
+	
+	IsOperator() {
+		return Tokens.FIRST_OPERATOR < this.Type && this.Type < Tokens.LAST_OPERATOR
+	}
+	CaseIsOperator() {
+		if (this.IsOperator()) {
+			return this.Type
+		}
+		else {
+			return !this.Type
+		}
+	}
+
+	
+	Debug() {
+		if (this.Type = Tokens.KEYWORD) {
+			return "KEYWORD: " Keywords[this.Value]
+		}
+		else if (this.IsOperator()) {
+			return "OPERATOR: " Tokens[this.Type]
+		}
+		
+		return Tokens[this.Type] ": " this.Value
+	}
+	
+	Stringify() {
+		if (this.Type = Tokens.KEYWORD) {
+			return Keywords[this.Value]
+		}
+		else if (this.Type = Tokens.STRING) {
+			return A_Quote this.Value A_Quote
+		}
+	
+		return this.Value
+	}
+}
+class Context {
+	; TODO: Implement this in all AST nodes so we can have errors spanning multiple lines 
+
+	__New(Start, End, Line := 0) {
+		this.Start := Start
+		this.End := End
+		this.Line := Line
+	}
+	Merge(OtherContext) {
+		NewStart := Min(OtherContext.Start, this.Start)
+		NewEnd := Max(OtherContext.End, this.End)
+		NewLine := Min(OtherContext.Line, this.Line)
+
+		return new Context(NewStart, NewEnd, NewLine)
+	}
+	ExtractFrom(String) {
+		return SubStr(String, this.Start + 1, this.End - this.Start)
+	}
 }
 
 class Operators {
@@ -171,28 +230,6 @@ class Operators {
 		}
 	
 		Assert.Unreachable(this.ToString(Operator))
-	}
-
-	ToString(Operator) {
-		return Operator.Value
-	
-		OperatorName := Tokens[Operator.Type]
-		
-		if (SubStr(OperatorName, StrLen(OperatorName) - 1, 1) = "_") {
-			RealName := SubStr(OperatorName, 1, StrLen(OperatorName) - 2)
-			return this.ToString(new Token(Tokens[RealName], Operator.Value, Operator.Context))
-		}
-	
-	
-		for Start, Endings in CharacterTokens.Operators {
-			for k, EndingToken in Endings {
-				if (Operator.Type = EndingToken) {
-					return Start (k != "NONE" ? k : "")
-				}
-			}
-		}
-		
-		Assert.Unreachable(Tokens[Operator.Type])
 	}
 
 	CheckPrecedence(FirstOperator, SecondOperator) {
@@ -258,7 +295,7 @@ class Keywords extends Enum {
 class ASTNode {
 	__New(Params*) {
 		if (Params.Count() != this.Parameters.Count()) {
-			Msgbox, % "Not enough parameters passed to " this.__Class ".__New, " Params.Count() " != " this.Parameters.Count()
+			Throw, Exception("INTERNAL: Not enough parameters passed to " this.__Class ".__New, " Params.Count() " != " this.Parameters.Count())
 		}
 	
 		for k, v in this.Parameters {
@@ -306,7 +343,7 @@ class ASTNodes {
 			static Parameters := ["Functions", "Globals"]
 		
 			Stringify() {
-				String := "/* " Config.VERSION " */`n"
+				String := "/* " LanguageName.VERSION " */`n"
 				
 				for k, GlobalVariable in this.Imports {
 					String .= GlobalVariable[1] " " GlobalVariable[2]

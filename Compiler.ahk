@@ -641,16 +641,12 @@
 	Cast_I64_I8() {
 		this.Cast(this.Typing.GetType("Int8"), this.Typing.GetType("Int64"), True)
 	}
-	
-	
 	Cast_I64_Pointer() {
 		return ; Lmao
 	}
 	Cast_Pointer_I64() {
 		return ; These are some really useful casts
 	}
-	
-	
 	Cast_I64_Double() {
 		this.CodeGen.Push(RAX), this.StackDepth++
 		this.CodeGen.FILD_Stack()
@@ -663,21 +659,13 @@
 		this.CodeGen.FSTP_Stack()
 		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
-	
 	Cast_I32_Float() {
 	
 	}
 	Cast_Float_I32() {
 		
 	}
-	
-	
-	
-	
-	
-	
-	
-	
+
 	CompileCall(Expression) {
 		if (Expression.Target.Value = "Deref") {
 			return this.CompileDeref(Expression.Params.Expressions)

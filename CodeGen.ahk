@@ -135,9 +135,6 @@ class X64CodeGen {
 			this.Push(Integer)
 			this.Pop(Register)
 		}
-		;else {
-		;	this.Move_R64_I32(Register, {"Value": Integer})
-		;}
 	}
 	
 	; Calls START
@@ -780,6 +777,8 @@ class REX {
 
 	static None := 0
 }
+
+; Super-global classes to hold registers, so they are always in scope
 
 class RAX  { 
 	static Type := "R64"
