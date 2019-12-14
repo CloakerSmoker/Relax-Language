@@ -38,9 +38,11 @@
 	;    - to the given function, gathered by `GetProcAddress`
 	
 
-	__New(Tokenizer, Typingizer) {
-		this.Tokenizer := Tokenizer
-		this.Typing := Typingizer
+	__New(CodeLexer, CodeParser) {
+		this.Lexer := CodeLexer
+		this.Source := CodeLexer.CodeString
+		this.Parser := CodeParser
+		this.Typing := CodeParser.Typing
 	}
 	Compile(Something) {
 		if (Something.__Class = "Token") {
@@ -51,49 +53,6 @@
 	}
 	CompileNone() {
 		return
-	}
-	
-	GetVariablePrelude(Name) {
-		if !(this.Variables.HasKey(Name)) {
-			Throw, Exception("Variable '" Name "' not found.")
-		}
-		
-		Index := this.Variables[Name]
-		
-		if (Index = 0) {
-			return RSI
-		}
-		else if (Index = 1) {
-			return RDI
-		}
-		else {
-			this.CodeGen.SmallMove(R10, Index)
-			return R10
-		}
-	}
-	
-	SetVariable(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15)), this.StackDepth--
-	}
-	
-	GetVariable(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		Type := this.Typing.GetVariableType(Name)
-	
-		this.CodeGen.Push(SIB(8, IndexRegister, R15)), this.StackDepth++
-		
-		return Type
-	}
-	GetVariableAddress(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		
-		this.CodeGen.Lea(R11, SIB(8, IndexRegister, R15))
-		this.CodeGen.Push(R11), this.StackDepth++
-	}
-	
-	AddVariable(RSPIndex, Name) {
-		this.Variables[Name] := RSPIndex
 	}
 	
 	CompileToken(TargetToken) {
@@ -120,11 +79,10 @@
 						   ,"Token '" TargetToken.Stringify() "' can not be compiled."
 						   ,"Is not implemented in the compiler."
 						   ,TargetToken
-						   ,this.Tokenizer.CodeString)
+						   ,this.Source)
 			}
 		}
 	}
-	
 	CompileProgram(Program) {
 		this.FunctionIndex := 0
 		this.CodeGen := new X64CodeGen()
@@ -338,10 +296,53 @@
 		this.CodeGen.JMP("__Return" this.FunctionIndex)
 	}
 	
-	CompileBinary(Expression) {
-		; Thonking time:
-		;  To mix types in the middle of an expression, get the result type, cast both operands to that type, and then do the operation with just that type
+	;========================
+	; Variable methods
+	
+	GetVariablePrelude(Name) {
+		if !(this.Variables.HasKey(Name)) {
+			Throw, Exception("Variable '" Name "' not found.")
+		}
 		
+		Index := this.Variables[Name]
+		
+		if (Index = 0) {
+			return RSI
+		}
+		else if (Index = 1) {
+			return RDI
+		}
+		else {
+			this.CodeGen.SmallMove(R10, Index)
+			return R10
+		}
+	}
+	SetVariable(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
+		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15)), this.StackDepth--
+	}
+	GetVariable(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
+		Type := this.Typing.GetVariableType(Name)
+	
+		this.CodeGen.Push(SIB(8, IndexRegister, R15)), this.StackDepth++
+		
+		return Type
+	}
+	GetVariableAddress(Name) {
+		IndexRegister := this.GetVariablePrelude(Name)
+		
+		this.CodeGen.Lea(R11, SIB(8, IndexRegister, R15))
+		this.CodeGen.Push(R11), this.StackDepth++
+	}
+	AddVariable(RSPIndex, Name) {
+		this.Variables[Name] := RSPIndex
+	}
+	
+	;========================
+	; Binary expression methods 
+	
+	CompileBinary(Expression) {
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
 		
 		if (IsAssignment) {
@@ -361,7 +362,7 @@
 					   ,"The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible."
 					   ,""
 					   ,Expression.Operator
-					   ,this.Tokenizer.CodeString)
+					   ,this.Source)
 		}
 		
 		if (IsAssignment) {
@@ -371,49 +372,13 @@
 			return this.CompileBinaryTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
 		}
 	}
-	CompileUnary(Expression) {
-		Operator := Expression.Operator
-		OperatorString := Operator.Stringify()
-		
-		if (OperatorString = "--" || OperatorString = "++") {
-			VariableIndexRegister := this.GetVariablePrelude(Expression.Operand.Value)
-			
-			Switch (Operator.Type) {
-				Case Tokens.PLUS_PLUS_L: {
-					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
-					this.GetVariable(Expression.Operand.Value)
-				}
-				Case Tokens.PLUS_PLUS_R: {
-					this.GetVariable(Expression.Operand.Value)
-					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
-				}
-				Case Tokens.MINUS_MINUS_L: {
-					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
-					this.GetVariable(Expression.Operand.Value)
-				}
-				Case Tokens.MINUS_MINUS_R: {
-					this.GetVariable(Expression.Operand.Value)
-					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
-				}
-			}
-			
-			return this.GetVariableType(Expression.Operand.Value)
-		}
-		
-		PrettyError("Compile"
-				   ,"Unary operator " OperatorString " is not implemented in the compiler."
-				   ,""
-				   ,Operator
-				   ,this.Tokenizer.CodeString)
-	}
-	
 	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
 		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
 			PrettyError("Type"
 					   ,"The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " ."
 					   ,""
 					   ,Expression.Operator
-					   ,this.Tokenizer.CodeString)
+					   ,this.Source)
 		}
 		
 		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
@@ -502,7 +467,7 @@
 						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the dblbin compiler."
 						   ,""
 						   ,Expression.Operator
-						   ,this.Tokenizer.CodeString)
+						   ,this.Source)
 			}
 		}
 		
@@ -570,12 +535,51 @@
 						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the intbin compiler."
 						   ,""
 						   ,Expression.Operator
-						   ,this.Tokenizer.CodeString)
+						   ,this.Source)
 			}
 		}
 		
 		this.CodeGen.Push(RAX), this.StackDepth++
 		return ResultType
+	}
+	
+	;========================
+	; Unary/grouping expression methods
+	
+	CompileUnary(Expression) {
+		Operator := Expression.Operator
+		OperatorString := Operator.Stringify()
+		
+		if (OperatorString = "--" || OperatorString = "++") {
+			VariableIndexRegister := this.GetVariablePrelude(Expression.Operand.Value)
+			
+			Switch (Operator.Type) {
+				Case Tokens.PLUS_PLUS_L: {
+					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+					this.GetVariable(Expression.Operand.Value)
+				}
+				Case Tokens.PLUS_PLUS_R: {
+					this.GetVariable(Expression.Operand.Value)
+					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+				}
+				Case Tokens.MINUS_MINUS_L: {
+					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+					this.GetVariable(Expression.Operand.Value)
+				}
+				Case Tokens.MINUS_MINUS_R: {
+					this.GetVariable(Expression.Operand.Value)
+					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+				}
+			}
+			
+			return this.GetVariableType(Expression.Operand.Value)
+		}
+		
+		PrettyError("Compile"
+				   ,"Unary operator " OperatorString " is not implemented in the compiler."
+				   ,""
+				   ,Operator
+				   ,this.Source)
 	}
 	
 	CompileGrouping(Expression) {
@@ -592,6 +596,8 @@
 		return ResultType
 	}
 	
+	;========================
+	; Cast methods
 	
 	Cast(TypeOne, TypeTwo, StackLess := False) {
 		if (TypeOne.Name = TypeTwo.Name) {
@@ -642,10 +648,8 @@
 		this.Cast(this.Typing.GetType("Int8"), this.Typing.GetType("Int64"), True)
 	}
 	Cast_I64_Pointer() {
-		return ; Lmao
 	}
 	Cast_Pointer_I64() {
-		return ; These are some really useful casts
 	}
 	Cast_I64_Double() {
 		this.CodeGen.Push(RAX), this.StackDepth++
@@ -660,11 +664,12 @@
 		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
 	Cast_I32_Float() {
-	
 	}
 	Cast_Float_I32() {
-		
 	}
+	
+	;========================
+	; Function call methods
 
 	CompileCall(Expression) {
 		if (Expression.Target.Value = "Deref") {
@@ -712,14 +717,14 @@
 						   ,"Too many parameters passed to function."
 						   ,"Takes " FunctionNode.Params.Count() " parameters."
 						   ,Expression.Target
-						   ,this.Tokenizer.CodeString)
+						   ,this.Source)
 			}
 			else if (Params.Count() < FunctionNode.Params.Count()) {
 				PrettyError("Compile"
 						   ,"Not enough parameters passed to function."
 						   ,"Takes " FunctionNode.Params.Count() " parameters."
 						   ,Expression.Target
-						   ,this.Tokenizer.CodeString)
+						   ,this.Source)
 			}
 		
 			if (Params.Count() > 4) {
@@ -744,7 +749,7 @@
 								,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber "."
 								,""
 								,ParamValue.Stringify()
-								,this.Tokenizer.CodeString)
+								,this.Source)
 					}
 					
 					StackParamSpace++ ; Increment the number of Int64s to free from the stack
@@ -769,7 +774,7 @@
 							   ,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k "."
 							   ,""
 							   ,ParamValue.Stringify()
-							   ,this.Tokenizer.CodeString)
+							   ,this.Source)
 				}
 			}
 			
@@ -801,9 +806,12 @@
 				   ,"Function '" Expression.Target.Stringify() "' is not callable."
 				   ,""
 				   ,Expression.Operator
-				   ,this.Tokenizer.CodeString
+				   ,this.Source
 				   ,"Only inbuilt functions are currently callable")
 	}
+	
+	;========================
+	; Built in functions
 	
 	CompileDeref(Params) {
 		PointerType := this.Compile(Params[1])
@@ -813,7 +821,7 @@
 					   ,":Deref requires an operand of type Pointer, not '" PointerType.Name "'."
 					   ,"Not a pointer"
 					   ,Params[1]
-					   ,this.Tokenizer.CodeString)
+					   ,this.Source)
 		}
 		
 		this.CodeGen.Pop(RCX)
@@ -827,17 +835,11 @@
 			Case 16: {
 				this.CodeGen.MoveSX_R64_RI16(RDX, RCX)
 			}
-			Case 32: {
+			Case 32, 33: {
 				this.CodeGen.MoveSX_R64_RI32(RDX, RCX)
 			}
-			Case 33: {
-				; TODO same as below
-			}
-			Case 64: {
+			Case 64, 65: {
 				this.CodeGen.Move_R64_RI64(RDX, RCX)
-			}
-			Case 65: {
-				; TODO - Implement for more than a test
 			}
 			Default: {
 				Throw, Exception("Un-supported deref type: '" Params[2].Stringify() "'.")
@@ -856,7 +858,7 @@
 					   ,":Put requires an operand of type Pointer, not '" PointerType.Name "'."
 					   ,"Not a pointer"
 					   ,Params[1]
-					   ,this.Tokenizer.CodeString)
+					   ,this.Source)
 		}
 		
 		this.CodeGen.Pop(RCX)
@@ -875,11 +877,11 @@
 				this.CodeGen.Move_RI16_R64(RCX, RDX)
 				this.CodeGen.Push(2)
 			}
-			Case 32: {
+			Case 32, 33: {
 				this.CodeGen.Move_RI32_R64(RCX, RDX)
 				this.CodeGen.Push(4)
 			}
-			Case 64: {
+			Case 64, 65: {
 				this.CodeGen.Move_RI64_R64(RCX, RDX)
 				this.CodeGen.Push(8)
 			}

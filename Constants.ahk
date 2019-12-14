@@ -520,18 +520,18 @@ class CompiledProgram {
 		this.CodeGen := CodeGen
 		this.Offsets := FunctionOffsets
 		
-		CodeGen.Link()
+		LinkedCode := CodeGen.Link()
 	
-		pMemory := this.pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", CodeGen.Index(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
+		pMemory := this.pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", LinkedCode.Count(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
 		
-		for k, v in CodeGen.Bytes {
+		for k, v in LinkedCode {
 			NumPut(v, pMemory + 0, A_Index - 1, "Char")
 		}
 		
-		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", CodeGen.Index(), "UInt", 0x20, "UInt*", OldProtection)
+		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x20, "UInt*", OldProtection)
 	}
 	__Delete() {
-		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", this.CodeGen.Index(), "UInt", 0x00008000)
+		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000)
 	}
 	
 	CallFunction(Name, Params*) {

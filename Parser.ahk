@@ -1,6 +1,5 @@
 ﻿class Parser {
 	__New(Tokenizer) {
-		this.Tokens := Tokenizer.Tokens
 		this.Source := Tokenizer.CodeString
 		this.Typing := new Typing()
 	
@@ -20,7 +19,8 @@
 		this.UnwindTo(Tokens.NEWLINE, Tokens.EOF)
 	}
 	
-	Start() {
+	Start(Tokens) {
+		this.Tokens := Tokens
 		return this.ParseProgram()
 	}
 	
@@ -558,13 +558,14 @@
 	}
 	RunTests() {
 		for Input, Output in Parser.ExpressionTests {
-			Lex := new Lexer(Input)
-			Tok := Lex.Start()
+			TestLexer := new Lexer()
+			InputTokens := TestLexer.Start(Input)
 			
-			Par := new Parser(Lex)
-			ParAST := Par.ParseExpression()
+			TestParser := new Parser(TestLexer)
+			TestParser.Tokens := InputTokens
+			InputAST := TestParser.ParseExpression()
 			
-			Assert.String.True(ParAST.Stringify(), Output)
+			Assert.String.True(InputAST.Stringify(), Output)
 		}
 	}
 	

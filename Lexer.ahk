@@ -1,14 +1,126 @@
 ﻿class Lexer {
-	__New(Code) {
-		this.CodeString := Code
-		this.Code := StrSplit(Code)
-		this.CodeLength := this.Code.Count()
+	__New() {
 		this.Index := 0
 		this.TokenStart := 0
 		this.Tokens := []
 		
 		this.LineNumber := 1
 	}
+	
+	Start(Code) {
+		this.CodeString := Code
+		this.Code := StrSplit(Code)
+		this.CodeLength := this.Code.Count()
+	
+		loop {
+			this.TokenStart := this.Index
+			NextCharacter := this.Next()
+			
+			if (CharacterTokens.Operators.HasKey(NextCharacter)) {
+				FoundToken := ""
+				
+				for OperatorPart, OperatorType in CharacterTokens.Operators[NextCharacter] {
+					if (this.NextMatches(OperatorPart)) {
+						FoundToken := OperatorType
+						break
+					}
+				}
+				
+				if !(FoundToken) {
+					FoundToken := CharacterTokens.Operators[NextCharacter]["NONE"]
+				}
+				
+				this.AddToken(FoundToken)
+				Continue
+			}
+			else if (CharacterTokens.Misc.HasKey(NextCharacter)) {
+				this.AddToken(CharacterTokens.Misc[NextCharacter])
+				Continue
+			}
+			
+			Switch (NextCharacter) {
+				Case "/": {
+					Next := this.Peek()
+					
+					Switch (Next) {
+						Case "*": {
+							this.Index -= 1
+							this.AdvanceThrough("/*", "*/")
+						}
+						Case "/": {
+							this.Index -= 1
+							this.AdvanceThrough("//", "`n")
+						}
+						Default: {
+							this.AddToken(Tokens.DIVIDE)
+						}
+					}
+				}
+				Case A_Quote: {
+					this.Index -= 1
+					StringBounds := this.AdvanceThrough(A_Quote, A_Quote)
+					
+					if !(this.Previous() = A_Quote) {
+						MsgBox, % "Unterminated string starting at character " this.TokenStart
+						return
+					}
+					
+					this.AddToken(Tokens.STRING, this.SubStr(StringBounds[1], StringBounds[2]))
+				}
+				Case "`n": {
+					if (this.Tokens[this.Tokens.Count()].Type != Tokens.NEWLINE) {
+						this.AddToken(Tokens.NEWLINE, "\n")
+					}
+				}
+				Case CW.IsWhiteSpace(NextCharacter): {
+					; Ignore whitespace
+				}
+				Case CW.IsDigit(NextCharacter): {
+					if (NextCharacter = 0) {
+						Next := this.Next()
+					
+						Switch (Next) {
+							Case "x", "b", "o": {
+								NumberBounds := this.AdvanceThroughFilter(Conversions[Next].Filter)
+								Number := this.SubStr(NumberBounds[1], NumberBounds[2])
+								this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
+							}
+							Default: {
+								this.Index -= 2 
+								; Roll back by the 0, and whatever .Next returned, so we start AdvanceThroughNumber at the right index
+								this.AdvanceThroughNumber()
+							}
+						}
+					}
+					else {
+						this.AdvanceThroughNumber()
+					}
+				}
+				Case CW.IsAlpha(NextCharacter): {
+					while (IsAlphaNumeric(this.Peek())) {
+						this.Advance()
+					}
+					
+					IdentifierText := this.SubStr(this.TokenStart, this.Index)
+					
+					if (Keywords.HasKey(IdentifierText)) {
+						this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])
+					}
+					else {
+						this.AddToken(Tokens.IDENTIFIER, IdentifierText)
+					}
+				}
+				Default: {
+					MsgBox, % "Unexpected character '" NextCharacter "' at position " this.Index
+				}
+			}
+		} until (this.IsAtEnd())
+		
+		this.AddToken(Tokens.EOF, "EOF")
+		
+		return this.Tokens
+	}
+	
 	IsAtEnd() {
 		return this.Index >= this.CodeLength
 	}
@@ -121,116 +233,5 @@
 		}
 		
 		this.AddToken(Type, this.SubStr(this.TokenStart, this.Index) + 0)
-	}
-	
-	
-	Start() {
-		loop {
-			this.TokenStart := this.Index
-			NextCharacter := this.Next()
-			
-			if (CharacterTokens.Operators.HasKey(NextCharacter)) {
-				FoundToken := ""
-				
-				for OperatorPart, OperatorType in CharacterTokens.Operators[NextCharacter] {
-					if (this.NextMatches(OperatorPart)) {
-						FoundToken := OperatorType
-						break
-					}
-				}
-				
-				if !(FoundToken) {
-					FoundToken := CharacterTokens.Operators[NextCharacter]["NONE"]
-				}
-				
-				this.AddToken(FoundToken)
-				Continue
-			}
-			else if (CharacterTokens.Misc.HasKey(NextCharacter)) {
-				this.AddToken(CharacterTokens.Misc[NextCharacter])
-				Continue
-			}
-			
-			Switch (NextCharacter) {
-				Case "/": {
-					Next := this.Peek()
-					
-					Switch (Next) {
-						Case "*": {
-							this.Index -= 1
-							this.AdvanceThrough("/*", "*/")
-						}
-						Case "/": {
-							this.Index -= 1
-							this.AdvanceThrough("//", "`n")
-						}
-						Default: {
-							this.AddToken(Tokens.DIVIDE)
-						}
-					}
-				}
-				Case A_Quote: {
-					this.Index -= 1
-					StringBounds := this.AdvanceThrough(A_Quote, A_Quote)
-					
-					if !(this.Previous() = A_Quote) {
-						MsgBox, % "Unterminated string starting at character " this.TokenStart
-						return
-					}
-					
-					this.AddToken(Tokens.STRING, this.SubStr(StringBounds[1], StringBounds[2]))
-				}
-				Case "`n": {
-					if (this.Tokens[this.Tokens.Count()].Type != Tokens.NEWLINE) {
-						this.AddToken(Tokens.NEWLINE, "\n")
-					}
-				}
-				Case CW.IsWhiteSpace(NextCharacter): {
-					; Ignore whitespace
-				}
-				Case CW.IsDigit(NextCharacter): {
-					if (NextCharacter = 0) {
-						Next := this.Next()
-					
-						Switch (Next) {
-							Case "x", "b", "o": {
-								NumberBounds := this.AdvanceThroughFilter(Conversions[Next].Filter)
-								Number := this.SubStr(NumberBounds[1], NumberBounds[2])
-								this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
-							}
-							Default: {
-								this.Index -= 2 
-								; Roll back by the 0, and whatever .Next returned, so we start AdvanceThroughNumber at the right index
-								this.AdvanceThroughNumber()
-							}
-						}
-					}
-					else {
-						this.AdvanceThroughNumber()
-					}
-				}
-				Case CW.IsAlpha(NextCharacter): {
-					while (IsAlphaNumeric(this.Peek())) {
-						this.Advance()
-					}
-					
-					IdentifierText := this.SubStr(this.TokenStart, this.Index)
-					
-					if (Keywords.HasKey(IdentifierText)) {
-						this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])
-					}
-					else {
-						this.AddToken(Tokens.IDENTIFIER, IdentifierText)
-					}
-				}
-				Default: {
-					MsgBox, % "Unexpected character '" NextCharacter "' at position " this.Index
-				}
-			}
-		} until (this.IsAtEnd())
-		
-		this.AddToken(Tokens.EOF, "EOF")
-		
-		return this.Tokens
 	}
 }

@@ -612,15 +612,8 @@ class X64CodeGen {
 		this.Call_RI64(RAX)
 	}
 	Push_String_Pointer(String) {
-		static HEAP_ZERO_MEMORY := 0x00000008
-		static hProcessHeap := DllCall("GetProcessHeap")
-		
-		pMemory := DllCall("HeapAlloc", "Ptr", hProcessHeap, "UInt", HEAP_ZERO_MEMORY, "UInt", StrLen(String) + 1)
-		StrPut(String, pMemory, StrLen(String) + 1, "UTF-8")
-
-		OnExit(Func("DllCall").Bind("HeapFree", "Ptr", hProcessHeap, "UInt", 0, "Ptr", pMemory))
-		
-		this.Move_R64_I64(RAX, I64(pMemory))
+		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
+		this.StringPlaceholder(String)
 		this.Push(RAX)
 	}
 	
@@ -674,9 +667,33 @@ class X64CodeGen {
 		this.PushByte(0x00)
 		this.PushByte(0x00)
 	}
+	StringPlaceholder(String) {
+		this.Bytes.Push(["String", String])
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+	}
 	Link() {
+		static HEAP_ZERO_MEMORY := 0x00000008
+		static hProcessHeap := DllCall("GetProcessHeap")
+	
+		if (this.LinkedBytes) {
+			return this.LinkedBytes
+		}
+	
+		this.LinkedBytes := LinkedBytes := []
+		SkipBytes := 0
+	
 		for Index, Byte in this.Bytes {
-			if (IsObject(Byte)) {
+			if (SkipBytes != 0) {
+				SkipBytes--
+			}
+			else if (IsObject(Byte)) {
 				Switch (Byte[1]) {
 					Case "Label": {
 						TargetIndex := this.Labels[Byte[2]]
@@ -684,20 +701,41 @@ class X64CodeGen {
 						Offset := TargetIndex - CurrentIndex
 					
 						for k, v in SplitIntoBytes32(Offset) {
-							this.Bytes[Index + k - 1] := v
+							LinkedBytes.Push(v)
 						}
+						
+						SkipBytes += 3
 					}
 					Case "Dll": {
 						hDllFile := DllCall("GetModuleHandle", "Str", Byte[2], "Ptr")
 						pSomeFunction := DllCall("GetProcAddress", "Ptr", hDllFile, "AStr", Byte[3], "Ptr")
 						
 						for k, v in SplitIntoBytes64(pSomeFunction) {
-							this.Bytes[Index + k - 1] := v
+							LinkedBytes.Push(v)
 						}
+						
+						SkipBytes += 7
+					}
+					Case "String": {
+						pMemory := DllCall("HeapAlloc", "Ptr", hProcessHeap, "UInt", HEAP_ZERO_MEMORY, "UInt", StrLen(Byte[2]) + 1)
+						StrPut(Byte[2], pMemory, StrLen(Byte[2]) + 1, "UTF-8")
+				
+						OnExit(Func("DllCall").Bind("HeapFree", "Ptr", hProcessHeap, "UInt", 0, "Ptr", pMemory))
+						
+						for k, v in SplitIntoBytes64(pMemory) {
+							LinkedBytes.Push(v)
+						}
+						
+						SkipBytes += 7
 					}
 				}
 			}
+			else {
+				LinkedBytes.Push(Byte)
+			}
 		}
+		
+		return LinkedBytes
 	}
 
 	PushByte(Byte) {
@@ -736,35 +774,15 @@ class X64CodeGen {
 	}
 	
 	Stringify() {
-		this.Link()
+		Bytes := this.Link()
 	
 		String := ""
 		
-		for k, v in this.Bytes {
+		for k, v in Bytes {
 			String .= Conversions.IntToHex(v) " "
 		}
 		
 		return String
-	}
-	
-	Execute(Params*) {
-		this.Link()
-	
-		pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", this.Bytes.Count(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
-		
-		for k, v in this.Bytes {
-			NumPut(v, pMemory + 0, A_Index - 1, "Char")
-		}
-		
-		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", this.Bytes.Count(), "UInt", 0x20, "UInt*", OldProtection)
-		
-		Params.InsertAt(1, pMemory)
-		
-		ReturnValue := DllCall(Params*)
-		
-		DllCall("VirtualFree", "Ptr", pMemory, "Ptr", this.Bytes.Count(), "UInt", 0x00008000)
-		
-		return ReturnValue
 	}
 }
 

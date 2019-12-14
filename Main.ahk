@@ -23,19 +23,19 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.0"
+	static VERSION := "1.0.0-alpha.1"
 
 	CompileCode(CodeString) {
-		CodeLexer := new Lexer(CodeString) ; TODO: Clean up this process, it's very inconistant
-		CodeTokens := CodeLexer.Start()
+		CodeLexer := new Lexer()
+		CodeTokens := CodeLexer.Start(CodeString)
 	
 		CodeParser := new Parser(CodeLexer)
-		CodeAST := CodeParser.Start()
+		CodeAST := CodeParser.Start(CodeTokens)
 		
-		CodeCompiler := new Compiler(CodeLexer, CodeParser.Typing)
+		CodeCompiler := new Compiler(CodeLexer, CodeParser)
 		Program := CodeCompiler.CompileProgram(CodeAST)
 		
-		return {"Program": Program, "AST": CodeAST} ; Maybe change CompiledProgram to include the AST/Source by default?
+		return Program
 	}
 
 }
@@ -61,9 +61,7 @@ define Int64 Test2(Int64 P1, Pointer TT, Pointer BT) {
 )
 
 R := LanguageName.CompileCode(Code)
-A := R.AST
-G := R.Program
 
-MsgBox, % A.Stringify()
-MsgBox, % (Clipboard := G.CodeGen.Stringify())
-MsgBox, % "Result: " G.CallFunction("Test", 3, 1, 4, 3, 4) "`n" A_LastError
+MsgBox, % R.Node.Stringify()
+MsgBox, % (Clipboard := R.CodeGen.Stringify())
+MsgBox, % "Result: " R.CallFunction("Test", 3, 1, 4, 3, 4) "`n" A_LastError
