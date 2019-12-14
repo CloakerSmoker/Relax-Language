@@ -13,8 +13,6 @@
 ; TODO: Pick a name
 ; TODO: CodeGen linking rewrite
 ; TODO: (Related to above) Shorter Jmp encodings
-; TODO: Clean up source string passing between step classes
-; TODO: Clean up tokenizer/typing passing
 ; TODO: Write more tests
 ; TODO: Make type checking much more strict
 ; TODO: Eventually find a smarted way to handle variables
@@ -50,7 +48,7 @@ define Int64 Test(Int64 P1) {
 	Pointer BodyText := "this is the body text"
 
 	for (Int64 i := 0, i <= P1, i++) {
-		Test2(0, TitleText, BodyText)
+		Tes t2(0, TitleText, BodyText)
 	}
 
 	return 0
@@ -59,6 +57,7 @@ define Int64 Test2(Int64 P1, Pointer TT, Pointer BT) {
 	return MessageBoxA(P1, TT, BT, 0)
 }
 )
+; TODO: Fix the }}}}}}}}}}}}} errror when a non-token AST node is passed to PrettyError
 
 R := LanguageName.CompileCode(Code)
 

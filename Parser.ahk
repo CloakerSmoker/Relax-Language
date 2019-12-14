@@ -58,12 +58,14 @@
 		}
 		
 		this.UnwindToNextLine()
-		PrettyError("Parse"
-				   ,"All top-level statements must be either DllImport or Define."
-				   ,"Should be inside of a Define statement."
-				   ,Next
-				   ,this.Source
-				   ,"Code outside of function defintions is invalid")
+		
+		new Error("Parse")
+			.LongText("All top-level statements must be either DllImport or Define.")
+			.ShortText("Should be inside of a Define statement.")
+			.Help("Code outside of function defintions is invalid")
+			.Token(Next)
+			.Source(this.Source)
+		.Throw()
 	}
 	ParseDefine() {
 		ReturnType := this.EnsureValidType(this.ParsePrimary())
@@ -72,12 +74,14 @@
 		
 		if (Name.Type != Tokens.IDENTIFIER) {
 			this.UnwindToBlockClose()
-			PrettyError("Parse"
-					   ,"Invalid function name '" Name.Stringify() "', expected IDENTIFIER."
-					   ,"Expected an identifier."
-					   ,Name
-					   ,this.Source
-					   ,"Function names must be identifiers, not numbers or quoted strings.")
+			
+			new Error("Parse")
+				.LongText("Invalid function name, expected an identifier.")
+				.ShortText("Expected an identifier.")
+				.Help("Function names must be identifiers, not numbers or quoted strings.")
+				.Token(Name)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		Params := this.ParseParamGrouping()
@@ -96,12 +100,14 @@
 		
 		if (Name.Type != Tokens.IDENTIFIER) {
 			this.UnwindToNextLine()
-			PrettyError("Parse"
-					   ,"Invalid DllImport name '" Name.Stringify() "', expected IDENTIFIER."
-					   ,"Expected an identifier."
-					   ,Name
-					   ,this.Source
-					   ,"Function names must be identifiers, not numbers or quoted strings.")
+			
+			new Error("Parse")
+				.LongText("Invalid DllImport name, expected an identifier.")
+				.ShortText("Not an identifier.")
+				.Help("Function names must be identifiers, not numbers or quoted strings.")
+				.Token(Name)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		Params := this.ParseGrouping().Expressions
@@ -169,11 +175,13 @@
 			ErrorToken := this.Next()
 		
 			this.UnwindToNextLine()
-			PrettyError("Parse"
-					   ,"Declarations can only be followed by ':=' to initialize the declared variable."
-					   ,"Not ':='."
-					   ,ErrorToken
-					   ,this.Source)
+			
+			new Error("Parse")
+				.LongText("Declarations can only be followed by ':=' to initialize the declared variable.")
+				.ShortText("Not ':='.")
+				.Token(ErrorToken)
+				.Source(this.Source)
+			.Throw()
 		}
 	}
 	
@@ -191,16 +199,17 @@
 				Else := this.Current()
 				
 				this.UnwindToBlockClose()
-				PrettyError("Parse"
-						   ,"Unexpected ELSE"
-						   ,"Not part of an if-statement."
-						   ,Else
-						   ,this.Source
-						   ,"The line above this probably terminates the IF statement this ELSE should be a part of.")
+				
+				new Error("Parse")
+					.LongText("Unexpected ELSE.")
+					.ShortText("Not part of an if-statement.")
+					.Help("The line above this probably terminates the IF statement this ELSE should be a part of.")
+					.Token(Else)
+					.Source(this.Source)
+				.Throw()
 			}
 			Case Keywords.FOR: {
 				return this.ParseFor()
-			
 			}
 		}
 	}
@@ -265,12 +274,13 @@
 			Next := this.Next()
 		
 			this.UnwindToNextLine()
-			PrettyError("Parse"
-					   ,"Unexpected expression terminator '" Next.Stringify() "'."
-					   ,"Should be \n or EOF"
-					   ,Next
-					   ,this.Source
-					   ,"You might have included two expression statements on a single line (I have no clue how though).")
+			
+			new Error("Parse")
+				.LongText("Unexpected expression terminator.")
+				.ShortText("Should be \n or EOF")
+				.Token(Next)
+				.Source(this.Source)
+			.Throw()
 		}
 	}
 	
@@ -326,22 +336,24 @@
 			NextOperand := OperandStack.Pop()
 			
 			if !(NextOperand) {
-				PrettyError("Parse"
-						   ,"Missing operand for operator '" Operator.Stringify() "'."
-						   ,"Needs another operand."
-						   ,Operator
-						   ,this.Source)
+				new Error("Parse")
+					.LongText("Missing operand for operator.")
+					.ShortText("Needs another operand.")
+					.Token(Operator)
+					.Source(this.Source)
+				.Throw()
 			}
 			
 			Operands.Push(NextOperand)
 		}
 		
 		if !(Operator) {
-			PrettyError("Parse"
-					   ,"Missing operator for operand '" Operands[1].Stringify() "'."
-					   ,"Needs an operator."
-					   ,Operands[1]
-					   ,this.Source)
+			new Error("Parse")
+				.LongText("Missing operator for operand.")
+				.ShortText("Needs an operator.")
+				.Token(Operands[1])
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		Switch (OperandCount) {
@@ -447,11 +459,13 @@
 			
 			if (Unexpected) {
 				this.UnwindToBlockClose()
-				PrettyError("Parse"
-						   ,"Unexpected character '" Next.Stringify() "' in expression."
-						   ,""
-						   ,Next
-						   ,this.Source)
+				
+				new Error("Parse")
+					.LongText("Unexpected character.")
+					.ShortText("Unexpected in expression.")
+					.Token(Next)
+					.Source(this.Source)
+				.Throw()
 			}
 		}
 		
@@ -459,11 +473,12 @@
 			NextOperator := OperatorStack.Pop()
 			
 			if (Operators.IsPrefix(NextOperator) && OperandStack.Count() < Operators.OperandCount(NextOperator)) {
-				PrettyError("Parse"
-						   ,"Missing operand for operator '" NextOperator.Stringify() "'."
-						   ,"Needs another operand."
-						   ,NextOperator
-						   ,this.Source)
+				new Error("Parse")
+					.LongText("Missing operand for operator.")
+					.ShortText("Needs another operand.")
+					.Token(NextOperator)
+					.Source(this.Source)
+				.Throw()
 			}
 			
 			this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
@@ -471,12 +486,13 @@
 		
 		if (OperandStack.Count() > 1) {
 			Operand := OperandStack.Pop()
-		
-			PrettyError("Parse"
-					   ,"Missing operator for operand '" Operand.Stringify() "'."
-					   ,"Needs an operator."
-					   ,Operand
-					   ,this.Source)
+			
+			new Error("Parse")
+				.LongText("Missing operator for operand")
+				.ShortText("Needs an operator.")
+				.Token(Operand)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		return OperandStack
@@ -502,11 +518,12 @@
 			Default: {
 				this.Index--
 				
-				PrettyError("Parse"
-						   ,"Unexpected token '" Next.Stringify() "'."
-						   ,""
-						   ,Next
-						   ,this.Source)
+				new Error("Parse")
+					.LongText("Unexpected token.")
+					.ShortText("Not part of any other construct.")
+					.Token(Next)
+					.Source(this.Source)
+				.Throw()
 			}
 		}
 	}
@@ -532,12 +549,13 @@
 			Next := this.Next()
 			
 			this.UnwindToNextLine()
-			PrettyError("Parse"
-					  , "Expression grouping expected, got '" Next.Stringify() "' instead."
-					  , "'(' expected."
-					  , Next
-					  , this.Source
-					  , "You might be missing an open/close paren, or have whitespace between a name and '('.")
+			
+			new Error("Parse")
+				.LongText("Expression grouping expected.")
+				.ShortText("'(' expected.")
+				.Token(Next)
+				.Source(this.Source)
+			.Throw()
 		}
 	}
 	
@@ -573,11 +591,12 @@
 	
 	EnsureValidType(TypeToken) {
 		if !(this.Typing.IsValidType(TypeToken.Value)) {
-			PrettyError("Type"
-					   ,"Invalid type '" TypeToken.Stringify() "'."
-					   ,"Not a valid type name."
-					   ,TypeToken
-					   ,this.Source)
+			new Error("Type")
+				.LongText("Invalid type.")
+				.ShortText("Not a valid type name.")
+				.Token(TypeToken)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		return TypeToken
@@ -592,11 +611,13 @@
 		
 		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
 			this.UnwindToBlockClose()
-			PrettyError("Parse"
-					   ,"Duplicate defintion"
-					   ,""
-					   ,Node.Name
-					   ,this.Source)
+			
+			new Error("Parse")
+				.LongText("Duplicate defintion")
+				.ShortText("Already defined elsewhere.")
+				.Token(Node.Name)
+				.Source(this.Source)
+			.Throw()
 		}
 	
 		this.CurrentProgram.Functions[FunctionName] := Node
@@ -615,11 +636,13 @@
 			Next := this.Next()
 			
 			this.UnwindToNextLine()
-			PrettyError("Parse"
-					   ,Reason
-					   ,""
-					   ,Next
-					   ,this.Source)
+			
+			new Error("Parse")
+				.LongText(Reason)
+				.ShortText(">")
+				.Token(Next)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		return this.Current()

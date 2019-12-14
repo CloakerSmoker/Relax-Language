@@ -116,8 +116,6 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		; TODO - Save all GPRs here, and load them inside of .Leave, otherwise we clobber saved values that parent functions might need (aka any other functions we compile, since R15 is a *bit* important)
-		
 		CG.Label("__Define__" DefineAST.Name.Value)
 		
 		this.PushA()
@@ -381,7 +379,8 @@
 					   ,this.Source)
 		}
 		
-		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ ; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
+		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ 
+		; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
 		
 		if (Type.Name = "Double") {
 			this.CompileDoubleAssignment(Expression, VariableType, RightType)

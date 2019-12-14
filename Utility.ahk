@@ -1,5 +1,24 @@
 ﻿global A_Quote := """"
 
+class Error {
+	__New(Phase) {
+		this.Phase := Phase
+	}
+	__Call(Key, Value) {
+		static Keys := {"Phase": 0, "LongText": 0, "ShortText": 0, "Token": 0, "Source": 0, "Help": 0}
+	
+		if (Keys.HasKey(Key)) {
+			this[Key] := Value
+			return this
+		}
+	}
+	Throw() {
+		if (this.Phase && this.LongText && this.Token && this.Source) {
+			PrettyError(this.Phase, this.LongText, this.ShortText, this.Token, this.Source, this.Help)
+		}
+	}
+}
+
 PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	TokenContext := Token.Context
 	
@@ -12,8 +31,12 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	Message := ""
 	Message .= Phase " Error: " LongText "`n"
 	
+	Padding := 2 + Max(StrLen(TokenContext.Line - 1), StrLen(TokenContext.Line))
+	
 	if (TokenContext.Line != 1) {
-		Message .= " " (TokenContext.Line - 1) " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
+		Message .= Spaces(Padding - StrLen(TokenContext.Line - 1) - 1)
+		Message .= TokenContext.Line - 1
+		Message .= " | " StrReplace(Lines[TokenContext.Line - 1], "`t", "    ") "`n"
 	}
 	
 	TokenLineText := TokenText
@@ -57,8 +80,8 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	TokenStart := (TokenStart - TabCount) + (TabCount * 4)
 	TokenEnd := StrLen(TokenText)
 	
-	Message .= " " TokenContext.Line " | " TokenLineText	
-	Message .= "`n   |-"
+	Message .= Spaces(Padding - StrLen(TokenContext.Line) - 1) TokenContext.Line " | " TokenLineText
+	Message .= "`n" Spaces(Padding) "|-"
 	
 	loop, % TokenStart - 1 {
 		Message .= "-"
@@ -68,7 +91,7 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 		Message .= "^"
 	}
 
-	Message .= "`n   | "
+	Message .= "`n" Spaces(Padding) "| "
 	
 	loop, % TokenStart - 1 {
 		Message .= " "
@@ -102,6 +125,15 @@ ShowError(Message) {
 	Gui, ShowError:Destroy
 	
 	Throw, Exception(Message)
+}
+Spaces(Count) {
+	String := ""
+	
+	loop, % Count {
+		String .= " "
+	}
+	
+	return String
 }
 
 ; %Phase% Error: %LongText%
