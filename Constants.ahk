@@ -175,6 +175,9 @@ class Token {
 			return !this.Type
 		}
 	}
+	GetContext() {
+		return this.Context
+	}
 
 	
 	Debug() {
@@ -305,6 +308,8 @@ class ASTNode {
 		ClassNameParts := StrSplit(this.__Class, ".")
 		this.Type := ASTNodeTypes[ClassNameParts[ClassNameParts.Count()]] ; Translates ASTNode.Expressions.Identifier into 
 		; just 'Identifier', and then gets the enum value for 'Identifier'
+		
+		this.Context := this.GetContext()
 	}
 }
 
@@ -481,6 +486,15 @@ class ASTNodes {
 				
 				return SubStr(String, 1, StrLen(String) - 2) ")"
 			}
+			GetContext() {
+				LeftMost := this.Parameters[1].GetContext()
+				LeftMost.Start -= 1
+				
+				RightMost := this.Parameters[this.Parameters.Count()].GetContext()
+				RightMost.End += 1
+			
+				return LeftMost.Merge(RightMost)
+			}
 		}
 		
 		class Unary extends ASTNode {
@@ -494,6 +508,9 @@ class ASTNodes {
 					return "(" this.Operator.Stringify() this.Operand.Stringify() ")"
 				}
 			}
+			GetContext() {
+				return this.Operand.GetContext().Merge(this.Operator.GetContext())
+			}
 		}
 		
 		class Binary extends ASTNode {
@@ -502,6 +519,9 @@ class ASTNodes {
 			Stringify() {
 				return "(" this.Left.Stringify() " " this.Operator.Stringify() " " this.Right.Stringify() ")"
 			}
+			GetContext() {
+				return this.Left.GetContext().Merge(this.Right.GetContext())
+			}
 		}
 		
 		class Call extends ASTNode {
@@ -509,6 +529,15 @@ class ASTNodes {
 			
 			Stringify() {
 				return this.Target.Stringify() this.Params.Stringify()
+			}
+			GetContext() {
+				StartContext := this.Target.GetContext()
+				EndContext := this.Params.Expressions[this.Params.Expressions.Count()].GetContext()
+				EndContext.End += 1
+				
+				FullContext := StartContext.Merge(EndContext)
+			
+				return FullContext
 			}
 		}
 	}

@@ -21,7 +21,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.1"
+	static VERSION := "1.0.0-alpha.2"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()
@@ -37,7 +37,6 @@ class LanguageName {
 	}
 
 }
-
 
 Code = 
 ( % 

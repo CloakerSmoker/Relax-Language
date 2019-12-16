@@ -75,11 +75,12 @@
 				return this.Typing.GetType("Pointer")
 			}
 			Default: {
-				PrettyError("Compile"
-						   ,"Token '" TargetToken.Stringify() "' can not be compiled."
-						   ,"Is not implemented in the compiler."
-						   ,TargetToken
-						   ,this.Source)
+				new Error("Compile")
+					.LongText("This token can not be compiled.")
+					.ShortText("Is not implemented in the compiler.")
+					.Token(TargetToken)
+					.Source(this.Source)
+				.Throw()
 			}
 		}
 	}
@@ -356,11 +357,12 @@
 			ResultType := this.Typing.ResultType(LeftType, RightType)
 		}
 		Catch E {
-			PrettyError("Compile"
-					   ,"The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible."
-					   ,""
-					   ,Expression.Operator
-					   ,this.Source)
+			new Error("Type")
+				.LongText("The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible.")
+				.ShortText("<")
+				.Token(Expression.Operator)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		if (IsAssignment) {
@@ -372,11 +374,12 @@
 	}
 	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
 		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
-			PrettyError("Type"
-					   ,"The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " ."
-					   ,""
-					   ,Expression.Operator
-					   ,this.Source)
+			new Error("Type")
+				.LongText("The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " .")
+				.ShortText("<")
+				.Token(Expression.Operator)
+				.Source(this.Source)
+			.Throw()
 		}
 		
 		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ 
@@ -462,11 +465,12 @@
 				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
 			}
 			Default: {
-				PrettyError("Compile"
-						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the dblbin compiler."
-						   ,""
-						   ,Expression.Operator
-						   ,this.Source)
+				new Error("Compile")
+					.LongText("Floating-point operator '" Expression.Operator.Stringify() "' is not implemented in the compiler.")
+					.ShortText("<")
+					.Token(Expression.Operator)
+					.Source(this.Source)
+				.Throw()
 			}
 		}
 		
@@ -530,11 +534,12 @@
 				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
 			}
 			Default: {
-				PrettyError("Compile"
-						   ,"Operator '" Expression.Operator.Stringify() "' is not implemented in the intbin compiler."
-						   ,""
-						   ,Expression.Operator
-						   ,this.Source)
+				new Error("Compile")
+					.LongText("Integer operator '" Expression.Operator.Stringify() "' is not implemented in the compiler.")
+					.ShortText("<")
+					.Token(Expression.Operator)
+					.Source(this.Source)
+				.Throw()
 			}
 		}
 		
@@ -574,11 +579,12 @@
 			return this.GetVariableType(Expression.Operand.Value)
 		}
 		
-		PrettyError("Compile"
-				   ,"Unary operator " OperatorString " is not implemented in the compiler."
-				   ,""
-				   ,Operator
-				   ,this.Source)
+		new Error("Compile")
+			.LongText("Unary operator " OperatorString " is not implemented in the compiler.")
+			.ShortText("<")
+			.Token(Operator)
+			.Source(this.Source)
+		.Throw()
 	}
 	
 	CompileGrouping(Expression) {
@@ -712,18 +718,20 @@
 			Params := Expression.Params.Expressions
 		
 			if (Params.Count() > FunctionNode.Params.Count()) {
-				PrettyError("Compile"
-						   ,"Too many parameters passed to function."
-						   ,"Takes " FunctionNode.Params.Count() " parameters."
-						   ,Expression.Target
-						   ,this.Source)
+				new Error("Compile")
+					.LongText("Too many parameters passed to function.")
+					.ShortText("Takes " FunctionNode.Params.Count() " parameters.")
+					.Token(Expression.Target)
+					.Source(this.Source)
+				.Throw()
 			}
 			else if (Params.Count() < FunctionNode.Params.Count()) {
-				PrettyError("Compile"
-						   ,"Not enough parameters passed to function."
-						   ,"Takes " FunctionNode.Params.Count() " parameters."
-						   ,Expression.Target
-						   ,this.Source)
+				new Error("Compile")
+					.LongText("Not enough parameters passed to function.")
+					.ShortText("Takes " FunctionNode.Params.Count() " parameters.")
+					.Token(Expression.Target)
+					.Source(this.Source)
+				.Throw()
 			}
 		
 			if (Params.Count() > 4) {
@@ -744,11 +752,12 @@
 						this.Cast(ParamType, RequiredType) ; A quick param type check
 					}
 					catch E {
-						PrettyError("Compile"
-								,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber "."
-								,""
-								,ParamValue.Stringify()
-								,this.Source)
+						new Error("Compile")
+							.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber ".")
+							.ShortText("<")
+							.Token(ParamValue)
+							.Source(this.Source)
+						.Throw()
 					}
 					
 					StackParamSpace++ ; Increment the number of Int64s to free from the stack
@@ -769,11 +778,12 @@
 					this.Cast(ParamType, RequiredType) ; Another quick type check
 				}
 				catch E {
-					PrettyError("Compile"
-							   ,"Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k "."
-							   ,""
-							   ,ParamValue.Stringify()
-							   ,this.Source)
+					new Error("Compile")
+						.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k ".")
+						.ShortText("<")
+						.Token(ParamValue)
+						.Source(this.Source)
+					.Throw()
 				}
 			}
 			
@@ -800,13 +810,12 @@
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}
 		
-		
-		PrettyError("Compile"
-				   ,"Function '" Expression.Target.Stringify() "' is not callable."
-				   ,""
-				   ,Expression.Operator
-				   ,this.Source
-				   ,"Only inbuilt functions are currently callable")
+		new Error("Compile")
+			.LongText("Function '" Expression.Target.Stringify() "' is not callable.")
+			.ShortText("<")
+			.Token(Expression.Target)
+			.Source(this.Source)
+		.Throw()
 	}
 	
 	;========================
