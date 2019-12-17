@@ -347,7 +347,6 @@
 		if !(InStr(LeftType.Name, "*")) {
 			new Error("Type")
 				.LongText("The left operand of '" Expression.Stringify() "' (" LeftType.Name ") must be a pointer type.")
-				.ShortText("")
 				.Token(Expression.Left)
 				.Source(this.Source)
 			.Throw()
@@ -391,7 +390,6 @@
 		Catch E {
 			new Error("Type")
 				.LongText("The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible.")
-				.ShortText("<")
 				.Token(Expression.Operator)
 				.Source(this.Source)
 			.Throw()
@@ -408,7 +406,6 @@
 		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
 			new Error("Type")
 				.LongText("The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " .")
-				.ShortText("<")
 				.Token(Expression.Operator)
 				.Source(this.Source)
 			.Throw()
@@ -499,7 +496,6 @@
 			Default: {
 				new Error("Compile")
 					.LongText("Floating-point operator '" Expression.Operator.Stringify() "' is not implemented in the compiler.")
-					.ShortText("<")
 					.Token(Expression.Operator)
 					.Source(this.Source)
 				.Throw()
@@ -568,7 +564,6 @@
 			Default: {
 				new Error("Compile")
 					.LongText("Integer operator '" Expression.Operator.Stringify() "' is not implemented in the compiler.")
-					.ShortText("<")
 					.Token(Expression.Operator)
 					.Source(this.Source)
 				.Throw()
@@ -616,7 +611,6 @@
 			if !(OperandType.Pointer) {
 				new Error("Type")
 					.LongText("Unary operator '*' requires an operand of a pointer type, not (" OperandType.Name ").")
-					.ShortText("")
 					.Token(Expression.Operator)
 					.Source(this.Source)
 				.Throw()
@@ -803,7 +797,6 @@
 					catch E {
 						new Error("Compile")
 							.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber ".")
-							.ShortText("<")
 							.Token(ParamValue)
 							.Source(this.Source)
 						.Throw()
@@ -829,7 +822,6 @@
 				catch E {
 					new Error("Compile")
 						.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k ".")
-						.ShortText("<")
 						.Token(ParamValue)
 						.Source(this.Source)
 					.Throw()
@@ -861,7 +853,6 @@
 		
 		new Error("Compile")
 			.LongText("Function '" Expression.Target.Stringify() "' is not callable.")
-			.ShortText("<")
 			.Token(Expression.Target)
 			.Source(this.Source)
 		.Throw()

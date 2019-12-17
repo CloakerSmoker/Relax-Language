@@ -19,6 +19,7 @@
 ; TODO: Make type checking much more strict
 ; TODO: Eventually find a smarted way to handle variables
 ; TODO: Start to optimize code
+; TODO: Fix floating point comparison operators
 
 class LanguageName {
 	; Change ^ when you've come up with a name
@@ -50,7 +51,27 @@ class LanguageName {
 
 Code = 
 ( % 
+
+define Int64 Test3(Int64 B) {
+	if (B < 2) {
+		return B
+	}
+	else if (B < 4) {
+		return B + 4
+	}
+	else if (B < 8) {
+		return B + 8
+	}
+	else {
+		return B + 12
+	}
+}
+
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+
+define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
+	return MessageBoxA(P1, TT, BT, 0)
+}
 
 define Int64 Test(Int64 P1) {
 	Int8* TitleText := "this is the title"
@@ -63,9 +84,6 @@ define Int64 Test(Int64 P1) {
 
 	return 0
 }
-define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
-	return MessageBoxA(P1, TT, BT, 0)
-}
 )
 
 ;MsgBox, % LanguageName.ValidateCode(Code)
@@ -74,7 +92,7 @@ R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("Test", 3, 1, 4, 3, 4) "`n" A_LastError
+MsgBox, % "Result: " R.CallFunction("Test", 9, 1, 4, 3, 4) "`n" A_LastError
 
 ; Int64* A := &B
 ; A := 99

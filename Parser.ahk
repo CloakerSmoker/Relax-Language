@@ -234,28 +234,27 @@
 	
 		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
 		
-		if (this.NextMatches(Tokens.RIGHT_PAREN)) {
-			Pairs := [[]]
-		}
-		else {
+		Pairs := []
+		
+		if !(this.Check(Tokens.RIGHT_PAREN)) {
 			Type := this.ParseTypeName()
 			
 			if !(ImportStyle) {
 				Name := this.ParsePrimary()
 			}
 				
-			Pairs := [[Type, Name]]
-		}
-		
-		while (this.NextMatches(Tokens.COMMA)) {
-			Pair := []
-			Pair.Push(this.ParseTypeName()) ; Type
+			Pairs.Push([Type, Name])
 			
-			if !(ImportStyle) {
-				Pair.Push(this.ParsePrimary()) ; Name
+			while (this.NextMatches(Tokens.COMMA)) {
+				Pair := []
+				Pair.Push(this.ParseTypeName()) ; Type
+				
+				if !(ImportStyle) {
+					Pair.Push(this.ParsePrimary()) ; Name
+				}
+				
+				Pairs.Push(Pair)
 			}
-			
-			Pairs.Push(Pair)
 		}
 	
 		this.Consume(Tokens.RIGHT_PAREN, "Parameter groupings require closing ')'.")
@@ -653,7 +652,6 @@
 			
 			new Error("Parse")
 				.LongText(Reason)
-				.ShortText(">")
 				.Token(Next)
 				.Source(this.Source)
 			.Throw()
