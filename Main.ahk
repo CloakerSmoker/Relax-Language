@@ -6,11 +6,13 @@
 #Include Utility.ahk
 #Include Constants.ahk
 #Include Lexer.ahk
+#Include Typing.ahk
 #Include Parser.ahk
 #Include CodeGen.ahk
 #Include Compiler.ahk
 
 ; TODO: Pick a name
+; TODO: Fix typing using global scope instead of function scope
 ; TODO: CodeGen linking rewrite
 ; TODO: (Related to above) Shorter Jmp encodings
 ; TODO: Write more tests
@@ -21,7 +23,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.2"
+	static VERSION := "1.0.0-alpha.4"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()

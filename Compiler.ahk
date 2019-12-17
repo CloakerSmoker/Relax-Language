@@ -652,12 +652,8 @@
 		Base := ObjGetBase(this)
 		Path := this.Typing.CastPath(TypeOne, TypeTwo)
 		
-		for k, v in Path {
-			if !(Path[k + 1]) {
-				Break
-			}
-		
-			Name := "Cast_" IntToI(v) "_" IntToI(Path[k + 1])
+		for k, Pair in Path {
+			Name := "Cast_" IntToI(Pair[1].Name) "_" IntToI(Pair[2].Name)
 		
 			if (Base.HasKey(Name)) {
 				Base[Name].Call(this)
