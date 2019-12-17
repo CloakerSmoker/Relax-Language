@@ -55,17 +55,16 @@ define Int64 Test(Int64 P1) {
 	Int8* BodyText := "this is the body text"
 
 	for (Int64 i := 0, i <= P1, i++) {
+		(BodyText + i) *= 48 + i
 		Test2(0, TitleText, BodyText)
 	}
 
 	return 0
 }
-define Int64 Test2(Int64 P1, Int8* TT, Int8* BT) {
+define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
 	return MessageBoxA(P1, TT, BT, 0)
 }
 )
-
-MsgBox, % LanguageName.ValidateCode(Code)
 
 R := LanguageName.CompileCode(Code)
 

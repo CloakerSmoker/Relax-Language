@@ -691,22 +691,22 @@
 class Typing {
 	class TypeSet {
 		static Int64   := {"Name": "Int64", "Next": "Int8" , "Precision": 64, "Escape": {"Double": 1, "Pointer": 1}}
-		static pInt64  := {"Name": "Int64*", "Precision": 66, "Exclude": "All"}
+		static pInt64  := {"Name": "Int64*", "Precision": 66, "Pointer": 1}
 		
 		static Int32   := {"Name": "Int32", "Next": "Int64", "Precision": 32, "Escape": {"Float": 1}}
-		static pInt32  := {"Name": "Int32*", "Precision": 34, "Exclude": "All"}
+		static pInt32  := {"Name": "Int32*", "Precision": 34, "Pointer": 1}
 		
 		static Int16   := {"Name": "Int16", "Next": "Int32", "Precision": 16}
-		static pInt16  := {"Name": "Int16*", "Precision": 18, "Exclude": "All"}
+		static pInt16  := {"Name": "Int16*", "Precision": 18, "Pointer": 1}
 		
 		static Int8    := {"Name": "Int8" , "Next": "Int16", "Precision": 8 }
-		static pInt8   := {"Name": "Int8*", "Precision": 10, "Exclude": "All"}
+		static pInt8   := {"Name": "Int8*", "Precision": 10, "Pointer": 1}
 		
 		static Double  := {"Name": "Double", "Next": "Float" , "Precision": 65, "Escape": {"Int64": 1}}
-		static pDouble  := {"Name": "Double*", "Precision": 67, "Exclude": "All"}
+		static pDouble  := {"Name": "Double*", "Precision": 67, "Pointer": 1}
 		
 		static Float   := {"Name": "Float" , "Next": "Double", "Precision": 33, "Escape": {"Int32": 1}}
-		static pFloat  := {"Name": "Float*", "Precision": 35, "Exclude": "All"}
+		static pFloat  := {"Name": "Float*", "Precision": 35, "Pointer": 1}
 	}
 	
 	__New() {
@@ -718,11 +718,11 @@ class Typing {
 			return LeftType
 		}
 		
-		if (InStr(LeftType.Name, "*") && InStr(RightType.Name, "*")) {
+		if (LeftType.Pointer && RightType.Pointer) {
 			IgnoreExclude := True
 		}
 	
-		if (LeftType.Exclude.HasKey(RightType.Name) || RightType.Exclude.HasKey(LeftType.Name) || LeftType.Exclude = "All" || RightType.Exclude = "All") {
+		if (LeftType.Exclude.HasKey(RightType.Name) || RightType.Exclude.HasKey(LeftType.Name)) {
 			if !(IgnoreExclude) {
 				Throw, Exception("Invalid")
 			}

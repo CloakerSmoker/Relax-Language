@@ -339,9 +339,41 @@
 	}
 	
 	;========================
-	; Binary expression methods 
+	; Binary expression methods
+	
+	CompileDerefAssign(Expression) {
+		LeftType := this.Compile(Expression.Left)
+		
+		if !(InStr(LeftType.Name, "*")) {
+			new Error("Type")
+				.LongText("The left operand of '" Expression.Stringify() "' (" LeftType.Name ") must be a pointer type.")
+				.ShortText("")
+				.Token(Expression.Left)
+				.Source(this.Source)
+			.Throw()
+		}
+		
+		RightType := this.Compile(Expression.Right)
+		
+		LeftValueType := this.Typing.GetType(StrReplace(LeftType.Name, "*"))
+		this.Cast(RightType, LeftValueType) ; Cast the right side value to the type the left side points to
+		
+		this.CodeGen.Pop(RBX), this.StackDepth--
+		this.CodeGen.Pop(RAX), this.StackDepth--
+		this.CodeGen.Push(RBX), this.StackDepth++ ; Store our result back onto the stack
+		
+		ShortTypeName := IntToI(LeftValueType.Name)
+		
+		this.CodeGen["Move_R" ShortTypeName "_R64"].Call(this.CodeGen, RAX, RBX)
+		
+		return RightType
+	}
 	
 	CompileBinary(Expression) {
+		if (Expression.Operator.Type = Tokens.TIMES_EQUAL) {
+			return this.CompileDerefAssign(Expression)
+		}
+	
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
 		
 		if (IsAssignment) {
