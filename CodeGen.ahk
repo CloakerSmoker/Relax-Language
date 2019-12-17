@@ -32,7 +32,7 @@ SplitIntoBytes64(Integer) {
 }
 
 IntToI(IntNumber) {
-	return (IntNumber != "Pointer" ? StrReplace(IntNumber, "Int", "I") : IntNumber)
+	return StrReplace(IntNumber, "Int", "I")
 }
 IToInt(INumber) {
 	return StrReplace(INumber, "I", "Int")

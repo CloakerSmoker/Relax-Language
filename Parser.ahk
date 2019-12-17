@@ -24,6 +24,25 @@
 		return this.ParseProgram()
 	}
 	
+	ParseTypeName() {
+		TypeToken := this.Next()
+		
+		if (this.NextMatches(Tokens.TIMES)) {
+			TypeToken.Value .= "*"
+		}
+	
+		if !(this.Typing.IsValidType(TypeToken.Value)) {
+			new Error("Type")
+				.LongText("Invalid type.")
+				.ShortText("Not a valid type name.")
+				.Token(TypeToken)
+				.Source(this.Source)
+			.Throw()
+		}
+		
+		return TypeToken
+	}
+	
 	ParseProgram() {
 		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}}
 	
@@ -68,7 +87,7 @@
 		.Throw()
 	}
 	ParseDefine() {
-		ReturnType := this.EnsureValidType(this.ParsePrimary())
+		ReturnType := this.ParseTypeName()
 		
 		Name := this.ParsePrimary()
 		
@@ -94,7 +113,7 @@
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals)
 	}
 	ParseImport() {
-		ReturnType := this.EnsureValidType(this.ParsePrimary())
+		ReturnType := this.ParseTypeName()
 		
 		Name := this.ParsePrimary()
 		
@@ -110,13 +129,8 @@
 			.Throw()
 		}
 		
-		Params := this.ParseGrouping().Expressions
-		
-		for k, Param in Params {
-			this.EnsureValidType(Param)
-			Params[k] := [Param] ; Convert an array of type names into an array of arrays of type names + (empty) var names
-			; this is so the compiler can type check an import and define in the same way
-		}
+		Params := this.ParseParamGrouping(True) ; True = don't bother consuming a token after each time name so
+		; (Int16, Int32) is valid, and (Int16 A, Int16 B) isn't
 		
 		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
 		DllName := this.Consume(Tokens.IDENTIFIER, "DllImport file names must be IDENTIFIERs").Value
@@ -159,7 +173,7 @@
 		}
 	}
 	ParseDeclaration() {
-		Type := this.Consume(Tokens.IDENTIFIER, "It is impossible to get this error")
+		Type := this.ParseTypeName()
 	
 		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
 		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
@@ -214,24 +228,33 @@
 		}
 	}
 	
-	ParseParamGrouping() {
+	ParseParamGrouping(ImportStyle := False) {
+		; Since DllImport statements just take a list of types without var names, we can reuse this function for both
+		;  Define and DllImport
+	
 		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
 		
-		try {
-			Type := this.ParsePrimary()
-			Name := this.ParsePrimary()
+		if (this.NextMatches(Tokens.RIGHT_PAREN)) {
+			Pairs := [[]]
+		}
+		else {
+			Type := this.ParseTypeName()
+			
+			if !(ImportStyle) {
+				Name := this.ParsePrimary()
+			}
+				
 			Pairs := [[Type, Name]]
 		}
-		catch {
-			Pairs := []
-		}
-		
-		this.EnsureValidType(Type) ; Done outside of the try so any invalid type errors are still shown
 		
 		while (this.NextMatches(Tokens.COMMA)) {
 			Pair := []
-			Pair.Push(this.EnsureValidType(this.ParsePrimary())) ; Type
-			Pair.Push(this.ParsePrimary()) ; Name
+			Pair.Push(this.ParseTypeName()) ; Type
+			
+			if !(ImportStyle) {
+				Pair.Push(this.ParsePrimary()) ; Name
+			}
+			
 			Pairs.Push(Pair)
 		}
 	
@@ -397,21 +420,7 @@
 					Operator := Next
 					DontPush := False
 					
-					if (Operator.Type = Tokens.COLON) {
-						Param := OperandStack.Pop()
-						Name := this.Next()
-						
-						if (Name.Type != Tokens.IDENTIFIER) {
-							Throw, Exception("Invalid name for (come up with a name): '" Name.Stringify() "'.", Name)
-						}
-						
-						Params := this.ParseGrouping()
-						Params.Expressions.InsertAt(1, Param)
-						
-						OperandStack.Push(new ASTNodes.Expressions.Call(Name, Params))
-						DontPush := True
-					}
-					else if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
+					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
 						DontPush := True
 					}
@@ -681,18 +690,23 @@
 
 class Typing {
 	class TypeSet {
-		static Pointer := {"Name": "Pointer", "Next": "Pointer", "Precision": 65
-							, "Escape": {"Int64": 1}
-							, "Exclude": {"Float": 1, "Double": 1, "Int8": 1, "Int16": 1, "Int32": 1}}
-	
 		static Int64   := {"Name": "Int64", "Next": "Int8" , "Precision": 64, "Escape": {"Double": 1, "Pointer": 1}}
+		static pInt64  := {"Name": "Int64*", "Precision": 66, "Exclude": "All"}
+		
 		static Int32   := {"Name": "Int32", "Next": "Int64", "Precision": 32, "Escape": {"Float": 1}}
+		static pInt32  := {"Name": "Int32*", "Precision": 34, "Exclude": "All"}
+		
 		static Int16   := {"Name": "Int16", "Next": "Int32", "Precision": 16}
+		static pInt16  := {"Name": "Int16*", "Precision": 18, "Exclude": "All"}
+		
 		static Int8    := {"Name": "Int8" , "Next": "Int16", "Precision": 8 }
+		static pInt8   := {"Name": "Int8*", "Precision": 10, "Exclude": "All"}
 		
 		static Double  := {"Name": "Double", "Next": "Float" , "Precision": 65, "Escape": {"Int64": 1}}
+		static pDouble  := {"Name": "Double*", "Precision": 67, "Exclude": "All"}
+		
 		static Float   := {"Name": "Float" , "Next": "Double", "Precision": 33, "Escape": {"Int32": 1}}
-	
+		static pFloat  := {"Name": "Float*", "Precision": 35, "Exclude": "All"}
 	}
 	
 	__New() {
@@ -700,10 +714,20 @@ class Typing {
 	}
 	
 	ResultType(LeftType, RightType) {
-		if (LeftType.Exclude.HasKey(RightType.Name) || RightType.Exclude.HasKey(LeftType.Name)) {
-			Throw, Exception("Invalid")
+		if (LeftType.Name = RightType.Name) {
+			return LeftType
+		}
+		
+		if (InStr(LeftType.Name, "*") && InStr(RightType.Name, "*")) {
+			IgnoreExclude := True
 		}
 	
+		if (LeftType.Exclude.HasKey(RightType.Name) || RightType.Exclude.HasKey(LeftType.Name) || LeftType.Exclude = "All" || RightType.Exclude = "All") {
+			if !(IgnoreExclude) {
+				Throw, Exception("Invalid")
+			}
+		}
+		
 		if (LeftType.Precision > RightType.Precision) {
 			return LeftType
 		}
@@ -731,18 +755,24 @@ class Typing {
 	}
 	
 	CastPath(FromType, ToType) {
-		if (FromType.Name = ToType.Name) {
-			return []
+		if (FromType.Precision + 2 = ToType.Precision || FromType.Precision - 2 = ToType.Precision) {
+			return [] ; For when one of the two types is a pointer to the other type, just let it happen
 		}
-	
+		else if (InStr(FromType.Name, "*") && InStr(ToType.Name, "*")) {
+			return [] ; For when both types are pointer, they are fine with no cast
+		}
+		else if (FromType.Name = ToType.Name) {
+			return [] ; And if both types are the same type, there's no cast needed
+		}
+		
 		NextType := FromType
 		Path := []
 		
-		loop {
+		loop 6 {
 			NextName := NextType.Next
 			TempType := this.GetType(NextName)
 			Path.Push(NextName)
-		
+			
 			if (TempType.Name = ToType.Name) {
 				return Path
 			}
@@ -762,7 +792,7 @@ class Typing {
 		NextType := FromType
 		Path := []
 		
-		loop {
+		loop 6 {
 			NextName := NextType.Next
 			TempType := this.GetType(NextName)
 			Path.Push(NextName)
@@ -783,7 +813,10 @@ class Typing {
 		if !(TypeName) {
 			return
 		}
-	
+		else if (InStr(TypeName, "*")) {
+			TypeName := "p" StrReplace(TypeName, "*")
+		}
+		
 		if (this.TypeSet.HasKey(TypeName)) {
 			return this.TypeSet[TypeName]
 		}

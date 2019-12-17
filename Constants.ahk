@@ -487,11 +487,10 @@ class ASTNodes {
 				return SubStr(String, 1, StrLen(String) - 2) ")"
 			}
 			GetContext() {
-				LeftMost := this.Parameters[1].GetContext()
+				LeftMost := this.Expressions[1].GetContext()
 				LeftMost.Start -= 1
 				
-				RightMost := this.Parameters[this.Parameters.Count()].GetContext()
-				RightMost.End += 1
+				RightMost := this.Expressions[this.Expressions.Count()].GetContext()
 			
 				return LeftMost.Merge(RightMost)
 			}

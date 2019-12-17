@@ -35,31 +35,43 @@ class LanguageName {
 		
 		return Program
 	}
-
+	ValidateCode(CodeString) {
+		CodeLexer := new Lexer()
+		CodeTokens := CodeLexer.Start(CodeString)
+	
+		CodeParser := new Parser(CodeLexer)
+		CodeAST := CodeParser.Start(CodeTokens)
+		
+		return CodeAST.Stringify()
+	}
 }
 
 Code = 
 ( % 
-DllImport Int64 MessageBoxA(Pointer, Pointer, Pointer, Int32) {User32.dll, MessageBoxA}
+DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
 define Int64 Test(Int64 P1) {
-	Pointer TitleText := "this is the title"
-	Pointer BodyText := "this is the body text"
+	Int8* TitleText := "this is the title"
+	Int8* BodyText := "this is the body text"
 
 	for (Int64 i := 0, i <= P1, i++) {
-		Tes t2(0, TitleText, BodyText)
+		Test2(0, TitleText, BodyText)
 	}
 
 	return 0
 }
-define Int64 Test2(Int64 P1, Pointer TT, Pointer BT) {
+define Int64 Test2(Int64 P1, Int8* TT, Int8* BT) {
 	return MessageBoxA(P1, TT, BT, 0)
 }
 )
-; TODO: Fix the }}}}}}}}}}}}} errror when a non-token AST node is passed to PrettyError
+
+MsgBox, % LanguageName.ValidateCode(Code)
 
 R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
 MsgBox, % "Result: " R.CallFunction("Test", 3, 1, 4, 3, 4) "`n" A_LastError
+
+; Int64* A := &B
+; A := 99

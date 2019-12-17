@@ -72,7 +72,7 @@
 			}
 			Case Tokens.STRING: {
 				this.CodeGen.Push_String_Pointer(TargetToken.Value), this.StackDepth++
-				return this.Typing.GetType("Pointer")
+				return this.Typing.GetType("Int8*")
 			}
 			Default: {
 				new Error("Compile")
@@ -677,17 +677,6 @@
 	; Function call methods
 
 	CompileCall(Expression) {
-		if (Expression.Target.Value = "Deref") {
-			return this.CompileDeref(Expression.Params.Expressions)
-		}
-		else if (Expression.Target.Value = "Put") {
-			return this.CompilePut(Expression.Params.Expressions)
-		}
-		else if (Expression.Target.Value = "Address") {
-			this.GetVariableAddress(Expression.Params.Expressions[1].Value)
-			return this.Typing.GetType("Pointer")
-		}
-		
 		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
@@ -800,7 +789,7 @@
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.Define) {
-				this.CodeGen.Call_Label("__define__" Expression.Target.Value)
+				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)
 			}
 			
 			this.CodeGen.SmallAdd(RSP, (StackParamSpace * 8) + 0x20), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params
@@ -816,85 +805,5 @@
 			.Token(Expression.Target)
 			.Source(this.Source)
 		.Throw()
-	}
-	
-	;========================
-	; Built in functions
-	
-	CompileDeref(Params) {
-		PointerType := this.Compile(Params[1])
-		
-		if (PointerType.Name != "Pointer") {
-			PrettyError("Compile"
-					   ,":Deref requires an operand of type Pointer, not '" PointerType.Name "'."
-					   ,"Not a pointer"
-					   ,Params[1]
-					   ,this.Source)
-		}
-		
-		this.CodeGen.Pop(RCX)
-	
-		ResultType := this.Typing.GetType(Params[2].Value)
-	
-		Switch (ResultType.Precision) {
-			Case 8: {
-				this.CodeGen.MoveSX_R64_RI8(RDX, RCX)
-			}
-			Case 16: {
-				this.CodeGen.MoveSX_R64_RI16(RDX, RCX)
-			}
-			Case 32, 33: {
-				this.CodeGen.MoveSX_R64_RI32(RDX, RCX)
-			}
-			Case 64, 65: {
-				this.CodeGen.Move_R64_RI64(RDX, RCX)
-			}
-			Default: {
-				Throw, Exception("Un-supported deref type: '" Params[2].Stringify() "'.")
-			}
-		}
-		
-		this.CodeGen.Push(RDX)
-		return ResultType
-	}
-	
-	CompilePut(Params) {
-		PointerType := this.Compile(Params[1])
-		
-		if (PointerType.Name != "Pointer") {
-			PrettyError("Compile"
-					   ,":Put requires an operand of type Pointer, not '" PointerType.Name "'."
-					   ,"Not a pointer"
-					   ,Params[1]
-					   ,this.Source)
-		}
-		
-		this.CodeGen.Pop(RCX)
-		
-		this.Compile(Params[2])
-		this.CodeGen.Pop(RDX)
-		
-		PutType := this.Typing.GetType(Params[3].Value)
-		
-		Switch (PutType.Precision) {
-			Case 8: {
-				this.CodeGen.Move_RI8_R64(RCX, RDX)
-				this.CodeGen.Push(1)
-			}
-			Case 16: {
-				this.CodeGen.Move_RI16_R64(RCX, RDX)
-				this.CodeGen.Push(2)
-			}
-			Case 32, 33: {
-				this.CodeGen.Move_RI32_R64(RCX, RDX)
-				this.CodeGen.Push(4)
-			}
-			Case 64, 65: {
-				this.CodeGen.Move_RI64_R64(RCX, RDX)
-				this.CodeGen.Push(8)
-			}
-		}
-		
-		return this.Typing.GetType("Int64")
 	}
 }
