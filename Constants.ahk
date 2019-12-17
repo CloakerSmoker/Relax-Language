@@ -29,7 +29,9 @@
 			BANG
 			BITWISE_NOT
 			DEREF
-		
+			ADDRESS
+			NEGATE
+			
 			FIRST_POSTFIX
 				; The overlap here is since ++/-- are both pre/postfix
 				PLUS_PLUS
@@ -118,7 +120,7 @@ class CharacterTokens {
 class OperatorClasses {
 	static Prefix	  := {"Precedence": -1
 						, "Associative": "Right"
-						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.DEREF]}
+						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.DEREF, Tokens.ADDRESS]}
 
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"
@@ -144,6 +146,15 @@ class OperatorClasses {
 						, "Associative": "Left"
 						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES, Tokens.MOD]}
 						
+	static Bitwise    := {"Precedence": 6
+						, "Associative": "Left"
+						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_NOT, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
+						
+						
+	static BinaryToPrefix := {Tokens.TIMES: Tokens.DEREF
+							 ,Tokens.BITWISE_AND: Tokens.ADDRESS
+							 ,Tokens.MINUS: Tokens.NEGATE}
+						
 	IsClass(OperatorToken, ClassNames*) {
 		for k, ClassName in ClassNames {
 			for TokenNumber, PotentialToken in OperatorClasses[ClassName].Tokens {
@@ -154,6 +165,80 @@ class OperatorClasses {
 		}
 		
 		return False
+	}
+}
+
+class Operators {
+	Precedence(Operator) {
+		for k, v in OperatorClasses {
+			for k, FoundOperator in v.Tokens {
+				if (Operator.Type = FoundOperator) {
+					return v
+				}
+			}
+		}
+	
+		Assert.Unreachable(this.ToString(Operator))
+	}
+
+	CheckPrecedence(FirstOperator, SecondOperator) {
+		OperatorOne := this.Precedence(FirstOperator)
+		OperatorTwo := this.Precedence(SecondOperator)
+	
+		if (OperatorOne.Associative = "Left" && (OperatorOne.Precedence = OperatorTwo.Precedence)) {
+			return 1
+		}
+		else if (OperatorOne.Precedence < OperatorTwo.Precedence) {
+			return 1
+		}
+		else {
+			return 0
+		}
+	}
+	OperandCount(Operator) {
+		if (this.IsPostfix(Operator) || this.IsPrefix(Operator)) {
+			return 1
+		}
+		else {
+			return 2
+		}
+	}
+	
+	IsBinaryOrPrefix(Operator) {
+		return OperatorClasses.BinaryToPrefix.HasKey(Operator.Type)
+	}
+	
+	; For when an operator is both binary, and prefix, this will get the prefix version of it
+	BinaryToPrefix(Operator) {
+		if (this.IsBinaryOrPrefix(Operator)) {
+			Operator.Type := OperatorClasses.BinaryToPrefix[Operator.Type]
+		
+			return Operator
+		}
+	
+		Throw, Exception("No prefix version of " Operator.Stringify())
+	}
+	
+	; For when an operator is both pre and postfix, these functions will get just the pre/postfix version
+	EnsurePrefix(Operator) {
+		return this.EnsureXXXfix(Operator, "_L")
+	}
+	EnsurePostfix(Operator) {
+		return this.EnsureXXXfix(Operator, "_R")
+	}
+	EnsureXXXfix(Operator, Form) {
+		if (this.IsPrefix(Operator) && this.IsPostfix(Operator)) {
+			return new Token(Tokens[Tokens[Operator.Type] Form], Operator.Value, Operator.Context)
+		}
+		
+		return Operator
+	}
+	
+	IsPostfix(Operator) {
+		return Tokens.FIRST_POSTFIX < Operator.Type && Operator.Type < Tokens.LAST_POSTFIX
+	}
+	IsPrefix(Operator) {
+		return Tokens.FIRST_PREFIX < Operator.Type && Operator.Type < Tokens.LAST_PREFIX
 	}
 }
 
@@ -222,65 +307,6 @@ class Context {
 		return SubStr(String, this.Start + 1, this.End - this.Start)
 	}
 }
-
-class Operators {
-	Precedence(Operator) {
-		for k, v in OperatorClasses {
-			for k, FoundOperator in v.Tokens {
-				if (Operator.Type = FoundOperator) {
-					return v
-				}
-			}
-		}
-	
-		Assert.Unreachable(this.ToString(Operator))
-	}
-
-	CheckPrecedence(FirstOperator, SecondOperator) {
-		OperatorOne := this.Precedence(FirstOperator)
-		OperatorTwo := this.Precedence(SecondOperator)
-	
-		if (OperatorOne.Associative = "Left" && (OperatorOne.Precedence = OperatorTwo.Precedence)) {
-			return 1
-		}
-		else if (OperatorOne.Precedence < OperatorTwo.Precedence) {
-			return 1
-		}
-		else {
-			return 0
-		}
-	}
-	OperandCount(Operator) {
-		if (this.IsPostfix(Operator) || this.IsPrefix(Operator)) {
-			return 1
-		}
-		else {
-			return 2
-		}
-	}
-	
-	EnsurePrefix(Operator) {
-		return this.EnsureXXXfix(Operator, "_L")
-	}
-	EnsurePostfix(Operator) {
-		return this.EnsureXXXfix(Operator, "_R")
-	}
-	EnsureXXXfix(Operator, Form) {
-		if (this.IsPrefix(Operator) && this.IsPostfix(Operator)) {
-			return new Token(Tokens[Tokens[Operator.Type] Form], Operator.Value, Operator.Context)
-		}
-		
-		return Operator
-	}
-	
-	IsPostfix(Operator) {
-		return Tokens.FIRST_POSTFIX < Operator.Type && Operator.Type < Tokens.LAST_POSTFIX
-	}
-	IsPrefix(Operator) {
-		return Tokens.FIRST_PREFIX < Operator.Type && Operator.Type < Tokens.LAST_PREFIX
-	}
-}
-
 
 class Keywords extends Enum {
 	static Options := "

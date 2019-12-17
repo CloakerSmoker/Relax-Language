@@ -419,6 +419,10 @@ class X64CodeGen {
 		this.REXOpcodeMod([0xF7], {"OpcodeExtension": 7}, Register)
 	}
 	
+	Neg_SIB(SIB) {
+		this.REXOpcodeModSIB([0xF7], {"OpcodeExtension": 3}, SIB)
+	}
+	
 	; Int math instructions END
 	;============================
 	; Push instructions START

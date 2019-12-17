@@ -636,6 +636,16 @@
 			this.CodeGen.Push(RAX), this.StackDepth++
 			return OperandType.Pointer
 		}
+		else if (Operator.Type = Tokens.ADDRESS) {
+			this.GetVariableAddress(Expression.Operand.Value)
+			return this.Typing.GetPointerType(this.Typing.GetVariableType(Expression.Operand.Value))
+		}
+		else if (Operator.Type = Tokens.NEGATE) {
+			OperandType := this.Compile(Expression.Operand)
+		
+			this.CodeGen.Neg_SIB(SIB(8, RSI, RSP))
+			return OperandType
+		}
 		
 		new Error("Compile")
 			.LongText("Unary operator " OperatorString " is not implemented in the compiler.")

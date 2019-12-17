@@ -394,12 +394,10 @@
 	
 		loop {
 			Next := this.Next()
-			Unexpected := True
 		
 			Switch (Next.Type) {
 				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER, Tokens.STRING: {
 					OperandStack.Push(Next)
-					Unexpected := False
 				}
 				Case Tokens.LEFT_PAREN: {
 					this.Index--
@@ -412,24 +410,15 @@
 					else {
 						OperandStack.Push(Params)
 					}
-					
-					Unexpected := False
 				}
 				Case Next.CaseIsOperator(): {
 					Operator := Next
-					DontPush := False
 					
-					if (Operators.IsPostfix(Operator) && this.Previous() && !this.Previous().IsOperator()) {
+					if (Operators.IsPostfix(Operator) && !(this.Previous().IsOperator())) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
-						DontPush := True
 					}
-					else if ((Operators.IsPrefix(Operator) || Operator.Value = "*") && this.Previous() && this.Previous().IsOperator()) {
-						if (Operator.Type = Tokens.TIMES) {
-							Operator.Type := Tokens.DEREF
-						}
-					
-						OperatorStack.Push(Operator)
-						DontPush := True
+					else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsOperator()) {
+						OperatorStack.Push(Operators.BinaryToPrefix(Operator))
 					}
 					else {
 						while (OperatorStack.Count() != 0) {
@@ -448,19 +437,15 @@
 								Break
 							}
 						}
-					}
-					
-					if !(DontPush) {
+						
 						OperatorStack.Push(Operator)
 					}
-					
-					Unexpected := False
 				}
 				Default: {
 					; This isn't a character that should be in this expression, but it might be the terminator, so we drop the
 					;  index to point at the character again, and run it through the terminator check below before
 					;   breaking/erroring
-					this.Index-- 
+					this.Index--
 				}
 			}
 			
@@ -470,8 +455,11 @@
 				}
 			}
 			
-			if (Unexpected) {
-				this.UnwindToBlockClose()
+			if (Next.Context.Start = this.Previous().Context.Start) {
+				; When the Previous token starts at the same place as our "Next" token,
+				;  then the token was not consumed, and is unexpected
+			
+				this.UnwindToNextLine()
 				
 				new Error("Parse")
 					.LongText("Unexpected character.")
