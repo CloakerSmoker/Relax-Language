@@ -67,6 +67,16 @@
 					
 					this.AddToken(Tokens.STRING, this.SubStr(StringBounds[1], StringBounds[2]))
 				}
+				Case "'": {
+					LiteralCharacter := this.Next()
+					
+					if !(this.NextMatches("'")) {
+						MsgBox, % "Character literals must be followed by '"
+						return
+					}
+					
+					this.AddToken(Tokens.INTEGER, Asc(LiteralCharacter))
+				}
 				Case "`n": {
 					if (this.Tokens[this.Tokens.Count()].Type != Tokens.NEWLINE) {
 						this.AddToken(Tokens.NEWLINE, "\n")

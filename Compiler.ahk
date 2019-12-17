@@ -610,6 +610,38 @@
 			
 			return this.GetVariableType(Expression.Operand.Value)
 		}
+		else if (Operator.Type = Tokens.DEREF) {
+			OperandType := this.Compile(Expression.Operand)
+			
+			if !(OperandType.Pointer) {
+				new Error("Type")
+					.LongText("Unary operator '*' requires an operand of a pointer type, not (" OperandType.Name ").")
+					.ShortText("")
+					.Token(Expression.Operator)
+					.Source(this.Source)
+				.Throw()
+			}
+			
+			this.CodeGen.Pop(RAX), this.StackDepth--
+			
+			Switch (OperandType.Pointer.Precision) {
+				Case 8: {
+					this.CodeGen.Move_R64_RI8(RAX, RAX)
+				}
+				Case 16: {
+					this.CodeGen.Move_R64_RI16(RAX, RAX)
+				}
+				Case 32: {
+					this.CodeGen.Move_R64_RI32(RAX, RAX)
+				}
+				Case 64: {
+					this.CodeGen.Move_R64_RI64(RAX, RAX)
+				}
+			}
+			
+			this.CodeGen.Push(RAX), this.StackDepth++
+			return OperandType.Pointer
+		}
 		
 		new Error("Compile")
 			.LongText("Unary operator " OperatorString " is not implemented in the compiler.")

@@ -28,6 +28,7 @@
 		FIRST_PREFIX
 			BANG
 			BITWISE_NOT
+			DEREF
 		
 			FIRST_POSTFIX
 				; The overlap here is since ++/-- are both pre/postfix
@@ -117,7 +118,7 @@ class CharacterTokens {
 class OperatorClasses {
 	static Prefix	  := {"Precedence": -1
 						, "Associative": "Right"
-						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.COLON]}
+						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.DEREF]}
 
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"

@@ -23,7 +23,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.4"
+	static VERSION := "1.0.0-alpha.5"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()
@@ -57,7 +57,7 @@ define Int64 Test(Int64 P1) {
 	Int8* BodyText := "this is the body text"
 
 	for (Int64 i := 0, i <= P1, i++) {
-		(BodyText + i) *= 48 + i
+		(BodyText + i) *= *(BodyText + 12 + i)
 		Test2(0, TitleText, BodyText)
 	}
 
@@ -67,6 +67,8 @@ define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
 	return MessageBoxA(P1, TT, BT, 0)
 }
 )
+
+;MsgBox, % LanguageName.ValidateCode(Code)
 
 R := LanguageName.CompileCode(Code)
 

@@ -420,29 +420,34 @@
 					Operator := Next
 					DontPush := False
 					
-					if (Operators.IsPostfix(Operator) && this.Previous() && this.Previous().Type != Tokens.Operator) {
+					if (Operators.IsPostfix(Operator) && this.Previous() && !this.Previous().IsOperator()) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
 						DontPush := True
 					}
-					else if (Operators.IsPrefix(Operator)) {
+					else if ((Operators.IsPrefix(Operator) || Operator.Value = "*") && this.Previous() && this.Previous().IsOperator()) {
+						if (Operator.Type = Tokens.TIMES) {
+							Operator.Type := Tokens.DEREF
+						}
+					
 						OperatorStack.Push(Operator)
 						DontPush := True
 					}
-					
-					while (OperatorStack.Count() != 0) {
-						NextOperator := OperatorStack.Pop()
-						
-						if (Operators.IsPrefix(NextOperator)) {
-							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
-							Unexpected := False
-						}
-						
-						if (NextOperator.IsOperator() && Operators.CheckPrecedence(Operator, NextOperator)) {
-							this.AddNode(OperandStack, Operators.OperandCount(NextOperator), NextOperator)
-						}
-						else {
-							OperatorStack.Push(NextOperator)
-							Break
+					else {
+						while (OperatorStack.Count() != 0) {
+							NextOperator := OperatorStack.Pop()
+							
+							if (Operators.IsPrefix(NextOperator)) {
+								this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
+								Break
+							}
+							
+							if (NextOperator.IsOperator() && Operators.CheckPrecedence(Operator, NextOperator)) {
+								this.AddNode(OperandStack, Operators.OperandCount(NextOperator), NextOperator)
+							}
+							else {
+								OperatorStack.Push(NextOperator)
+								Break
+							}
 						}
 					}
 					

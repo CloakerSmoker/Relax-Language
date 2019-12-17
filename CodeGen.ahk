@@ -188,12 +188,6 @@ class X64CodeGen {
 	
 		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W]})
 	}
-	Move_R64_RI64(DestRegister, SourceRegister) {
-		; MOV r64,r/m64
-		; REX.W + 8B /r
-	
-		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W], "Mode": Mode.RToPtr})
-	}
 	Move_SIB_XMM(SIB, Register) {
 		this.PushByte(0xF2)
 		this.REXOpcodeModSIB([0x0F, 0x11], Register, SIB)
@@ -221,6 +215,21 @@ class X64CodeGen {
 	}
 	Move_RI64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr, "REX": [REX.W]})
+	}
+	
+	Move_R64_RI64(DestRegister, SourceRegister) {
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W], "Mode": Mode.RToPtr})
+	}
+	Move_R64_RI32(DestRegister, SourceRegister) {
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})
+	}
+	Move_R64_RI16(DestRegister, SourceRegister) {
+		this.PushByte(0x66)
+		this.PushByte(0x8B)
+		this.Mod(Mode.RToPtr, DestRegister.Number, SourceRegister.Number)
+	}
+	Move_R64_RI8(DestRegister, SourceRegister) {
+		this.REXOpcodeMod([0x8A], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})
 	}
 	
 	; Register to (in register) pointer moves END
