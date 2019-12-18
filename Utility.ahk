@@ -117,7 +117,7 @@ StatementError(Statement, Message) {
 ShowError(Message) {
 	Gui, ShowError:New
 	Gui, ShowError:Font, s10, Terminal
-	Gui, ShowError:Add, Text, w800, % Message
+	Gui, ShowError:Add, Text, w800 0x80, % Message
 	Gui, ShowError:Show
 	
 	KeyWait, Enter, D

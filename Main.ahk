@@ -1,5 +1,5 @@
 ﻿class Config {
-	static DEBUG := True
+	static DEBUG := False
 }
 
 #Include %A_ScriptDir%
@@ -24,7 +24,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.6"
+	static VERSION := "1.0.0-alpha.7"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()
@@ -52,38 +52,28 @@ class LanguageName {
 Code = 
 ( % 
 define Int64 Test3(Int64 B) {
-	if (B < 2) {
-		return B
-	}
-	else if (B < 4) {
-		return B + 4
-	}
-	else if (B < 8) {
-		return B + 8
-	}
-	else {
-		return B + 12
-	}
+	return 1 || 0
 }
 
-DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
-define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
-	return MessageBoxA(P1, TT, BT, 0)
-}
-
-define Int64 Test(Int64 P1) {
-	Int8* TitleText := "this is the title"
-	Int8* BodyText := "this is the body text"
-
-	for (Int64 i := 0, i <= P1, i++) {
-		(BodyText + i) *= *(BodyText + 12 + i + -4)
-		Test2(0, TitleText, BodyText)
-	}
-
-	return 0
-}
 )
+
+;DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}  
+;
+;define Int64 Test(Int64 P1) {
+;	Int8* TitleText := "this is the title"
+;	Int8* BodyText := "this is the body text"
+;
+;	for (Int64 i := 0, i <= P1, i++) {
+;		(BodyText + i) *= *(BodyText + 12 + i + -4)
+;		Test2(0, TitleText, BodyText)
+;	}
+;
+;	return 0
+;}
+;define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
+;	return MessageBoxA(P1, TT, BT, 0)
+;}
 
 ;MsgBox, % LanguageName.ValidateCode(Code)
 
@@ -91,7 +81,7 @@ R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("Test", 9, 1, 4, 3, 4) "`n" A_LastError
+MsgBox, % "Result: " R.CallFunction("Test3", 6, 1, 4, 3, 4) "`n" A_LastError
 
 ; Int64* A := &B
 ; A := 99

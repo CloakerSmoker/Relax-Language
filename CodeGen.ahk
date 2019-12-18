@@ -128,7 +128,8 @@ class X64CodeGen {
 	;  ex: changing jumps to use 8bit offsets instead of 32 shouln't clobber other jumps
 	
 	SmallMove(Register, Integer) {
-		if (Integer = 0) {
+		if (Integer = 0 && False) {
+			; o7 RIP XOR 0ing, if only it didn't touch the flags register
 			this.XOR_R64_R64(Register, Register)
 		}
 		else {
@@ -291,7 +292,7 @@ class X64CodeGen {
 	; Jumps/Cmp instructions START
 	
 	Cmp_R64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x3B], RegisterOne, RegisterTwo)
+		this.REXOpcodeMod([0x3B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	JMP(Name) {
 		this.PushByte(0xE9)
@@ -421,6 +422,12 @@ class X64CodeGen {
 	
 	Neg_SIB(SIB) {
 		this.REXOpcodeModSIB([0xF7], {"OpcodeExtension": 3}, SIB, {"REX": [REX.W]})
+	}
+	And_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x23], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
+	Or_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	
 	; Int math instructions END

@@ -514,16 +514,33 @@
 		return ResultType
 	}
 	
-	CompileBinaryInt64(Expression, LeftType, RightType, ResultType) {
-		this.Cast(RightType, ResultType)
-		this.CodeGen.Pop(RBX), this.StackDepth--
-	
-		this.Cast(LeftType, ResultType)
-		this.CodeGen.Pop(RAX), this.StackDepth--
-	
+	CompileBinaryInt64(Expression, LeftType, RightType, ResultType) {		
+		if (OperatorClasses.IsClass(Expression.Operator, "Logic")) {
+			this.CodeGen.Pop(RDX), this.StackDepth--
+			this.CodeGen.Cmp(RDX, RSI)
+			this.CodeGen.SmallMove(RBX, 0)
+			this.CodeGen.C_Move_NE_R64_R64(RBX, RDI) ; Convert the two operands on the stack into 0 or 1, based on if they = 0 or not
+			
+			this.CodeGen.Pop(RCX), this.StackDepth--
+			this.CodeGen.Cmp(RCX, RSI)
+			this.CodeGen.SmallMove(RAX, 0)
+			this.CodeGen.C_Move_NE_R64_R64(RAX, RDI)
+			
+			ResultType := this.Typing.GetType("Int64")
+		}
+		else {
+			this.Cast(RightType, ResultType)
+			this.CodeGen.Pop(RBX), this.StackDepth--
+		
+			this.Cast(LeftType, ResultType)
+			this.CodeGen.Pop(RAX), this.StackDepth--
+		}
+		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			this.CodeGen.Cmp(RAX, RBX) ; All comparison operators have a prelude of a CMP instruction
 			this.CodeGen.Move(RAX, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
+			
+			ResultType := this.Typing.GetType("Int64")
 		}
 	
 		Switch (Expression.Operator.Type) {
@@ -560,6 +577,12 @@
 			}
 			Case Tokens.GREATER_EQUAL: {
 				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
+			}
+			Case Tokens.LOGICAL_AND: {
+				this.CodeGen.And_R64_R64(RAX, RBX)
+			}
+			Case Tokens.LOGICAL_OR: {
+				this.CodeGen.Or_R64_R64(RAX, RBX)
 			}
 			Default: {
 				new Error("Compile")

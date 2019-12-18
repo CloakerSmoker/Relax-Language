@@ -126,27 +126,31 @@ class OperatorClasses {
 						, "Associative": "Right"
 						, "Tokens": [Tokens.COLON_EQUAL, Tokens.PLUS_EQUAL, Tokens.MINUS_EQUAL, Tokens.DOT_EQUAL, Tokens.TIMES_EQUAL]}
 	
-	static Equality   := {"Precedence": 1
+	static Logic      := {"Precedence": 1
+						, "Associative": "Left"
+						, "Tokens": [Tokens.LOGICAL_AND, Tokens.LOGICAL_OR]}
+	
+	static Equality   := {"Precedence": 2
 						, "Associative": "Left"
 						, "Tokens": [Tokens.BANG_EQUAL, Tokens.EQUAL, Tokens.EQUAL_EQUAL]}
 						
-	static Comparison := {"Precedence": 2
+	static Comparison := {"Precedence": 3
 						, "Associative": "Right"
 						, "Tokens": [Tokens.LESS, Tokens.LESS_EQUAL, Tokens.GREATER, Tokens.GREATER_EQUAL]}
 						
-	static Concat	  := {"Precedence": 3
+	static Concat	  := {"Precedence": 4
 						, "Associative": "Left"
 						, "Tokens": [Tokens.CONCAT]}
 						
-	static Addition	  := {"Precedence": 4
+	static Addition	  := {"Precedence": 5
 						, "Associative": "Left"
 						, "Tokens": [Tokens.PLUS, Tokens.MINUS]}
 						
-	static Division	  := {"Precedence": 5
+	static Division	  := {"Precedence": 6
 						, "Associative": "Left"
 						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES, Tokens.MOD]}
 						
-	static Bitwise    := {"Precedence": 6
+	static Bitwise    := {"Precedence": 7
 						, "Associative": "Left"
 						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_NOT, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
 						
