@@ -420,7 +420,7 @@ class X64CodeGen {
 	}
 	
 	Neg_SIB(SIB) {
-		this.REXOpcodeModSIB([0xF7], {"OpcodeExtension": 3}, SIB)
+		this.REXOpcodeModSIB([0xF7], {"OpcodeExtension": 3}, SIB, {"REX": [REX.W]})
 	}
 	
 	; Int math instructions END
@@ -464,6 +464,10 @@ class X64CodeGen {
 		; This used to use the PUSH imm16 (68 iw) encodings, but it turns out that PUSHW increments RSP by 4, while PUSH imm8 and PUSH imm32 increment by 8
 	}
 	Push_I8(Byte) {
+		if (Byte.Value & 0x80) {
+			return this.Push_I32(Byte)
+		}
+	
 		this.PushByte(0x6A)
 		this.PushByte(Byte.Value & 0xFF)
 	}

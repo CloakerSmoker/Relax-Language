@@ -215,6 +215,9 @@ class Operators {
 		
 			return Operator
 		}
+		else if (this.IsPrefix(Operator)) {
+			return Operator
+		}
 	
 		Throw, Exception("No prefix version of " Operator.Stringify())
 	}
@@ -260,6 +263,22 @@ class Token {
 		else {
 			return !this.Type
 		}
+	}
+	IsNotData() {
+		if (this.IsOperator()) {
+			return True
+		}
+	
+		Switch (this.Type) {
+			Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING, Tokens.IDENTIFER: {
+				return False
+			}
+		}
+		
+		return True
+	}
+	IsData() {
+		return !this.IsNotData()
 	}
 	GetContext() {
 		return this.Context

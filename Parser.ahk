@@ -414,10 +414,10 @@
 				Case Next.CaseIsOperator(): {
 					Operator := Next
 					
-					if (Operators.IsPostfix(Operator) && !(this.Previous().IsOperator())) {
+					if (Operators.IsPostfix(Operator) && this.Previous().IsData()) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
 					}
-					else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsOperator()) {
+					else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsNotData()) {
 						OperatorStack.Push(Operators.BinaryToPrefix(Operator))
 					}
 					else {
