@@ -220,10 +220,3 @@
 		Throw, Exception("No cast possible")
 	}
 }
-
-T := new Typing()
-LT := T.GetType("Int8")
-RT := T.GetType("Double")
-
-RST := T.ResultType(LT, RT)
-P := T.CastPath(LT, RT)
