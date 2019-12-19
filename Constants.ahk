@@ -612,15 +612,26 @@ class CompiledProgram {
 		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000)
 	}
 	
+	GetAHKType(TypeName) {
+		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int"}
+	
+		if (AHKTypes.HasKey(TypeName)) {
+			return AHKTypes[TypeName]
+		}
+		else {
+			return TypeName
+		}
+	}
+	
 	CallFunction(Name, Params*) {
 		TypedParams := []
 		
 		for k, ParamPair in this.Node.Functions[Name].Params {
-			TypedParams.Push(ParamPair[1].Value)
+			TypedParams.Push(this.GetAHKType(ParamPair[1].Value))
 			TypedParams.Push(Params[k])
 		}
 		
-		TypedParams.Push(this.Node.Functions[Name].ReturnType.Value)
+		TypedParams.Push(this.GetAHKType(this.Node.Functions[Name].ReturnType.Value))
 		
 		Offset := this.Offsets[Name]
 		

@@ -88,6 +88,7 @@
 		this.FunctionIndex := 0
 		this.CodeGen := new X64CodeGen()
 		Current := this.CurrentProgram := {"Node": Program, "FunctionOffsets": {}}
+		this.CurrentFunction := {}
 		FunctionOffset := 0
 		
 		for FunctionName, FunctionDefine in Program.Functions {
@@ -103,6 +104,7 @@
 		this.FunctionIndex++
 		this.Variables := {}
 		this.StackDepth := 0
+		this.CurrentFunction := DefineAST
 
 		ParamSizes := DefineAST.Params.Count()
 		CG := this.CodeGen
@@ -289,7 +291,17 @@
 	}
 	
 	CompileReturn(Statement) {
-		this.Compile(Statement.Expression)
+		ResultType := this.Compile(Statement.Expression)
+		ReturnType := this.Typing.GetType(this.CurrentFunction.ReturnType.Value)
+		
+		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
+			new Error("Type")
+				.LongText("Wrong return type, should be " ReturnType.Name " or smaller.")
+				.Token(Statement.Expression)
+				.Source(this.Source)
+			.Throw()
+		}
+		
 		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 		this.CodeGen.Pop(RAX), this.StackDepth--
 		this.CodeGen.JMP("__Return" this.FunctionIndex)
@@ -403,9 +415,10 @@
 		}
 	}
 	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
-		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8)) {
+		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8) || (VariableType.Precision < RightType.Precision)) {
 			new Error("Type")
-				.LongText("The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name " .")
+				.LongText("The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name ".")
+				.ShortText("Right side precision must be <= left side")
 				.Token(Expression.Operator)
 				.Source(this.Source)
 			.Throw()
