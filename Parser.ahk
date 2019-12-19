@@ -287,7 +287,9 @@
 	}
 	
 	ParseExpressionStatement() {
-		Expression := this.ParseExpression()
+		return new ASTNodes.Statements.ExpressionLine(this.ParseExpression())
+		
+		;Expression := this.ParseExpression()
 		
 		if (this.NextMatches(Tokens.NEWLINE) || this.NextMatches(Tokens.EOF)) {
 			return new ASTNodes.Statements.ExpressionLine(Expression)
@@ -345,7 +347,7 @@
 	
 	ParseExpression(Terminators*) {
 		if ((!IsObject(Terminators)) || (Terminators.Count() = 0)) {
-			Terminators := [Tokens.NEWLINE, Tokens.EOF, Tokens.LEFT_BRACE]
+			Terminators := [Tokens.NEWLINE, Tokens.EOF, Tokens.LEFT_BRACE, Tokens.RIGHT_BRACE]
 		}
 	
 	

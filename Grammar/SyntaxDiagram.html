@@ -1,0 +1,1630 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
+    <meta name="generator" content="Railroad Diagram Generator 1.60" />
+    <style type="text/css">
+        ::-moz-selection {
+            color: #FAFFF0;
+            background: #0A0F00;
+        }
+        
+        ::selection {
+            color: #FAFFF0;
+            background: #0A0F00;
+        }
+        
+        .ebnf a,
+        .grammar a {
+            text-decoration: none;
+        }
+        
+        .ebnf a:hover,
+        .grammar a:hover {
+            color: #030500;
+            text-decoration: underline;
+        }
+        
+        .signature {
+            color: #558000;
+            font-size: 11px;
+            text-align: right;
+        }
+        
+        body {
+            font: normal 12px Verdana, sans-serif;
+            color: #FAFAFA;
+            background: #333333;
+			padding-left: 5%;
+        }
+        
+        a:link,
+        a:visited {
+            color: #FAFAFA;
+        }
+        
+        a:link.signature,
+        a:visited.signature {
+            color: #558000;
+        }
+        
+        a.button,
+        #tabs li a {
+            padding: 0.25em 0.5em;
+            border: 1px solid #558000;
+            background: #E2F1C6;
+            color: #558000;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        a.button:hover,
+        #tabs li a:hover {
+            color: #030500;
+            background: #F0FFD1;
+            border-color: #030500;
+        }
+        
+        #tabs {
+            padding: 3px 10px;
+            margin-left: 0;
+            margin-top: 58px;
+            border-bottom: 1px solid #0A0F00;
+        }
+        
+        #tabs li {
+            list-style: none;
+            margin-left: 5px;
+            display: inline;
+        }
+        
+        #tabs li a {
+            border-bottom: 1px solid #0A0F00;
+        }
+        
+        #tabs li a.active {
+            color: #0A0F00;
+            background: #FAFFF0;
+            border-color: #0A0F00;
+            border-bottom: 1px solid #FAFFF0;
+            outline: none;
+        }
+        
+        #divs div {
+            display: none;
+            overflow: auto;
+        }
+        
+        #divs div.active {
+            display: block;
+        }
+        
+        #text {
+            border-color: #558000;
+            background: #FDFFFA;
+            color: #030500;
+        }
+        
+        .small {
+            vertical-align: top;
+            text-align: right;
+            font-size: 9px;
+            font-weight: normal;
+            line-height: 120%;
+        }
+        
+        td.small {
+            padding-top: 0px;
+        }
+        
+        .hidden {
+            visibility: hidden;
+        }
+        
+        td:hover .hidden {
+            visibility: visible;
+        }
+        
+        div.download {
+            display: none;
+            background: #FAFFF0;
+            position: absolute;
+            right: 34px;
+            top: 94px;
+            padding: 10px;
+            border: 1px dotted #0A0F00;
+        }
+        
+        #divs div.ebnf,
+        .ebnf code {
+            display: block;
+            padding: 10px;
+			color: #000000;
+            background: #DAFF91;
+            width: 95%;
+			font-weight: 600;
+        }
+        
+        #divs div.grammar {
+            display: block;
+            padding-left: 16px;
+            padding-top: 2px;
+            padding-bottom: 2px;
+			color: #000000;
+            background: #F0FFD1;
+        }
+		
+		.ebnf a {
+			color: #000000;
+		}
+        
+        pre {
+            margin: 0px;
+        }
+        
+        .ebnf div {
+            padding-left: 13ch;
+            text-indent: -13ch;
+        }
+        
+        .grammar code,
+        textarea,
+        pre {
+            font: 12px SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+        }
+        
+        tr.option-line td:first-child {
+            text-align: right
+        }
+        
+        tr.option-text td {
+            padding-bottom: 10px
+        }
+        
+        table.palette {
+            border-top: 1px solid #030500;
+            border-right: 1px solid #030500;
+            margin-bottom: 4px
+        }
+        
+        td.palette {
+            border-bottom: 1px solid #030500;
+            border-left: 1px solid #030500;
+        }
+        
+        a.palette {
+            padding: 2px 3px 2px 10px;
+            text-decoration: none;
+        }
+        
+        .palette {
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -o-user-select: none;
+            -ms-user-select: none;
+        }
+    </style>
+	<style type="text/css">
+        @namespace "http://www.w3.org/2000/svg";
+        .line {
+            fill: none;
+            stroke: #FAFAFA;
+        }
+        
+        .bold-line {
+            stroke: #0E1400;
+            shape-rendering: crispEdges;
+            stroke-width: 2;
+        }
+        
+        .thin-line {
+            stroke: #141F00;
+            shape-rendering: crispEdges
+        }
+        
+        .filled {
+            fill: #223300;
+            stroke: none;
+        }
+        
+        text.terminal {
+            font-family: Verdana, Sans-serif;
+            font-size: 12px;
+            fill: #0E1400;
+            font-weight: bold;
+        }
+        
+        text.nonterminal {
+            font-family: Verdana, Sans-serif;
+            font-size: 12px;
+            fill: #111A00;
+        }
+        
+        text.regexp {
+            font-family: Verdana, Sans-serif;
+            font-size: 12px;
+            fill: #141F00;
+            font-weight: normal;
+        }
+        
+        rect,
+        circle {
+			display: none;
+        }
+		
+		polygon {
+            stroke: #FAFAFA;
+		}
+        
+        rect.terminal {
+            fill: #C4FF4D;
+			display: initial;
+        }
+        
+        rect.nonterminal {
+            fill: #DFFF9E;
+			display: initial;
+        }
+        
+        rect.text {
+            fill: none;
+			display: initial;
+        }
+        
+        polygon.regexp {
+            fill: #FAFAFA;
+			display: initial;
+        }
+    </style>
+</head>
+
+<body class="vsc-initialized">
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="Program">Program:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="239" height="57">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ProgramStatement" xlink:title="ProgramStatement">
+            <rect x="51" y="3" width="140" height="32" />
+            <rect x="49" y="1" width="140" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">ProgramStatement</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m20 0 h10 m0 0 h150 m-180 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m160 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-160 0 h10 m140 0 h10 m23 34 h-3" />
+        <polygon points="229 51 237 47 237 55" />
+        <polygon points="229 51 221 47 221 55" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#Program" title="Program">Program</a>  ::= <a href="#ProgramStatement" title="ProgramStatement">ProgramStatement</a>*</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">no references</p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="ProgramStatement">ProgramStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="243" height="81">
+        <defs>
+            <style type="text/css">
+
+            </style>
+        </defs>
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#DllImportStatement" xlink:title="DllImportStatement">
+            <rect x="51" y="3" width="144" height="32" />
+            <rect x="49" y="1" width="144" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">DllImportStatement</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#DefineStatement" xlink:title="DefineStatement" style="">
+            <rect x="51" y="47" width="126" height="32" />
+            <rect x="49" y="45" width="126" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">DefineStatement</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m144 0 h10 m-184 0 h20 m164 0 h20 m-204 0 q10 0 10 10 m184 0 q0 -10 10 -10 m-194 10 v24 m184 0 v-24 m-184 24 q0 10 10 10 m164 0 q10 0 10 -10 m-174 10 h10 m126 0 h10 m0 0 h18 m23 -44 h-3" />
+        <polygon points="233 17 241 13 241 21" />
+        <polygon points="233 17 225 13 225 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#ProgramStatement" title="ProgramStatement">ProgramStatement</a></div>
+               <div>         ::= <a href="#DllImportStatement" title="DllImportStatement">DllImportStatement</a></div>
+               <div>           | <a href="#DefineStatement" title="DefineStatement">DefineStatement</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#Program" title="Program">Program</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="DllImportStatement">DllImportStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1247" height="101">
+        <polygon points="9 33 1 29 1 37" />
+        <polygon points="17 33 9 29 9 37" />
+        <rect x="31" y="19" width="80" height="32" rx="10" />
+        <rect x="29" y="17" width="80" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="37">dllimport</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="131" y="19" width="86" height="32" />
+            <rect x="129" y="17" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="139" y="37">TypeName</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="237" y="19" width="78" height="32" />
+            <rect x="235" y="17" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="245" y="37">Identifier</text>
+        </a>
+        <rect x="335" y="19" width="26" height="32" rx="10" />
+        <rect x="333" y="17" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="343" y="37">(</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="421" y="51" width="86" height="32" />
+            <rect x="419" y="49" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="429" y="69">TypeName</text>
+        </a>
+        <rect x="587" y="19" width="24" height="32" rx="10" />
+        <rect x="585" y="17" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="595" y="37">,</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="631" y="19" width="86" height="32" />
+            <rect x="629" y="17" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="639" y="37">TypeName</text>
+        </a>
+        <rect x="797" y="19" width="26" height="32" rx="10" />
+        <rect x="795" y="17" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="805" y="37">)</text>
+        <rect x="843" y="19" width="28" height="32" rx="10" />
+        <rect x="841" y="17" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="851" y="37">{</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="891" y="19" width="78" height="32" />
+            <rect x="889" y="17" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="899" y="37">Identifier</text>
+        </a>
+        <rect x="989" y="19" width="40" height="32" rx="10" />
+        <rect x="987" y="17" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="997" y="37">.dll</text>
+        <rect x="1049" y="19" width="24" height="32" rx="10" />
+        <rect x="1047" y="17" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="1057" y="37">,</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="1093" y="19" width="78" height="32" />
+            <rect x="1091" y="17" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="1101" y="37">Identifier</text>
+        </a>
+        <rect x="1191" y="19" width="28" height="32" rx="10" />
+        <rect x="1189" y="17" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="1199" y="37">}</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 33 h2 m0 0 h10 m80 0 h10 m0 0 h10 m86 0 h10 m0 0 h10 m78 0 h10 m0 0 h10 m26 0 h10 m40 0 h10 m0 0 h96 m-126 0 h20 m106 0 h20 m-146 0 q10 0 10 10 m126 0 q0 -10 10 -10 m-136 10 v12 m126 0 v-12 m-126 12 q0 10 10 10 m106 0 q10 0 10 -10 m-116 10 h10 m86 0 h10 m60 -32 h10 m24 0 h10 m0 0 h10 m86 0 h10 m-170 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -12 q0 -10 10 -10 m150 32 l20 0 m-20 0 q10 0 10 -10 l0 -12 q0 -10 -10 -10 m-150 0 h10 m0 0 h140 m-190 32 h20 m190 0 h20 m-230 0 q10 0 10 10 m210 0 q0 -10 10 -10 m-220 10 v14 m210 0 v-14 m-210 14 q0 10 10 10 m190 0 q10 0 10 -10 m-200 10 h10 m0 0 h180 m-376 -34 h20 m376 0 h20 m-416 0 q10 0 10 10 m396 0 q0 -10 10 -10 m-406 10 v46 m396 0 v-46 m-396 46 q0 10 10 10 m376 0 q10 0 10 -10 m-386 10 h10 m0 0 h366 m20 -66 h10 m26 0 h10 m0 0 h10 m28 0 h10 m0 0 h10 m78 0 h10 m0 0 h10 m40 0 h10 m0 0 h10 m24 0 h10 m0 0 h10 m78 0 h10 m0 0 h10 m28 0 h10 m3 0 h-3" />
+        <polygon points="1237 33 1245 29 1245 37" />
+        <polygon points="1237 33 1229 29 1229 37" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#DllImportStatement" title="DllImportStatement">DllImportStatement</a></div>
+               <div>         ::= 'dllimport' <a href="#TypeName" title="TypeName">TypeName</a> <a href="#Identifier" title="Identifier">Identifier</a> '(' ( <a href="#TypeName" title="TypeName">TypeName</a>? ( ',' <a href="#TypeName" title="TypeName">TypeName</a> )* )? ')' '{' <a href="#Identifier" title="Identifier">Identifier</a> '.dll' ',' <a href="#Identifier" title="Identifier">Identifier</a> '}'</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#ProgramStatement" title="ProgramStatement">ProgramStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="DefineStatement">DefineStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1101" height="101">
+        <polygon points="9 33 1 29 1 37" />
+        <polygon points="17 33 9 29 9 37" />
+        <rect x="31" y="19" width="62" height="32" rx="10" />
+        <rect x="29" y="17" width="62" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="37">define</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="113" y="19" width="86" height="32" />
+            <rect x="111" y="17" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="121" y="37">TypeName</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="219" y="19" width="78" height="32" />
+            <rect x="217" y="17" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="227" y="37">Identifier</text>
+        </a>
+        <rect x="317" y="19" width="26" height="32" rx="10" />
+        <rect x="315" y="17" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="325" y="37">(</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="403" y="51" width="78" height="32" />
+            <rect x="401" y="49" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="411" y="69">Identifier</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="501" y="51" width="86" height="32" />
+            <rect x="499" y="49" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="509" y="69">TypeName</text>
+        </a>
+        <rect x="667" y="19" width="24" height="32" rx="10" />
+        <rect x="665" y="17" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="675" y="37">,</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="711" y="19" width="78" height="32" />
+            <rect x="709" y="17" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="719" y="37">Identifier</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="809" y="19" width="86" height="32" />
+            <rect x="807" y="17" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="817" y="37">TypeName</text>
+        </a>
+        <rect x="975" y="19" width="26" height="32" rx="10" />
+        <rect x="973" y="17" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="983" y="37">)</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Block" xlink:title="Block" style="">
+            <rect x="1021" y="19" width="52" height="32" />
+            <rect x="1019" y="17" width="52" height="32" class="nonterminal" />
+            <text class="nonterminal" x="1029" y="37">Block</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 33 h2 m0 0 h10 m62 0 h10 m0 0 h10 m86 0 h10 m0 0 h10 m78 0 h10 m0 0 h10 m26 0 h10 m40 0 h10 m0 0 h194 m-224 0 h20 m204 0 h20 m-244 0 q10 0 10 10 m224 0 q0 -10 10 -10 m-234 10 v12 m224 0 v-12 m-224 12 q0 10 10 10 m204 0 q10 0 10 -10 m-214 10 h10 m78 0 h10 m0 0 h10 m86 0 h10 m60 -32 h10 m24 0 h10 m0 0 h10 m78 0 h10 m0 0 h10 m86 0 h10 m-268 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -12 q0 -10 10 -10 m248 32 l20 0 m-20 0 q10 0 10 -10 l0 -12 q0 -10 -10 -10 m-248 0 h10 m0 0 h238 m-288 32 h20 m288 0 h20 m-328 0 q10 0 10 10 m308 0 q0 -10 10 -10 m-318 10 v14 m308 0 v-14 m-308 14 q0 10 10 10 m288 0 q10 0 10 -10 m-298 10 h10 m0 0 h278 m-572 -34 h20 m572 0 h20 m-612 0 q10 0 10 10 m592 0 q0 -10 10 -10 m-602 10 v46 m592 0 v-46 m-592 46 q0 10 10 10 m572 0 q10 0 10 -10 m-582 10 h10 m0 0 h562 m20 -66 h10 m26 0 h10 m0 0 h10 m52 0 h10 m3 0 h-3" />
+        <polygon points="1091 33 1099 29 1099 37" />
+        <polygon points="1091 33 1083 29 1083 37" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#DefineStatement" title="DefineStatement">DefineStatement</a></div>
+               <div>         ::= 'define' <a href="#TypeName" title="TypeName">TypeName</a> <a href="#Identifier" title="Identifier">Identifier</a> '(' ( ( <a href="#Identifier" title="Identifier">Identifier</a> <a href="#TypeName" title="TypeName">TypeName</a> )? ( ',' <a href="#Identifier" title="Identifier">Identifier</a> <a href="#TypeName" title="TypeName">TypeName</a> )* )? ')' <a href="#Block" title="Block">Block</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#ProgramStatement" title="ProgramStatement">ProgramStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="TypeName">TypeName:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="325" height="257">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="40" height="32" rx="10" />
+        <rect x="49" y="1" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">Int</text>
+        <rect x="131" y="3" width="28" height="32" rx="10" />
+        <rect x="129" y="1" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="139" y="21">8</text>
+        <rect x="131" y="47" width="38" height="32" rx="10" />
+        <rect x="129" y="45" width="38" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="139" y="65">16</text>
+        <rect x="131" y="91" width="38" height="32" rx="10" />
+        <rect x="129" y="89" width="38" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="139" y="109">32</text>
+        <rect x="131" y="135" width="38" height="32" rx="10" />
+        <rect x="129" y="133" width="38" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="139" y="153">64</text>
+        <rect x="51" y="179" width="54" height="32" rx="10" />
+        <rect x="49" y="177" width="54" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="197">Float</text>
+        <rect x="51" y="223" width="66" height="32" rx="10" />
+        <rect x="49" y="221" width="66" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="241">Double</text>
+        <rect x="249" y="35" width="28" height="32" rx="10" />
+        <rect x="247" y="33" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="257" y="53">*</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m40 0 h10 m20 0 h10 m28 0 h10 m0 0 h10 m-78 0 h20 m58 0 h20 m-98 0 q10 0 10 10 m78 0 q0 -10 10 -10 m-88 10 v24 m78 0 v-24 m-78 24 q0 10 10 10 m58 0 q10 0 10 -10 m-68 10 h10 m38 0 h10 m-68 -10 v20 m78 0 v-20 m-78 20 v24 m78 0 v-24 m-78 24 q0 10 10 10 m58 0 q10 0 10 -10 m-68 10 h10 m38 0 h10 m-68 -10 v20 m78 0 v-20 m-78 20 v24 m78 0 v-24 m-78 24 q0 10 10 10 m58 0 q10 0 10 -10 m-68 10 h10 m38 0 h10 m-158 -132 h20 m158 0 h20 m-198 0 q10 0 10 10 m178 0 q0 -10 10 -10 m-188 10 v156 m178 0 v-156 m-178 156 q0 10 10 10 m158 0 q10 0 10 -10 m-168 10 h10 m54 0 h10 m0 0 h84 m-168 -10 v20 m178 0 v-20 m-178 20 v24 m178 0 v-24 m-178 24 q0 10 10 10 m158 0 q10 0 10 -10 m-168 10 h10 m66 0 h10 m0 0 h72 m40 -220 h10 m0 0 h38 m-68 0 h20 m48 0 h20 m-88 0 q10 0 10 10 m68 0 q0 -10 10 -10 m-78 10 v12 m68 0 v-12 m-68 12 q0 10 10 10 m48 0 q10 0 10 -10 m-58 10 h10 m28 0 h10 m23 -32 h-3" />
+        <polygon points="315 17 323 13 323 21" />
+        <polygon points="315 17 307 13 307 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#TypeName" title="TypeName">TypeName</a> ::= ( 'Int' ( '8' | '16' | '32' | '64' ) | 'Float' | 'Double' ) '*'?</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#Declaration" title="Declaration">Declaration</a></li>
+            <li><a href="#DefineStatement" title="DefineStatement">DefineStatement</a></li>
+            <li><a href="#DllImportStatement" title="DllImportStatement">DllImportStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="Block">Block:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="281" height="71">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <rect x="31" y="37" width="28" height="32" rx="10" />
+        <rect x="29" y="35" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="55">{</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Statement" xlink:title="Statement">
+            <rect x="99" y="3" width="86" height="32" />
+            <rect x="97" y="1" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="107" y="21">Statement</text>
+        </a>
+        <rect x="225" y="37" width="28" height="32" rx="10" />
+        <rect x="223" y="35" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="233" y="55">}</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m0 0 h10 m28 0 h10 m20 0 h10 m0 0 h96 m-126 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m106 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-106 0 h10 m86 0 h10 m20 34 h10 m28 0 h10 m3 0 h-3" />
+        <polygon points="271 51 279 47 279 55" />
+        <polygon points="271 51 263 47 263 55" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#Block" title="Block">Block</a>    ::= '{' <a href="#Statement" title="Statement">Statement</a>* '}'</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#DefineStatement" title="DefineStatement">DefineStatement</a></li>
+            <li><a href="#ForLoop" title="ForLoop">ForLoop</a></li>
+            <li><a href="#IfStatement" title="IfStatement">IfStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="Statement">Statement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="255" height="125">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#KeywordStatement" xlink:title="KeywordStatement" style="">
+            <rect x="51" y="3" width="140" height="32" />
+            <rect x="49" y="1" width="140" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">KeywordStatement</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Declaration" xlink:title="Declaration">
+            <rect x="51" y="47" width="92" height="32" />
+            <rect x="49" y="45" width="92" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">Declaration</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ExpressionStatement" xlink:title="ExpressionStatement">
+            <rect x="51" y="91" width="156" height="32" />
+            <rect x="49" y="89" width="156" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="109">ExpressionStatement</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m140 0 h10 m0 0 h16 m-196 0 h20 m176 0 h20 m-216 0 q10 0 10 10 m196 0 q0 -10 10 -10 m-206 10 v24 m196 0 v-24 m-196 24 q0 10 10 10 m176 0 q10 0 10 -10 m-186 10 h10 m92 0 h10 m0 0 h64 m-186 -10 v20 m196 0 v-20 m-196 20 v24 m196 0 v-24 m-196 24 q0 10 10 10 m176 0 q10 0 10 -10 m-186 10 h10 m156 0 h10 m23 -88 h-3" />
+        <polygon points="245 17 253 13 253 21" />
+        <polygon points="245 17 237 13 237 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#Statement" title="Statement">Statement</a></div>
+               <div>         ::= <a href="#KeywordStatement" title="KeywordStatement">KeywordStatement</a></div>
+               <div>           | <a href="#Declaration" title="Declaration">Declaration</a></div>
+               <div>           | <a href="#ExpressionStatement" title="ExpressionStatement">ExpressionStatement</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#Block" title="Block">Block</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="KeywordStatement">KeywordStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="227" height="125">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ReturnStatement" xlink:title="ReturnStatement" style="">
+            <rect x="51" y="3" width="128" height="32" />
+            <rect x="49" y="1" width="128" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">ReturnStatement</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#IfStatement" xlink:title="IfStatement">
+            <rect x="51" y="47" width="96" height="32" />
+            <rect x="49" y="45" width="96" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">IfStatement</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ForLoop" xlink:title="ForLoop">
+            <rect x="51" y="91" width="70" height="32" />
+            <rect x="49" y="89" width="70" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="109">ForLoop</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m128 0 h10 m-168 0 h20 m148 0 h20 m-188 0 q10 0 10 10 m168 0 q0 -10 10 -10 m-178 10 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m96 0 h10 m0 0 h32 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m70 0 h10 m0 0 h58 m23 -88 h-3" />
+        <polygon points="217 17 225 13 225 21" />
+        <polygon points="217 17 209 13 209 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#KeywordStatement" title="KeywordStatement">KeywordStatement</a></div>
+               <div>         ::= <a href="#ReturnStatement" title="ReturnStatement">ReturnStatement</a></div>
+               <div>           | <a href="#IfStatement" title="IfStatement">IfStatement</a></div>
+               <div>           | <a href="#ForLoop" title="ForLoop">ForLoop</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#Statement" title="Statement">Statement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="ReturnStatement">ReturnStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="231" height="37">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="31" y="3" width="62" height="32" rx="10" />
+        <rect x="29" y="1" width="62" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="21">return</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression" style="">
+            <rect x="113" y="3" width="90" height="32" />
+            <rect x="111" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="121" y="21">Expression</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m62 0 h10 m0 0 h10 m90 0 h10 m3 0 h-3" />
+        <polygon points="221 17 229 13 229 21" />
+        <polygon points="221 17 213 13 213 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#ReturnStatement" title="ReturnStatement">ReturnStatement</a></div>
+               <div>         ::= 'return' <a href="#Expression" title="Expression">Expression</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#KeywordStatement" title="KeywordStatement">KeywordStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="IfStatement">IfStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="579" height="113">
+        <polygon points="9 61 1 57 1 65" />
+        <polygon points="17 61 9 57 9 65" />
+        <rect x="31" y="47" width="28" height="32" rx="10" />
+        <rect x="29" y="45" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="65">if</text>
+        <rect x="99" y="47" width="26" height="32" rx="10" />
+        <rect x="97" y="45" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="107" y="65">(</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="145" y="47" width="90" height="32" />
+            <rect x="143" y="45" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="153" y="65">Expression</text>
+        </a>
+        <rect x="255" y="47" width="26" height="32" rx="10" />
+        <rect x="253" y="45" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="263" y="65">)</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Block" xlink:title="Block">
+            <rect x="301" y="47" width="52" height="32" />
+            <rect x="299" y="45" width="52" height="32" class="nonterminal" />
+            <text class="nonterminal" x="309" y="65">Block</text>
+        </a>
+        <rect x="99" y="3" width="60" height="32" rx="10" />
+        <rect x="97" y="1" width="60" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="107" y="21">else if</text>
+        <rect x="413" y="79" width="46" height="32" rx="10" />
+        <rect x="411" y="77" width="46" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="421" y="97">else</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Block" xlink:title="Block">
+            <rect x="479" y="79" width="52" height="32" />
+            <rect x="477" y="77" width="52" height="32" class="nonterminal" />
+            <text class="nonterminal" x="487" y="97">Block</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 61 h2 m0 0 h10 m28 0 h10 m20 0 h10 m26 0 h10 m0 0 h10 m90 0 h10 m0 0 h10 m26 0 h10 m0 0 h10 m52 0 h10 m-294 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -24 q0 -10 10 -10 m274 44 l20 0 m-20 0 q10 0 10 -10 l0 -24 q0 -10 -10 -10 m-274 0 h10 m60 0 h10 m0 0 h194 m40 44 h10 m0 0 h128 m-158 0 h20 m138 0 h20 m-178 0 q10 0 10 10 m158 0 q0 -10 10 -10 m-168 10 v12 m158 0 v-12 m-158 12 q0 10 10 10 m138 0 q10 0 10 -10 m-148 10 h10 m46 0 h10 m0 0 h10 m52 0 h10 m23 -32 h-3" />
+        <polygon points="569 61 577 57 577 65" />
+        <polygon points="569 61 561 57 561 65" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#IfStatement" title="IfStatement">IfStatement</a></div>
+               <div>         ::= 'if' '(' <a href="#Expression" title="Expression">Expression</a> ')' <a href="#Block" title="Block">Block</a> ( 'else if' '(' <a href="#Expression" title="Expression">Expression</a> ')' <a href="#Block" title="Block">Block</a> )* ( 'else' <a href="#Block" title="Block">Block</a> )?</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#KeywordStatement" title="KeywordStatement">KeywordStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="ForLoop">ForLoop:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="721" height="81">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="31" y="3" width="38" height="32" rx="10" />
+        <rect x="29" y="1" width="38" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="21">for</text>
+        <rect x="89" y="3" width="26" height="32" rx="10" />
+        <rect x="87" y="1" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="97" y="21">(</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Declaration" xlink:title="Declaration">
+            <rect x="155" y="3" width="92" height="32" />
+            <rect x="153" y="1" width="92" height="32" class="nonterminal" />
+            <text class="nonterminal" x="163" y="21">Declaration</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="155" y="47" width="90" height="32" />
+            <rect x="153" y="45" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="163" y="65">Expression</text>
+        </a>
+        <rect x="287" y="3" width="24" height="32" rx="10" />
+        <rect x="285" y="1" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="295" y="21">,</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="331" y="3" width="90" height="32" />
+            <rect x="329" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="339" y="21">Expression</text>
+        </a>
+        <rect x="441" y="3" width="24" height="32" rx="10" />
+        <rect x="439" y="1" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="449" y="21">,</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="485" y="3" width="90" height="32" />
+            <rect x="483" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="493" y="21">Expression</text>
+        </a>
+        <rect x="595" y="3" width="26" height="32" rx="10" />
+        <rect x="593" y="1" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="603" y="21">)</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Block" xlink:title="Block">
+            <rect x="641" y="3" width="52" height="32" />
+            <rect x="639" y="1" width="52" height="32" class="nonterminal" />
+            <text class="nonterminal" x="649" y="21">Block</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m38 0 h10 m0 0 h10 m26 0 h10 m20 0 h10 m92 0 h10 m-132 0 h20 m112 0 h20 m-152 0 q10 0 10 10 m132 0 q0 -10 10 -10 m-142 10 v24 m132 0 v-24 m-132 24 q0 10 10 10 m112 0 q10 0 10 -10 m-122 10 h10 m90 0 h10 m0 0 h2 m20 -44 h10 m24 0 h10 m0 0 h10 m90 0 h10 m0 0 h10 m24 0 h10 m0 0 h10 m90 0 h10 m0 0 h10 m26 0 h10 m0 0 h10 m52 0 h10 m3 0 h-3" />
+        <polygon points="711 17 719 13 719 21" />
+        <polygon points="711 17 703 13 703 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#ForLoop" title="ForLoop">ForLoop</a>  ::= 'for' '(' ( <a href="#Declaration" title="Declaration">Declaration</a> | <a href="#Expression" title="Expression">Expression</a> ) ',' <a href="#Expression" title="Expression">Expression</a> ',' <a href="#Expression" title="Expression">Expression</a> ')' <a href="#Block" title="Block">Block</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#KeywordStatement" title="KeywordStatement">KeywordStatement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="Declaration">Declaration:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="447" height="69">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#TypeName" xlink:title="TypeName">
+            <rect x="31" y="3" width="86" height="32" />
+            <rect x="29" y="1" width="86" height="32" class="nonterminal" />
+            <text class="nonterminal" x="39" y="21">TypeName</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="137" y="3" width="78" height="32" />
+            <rect x="135" y="1" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="145" y="21">Identifier</text>
+        </a>
+        <rect x="255" y="35" width="34" height="32" rx="10" />
+        <rect x="253" y="33" width="34" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="263" y="53">:=</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="309" y="35" width="90" height="32" />
+            <rect x="307" y="33" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="317" y="53">Expression</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m86 0 h10 m0 0 h10 m78 0 h10 m20 0 h10 m0 0 h154 m-184 0 h20 m164 0 h20 m-204 0 q10 0 10 10 m184 0 q0 -10 10 -10 m-194 10 v12 m184 0 v-12 m-184 12 q0 10 10 10 m164 0 q10 0 10 -10 m-174 10 h10 m34 0 h10 m0 0 h10 m90 0 h10 m23 -32 h-3" />
+        <polygon points="437 17 445 13 445 21" />
+        <polygon points="437 17 429 13 429 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#Declaration" title="Declaration">Declaration</a></div>
+               <div>         ::= <a href="#TypeName" title="TypeName">TypeName</a> <a href="#Identifier" title="Identifier">Identifier</a> ( ':=' <a href="#Expression" title="Expression">Expression</a> )?</div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#ForLoop" title="ForLoop">ForLoop</a></li>
+            <li><a href="#Statement" title="Statement">Statement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="ExpressionStatement">ExpressionStatement:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="149" height="37">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="31" y="3" width="90" height="32" />
+            <rect x="29" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="39" y="21">Expression</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m90 0 h10 m3 0 h-3" />
+        <polygon points="139 17 147 13 147 21" />
+        <polygon points="139 17 131 13 131 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#ExpressionStatement" title="ExpressionStatement">ExpressionStatement</a></div>
+               <div>         ::= <a href="#Expression" title="Expression">Expression</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#Statement" title="Statement">Statement</a></li>
+        </ul>
+    </p>
+    <br xmlns:xhtml="http://www.w3.org/1999/xhtml" />
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml" style="font-size: 14px; font-weight:bold"><a name="Expression">Expression:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="227" height="301">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#CallExpression" xlink:title="CallExpression">
+            <rect x="51" y="3" width="112" height="32" />
+            <rect x="49" y="1" width="112" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">CallExpression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#BinaryExpression" xlink:title="BinaryExpression">
+            <rect x="51" y="47" width="128" height="32" />
+            <rect x="49" y="45" width="128" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">BinaryExpression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#UnaryExpression" xlink:title="UnaryExpression">
+            <rect x="51" y="91" width="126" height="32" />
+            <rect x="49" y="89" width="126" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="109">UnaryExpression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Grouping" xlink:title="Grouping">
+            <rect x="51" y="135" width="78" height="32" />
+            <rect x="49" y="133" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="153">Grouping</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="51" y="179" width="78" height="32" />
+            <rect x="49" y="177" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="197">Identifier</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Number" xlink:title="Number">
+            <rect x="51" y="223" width="70" height="32" />
+            <rect x="49" y="221" width="70" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="241">Number</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#String" xlink:title="String" style="">
+            <rect x="51" y="267" width="58" height="32" />
+            <rect x="49" y="265" width="58" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="285">String</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m112 0 h10 m0 0 h16 m-168 0 h20 m148 0 h20 m-188 0 q10 0 10 10 m168 0 q0 -10 10 -10 m-178 10 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m128 0 h10 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m126 0 h10 m0 0 h2 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m78 0 h10 m0 0 h50 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m78 0 h10 m0 0 h50 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m70 0 h10 m0 0 h58 m-158 -10 v20 m168 0 v-20 m-168 20 v24 m168 0 v-24 m-168 24 q0 10 10 10 m148 0 q10 0 10 -10 m-158 10 h10 m58 0 h10 m0 0 h70 m23 -264 h-3" />
+        <polygon points="217 17 225 13 225 21" />
+        <polygon points="217 17 209 13 209 21" />
+    </svg>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        <div class="ebnf"><code>
+               <div><a href="#Expression" title="Expression">Expression</a></div>
+               <div>         ::= <a href="#CallExpression" title="CallExpression">CallExpression</a></div>
+               <div>           | <a href="#BinaryExpression" title="BinaryExpression">BinaryExpression</a></div>
+               <div>           | <a href="#UnaryExpression" title="UnaryExpression">UnaryExpression</a></div>
+               <div>           | <a href="#Grouping" title="Grouping">Grouping</a></div>
+               <div>           | <a href="#Identifier" title="Identifier">Identifier</a></div>
+               <div>           | <a href="#Number" title="Number">Number</a></div>
+               <div>           | <a href="#String" title="String">String</a></div></code></div>
+    </p>
+    <p xmlns:xhtml="http://www.w3.org/1999/xhtml">referenced by:
+        <ul>
+            <li><a href="#BinaryExpression" title="BinaryExpression">BinaryExpression</a></li>
+            <li><a href="#Declaration" title="Declaration">Declaration</a></li>
+            <li><a href="#ExpressionStatement" title="ExpressionStatement">ExpressionStatement</a></li>
+            <li><a href="#ForLoop" title="ForLoop">ForLoop</a></li>
+            <li><a href="#Grouping" title="Grouping">Grouping</a></li>
+            <li><a href="#IfStatement" title="IfStatement">IfStatement</a></li>
+            <li><a href="#ReturnStatement" title="ReturnStatement">ReturnStatement</a></li>
+            <li><a href="#UnaryExpression" title="UnaryExpression">UnaryExpression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="CallExpression">CallExpression:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="235" height="37">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Identifier" xlink:title="Identifier">
+            <rect x="31" y="3" width="78" height="32" />
+            <rect x="29" y="1" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="39" y="21">Identifier</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Grouping" xlink:title="Grouping">
+            <rect x="129" y="3" width="78" height="32" />
+            <rect x="127" y="1" width="78" height="32" class="nonterminal" />
+            <text class="nonterminal" x="137" y="21">Grouping</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m78 0 h10 m0 0 h10 m78 0 h10 m3 0 h-3" />
+        <polygon points="225 17 233 13 233 21" />
+        <polygon points="225 17 217 13 217 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#CallExpression" title="CallExpression">CallExpression</a></div>
+               <div>         ::= <a href="#Identifier" title="Identifier">Identifier</a> <a href="#Grouping" title="Grouping">Grouping</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="BinaryExpression">BinaryExpression:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="395" height="37">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="31" y="3" width="90" height="32" />
+            <rect x="29" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="39" y="21">Expression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#BinaryOperator" xlink:title="BinaryOperator">
+            <rect x="141" y="3" width="116" height="32" />
+            <rect x="139" y="1" width="116" height="32" class="nonterminal" />
+            <text class="nonterminal" x="149" y="21">BinaryOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="277" y="3" width="90" height="32" />
+            <rect x="275" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="285" y="21">Expression</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m90 0 h10 m0 0 h10 m116 0 h10 m0 0 h10 m90 0 h10 m3 0 h-3" />
+        <polygon points="385 17 393 13 393 21" />
+        <polygon points="385 17 377 13 377 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#BinaryExpression" title="BinaryExpression">BinaryExpression</a></div>
+               <div>         ::= <a href="#Expression" title="Expression">Expression</a> <a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a> <a href="#Expression" title="Expression">Expression</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="UnaryExpression">UnaryExpression:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="327" height="81">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#PrefixOperator" xlink:title="PrefixOperator">
+            <rect x="51" y="3" width="112" height="32" />
+            <rect x="49" y="1" width="112" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">PrefixOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="183" y="3" width="90" height="32" />
+            <rect x="181" y="1" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="191" y="21">Expression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="51" y="47" width="90" height="32" />
+            <rect x="49" y="45" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">Expression</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#PostfixOperator" xlink:title="PostfixOperator">
+            <rect x="161" y="47" width="118" height="32" />
+            <rect x="159" y="45" width="118" height="32" class="nonterminal" />
+            <text class="nonterminal" x="169" y="65">PostfixOperator</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m112 0 h10 m0 0 h10 m90 0 h10 m0 0 h6 m-268 0 h20 m248 0 h20 m-288 0 q10 0 10 10 m268 0 q0 -10 10 -10 m-278 10 v24 m268 0 v-24 m-268 24 q0 10 10 10 m248 0 q10 0 10 -10 m-258 10 h10 m90 0 h10 m0 0 h10 m118 0 h10 m23 -44 h-3" />
+        <polygon points="317 17 325 13 325 21" />
+        <polygon points="317 17 309 13 309 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#UnaryExpression" title="UnaryExpression">UnaryExpression</a></div>
+               <div>         ::= <a href="#PrefixOperator" title="PrefixOperator">PrefixOperator</a> <a href="#Expression" title="Expression">Expression</a></div>
+               <div>           | <a href="#Expression" title="Expression">Expression</a> <a href="#PostfixOperator" title="PostfixOperator">PostfixOperator</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Grouping">Grouping:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="321" height="97">
+        <polygon points="9 61 1 57 1 65" />
+        <polygon points="17 61 9 57 9 65" />
+        <rect x="31" y="47" width="26" height="32" rx="10" />
+        <rect x="29" y="45" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="65">(</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Expression" xlink:title="Expression">
+            <rect x="117" y="47" width="90" height="32" />
+            <rect x="115" y="45" width="90" height="32" class="nonterminal" />
+            <text class="nonterminal" x="125" y="65">Expression</text>
+        </a>
+        <rect x="117" y="3" width="24" height="32" rx="10" />
+        <rect x="115" y="1" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="125" y="21">,</text>
+        <rect x="267" y="47" width="26" height="32" rx="10" />
+        <rect x="265" y="45" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="275" y="65">)</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 61 h2 m0 0 h10 m26 0 h10 m40 0 h10 m90 0 h10 m-130 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -24 q0 -10 10 -10 m110 44 l20 0 m-20 0 q10 0 10 -10 l0 -24 q0 -10 -10 -10 m-110 0 h10 m24 0 h10 m0 0 h66 m-150 44 h20 m150 0 h20 m-190 0 q10 0 10 10 m170 0 q0 -10 10 -10 m-180 10 v14 m170 0 v-14 m-170 14 q0 10 10 10 m150 0 q10 0 10 -10 m-160 10 h10 m0 0 h140 m20 -34 h10 m26 0 h10 m3 0 h-3" />
+        <polygon points="311 61 319 57 319 65" />
+        <polygon points="311 61 303 57 303 65" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Grouping" title="Grouping">Grouping</a> ::= '(' ( <a href="#Expression" title="Expression">Expression</a> ( ',' <a href="#Expression" title="Expression">Expression</a> )* )? ')'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#CallExpression" title="CallExpression">CallExpression</a></li>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Identifier">Identifier:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="283" height="203">
+        <polygon points="9 139 1 135 1 143" />
+        <polygon points="17 139 9 135 9 143" />
+        <polygon points="49 139 56 123 102 123 109 139 102 155 56 155" class="regexp" />
+        <text class="regexp" x="64" y="143">[a-z]</text>
+        <polygon points="49 183 56 167 104 167 111 183 104 199 56 199" class="regexp" />
+        <text class="regexp" x="64" y="187">[A-Z]</text>
+        <polygon points="171 105 178 89 226 89 233 105 226 121 178 121" class="regexp" />
+        <text class="regexp" x="186" y="109">[0-9]</text>
+        <polygon points="171 61 178 45 224 45 231 61 224 77 178 77" class="regexp" />
+        <text class="regexp" x="186" y="65">[a-z]</text>
+        <polygon points="171 17 178 1 226 1 233 17 226 33 178 33" class="regexp" />
+        <text class="regexp" x="186" y="21">[A-Z]</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 139 h2 m20 0 h10 m60 0 h10 m0 0 h2 m-102 0 h20 m82 0 h20 m-122 0 q10 0 10 10 m102 0 q0 -10 10 -10 m-112 10 v24 m102 0 v-24 m-102 24 q0 10 10 10 m82 0 q10 0 10 -10 m-92 10 h10 m62 0 h10 m40 -44 h10 m0 0 h72 m-102 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m82 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m-92 10 l0 -44 q0 -10 10 -10 m92 54 l0 -44 q0 -10 -10 -10 m-82 0 h10 m60 0 h10 m0 0 h2 m-92 10 l0 -44 q0 -10 10 -10 m92 54 l0 -44 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m23 122 h-3" />
+        <polygon points="273 139 281 135 281 143" />
+        <polygon points="273 139 265 135 265 143" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Identifier" title="Identifier">Identifier</a></div>
+               <div>         ::= [a-zA-Z] [0-9a-zA-Z]*</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#CallExpression" title="CallExpression">CallExpression</a></li>
+            <li><a href="#Declaration" title="Declaration">Declaration</a></li>
+            <li><a href="#DefineStatement" title="DefineStatement">DefineStatement</a></li>
+            <li><a href="#DllImportStatement" title="DllImportStatement">DllImportStatement</a></li>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Number">Number:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="169" height="213">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Integer" xlink:title="Integer">
+            <rect x="51" y="3" width="66" height="32" />
+            <rect x="49" y="1" width="66" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">Integer</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Decimal" xlink:title="Decimal">
+            <rect x="51" y="47" width="70" height="32" />
+            <rect x="49" y="45" width="70" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">Decimal</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Hex" xlink:title="Hex">
+            <rect x="51" y="91" width="44" height="32" />
+            <rect x="49" y="89" width="44" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="109">Hex</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Octal" xlink:title="Octal">
+            <rect x="51" y="135" width="52" height="32" />
+            <rect x="49" y="133" width="52" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="153">Octal</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Binary" xlink:title="Binary">
+            <rect x="51" y="179" width="60" height="32" />
+            <rect x="49" y="177" width="60" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="197">Binary</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m66 0 h10 m0 0 h4 m-110 0 h20 m90 0 h20 m-130 0 q10 0 10 10 m110 0 q0 -10 10 -10 m-120 10 v24 m110 0 v-24 m-110 24 q0 10 10 10 m90 0 q10 0 10 -10 m-100 10 h10 m70 0 h10 m-100 -10 v20 m110 0 v-20 m-110 20 v24 m110 0 v-24 m-110 24 q0 10 10 10 m90 0 q10 0 10 -10 m-100 10 h10 m44 0 h10 m0 0 h26 m-100 -10 v20 m110 0 v-20 m-110 20 v24 m110 0 v-24 m-110 24 q0 10 10 10 m90 0 q10 0 10 -10 m-100 10 h10 m52 0 h10 m0 0 h18 m-100 -10 v20 m110 0 v-20 m-110 20 v24 m110 0 v-24 m-110 24 q0 10 10 10 m90 0 q10 0 10 -10 m-100 10 h10 m60 0 h10 m0 0 h10 m23 -176 h-3" />
+        <polygon points="159 17 167 13 167 21" />
+        <polygon points="159 17 151 13 151 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Number" title="Number">Number</a>   ::= <a href="#Integer" title="Integer">Integer</a></div>
+               <div>           | <a href="#Decimal" title="Decimal">Decimal</a></div>
+               <div>           | <a href="#Hex" title="Hex">Hex</a></div>
+               <div>           | <a href="#Octal" title="Octal">Octal</a></div>
+               <div>           | <a href="#Binary" title="Binary">Binary</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="String">String:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="309" height="71">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <rect x="31" y="37" width="26" height="32" rx="10" />
+        <rect x="29" y="35" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="55">"</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ASCIICharacter" xlink:title="ASCIICharacter" style="">
+            <rect x="97" y="3" width="118" height="32" />
+            <rect x="95" y="1" width="118" height="32" class="nonterminal" />
+            <text class="nonterminal" x="105" y="21">ASCIICharacter</text>
+        </a>
+        <rect x="255" y="37" width="26" height="32" rx="10" />
+        <rect x="253" y="35" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="263" y="55">"</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m0 0 h10 m26 0 h10 m20 0 h10 m0 0 h128 m-158 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m138 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-138 0 h10 m118 0 h10 m20 34 h10 m26 0 h10 m3 0 h-3" />
+        <polygon points="299 51 307 47 307 55" />
+        <polygon points="299 51 291 47 291 55" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#String" title="String">String</a>   ::= '"' <a href="#ASCIICharacter" title="ASCIICharacter">ASCIICharacter</a>* '"'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Expression" title="Expression">Expression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="BinaryOperator">BinaryOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="251" height="301">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#AssignmentOperator" xlink:title="AssignmentOperator">
+            <rect x="51" y="3" width="150" height="32" />
+            <rect x="49" y="1" width="150" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="21">AssignmentOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#LogicOperator" xlink:title="LogicOperator">
+            <rect x="51" y="47" width="108" height="32" />
+            <rect x="49" y="45" width="108" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="65">LogicOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#EqualityOperator" xlink:title="EqualityOperator">
+            <rect x="51" y="91" width="126" height="32" />
+            <rect x="49" y="89" width="126" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="109">EqualityOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#ComparisonOperator" xlink:title="ComparisonOperator">
+            <rect x="51" y="135" width="152" height="32" />
+            <rect x="49" y="133" width="152" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="153">ComparisonOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#AdditionOperator" xlink:title="AdditionOperator">
+            <rect x="51" y="179" width="128" height="32" />
+            <rect x="49" y="177" width="128" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="197">AdditionOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#DivisionOperator" xlink:title="DivisionOperator">
+            <rect x="51" y="223" width="126" height="32" />
+            <rect x="49" y="221" width="126" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="241">DivisionOperator</text>
+        </a>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#BitwiseOperator" xlink:title="BitwiseOperator">
+            <rect x="51" y="267" width="120" height="32" />
+            <rect x="49" y="265" width="120" height="32" class="nonterminal" />
+            <text class="nonterminal" x="59" y="285">BitwiseOperator</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m150 0 h10 m0 0 h2 m-192 0 h20 m172 0 h20 m-212 0 q10 0 10 10 m192 0 q0 -10 10 -10 m-202 10 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m108 0 h10 m0 0 h44 m-182 -10 v20 m192 0 v-20 m-192 20 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m126 0 h10 m0 0 h26 m-182 -10 v20 m192 0 v-20 m-192 20 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m152 0 h10 m-182 -10 v20 m192 0 v-20 m-192 20 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m128 0 h10 m0 0 h24 m-182 -10 v20 m192 0 v-20 m-192 20 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m126 0 h10 m0 0 h26 m-182 -10 v20 m192 0 v-20 m-192 20 v24 m192 0 v-24 m-192 24 q0 10 10 10 m172 0 q10 0 10 -10 m-182 10 h10 m120 0 h10 m0 0 h32 m23 -264 h-3" />
+        <polygon points="241 17 249 13 249 21" />
+        <polygon points="241 17 233 13 233 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></div>
+               <div>         ::= <a href="#AssignmentOperator" title="AssignmentOperator">AssignmentOperator</a></div>
+               <div>           | <a href="#LogicOperator" title="LogicOperator">LogicOperator</a></div>
+               <div>           | <a href="#EqualityOperator" title="EqualityOperator">EqualityOperator</a></div>
+               <div>           | <a href="#ComparisonOperator" title="ComparisonOperator">ComparisonOperator</a></div>
+               <div>           | <a href="#AdditionOperator" title="AdditionOperator">AdditionOperator</a></div>
+               <div>           | <a href="#DivisionOperator" title="DivisionOperator">DivisionOperator</a></div>
+               <div>           | <a href="#BitwiseOperator" title="BitwiseOperator">BitwiseOperator</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryExpression" title="BinaryExpression">BinaryExpression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="PrefixOperator">PrefixOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="301">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="24" height="32" rx="10" />
+        <rect x="49" y="1" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">!</text>
+        <rect x="51" y="47" width="30" height="32" rx="10" />
+        <rect x="49" y="45" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">~</text>
+        <rect x="51" y="91" width="28" height="32" rx="10" />
+        <rect x="49" y="89" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">*</text>
+        <rect x="51" y="135" width="30" height="32" rx="10" />
+        <rect x="49" y="133" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="153">&amp;</text>
+        <rect x="51" y="179" width="26" height="32" rx="10" />
+        <rect x="49" y="177" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="197">-</text>
+        <rect x="51" y="223" width="40" height="32" rx="10" />
+        <rect x="49" y="221" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="241">++</text>
+        <rect x="51" y="267" width="32" height="32" rx="10" />
+        <rect x="49" y="265" width="32" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="285">--</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m24 0 h10 m0 0 h16 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m30 0 h10 m0 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m28 0 h10 m0 0 h12 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m30 0 h10 m0 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m26 0 h10 m0 0 h14 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m40 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m32 0 h10 m0 0 h8 m23 -264 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#PrefixOperator" title="PrefixOperator">PrefixOperator</a></div>
+               <div>         ::= '!'</div>
+               <div>           | '~'</div>
+               <div>           | '*'</div>
+               <div>           | '&amp;'</div>
+               <div>           | '-'</div>
+               <div>           | '++'</div>
+               <div>           | '--'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#UnaryExpression" title="UnaryExpression">UnaryExpression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="PostfixOperator">PostfixOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="81">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="40" height="32" rx="10" />
+        <rect x="49" y="1" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">++</text>
+        <rect x="51" y="47" width="32" height="32" rx="10" />
+        <rect x="49" y="45" width="32" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">--</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m40 0 h10 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m32 0 h10 m0 0 h8 m23 -44 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#PostfixOperator" title="PostfixOperator">PostfixOperator</a></div>
+               <div>         ::= '++'</div>
+               <div>           | '--'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#UnaryExpression" title="UnaryExpression">UnaryExpression</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Integer">Integer:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="161" height="57">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <polygon points="49 17 56 1 104 1 111 17 104 33 56 33" class="regexp" />
+        <text class="regexp" x="64" y="21">[0-9]</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m20 0 h10 m0 0 h72 m-102 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m82 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m23 34 h-3" />
+        <polygon points="151 51 159 47 159 55" />
+        <polygon points="151 51 143 47 143 55" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Integer" title="Integer">Integer</a>  ::= [0-9]*</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Decimal" title="Decimal">Decimal</a></li>
+            <li><a href="#Number" title="Number">Number</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Decimal">Decimal:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="255" height="37">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Integer" xlink:title="Integer">
+            <rect x="31" y="3" width="66" height="32" />
+            <rect x="29" y="1" width="66" height="32" class="nonterminal" />
+            <text class="nonterminal" x="39" y="21">Integer</text>
+        </a>
+        <rect x="117" y="3" width="24" height="32" rx="10" />
+        <rect x="115" y="1" width="24" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="125" y="21">.</text>
+        <a xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#Integer" xlink:title="Integer">
+            <rect x="161" y="3" width="66" height="32" />
+            <rect x="159" y="1" width="66" height="32" class="nonterminal" />
+            <text class="nonterminal" x="169" y="21">Integer</text>
+        </a>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m0 0 h10 m66 0 h10 m0 0 h10 m24 0 h10 m0 0 h10 m66 0 h10 m3 0 h-3" />
+        <polygon points="245 17 253 13 253 21" />
+        <polygon points="245 17 237 13 237 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Decimal" title="Decimal">Decimal</a>  ::= <a href="#Integer" title="Integer">Integer</a> '.' <a href="#Integer" title="Integer">Integer</a></div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Number" title="Number">Number</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Hex">Hex:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="217" height="159">
+        <polygon points="9 139 1 135 1 143" />
+        <polygon points="17 139 9 135 9 143" />
+        <rect x="31" y="125" width="36" height="32" rx="10" />
+        <rect x="29" y="123" width="36" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="143">0x</text>
+        <polygon points="105 105 112 89 160 89 167 105 160 121 112 121" class="regexp" />
+        <text class="regexp" x="120" y="109">[0-9]</text>
+        <polygon points="105 61 112 45 156 45 163 61 156 77 112 77" class="regexp" />
+        <text class="regexp" x="120" y="65">[a-f]</text>
+        <polygon points="105 17 112 1 158 1 165 17 158 33 112 33" class="regexp" />
+        <text class="regexp" x="120" y="21">[A-F]</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 139 h2 m0 0 h10 m36 0 h10 m20 0 h10 m0 0 h72 m-102 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m82 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m-92 10 l0 -44 q0 -10 10 -10 m92 54 l0 -44 q0 -10 -10 -10 m-82 0 h10 m58 0 h10 m0 0 h4 m-92 10 l0 -44 q0 -10 10 -10 m92 54 l0 -44 q0 -10 -10 -10 m-82 0 h10 m60 0 h10 m0 0 h2 m23 122 h-3" />
+        <polygon points="207 139 215 135 215 143" />
+        <polygon points="207 139 199 135 199 143" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Hex" title="Hex">Hex</a>      ::= '0x' [0-9a-fA-F]*</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Number" title="Number">Number</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Octal">Octal:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="217" height="71">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <rect x="31" y="37" width="36" height="32" rx="10" />
+        <rect x="29" y="35" width="36" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="55">0o</text>
+        <polygon points="105 17 112 1 160 1 167 17 160 33 112 33" class="regexp" />
+        <text class="regexp" x="120" y="21">[0-7]</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m0 0 h10 m36 0 h10 m20 0 h10 m0 0 h72 m-102 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m82 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m23 34 h-3" />
+        <polygon points="207 51 215 47 215 55" />
+        <polygon points="207 51 199 47 199 55" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Octal" title="Octal">Octal</a>    ::= '0o' [0-7]*</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Number" title="Number">Number</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="Binary">Binary:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="217" height="71">
+        <polygon points="9 51 1 47 1 55" />
+        <polygon points="17 51 9 47 9 55" />
+        <rect x="31" y="37" width="36" height="32" rx="10" />
+        <rect x="29" y="35" width="36" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="39" y="55">0b</text>
+        <polygon points="105 17 112 1 160 1 167 17 160 33 112 33" class="regexp" />
+        <text class="regexp" x="120" y="21">[0-1]</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 51 h2 m0 0 h10 m36 0 h10 m20 0 h10 m0 0 h72 m-102 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -14 q0 -10 10 -10 m82 34 l20 0 m-20 0 q10 0 10 -10 l0 -14 q0 -10 -10 -10 m-82 0 h10 m62 0 h10 m23 34 h-3" />
+        <polygon points="207 51 215 47 215 55" />
+        <polygon points="207 51 199 47 199 55" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#Binary" title="Binary">Binary</a>   ::= '0b' [0-1]*</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#Number" title="Number">Number</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="AssignmentOperator">AssignmentOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="169">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="34" height="32" rx="10" />
+        <rect x="49" y="1" width="34" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">:=</text>
+        <rect x="51" y="47" width="40" height="32" rx="10" />
+        <rect x="49" y="45" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">+=</text>
+        <rect x="51" y="91" width="36" height="32" rx="10" />
+        <rect x="49" y="89" width="36" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">-=</text>
+        <rect x="51" y="135" width="38" height="32" rx="10" />
+        <rect x="49" y="133" width="38" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="153">*=</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m34 0 h10 m0 0 h6 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m40 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m36 0 h10 m0 0 h4 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m38 0 h10 m0 0 h2 m23 -132 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#AssignmentOperator" title="AssignmentOperator">AssignmentOperator</a></div>
+               <div>         ::= ':='</div>
+               <div>           | '+='</div>
+               <div>           | '-='</div>
+               <div>           | '*='</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="LogicOperator">LogicOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="81">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="40" height="32" rx="10" />
+        <rect x="49" y="1" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">&amp;&amp;</text>
+        <rect x="51" y="47" width="32" height="32" rx="10" />
+        <rect x="49" y="45" width="32" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">||</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m40 0 h10 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m32 0 h10 m0 0 h8 m23 -44 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#LogicOperator" title="LogicOperator">LogicOperator</a></div>
+               <div>         ::= '&amp;&amp;'</div>
+               <div>           | '||'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="EqualityOperator">EqualityOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="125">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="30" height="32" rx="10" />
+        <rect x="49" y="1" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">=</text>
+        <rect x="51" y="47" width="40" height="32" rx="10" />
+        <rect x="49" y="45" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">==</text>
+        <rect x="51" y="91" width="34" height="32" rx="10" />
+        <rect x="49" y="89" width="34" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">!=</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m30 0 h10 m0 0 h10 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m40 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m34 0 h10 m0 0 h6 m23 -88 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#EqualityOperator" title="EqualityOperator">EqualityOperator</a></div>
+               <div>         ::= '='</div>
+               <div>           | '=='</div>
+               <div>           | '!='</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="ComparisonOperator">ComparisonOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="139" height="169">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="30" height="32" rx="10" />
+        <rect x="49" y="1" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">&lt;</text>
+        <rect x="51" y="47" width="40" height="32" rx="10" />
+        <rect x="49" y="45" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">&lt;=</text>
+        <rect x="51" y="91" width="30" height="32" rx="10" />
+        <rect x="49" y="89" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">&gt;</text>
+        <rect x="51" y="135" width="40" height="32" rx="10" />
+        <rect x="49" y="133" width="40" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="153">&gt;=</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m30 0 h10 m0 0 h10 m-80 0 h20 m60 0 h20 m-100 0 q10 0 10 10 m80 0 q0 -10 10 -10 m-90 10 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m40 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m30 0 h10 m0 0 h10 m-70 -10 v20 m80 0 v-20 m-80 20 v24 m80 0 v-24 m-80 24 q0 10 10 10 m60 0 q10 0 10 -10 m-70 10 h10 m40 0 h10 m23 -132 h-3" />
+        <polygon points="129 17 137 13 137 21" />
+        <polygon points="129 17 121 13 121 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#ComparisonOperator" title="ComparisonOperator">ComparisonOperator</a></div>
+               <div>         ::= '&lt;'</div>
+               <div>           | '&lt;='</div>
+               <div>           | '&gt;'</div>
+               <div>           | '&gt;='</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="AdditionOperator">AdditionOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="129" height="81">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="30" height="32" rx="10" />
+        <rect x="49" y="1" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">+</text>
+        <rect x="51" y="47" width="26" height="32" rx="10" />
+        <rect x="49" y="45" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">-</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m30 0 h10 m-70 0 h20 m50 0 h20 m-90 0 q10 0 10 10 m70 0 q0 -10 10 -10 m-80 10 v24 m70 0 v-24 m-70 24 q0 10 10 10 m50 0 q10 0 10 -10 m-60 10 h10 m26 0 h10 m0 0 h4 m23 -44 h-3" />
+        <polygon points="119 17 127 13 127 21" />
+        <polygon points="119 17 111 13 111 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#AdditionOperator" title="AdditionOperator">AdditionOperator</a></div>
+               <div>         ::= '+'</div>
+               <div>           | '-'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="DivisionOperator">DivisionOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="133" height="125">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="28" height="32" rx="10" />
+        <rect x="49" y="1" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">/</text>
+        <rect x="51" y="47" width="28" height="32" rx="10" />
+        <rect x="49" y="45" width="28" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">*</text>
+        <rect x="51" y="91" width="34" height="32" rx="10" />
+        <rect x="49" y="89" width="34" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">%</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m28 0 h10 m0 0 h6 m-74 0 h20 m54 0 h20 m-94 0 q10 0 10 10 m74 0 q0 -10 10 -10 m-84 10 v24 m74 0 v-24 m-74 24 q0 10 10 10 m54 0 q10 0 10 -10 m-64 10 h10 m28 0 h10 m0 0 h6 m-64 -10 v20 m74 0 v-20 m-74 20 v24 m74 0 v-24 m-74 24 q0 10 10 10 m54 0 q10 0 10 -10 m-64 10 h10 m34 0 h10 m23 -88 h-3" />
+        <polygon points="123 17 131 13 131 21" />
+        <polygon points="123 17 115 13 115 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#DivisionOperator" title="DivisionOperator">DivisionOperator</a></div>
+               <div>         ::= '/'</div>
+               <div>           | '*'</div>
+               <div>           | '%'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <p style="font-size: 14px; font-weight:bold"><a name="BitwiseOperator">BitwiseOperator:</a></p>
+    <svg xmlns="http://www.w3.org/2000/svg" width="129" height="169">
+        <polygon points="9 17 1 13 1 21" />
+        <polygon points="17 17 9 13 9 21" />
+        <rect x="51" y="3" width="30" height="32" rx="10" />
+        <rect x="49" y="1" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="21">&amp;</text>
+        <rect x="51" y="47" width="30" height="32" rx="10" />
+        <rect x="49" y="45" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="65">~</text>
+        <rect x="51" y="91" width="26" height="32" rx="10" />
+        <rect x="49" y="89" width="26" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="109">|</text>
+        <rect x="51" y="135" width="30" height="32" rx="10" />
+        <rect x="49" y="133" width="30" height="32" class="terminal" rx="10" />
+        <text class="terminal" x="59" y="153">^</text>
+        <path xmlns:svg="http://www.w3.org/2000/svg" class="line" d="m17 17 h2 m20 0 h10 m30 0 h10 m-70 0 h20 m50 0 h20 m-90 0 q10 0 10 10 m70 0 q0 -10 10 -10 m-80 10 v24 m70 0 v-24 m-70 24 q0 10 10 10 m50 0 q10 0 10 -10 m-60 10 h10 m30 0 h10 m-60 -10 v20 m70 0 v-20 m-70 20 v24 m70 0 v-24 m-70 24 q0 10 10 10 m50 0 q10 0 10 -10 m-60 10 h10 m26 0 h10 m0 0 h4 m-60 -10 v20 m70 0 v-20 m-70 20 v24 m70 0 v-24 m-70 24 q0 10 10 10 m50 0 q10 0 10 -10 m-60 10 h10 m30 0 h10 m23 -132 h-3" />
+        <polygon points="119 17 127 13 127 21" />
+        <polygon points="119 17 111 13 111 21" />
+    </svg>
+    <p>
+        <div class="ebnf"><code>
+               <div><a href="#BitwiseOperator" title="BitwiseOperator">BitwiseOperator</a></div>
+               <div>         ::= '&amp;'</div>
+               <div>           | '~'</div>
+               <div>           | '|'</div>
+               <div>           | '^'</div></code></div>
+    </p>
+    <p>referenced by:
+        <ul>
+            <li><a href="#BinaryOperator" title="BinaryOperator">BinaryOperator</a></li>
+        </ul>
+    </p>
+    <br />
+    <hr />
+    <p>
+        <table border="0" class="signature">
+            <tr>
+                <td style="width: 100%"> </td>
+                <td valign="top">
+                    <nobr class="signature">... generated by <a name="Railroad-Diagram-Generator" class="signature" title="https://bottlecaps.de/rr/ui" href="https://bottlecaps.de/rr/ui" target="_blank">Railroad Diagram Generator</a></nobr>
+                </td>
+                <td>
+                    <a name="Railroad-Diagram-Generator" title="https://bottlecaps.de/rr/ui" href="https://bottlecaps.de/rr/ui" target="_blank">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                            <g transform="scale(0.178)">
+                                <circle cx="45" cy="45" r="45" style="stroke: none; fill: rgb(255, 204, 0); --darkreader-inline-stroke:none; --darkreader-inline-fill:#ffd633;" data-darkreader-inline-stroke="" data-darkreader-inline-fill="" />
+                                <circle cx="45" cy="45" r="42" style="stroke: rgb(51, 41, 0); stroke-width: 2px; fill: rgb(255, 204, 0); --darkreader-inline-stroke:#dad8d2; --darkreader-inline-fill:#ffd633;" data-darkreader-inline-stroke="" data-darkreader-inline-fill="" />
+                                <line x1="15" y1="15" x2="75" y2="75" stroke="#332900" style="stroke-width: 9px; --darkreader-inline-stroke:#f5c500;" data-darkreader-inline-stroke="" />
+                                <line x1="15" y1="75" x2="75" y2="15" stroke="#332900" style="stroke-width: 9px; --darkreader-inline-stroke:#f5c500;" data-darkreader-inline-stroke="" />
+                                <text x="7" y="54" style="font-size: 26px; font-family: Arial, sans-serif; font-weight: bold; fill: rgb(51, 41, 0); --darkreader-inline-fill:#dad8d2;" data-darkreader-inline-fill="">R</text>
+                                <text x="64" y="54" style="font-size: 26px; font-family: Arial, sans-serif; font-weight: bold; fill: rgb(51, 41, 0); --darkreader-inline-fill:#dad8d2;" data-darkreader-inline-fill="">R</text>
+                            </g>
+                        </svg>
+                    </a>
+                </td>
+            </tr>
+        </table>
+    </p>
+</body>
+
+</html>
