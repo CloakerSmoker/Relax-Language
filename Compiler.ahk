@@ -422,6 +422,10 @@
 		
 		Try {
 			ResultType := this.Typing.ResultType(LeftType, RightType)
+			
+			if (IsAssignment && (Mod(LeftType.Precision, 8) != Mod(RightType.Precision, 8) || (LeftType.Precision < RightType.Precision))) {
+				Throw, Exception("Dummy exception")
+			}
 		}
 		Catch E {
 			new Error("Type")
@@ -432,61 +436,61 @@
 		}
 		
 		if (IsAssignment) {
-			return this.CompileTypeAssignment(ResultType, Expression, LeftType, RightType)
+			if (ResultType.Family = "Decimal" && Expression.Operator.Type = Tokens.COLON_EQUAL) {
+				this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++
+				; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
+				
+				this.SetVariable(Expression.Left.Value)
+				return RightType
+			}
+			else if (ResultType.Family = "Integer") {
+				return this.CompileIntegerAssignment(Expression, LeftType, RightType)
+			}
+			else {
+				new Error("Compile")
+					.LongText("Assigning a " VariableType.Name " with the " Expression.Operator.Value " operator is not implemented.")
+					.Token(Expression.Operator)
+					.Source(this.Source)
+				.Throw()
+			}
 		}
 		else {
-			return this.CompileBinaryTypeExpression(ResultType, Expression, LeftType, RightType, ResultType) ; TODO: Remove duplicate param
+			if (ResultType.Family = "Decimal") {
+				return this.CompileBinaryDecimal(Expression, LeftType, RightType, ResultType)
+			}
+			else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
+				return this.CompileBinaryInteger(Expression, LeftType, RightType, ResultType)
+			}
 		}
 	}
-	CompileTypeAssignment(Type, Expression, VariableType, RightType) {
-		if (Mod(VariableType.Precision, 8) != Mod(RightType.Precision, 8) || (VariableType.Precision < RightType.Precision)) {
-			new Error("Type")
-				.LongText("The type " RightType.Name " is not a valid right side operand type for assigning a variable of type " VariableType.Name ".")
-				.ShortText("Right side precision must be <= left side")
-				.Token(Expression.Operator)
-				.Source(this.Source)
-			.Throw()
-		}
-		
-		this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++ 
-		; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
-		
-		if (Type.Name = "Double") {
-			this.CompileDoubleAssignment(Expression, VariableType, RightType)
-		}
-		else {
-			this.CompileInt64Assignment(Expression, VariableType, RightType)
-		}
-		
-		return RightType
-	}
-	
-	CompileBinaryTypeExpression(Type, Params*) {
-		if (Type.Name = "Double") {
-			return this.CompileBinaryDouble(Params*)
-		}
-		else {
-			return this.CompileBinaryInt64(Params*)
-		}
-	}
-	
-	CompileDoubleAssignment(Expression, VariableType, RightType) {
+	CompileIntegerAssignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
+				this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++
+				; Copy the right side value, which is on top of the stack; since this.SetVariable pops the stack while assigning, and we still need to return a result
+			
+				this.SetVariable(Expression.Left.Value)
+			}
+			Case Tokens.PLUS_EQUAL, Tokens.MINUS_EQUAL: {
+				this.GetVariable(Expression.Left.Value)
+				this.CodeGen.Pop(RAX), this.StackDepth--
+				this.CodeGen.Pop(RBX), this.StackDepth--
+				
+				if (Expression.Operator.Type = Tokens.PLUS_EQUAL) {
+					this.CodeGen.Add(RAX, RBX)
+				}
+				else if (Expression.Operator.Type = Tokens.MINUS_EQUAL) {
+					this.CodeGen.Sub(RAX, RBX)
+				}
+				
+				this.CodeGen.Push(RAX), this.StackDepth++
+				this.CodeGen.Push(SIB(8, RSI, RSP)), this.StackDepth++
 				this.SetVariable(Expression.Left.Value)
 			}
 		}
 	}
 	
-	CompileInt64Assignment(Expression, VariableType, RightType) {
-		Switch (Expression.Operator.Type) {
-			Case Tokens.COLON_EQUAL: {
-				this.SetVariable(Expression.Left.Value)
-			}
-		}
-	}
-	
-	CompileBinaryDouble(Expression, LeftType, RightType, ResultType) {
+	CompileBinaryDecimal(Expression, LeftType, RightType, ResultType) {
 		this.Cast(RightType, ResultType)
 		this.CodeGen.FLD_Stack()
 		this.CodeGen.Pop(RBX), this.StackDepth--
@@ -551,7 +555,7 @@
 		return ResultType
 	}
 	
-	CompileBinaryInt64(Expression, LeftType, RightType, ResultType) {		
+	CompileBinaryInteger(Expression, LeftType, RightType, ResultType) {		
 		if (OperatorClasses.IsClass(Expression.Operator, "Logic")) {
 			this.CodeGen.Pop(RDX), this.StackDepth--
 			this.CodeGen.Cmp(RDX, RSI)
