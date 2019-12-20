@@ -55,63 +55,96 @@
 		return
 	}
 	
-	CompileToken(TargetToken) {
-		Switch (TargetToken.Type) {
-			Case Tokens.INTEGER: {
-				this.CodeGen.Push(TargetToken.Value), this.StackDepth++
-				ShortTypeName := this.CodeGen.NumberSizeOf(TargetToken.Value, False)
-				FullTypeName := IToInt(ShortTypeName)
-				return this.Typing.GetType(FullTypeName)
+	;========================
+	; Variable methods
+	
+	GetVariableSIB(Name) {
+		if (this.Variables.HasKey(Name)) {
+			Index := this.Variables[Name]
+			
+			if (Index = 0) {
+				IndexRegister := RSI
 			}
-			Case Tokens.DOUBLE: {
-				this.CodeGen.Push(FloatToBinaryInt(TargetToken.Value)), this.StackDepth++
-				return this.Typing.GetType("Double")
+			else if (Index = 1) {
+				IndexRegister := RDI
 			}
-			Case Tokens.IDENTIFIER: {
-				return this.GetVariable(TargetToken.Value)
+			else {
+				this.CodeGen.SmallMove(R10, Index)
+				IndexRegister := R10
 			}
-			Case Tokens.STRING: {
-				this.CodeGen.Push_String_Pointer(TargetToken.Value), this.StackDepth++
-				return this.Typing.GetType("Int8*")
-			}
-			Default: {
-				new Error("Compile")
-					.LongText("This token can not be compiled.")
-					.ShortText("Is not implemented in the compiler.")
-					.Token(TargetToken)
-					.Source(this.Source)
-				.Throw()
-			}
+			
+			return SIB(8, IndexRegister, R15)
+		}
+		else if (this.Globals.HasKey(Name)) {
+			this.CodeGen.Move_R64_Global_Pointer(R10, Name)
+			return SIB(8, RSI, R10)
 		}
 	}
+	SetVariable(Name) {
+		VariableSIB := this.GetVariableSIB(Name)
+		this.CodeGen.Pop_SIB(VariableSIB), this.StackDepth--
+	}
+	GetVariable(Name) {
+		VariableSIB := this.GetVariableSIB(Name)
+		
+		this.CodeGen.Push_SIB(VariableSIB), this.StackDepth++
+		
+		return this.GetVariableType(Name)
+	}
+	GetVariableType(Name) {
+		if (this.Globals.HasKey(Name)) {
+			return this.Typing.GetType(this.Globals[Name])
+		}
+		else {
+			return this.Typing.GetVariableType(Name)
+		}
+	}
+	GetVariableAddress(Name) {
+		VariableSIB := this.GetVariableSIB(Name)
+		
+		this.CodeGen.Lea(R10, VariableSIB)
+		this.CodeGen.Push(R10), this.StackDepth++
+	}
+	AddVariable(RSPIndex, Name) {
+		this.Variables[Name] := RSPIndex
+	}
+	
 	CompileProgram(Program) {
-		this.FunctionIndex := 0
+		this.FunctionIndex := 0 ; A unique number to keep different functions from reusing label names
+		
 		this.CodeGen := new X64CodeGen()
-		Current := this.CurrentProgram := {"Node": Program, "FunctionOffsets": {}}
-		this.CurrentFunction := {}
+		this.Globals := Program.Globals
+		this.Program := Program
+		
+		FunctionOffsets := {}
 		FunctionOffset := 0
 		
+		
 		for FunctionName, FunctionDefine in Program.Functions {
-			Current.FunctionOffsets[FunctionName] := FunctionOffset
+			FunctionOffsets[FunctionName] := FunctionOffset
+			
 			this.Compile(FunctionDefine) ; Compile a function starting from FunctionOffset
+			
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
 		
-		return new CompiledProgram(Program, this.CodeGen, Current.FunctionOffsets)
+		return new CompiledProgram(Program, this.CodeGen, FunctionOffsets)
 	}
 	
 	CompileDefine(DefineAST) {
 		this.FunctionIndex++
 		this.Variables := {}
+		
+		this.Function := DefineAST
+		this.Locals := DefineAST.Locals
+		
 		this.StackDepth := 0
-		this.CurrentFunction := DefineAST
-
+		
 		ParamSizes := DefineAST.Params.Count()
-		CG := this.CodeGen
 		
 		for LocalName, LocalType in DefineAST.Locals {
 			this.AddVariable(ParamSizes++, LocalName)
-			this.Typing.AddVariable(LocalType, LocalName)
+			this.Typing.AddVariable(LocalType[1], LocalName)
 		}
 		
 		if (Mod(ParamSizes, 2) != 1) {
@@ -119,27 +152,33 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		CG.Label("__Define__" DefineAST.Name.Value)
+		this.CodeGen.Label("__Define__" DefineAST.Name.Value)
 		
 		this.PushA()
 			if (ParamSizes != 0) {
-				CG.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
-				CG.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
+				this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
+				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
-			CG.SmallMove(RSI, 0)
-			CG.SmallMove(RDI, 1)
+			this.CodeGen.SmallMove(RSI, 0)
+			this.CodeGen.SmallMove(RDI, 1)
 			
 			this.FunctionParameters(DefineAST.Params)
+			
+			for k, LocalDefault in DefineAST.Locals {
+				if (LocalDefault[2].Type != ASTNodeTypes.None) {
+					this.Compile(LocalDefault[2])
+				}
+			}
 			
 			for k, Statement in DefineAST.Body {
 				this.Compile(Statement)
 			}
 			
-			CG.Label("__Return" this.FunctionIndex)
+			this.CodeGen.Label("__Return" this.FunctionIndex)
 		
 			if (ParamSizes != 0) {
-				CG.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+				this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
 			}
 		this.PopA()
 		
@@ -148,8 +187,6 @@
 		}
 		
 		this.CodeGen.Return()
-		
-		return CG
 	}
 	
 	static PushSavedRegisters := [RCX, RDX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15]
@@ -234,6 +271,36 @@
 		}
 	}
 	
+	CompileToken(TargetToken) {
+		Switch (TargetToken.Type) {
+			Case Tokens.INTEGER: {
+				this.CodeGen.Push(TargetToken.Value), this.StackDepth++
+				ShortTypeName := this.CodeGen.NumberSizeOf(TargetToken.Value, False)
+				FullTypeName := IToInt(ShortTypeName)
+				return this.Typing.GetType(FullTypeName)
+			}
+			Case Tokens.DOUBLE: {
+				this.CodeGen.Push(FloatToBinaryInt(TargetToken.Value)), this.StackDepth++
+				return this.Typing.GetType("Double")
+			}
+			Case Tokens.IDENTIFIER: {
+				return this.GetVariable(TargetToken.Value)
+			}
+			Case Tokens.STRING: {
+				this.CodeGen.Push_String_Pointer(TargetToken.Value), this.StackDepth++
+				return this.Typing.GetType("Int8*")
+			}
+			Default: {
+				new Error("Compile")
+					.LongText("This token can not be compiled.")
+					.ShortText("Is not implemented in the compiler.")
+					.Token(TargetToken)
+					.Source(this.Source)
+				.Throw()
+			}
+		}
+	}
+	
 	CompileExpressionLine(Statement) {
 		this.Compile(Statement.Expression)
 		this.CodeGen.Pop(RAX), this.StackDepth--
@@ -292,7 +359,7 @@
 	
 	CompileReturn(Statement) {
 		ResultType := this.Compile(Statement.Expression)
-		ReturnType := this.Typing.GetType(this.CurrentFunction.ReturnType.Value)
+		ReturnType := this.Typing.GetType(this.Function.ReturnType.Value)
 		
 		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
 			new Error("Type")
@@ -305,49 +372,6 @@
 		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 		this.CodeGen.Pop(RAX), this.StackDepth--
 		this.CodeGen.JMP("__Return" this.FunctionIndex)
-	}
-	
-	;========================
-	; Variable methods
-	
-	GetVariablePrelude(Name) {
-		if !(this.Variables.HasKey(Name)) {
-			Throw, Exception("Variable '" Name "' not found.")
-		}
-		
-		Index := this.Variables[Name]
-		
-		if (Index = 0) {
-			return RSI
-		}
-		else if (Index = 1) {
-			return RDI
-		}
-		else {
-			this.CodeGen.SmallMove(R10, Index)
-			return R10
-		}
-	}
-	SetVariable(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		this.CodeGen.Pop_SIB(SIB(8, IndexRegister, R15)), this.StackDepth--
-	}
-	GetVariable(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		Type := this.Typing.GetVariableType(Name)
-	
-		this.CodeGen.Push(SIB(8, IndexRegister, R15)), this.StackDepth++
-		
-		return Type
-	}
-	GetVariableAddress(Name) {
-		IndexRegister := this.GetVariablePrelude(Name)
-		
-		this.CodeGen.Lea(R11, SIB(8, IndexRegister, R15))
-		this.CodeGen.Push(R11), this.StackDepth++
-	}
-	AddVariable(RSPIndex, Name) {
-		this.Variables[Name] := RSPIndex
 	}
 	
 	;========================
@@ -389,7 +413,7 @@
 		
 		if (IsAssignment) {
 			RightType := this.Compile(Expression.Right)
-			LeftType := this.Typing.GetVariableType(Expression.Left.Value)
+			LeftType := this.GetVariableType(Expression.Left.Value)
 		}
 		else {
 			LeftType := this.Compile(Expression.Left)
@@ -618,24 +642,24 @@
 		OperatorString := Operator.Stringify()
 		
 		if (OperatorString = "--" || OperatorString = "++") {
-			VariableIndexRegister := this.GetVariablePrelude(Expression.Operand.Value)
+			VariableSIB := this.GetVariableSIB(Expression.Operand.Value)
 			
 			Switch (Operator.Type) {
 				Case Tokens.PLUS_PLUS_L: {
-					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+					this.CodeGen.Inc_SIB(VariableSIB)
 					this.GetVariable(Expression.Operand.Value)
 				}
 				Case Tokens.PLUS_PLUS_R: {
 					this.GetVariable(Expression.Operand.Value)
-					this.CodeGen.Inc_SIB(SIB(8, VariableIndexRegister, R15))
+					this.CodeGen.Inc_SIB(VariableSIB)
 				}
 				Case Tokens.MINUS_MINUS_L: {
-					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+					this.CodeGen.Dec_SIB(VariableSIB)
 					this.GetVariable(Expression.Operand.Value)
 				}
 				Case Tokens.MINUS_MINUS_R: {
 					this.GetVariable(Expression.Operand.Value)
-					this.CodeGen.Dec_SIB(SIB(8, VariableIndexRegister, R15))
+					this.CodeGen.Dec_SIB(VariableSIB)
 				}
 			}
 			
@@ -777,7 +801,7 @@
 	; Function call methods
 
 	CompileCall(Expression) {
-		if (FunctionNode := this.CurrentProgram.Node.Functions[Expression.Target.Value]) {
+		if (FunctionNode := this.Program.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
 			StackParamSpace := 0 ; Remembers how much stack space to free after the call

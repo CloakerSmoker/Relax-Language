@@ -82,7 +82,7 @@
 		}
 		
 		if !(FoundType) {
-			Throw, Exception("Invalid Type")
+			Throw, Exception("Invalid Type: '" TypeName "'")
 		}
 		else if (Pointer) {
 			return this.GetPointerType(FoundType)

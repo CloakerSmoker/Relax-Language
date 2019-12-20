@@ -340,6 +340,7 @@ class Keywords extends Enum {
 		if
 		else
 		for
+		global
 	)"
 }
 
@@ -449,7 +450,10 @@ class ASTNodes {
 				String .= ") {`n"
 				
 				for LocalName, LocalType in this.Locals {
-					String .= "`t" LocalType " " LocalName ";`n"
+					String .= "`t" LocalType[1] " " LocalName ";`n"
+				}
+				for LocalName, LocalDefault in this.Locals {
+					String .= LocalDefault[2].Stringify("`t")
 				}
 				
 				for k, Line in this.Body {

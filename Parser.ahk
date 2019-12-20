@@ -19,6 +19,35 @@
 		this.UnwindTo(Tokens.NEWLINE, Tokens.EOF)
 	}
 	
+	AddFunction(Node) {
+		if (Node.Type = ASTNodeTypes.None) {
+			return
+		}
+	
+		FunctionName := Node.Name.Value
+		
+		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
+			this.UnwindToBlockClose()
+			
+			new Error("Parse")
+				.LongText("Duplicate defintion")
+				.ShortText("Already defined elsewhere.")
+				.Token(Node.Name)
+				.Source(this.Source)
+			.Throw()
+		}
+	
+		this.CurrentProgram.Functions[FunctionName] := Node
+	}
+	AddLocal(Type, Name, Default) {
+		this.CurrentProgram.CurrentFunction[Name.Value] := [Type.Value, Default]
+		return new ASTNodes.None()
+	}
+	AddGlobal(Type, Name) {
+		this.CurrentProgram.Globals[Name.Value] := Type.Value
+		return new ASTNodes.None()
+	}
+	
 	Start(Tokens) {
 		this.Tokens := Tokens
 		return this.ParseProgram()
@@ -69,7 +98,10 @@
 				return this.ParseDefine()
 			}
 			else if (Next.Value = Keywords.DLLIMPORT) {
-				return this.ParseImport()
+				return this.ParseDllImport()
+			}
+			else if (Next.Value = Keywords.GLOBAL) {
+				return this.AddGlobal(this.ParseDeclaration(False)*) ; Parse a declaration, with no initialization allowed, since there's no time to run the initialization
 			}
 		}
 		else if (Next.Type = Tokens.NEWLINE) {
@@ -112,7 +144,7 @@
 		
 		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals)
 	}
-	ParseImport() {
+	ParseDllImport() {
 		ReturnType := this.ParseTypeName()
 		
 		Name := this.ParsePrimary()
@@ -162,7 +194,7 @@
 				return this.ParseKeywordStatement()
 			}
 			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
-				return this.ParseDeclaration() ; The declaration format is TypeName VarName (ExpressionLine|\n)
+				return this.AddLocal(this.ParseDeclaration()*) ; The declaration format is TypeName VarName (ExpressionLine|\n)
 			}
 			else {
 				return this.ParseExpressionStatement()
@@ -172,18 +204,16 @@
 			this.CriticalError := True
 		}
 	}
-	ParseDeclaration() {
+	ParseDeclaration(AllowInitializing := True) {
 		Type := this.ParseTypeName()
-	
 		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
-		this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
 		
 		if (this.NextMatches(Tokens.NEWLINE)) {
-			return new ASTNodes.None()
+			return [Type, Name, new ASTNodes.None()]
 		}
-		else if (this.NextMatches(Tokens.COLON_EQUAL)) {
+		else if (this.NextMatches(Tokens.COLON_EQUAL) && AllowInitializing) {
 			this.Index -= 2
-			return this.ParseExpressionStatement()
+			return [Type, Name, this.ParseExpressionStatement()]
 		}
 		else {
 			ErrorToken := this.Next()
@@ -266,10 +296,7 @@
 		this.Consume(Tokens.LEFT_PAREN, "For loops require a '(' after 'for'.")
 		
 		if (this.Typing.IsValidType(this.Peek().Value) && this.Peek(2).Type = Tokens.IDENTIFIER) {
-			Type := this.Next()
-			Name := this.Peek()
-			
-			this.CurrentProgram.CurrentFunction[Name.Value] := Type.Value
+			this.AddLocal(this.Next(), this.Peek(), new ASTNodes.None())
 		}
 		
 		Init := this.ParseExpression(Tokens.COMMA)
@@ -605,26 +632,6 @@
 		return TypeToken
 	}
 	
-	AddFunction(Node) {
-		if (Node.Type = ASTNodeTypes.None) {
-			return
-		}
-	
-		FunctionName := Node.Name.Value
-		
-		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
-			this.UnwindToBlockClose()
-			
-			new Error("Parse")
-				.LongText("Duplicate defintion")
-				.ShortText("Already defined elsewhere.")
-				.Token(Node.Name)
-				.Source(this.Source)
-			.Throw()
-		}
-	
-		this.CurrentProgram.Functions[FunctionName] := Node
-	}
 	Next() {
 		return this.Tokens[++this.Index]
 	}

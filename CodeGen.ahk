@@ -640,6 +640,10 @@ class X64CodeGen {
 		this.StringPlaceholder(String)
 		this.Push(RAX)
 	}
+	Move_R64_Global_Pointer(Register, GlobalName) {
+		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
+		this.GlobalPlaceholder(GlobalName)
+	}
 	
 	
 	;============================
@@ -702,6 +706,18 @@ class X64CodeGen {
 		this.PushByte(0x00)
 		this.PushByte(0x00)
 	}
+	GlobalPlaceholder(Name) {
+		this.Bytes.Push(["Global", Name])
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+	}
+	
 	Link() {
 		static HEAP_ZERO_MEMORY := 0x00000008
 		static hProcessHeap := DllCall("GetProcessHeap")
@@ -711,6 +727,7 @@ class X64CodeGen {
 		}
 	
 		this.LinkedBytes := LinkedBytes := []
+		Globals := {}
 		SkipBytes := 0
 	
 		for Index, Byte in this.Bytes {
@@ -747,6 +764,20 @@ class X64CodeGen {
 						OnExit(Func("DllCall").Bind("HeapFree", "Ptr", hProcessHeap, "UInt", 0, "Ptr", pMemory))
 						
 						for k, v in SplitIntoBytes64(pMemory) {
+							LinkedBytes.Push(v)
+						}
+						
+						SkipBytes += 7
+					}
+					Case "Global": {
+						if !(Globals.HasKey(Byte[2])) {
+							pMemory := DllCall("HeapAlloc", "Ptr", hProcessHeap, "UInt", HEAP_ZERO_MEMORY, "UInt", 8)
+							OnExit(Func("DllCall").Bind("HeapFree", "Ptr", hProcessHeap, "UInt", 0, "Ptr", pMemory))
+							
+							Globals[Byte[2]] := pMemory
+						}
+						
+						for k, v in SplitIntoBytes64(Globals[Byte[2]]) {
 							LinkedBytes.Push(v)
 						}
 						
