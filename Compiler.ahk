@@ -115,6 +115,7 @@
 		this.CodeGen := new X64CodeGen()
 		this.Globals := Program.Globals
 		this.Program := Program
+		this.Modules := {}
 		
 		FunctionOffsets := {}
 		FunctionOffset := 0
@@ -128,7 +129,7 @@
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
 		
-		return new CompiledProgram(Program, this.CodeGen, FunctionOffsets)
+		return new CompiledProgram(Program, this.CodeGen, FunctionOffsets, this.Modules)
 	}
 	
 	CompileDefine(DefineAST) {
@@ -139,6 +140,7 @@
 		this.Locals := DefineAST.Locals
 		
 		this.StackDepth := 0
+		this.HasReturn := False
 		
 		ParamSizes := DefineAST.Params.Count()
 		
@@ -175,6 +177,10 @@
 				this.Compile(Statement)
 			}
 			
+			if !(HasReturn) {
+				this.CodeGen.SmallMove(RAX, 0)
+			}
+			
 			this.CodeGen.Label("__Return" this.FunctionIndex)
 		
 			if (ParamSizes != 0) {
@@ -188,7 +194,32 @@
 		
 		this.CodeGen.Return()
 	}
-	
+
+	CompileReturn(Statement) {
+		this.HasReturn := True
+		
+		ResultType := this.Compile(Statement.Expression)
+		ReturnType := this.Typing.GetType(this.Function.ReturnType.Value)
+		
+		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
+			new Error("Type")
+				.LongText("Wrong return type, should be " ReturnType.Name " or smaller.")
+				.Token(Statement.Expression)
+				.Source(this.Source)
+			.Throw()
+		}
+		
+		if (ResultType.Family = "Decimal") {
+			this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
+		}
+		else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
+			this.CodeGen.Pop(RAX), this.StackDepth--
+		}
+		
+		this.CodeGen.JMP("__Return" this.FunctionIndex)
+	}
+
+
 	static PushSavedRegisters := [RCX, RDX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15]
 	static PopSavedRegisters := [R15, R14, R13, R12, R11, R10, R9, R8, RDI, RSI, RDX, RCX]
 	
@@ -355,23 +386,6 @@
 		this.CodeGen.Jmp("__For__" ThisIndex)
 		
 		this.CodeGen.Label("__For__" ThisIndex "__End")
-	}
-	
-	CompileReturn(Statement) {
-		ResultType := this.Compile(Statement.Expression)
-		ReturnType := this.Typing.GetType(this.Function.ReturnType.Value)
-		
-		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
-			new Error("Type")
-				.LongText("Wrong return type, should be " ReturnType.Name " or smaller.")
-				.Token(Statement.Expression)
-				.Source(this.Source)
-			.Throw()
-		}
-		
-		this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
-		this.CodeGen.Pop(RAX), this.StackDepth--
-		this.CodeGen.JMP("__Return" this.FunctionIndex)
 	}
 	
 	;========================
@@ -780,9 +794,9 @@
 	Cast_I64_I8() {
 		this.Cast(this.Typing.GetType("Int8"), this.Typing.GetType("Int64"), True)
 	}
-	Cast_I64_Pointer() {
+	Cast_I64_Void() {
 	}
-	Cast_Pointer_I64() {
+	Cast_Void_I64() {
 	}
 	Cast_I64_Double() {
 		this.CodeGen.Push(RAX), this.StackDepth++
@@ -824,6 +838,7 @@
 					.Throw()
 				}
 				
+				this.Modules[ModuleName] := ModuleFunction
 				IsModuleCall := True
 			}
 		}
@@ -894,7 +909,7 @@
 					}
 					catch E {
 						new Error("Compile")
-							.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " ParamNumber ".")
+							.LongText("Should be " RequiredType.Name ", not " ParamType.Name ".")
 							.Token(ParamValue)
 							.Source(this.Source)
 						.Throw()
@@ -919,7 +934,7 @@
 				}
 				catch E {
 					new Error("Compile")
-						.LongText("Function '" Expression.Target.Stringify() "' does not take a " ParamType.Name " parameter as parameter " k ".")
+						.LongText("Should be " RequiredType.Name ", not " ParamType.Name ".")
 						.Token(ParamValue)
 						.Source(this.Source)
 					.Throw()

@@ -54,8 +54,8 @@ class LanguageName {
 
 Code = 
 ( % 
-define Int64 T1() {
-	return Tester:Test()
+define void T1() {
+	Tester:Test()
 }
 
 )
@@ -99,26 +99,42 @@ R := LanguageName.CompileCode(Code)
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
 MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4) "`n" A_LastError
-MsgBox, % "Stored: " R.CallFunction("T2")
+;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B
 ; A := 99
 
 
 class Builtins {
+	class Handle {
+		static Code := "
+		(
+			DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
+		
+			define Int8 Close(Int64 Handle) {
+				return CloseHandle(Handle)
+			}
+		)"
+	}
+
 	class Memory {
 		static Code := "
 		(
 			DllImport Int64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
-			DllImport Int8* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
+			DllImport void* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
 			DllImport Int8 HeapFree(Int64, Int32, Int8*) {Kernel32.dll, HeapFree}
+			DllImport Int8 CloseHandle
 			
 			global Int64 hProcessHeap
 					
-			define Int8 Main() {
+			define void Main() {
 				hProcessHeap := GetProcessHeap()
 			}
-			define Int8* Alloc(Int64 Count) {
+			define void Exit() {
+				Handle:Close(hProcessHeap)
+			}
+			
+			define void* Alloc(Int64 Count) {
 				return HeapAlloc(hProcessHeap, 0x08, Count)
 			}
 			define Int8 Free(Int8* pMemory) {
@@ -129,15 +145,25 @@ class Builtins {
 	class Tester {
 		static Code := "
 		(
-			DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+			DllImport Int64 MessageBoxA(Int64, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 			
-			define Int8 Test() {
-				Int8* Title := ""Tester:Test Title Text""
-				Int8* Body := ""Tester:Test Body Text""
-				MessageBoxA(0, Title, Body, 0)
-				return 1
+			define void Main() {
+				Int8* Title := ""Tester: Main Title Text""
+				Int8* Body := ""Tester: Main Body Text""
+				MessageBoxA(0, Body, Title, 0)
 			}
-		
+			
+			define void Test() {
+				Int8* Title := ""Tester: Test Title Text""
+				Int8* Body := ""Tester: Test Body Text""
+				MessageBoxA(0, Body, Title, 0)
+			}
+			
+			define void Exit() {
+				Int8* Title := ""Tester: Exit Title Text""
+				Int8* Body := ""Tester: Exit Body Text""
+				MessageBoxA(0, Body, Title, 0)
+			}
 		)"
 	}
 }

@@ -7,6 +7,9 @@
 				static Precision := 64
 				static Decimal := "Double"
 			}
+			class Void {
+				static Precision := 64
+			}
 			class Int32 {
 				static Precision := 32
 				static Decimal := "Float"
@@ -51,14 +54,21 @@
 				Type.Family := TypeFamilyName
 				Type.Name := TypeName
 				Type.Weight := TypeFamily.Weight
-				Precisions[Type.Precision] := Type
+				
+				if !(IsObject(Precisions[Type.Precision])) {
+					Precisions[Type.Precision] := []
+				}
+				
+				Precisions[Type.Precision].Push(Type)
 			}
 			
 			TypesInSizeOrder := []
 			
-			for k, Type in Precisions {
-				Type.Index := A_Index
-				TypesInSizeOrder.Push(Type)
+			for k, Types in Precisions {
+				for k, Type in Types {
+					Type.Index := A_Index
+					TypesInSizeOrder.Push(Type)
+				}
 			}
 			
 			TypeFamily.Types := TypesInSizeOrder

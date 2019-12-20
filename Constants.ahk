@@ -604,10 +604,11 @@ class ASTNodes {
 }
 
 class CompiledProgram {
-	__New(ProgramNode, CodeGen, FunctionOffsets) {
+	__New(ProgramNode, CodeGen, FunctionOffsets, Modules) {
 		this.Node := ProgramNode
 		this.CodeGen := CodeGen
 		this.Offsets := FunctionOffsets
+		this.Modules := Modules
 		
 		LinkedCode := CodeGen.Link()
 	
@@ -622,13 +623,19 @@ class CompiledProgram {
 		try {
 			this.CallFunction("Main")
 		}
+		
+		OnExit(this.Delete.Bind(this))
 	}
-	__Delete() {
+	Delete() {
+		try {
+			this.CallFunction("Exit")
+		}
+		
 		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000)
 	}
 	
 	GetAHKType(TypeName) {
-		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int"}
+		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64"}
 	
 		if (AHKTypes.HasKey(TypeName)) {
 			return AHKTypes[TypeName]
