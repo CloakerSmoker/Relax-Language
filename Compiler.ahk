@@ -183,7 +183,7 @@
 		this.PopA()
 		
 		if (this.StackDepth != 0) {
-			Throw, Exception("Unbalenced stack ops, " this.StackDepth)
+			Throw, Exception("Unbalenced stack ops in " DefineAST.Name.Value ", " this.StackDepth)
 		}
 		
 		this.CodeGen.Return()
@@ -443,12 +443,12 @@
 				this.SetVariable(Expression.Left.Value)
 				return RightType
 			}
-			else if (ResultType.Family = "Integer") {
+			else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
 				return this.CompileIntegerAssignment(Expression, LeftType, RightType)
 			}
 			else {
 				new Error("Compile")
-					.LongText("Assigning a " VariableType.Name " with the " Expression.Operator.Value " operator is not implemented.")
+					.LongText("Assigning a " LeftType.Name " with the " Expression.Operator.Value " operator is not implemented.")
 					.Token(Expression.Operator)
 					.Source(this.Source)
 				.Throw()
@@ -805,7 +805,31 @@
 	; Function call methods
 
 	CompileCall(Expression) {
-		if (FunctionNode := this.Program.Functions[Expression.Target.Value]) {
+		if (Expression.Target.Type = ASTNodeTypes.Binary) {
+			ModuleExpression := Expression.Target
+			
+			if (ModuleExpression.Operator.Type = Tokens.COLON) {
+				ModuleName := ModuleExpression.Left.Value
+				FunctionName := ModuleExpression.Right.Value
+				
+				Try {
+					ModuleFunction := Module.Find(ModuleName, FunctionName)
+					FunctionNode := ModuleFunction.Define
+				}
+				Catch E {
+					new Error("Module")
+						.LongText(E.Message)
+						.Token(ModuleExpression)
+						.Source(this.Source)
+					.Throw()
+				}
+				
+				IsModuleCall := True
+			}
+		}
+	
+	
+		if (IsModuleCall || FunctionNode := this.Program.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
 			StackParamSpace := 0 ; Remembers how much stack space to free after the call
@@ -902,7 +926,7 @@
 				}
 			}
 			
-			loop, % 4 - k {
+			loop, % 4 - (k = "" ? 0 : k) {
 				this.CodeGen.Push(0), this.StackDepth++ ; For when we have less than 4 params, push a 0 for each unpassed param
 			}
 			
@@ -911,7 +935,10 @@
 				this.CodeGen.Pop(Register), this.StackDepth--
 			}
 		
-			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+			if (IsModuleCall) {
+				this.CodeGen.ModuleCall(ModuleName, FunctionDefine.Name.Value, ModuleFunction.Address)
+			}
+			else if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.Define) {

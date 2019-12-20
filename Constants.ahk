@@ -154,6 +154,10 @@ class OperatorClasses {
 						, "Associative": "Left"
 						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_NOT, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
 						
+	static Module     := {"Precedence": 8
+						, "Associative": "Left"
+						, "Tokens": [Tokens.COLON]}
+						
 						
 	static BinaryToPrefix := {Tokens.TIMES: Tokens.DEREF
 							 ,Tokens.BITWISE_AND: Tokens.ADDRESS
@@ -274,7 +278,7 @@ class Token {
 		}
 	
 		Switch (this.Type) {
-			Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING, Tokens.IDENTIFER: {
+			Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING, Tokens.IDENTIFIER: {
 				return False
 			}
 		}
@@ -377,7 +381,6 @@ class ASTNodeTypes extends Enum {
 		IF
 		FORLOOP
 		
-		IDENTIFER
 		GROUPING
 		CALL
 		UNARY
@@ -537,8 +540,12 @@ class ASTNodes {
 				for k, SubExpression in this.Expressions {
 					String .= SubExpression.Stringify() ", "
 				}
-				
-				return SubStr(String, 1, StrLen(String) - 2) ")"
+
+				if (k) {
+					String := SubStr(String, 1, StrLen(String) - 2)
+				}
+
+				return String ")"
 			}
 			GetContext() {
 				LeftMost := this.Expressions[1].GetContext()
@@ -611,6 +618,10 @@ class CompiledProgram {
 		}
 		
 		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x20, "UInt*", OldProtection)
+		
+		try {
+			this.CallFunction("Main")
+		}
 	}
 	__Delete() {
 		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000)
@@ -637,14 +648,21 @@ class CompiledProgram {
 		
 		TypedParams.Push(this.GetAHKType(this.Node.Functions[Name].ReturnType.Value))
 		
+		return DllCall(this.GetFunctionPointer(Name), TypedParams*)
+	}
+	GetFunctionPointer(Name) {
 		Offset := this.Offsets[Name]
 		
 		if (Offset = "") {
 			Throw, Exception("Function " Name " not found.")
 		}
 		
-		return DllCall(this.pMemory + Offset, TypedParams*)
+		return this.pMemory + Offset
 	}
-
-
+	GetFunction(Name) {
+		Address := this.GetFunctionPointer(Name)
+		Node := this.Node.Functions[Name]
+		
+		return {"Address": Address, "Define": Node}
+	}
 }

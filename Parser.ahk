@@ -431,9 +431,18 @@
 				Case Tokens.LEFT_PAREN: {
 					this.Index--
 					OldPrevious := this.Current()
-					Params := this.ParseGrouping()
 				
-					if (OperandStack[OperandStack.Count()].Type = Tokens.IDENTIFIER) {
+					if (this.Peek(-2).Type = Tokens.IDENTIFIER && this.Peek(-1).Type = Tokens.COLON && this.Current().Type = Tokens.IDENTIFIER) {
+						OperandStack.Pop(), OperatorStack.Pop(), OperandStack.Pop()
+					
+						Target := new ASTNodes.Expressions.Binary(this.Peek(-2), this.Peek(-1), this.Current())
+						OperandStack.Push(new ASTNodes.Expressions.Call(Target, this.ParseGrouping()))
+						Continue
+					}
+					
+					Params := this.ParseGrouping()
+					
+					if (OperandStack.Count() >= 1 && OldPrevious.IsData()) {
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
 					}
 					else {

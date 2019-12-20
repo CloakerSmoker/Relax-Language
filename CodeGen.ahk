@@ -644,6 +644,11 @@ class X64CodeGen {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
 		this.GlobalPlaceholder(GlobalName)
 	}
+	ModuleCall(ModuleName, FunctionName, FunctionAddress) {
+		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
+		this.ModuleCallPlaceholder(ModuleName, FunctionName, FunctionAddress)
+		this.Call_RI64(RAX)
+	}
 	
 	
 	;============================
@@ -717,6 +722,17 @@ class X64CodeGen {
 		this.PushByte(0x00)
 		this.PushByte(0x00)
 	}
+	ModuleCallPlaceholder(ModuleName, FunctionName, FunctionAddress) {
+		this.Bytes.Push(["Module", ModuleName, FunctionName, FunctionAddress])
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+		this.PushByte(0x00)
+	}
 	
 	Link() {
 		static HEAP_ZERO_MEMORY := 0x00000008
@@ -781,6 +797,13 @@ class X64CodeGen {
 							LinkedBytes.Push(v)
 						}
 						
+						SkipBytes += 7
+					}
+					Case "Module": {
+						for k, v in SplitIntoBytes64(Byte[4]) {
+							LinkedBytes.Push(v)
+						}
+					
 						SkipBytes += 7
 					}
 				}

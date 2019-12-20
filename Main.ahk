@@ -1,5 +1,5 @@
 ﻿class Config {
-	static DEBUG := False
+	static DEBUG := True
 }
 
 #Include %A_ScriptDir%
@@ -10,6 +10,9 @@
 #Include Parser.ahk
 #Include CodeGen.ahk
 #Include Compiler.ahk
+
+Module.Add("Memory", Builtins.Memory)
+Module.Add("Tester", Builtins.Tester)
 
 ; TODO: Pick a name
 ; TODO: Fix typing using global scope instead of function scope
@@ -51,16 +54,23 @@ class LanguageName {
 
 Code = 
 ( % 
-global Int64 TestGlobal
+define Int64 T1() {
+	return Tester:Test()
+}
 
-define Int64 T1(Int64 Value) {
-	TestGlobal := Value
-	return 0
-}
-define Int64 T2() {
-	return TestGlobal
-}
 )
+
+;global Int64 TestGlobal
+;
+;define Int64 T1(Int64 Value) {
+;	TestGlobal := Value
+;	Int8* A := Memory:HeapAlloc(8)
+;	return 0
+;}
+;define Int64 T2() {
+;	return TestGlobal
+;}
+
 
 ;define Int64 Test3(Int64 B) {if (B >= 2) {return 20} return 90}
 ;
@@ -95,3 +105,60 @@ MsgBox, % "Stored: " R.CallFunction("T2")
 ; A := 99
 
 
+class Builtins {
+	class Memory {
+		static Code := "
+		(
+			DllImport Int64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
+			DllImport Int8* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
+			DllImport Int8 HeapFree(Int64, Int32, Int8*) {Kernel32.dll, HeapFree}
+			
+			global Int64 hProcessHeap
+					
+			define Int8 Main() {
+				hProcessHeap := GetProcessHeap()
+			}
+			define Int8* Alloc(Int64 Count) {
+				return HeapAlloc(hProcessHeap, 0x08, Count)
+			}
+			define Int8 Free(Int8* pMemory) {
+				return HeapFree(hProcessHeap, 0, pMemory)
+			}
+		)"
+	}
+	class Tester {
+		static Code := "
+		(
+			DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+			
+			define Int8 Test() {
+				Int8* Title := ""Tester:Test Title Text""
+				Int8* Body := ""Tester:Test Body Text""
+				MessageBoxA(0, Title, Body, 0)
+				return 1
+			}
+		
+		)"
+	}
+}
+
+class Module {
+	static Modules := {}
+
+	Add(Name, ModuleClass) {
+		this.Modules[Name] := {"Class": ModuleClass, "Compiled": False}
+	}
+	Find(Name, FunctionName) {
+		FoundModule := this.Modules[Name]
+		
+		if !(FoundModule) {
+			Throw, Exception("Module " Name " not found.")
+		}
+		
+		if !(IsObject(FoundModule.Compiled)) {
+			FoundModule.Compiled := LanguageName.CompileCode(FoundModule.Class.Code)
+		}
+		
+		return FoundModule.Compiled.GetFunction(FunctionName)
+	}
+}
