@@ -11,8 +11,10 @@
 #Include CodeGen.ahk
 #Include Compiler.ahk
 
+Module.Add("Handle", Builtins.Handle)
 Module.Add("Memory", Builtins.Memory)
 Module.Add("Tester", Builtins.Tester)
+
 
 ; TODO: Pick a name
 ; TODO: Fix typing using global scope instead of function scope
@@ -27,7 +29,7 @@ Module.Add("Tester", Builtins.Tester)
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.10"
+	static VERSION := "1.0.0-alpha.11"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()
@@ -57,7 +59,6 @@ Code =
 define void T1() {
 	Tester:Test()
 }
-
 )
 
 ;global Int64 TestGlobal
@@ -123,7 +124,6 @@ class Builtins {
 			DllImport Int64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
 			DllImport void* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
 			DllImport Int8 HeapFree(Int64, Int32, Int8*) {Kernel32.dll, HeapFree}
-			DllImport Int8 CloseHandle
 			
 			global Int64 hProcessHeap
 					

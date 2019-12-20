@@ -440,6 +440,7 @@
 						Continue
 					}
 					
+					
 					Params := this.ParseGrouping()
 					
 					if (OperandStack.Count() >= 1 && OldPrevious.IsData()) {
@@ -452,7 +453,13 @@
 				Case Next.CaseIsOperator(): {
 					Operator := Next
 					
-					if (Operators.IsPostfix(Operator) && this.Previous().IsData()) {
+					if (Operator.Type = Tokens.AS) {
+						TypeName := this.ParseTypeName()
+						Params := new ASTNodes.Expressions.Grouping([OperandStack.Pop()])
+					
+						OperandStack.Push(new ASTNodes.Expressions.Call(TypeName, Params))
+					}
+					else if (Operators.IsPostfix(Operator) && this.Previous().IsData()) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
 					}
 					else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsNotData()) {

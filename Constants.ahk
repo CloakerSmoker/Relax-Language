@@ -25,6 +25,8 @@
 		
 		FIRST_OPERATOR
 		
+		AS
+		
 		FIRST_PREFIX
 			BANG
 			BITWISE_NOT
@@ -188,7 +190,11 @@ class Operators {
 	
 		Assert.Unreachable(this.ToString(Operator))
 	}
-
+	
+	IsOperator(Value) {
+		return Tokens.FIRST_OPERATOR < Tokens[Value] && Tokens[Value] < Tokens.LAST_OPERATOR
+	}
+	
 	CheckPrecedence(FirstOperator, SecondOperator) {
 		OperatorOne := this.Precedence(FirstOperator)
 		OperatorTwo := this.Precedence(SecondOperator)

@@ -819,7 +819,11 @@
 	; Function call methods
 
 	CompileCall(Expression) {
-		if (Expression.Target.Type = ASTNodeTypes.Binary) {
+		if (this.Typing.IsValidType(Expression.Target.Value) && Expression.Params.Expressions.Count() = 1) {
+			this.Compile(Expression.Params.Expressions[1])
+			return this.Typing.GetType(Expression.Target.Value)
+		}
+		else if (Expression.Target.Type = ASTNodeTypes.Binary) {
 			ModuleExpression := Expression.Target
 			
 			if (ModuleExpression.Operator.Type = Tokens.COLON) {

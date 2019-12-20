@@ -148,6 +148,9 @@
 				if (Keywords.HasKey(IdentifierText)) {
 					this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])
 				}
+				else if (Operators.IsOperator(IdentifierText)) {
+					this.AddToken(Tokens[IdentifierText], IdentifierText)
+				}
 				else {
 					this.AddToken(Tokens.IDENTIFIER, IdentifierText)
 				}
