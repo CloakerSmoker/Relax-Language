@@ -979,3 +979,50 @@ class XMM3  {
 	static Requires := {"REX": REX.None}
 	static Number := 3
 }
+
+class I386CodeGen {
+	__New() {
+		this.Bytes := []
+	}
+	PushByte(Byte) {
+		this.Bytes.Push(Byte & 0xFF)
+	}
+	
+	Push_CS() {
+		this.PushByte(0x0E)
+	}
+	Pop_DS() {
+		this.PushByte(0x1F)
+	}
+	
+	Move_DX_I16(Short) {
+		this.Move_R16_I16(2, Short)
+	}
+	Move_AX_I16(Short) {
+		this.Move_R16_I16(0, Short)
+	}
+	
+	Move_R16_I16(RegisterNumber, Short) {
+		this.PushByte(0xB8 + RegisterNumber)
+		this.PushByte((Short & 0x00FF) >> 0)
+		this.PushByte((Short & 0xFF00) >> 8)
+	}
+	
+	Move_AH_I8(Byte) {
+		this.PushByte(0xB0 + 4)
+		this.PushByte(Byte)
+	}
+	
+	Int_I8(Byte) {
+		this.PushByte(0xCD)
+		this.PushByte(Byte)
+	}
+	
+	Push_String(String) {
+		for k, Character in StrSplit(String) {
+			this.PushByte(Asc(Character))
+		}
+		
+		this.PushByte(Asc("$"))
+	}
+}

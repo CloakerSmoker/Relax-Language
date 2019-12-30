@@ -88,6 +88,8 @@
 		
 		MOD
 		
+		CONCAT
+		
 		LAST_OPERATOR
 	)"
 }
@@ -189,6 +191,20 @@ class Operators {
 		}
 	
 		Assert.Unreachable(this.ToString(Operator))
+	}
+	GetPrecedence(Operator) {
+		try {
+			return this.Precedence(Operator).Precedence
+		}
+		
+		return 0
+	}
+	GetAssociativity(Operator) {
+		try {
+			return this.Precedence(Operator).Associative
+		}
+		
+		return "Left"
 	}
 	
 	IsOperator(Value) {

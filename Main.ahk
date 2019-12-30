@@ -56,8 +56,13 @@ class LanguageName {
 
 Code = 
 ( % 
-define void T1() {
-	Tester:Test()
+define Int64 T1() {
+	Int8* StringBuffer := Memory:Alloc(40) as Int8*
+	
+	StringBuffer *= 'h'
+	StringBuffer + 1 *= 'i'
+	
+	return StringBuffer as Int64
 }
 )
 
@@ -99,7 +104,7 @@ R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4) "`n" A_LastError
+MsgBox, % "Result: " StrGet(R.CallFunction("T1", 6, 1, 4, 3, 4), "UTF-8") "`n" A_LastError
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B
