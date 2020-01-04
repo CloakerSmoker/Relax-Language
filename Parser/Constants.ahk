@@ -162,7 +162,6 @@ class OperatorClasses {
 						, "Associative": "Left"
 						, "Tokens": [Tokens.COLON]}
 						
-						
 	static BinaryToPrefix := {Tokens.TIMES: Tokens.DEREF
 							 ,Tokens.BITWISE_AND: Tokens.ADDRESS
 							 ,Tokens.MINUS: Tokens.NEGATE}
@@ -622,76 +621,5 @@ class ASTNodes {
 				return FullContext
 			}
 		}
-	}
-}
-
-class CompiledProgram {
-	__New(ProgramNode, CodeGen, FunctionOffsets, Modules) {
-		this.Node := ProgramNode
-		this.CodeGen := CodeGen
-		this.Offsets := FunctionOffsets
-		this.Modules := Modules
-		
-		LinkedCode := CodeGen.Link()
-	
-		pMemory := this.pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", LinkedCode.Count(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
-		
-		for k, v in LinkedCode {
-			NumPut(v, pMemory + 0, A_Index - 1, "Char")
-		}
-		
-		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x20, "UInt*", OldProtection)
-		
-		try {
-			this.CallFunction("Main")
-		}
-		
-		OnExit(this.Delete.Bind(this))
-	}
-	Delete() {
-		try {
-			this.CallFunction("Exit")
-		}
-		
-		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000)
-	}
-	
-	GetAHKType(TypeName) {
-		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64", "void*": "Ptr"}
-	
-		if (AHKTypes.HasKey(TypeName)) {
-			return AHKTypes[TypeName]
-		}
-		else {
-			return TypeName
-		}
-	}
-	
-	CallFunction(Name, Params*) {
-		TypedParams := []
-		
-		for k, ParamPair in this.Node.Functions[Name].Params {
-			TypedParams.Push(this.GetAHKType(ParamPair[1].Value))
-			TypedParams.Push(Params[k])
-		}
-		
-		TypedParams.Push(this.GetAHKType(this.Node.Functions[Name].ReturnType.Value))
-		
-		return DllCall(this.GetFunctionPointer(Name), TypedParams*)
-	}
-	GetFunctionPointer(Name) {
-		Offset := this.Offsets[Name]
-		
-		if (Offset = "") {
-			Throw, Exception("Function " Name " not found.")
-		}
-		
-		return this.pMemory + Offset
-	}
-	GetFunction(Name) {
-		Address := this.GetFunctionPointer(Name)
-		Node := this.Node.Functions[Name]
-		
-		return {"Address": Address, "Define": Node}
 	}
 }

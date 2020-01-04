@@ -3,56 +3,15 @@
 }
 
 #Include %A_ScriptDir%
-#Include Utility.ahk
-#Include Constants.ahk
-#Include Lexer.ahk
-#Include Typing.ahk
-#Include Parser.ahk
-#Include CodeGen.ahk
-#Include Compiler.ahk
-
-Module.Add("Handle", Builtins.Handle)
-Module.Add("Memory", Builtins.Memory)
-Module.Add("Tester", Builtins.Tester)
-
+#Include Interface.ahk
 
 ; TODO: Pick a name
-; TODO: Fix typing using global scope instead of function scope
 ; TODO: CodeGen linking rewrite
 ; TODO: (Related to above) Shorter Jmp encodings
 ; TODO: Write more tests
-; TODO: Make type checking much more strict
 ; TODO: Eventually find a smarted way to handle variables
 ; TODO: Start to optimize code
 ; TODO: Fix floating point comparison operators
-
-class LanguageName {
-	; Change ^ when you've come up with a name
-	
-	static VERSION := "1.0.0-alpha.12"
-
-	CompileCode(CodeString) {
-		CodeLexer := new Lexer()
-		CodeTokens := CodeLexer.Start(CodeString)
-	
-		CodeParser := new Parser(CodeLexer)
-		CodeAST := CodeParser.Start(CodeTokens)
-		
-		CodeCompiler := new Compiler(CodeLexer, CodeParser)
-		Program := CodeCompiler.CompileProgram(CodeAST)
-		
-		return Program
-	}
-	FormatCode(CodeString) {
-		CodeLexer := new Lexer()
-		CodeTokens := CodeLexer.Start(CodeString)
-	
-		CodeParser := new Parser(CodeLexer)
-		CodeAST := CodeParser.Start(CodeTokens)
-		
-		return CodeAST.Stringify()
-	}
-}
 
 Code = 
 ( % 
@@ -62,9 +21,11 @@ define void* T1() {
 	StringBuffer *= 'h'
 	StringBuffer + 1 *= 'i'
 	
-	return (&T1) as void*
+	return &T1
 }
 )
+
+; You were about to write CompiledProgram.ConvertToAHKFunction()
 
 ;global Int64 TestGlobal
 ;
@@ -108,87 +69,3 @@ MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4) "`n" A_LastError "`n" R
 
 ; Int64* A := &B
 ; A := 99
-
-
-class Builtins {
-	class Handle {
-		static Code := "
-		(
-			DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
-		
-			define Int8 Close(Int64 Handle) {
-				return CloseHandle(Handle)
-			}
-		)"
-	}
-
-	class Memory {
-		static Code := "
-		(
-			DllImport Int64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
-			DllImport void* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
-			DllImport Int8 HeapFree(Int64, Int32, Int8*) {Kernel32.dll, HeapFree}
-			
-			global Int64 hProcessHeap
-					
-			define void Main() {
-				hProcessHeap := GetProcessHeap()
-			}
-			define void Exit() {
-				Handle:Close(hProcessHeap)
-			}
-			
-			define void* Alloc(Int64 Count) {
-				return HeapAlloc(hProcessHeap, 0x08, Count)
-			}
-			define Int8 Free(Int8* pMemory) {
-				return HeapFree(hProcessHeap, 0, pMemory)
-			}
-		)"
-	}
-	class Tester {
-		static Code := "
-		(
-			DllImport Int64 MessageBoxA(Int64, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
-			
-			define void Main() {
-				Int8* Title := ""Tester: Main Title Text""
-				Int8* Body := ""Tester: Main Body Text""
-				MessageBoxA(0, Body, Title, 0)
-			}
-			
-			define void Test() {
-				Int8* Title := ""Tester: Test Title Text""
-				Int8* Body := ""Tester: Test Body Text""
-				MessageBoxA(0, Body, Title, 0)
-			}
-			
-			define void Exit() {
-				Int8* Title := ""Tester: Exit Title Text""
-				Int8* Body := ""Tester: Exit Body Text""
-				MessageBoxA(0, Body, Title, 0)
-			}
-		)"
-	}
-}
-
-class Module {
-	static Modules := {}
-
-	Add(Name, ModuleClass) {
-		this.Modules[Name] := {"Class": ModuleClass, "Compiled": False}
-	}
-	Find(Name, FunctionName) {
-		FoundModule := this.Modules[Name]
-		
-		if !(FoundModule) {
-			Throw, Exception("Module " Name " not found.")
-		}
-		
-		if !(IsObject(FoundModule.Compiled)) {
-			FoundModule.Compiled := LanguageName.CompileCode(FoundModule.Class.Code)
-		}
-		
-		return FoundModule.Compiled.GetFunction(FunctionName)
-	}
-}

@@ -718,15 +718,20 @@ class X64CodeGen {
 		}
 	}
 	
-	Link() {
+	Link(LabelOnly := False) {
 		static HEAP_ZERO_MEMORY := 0x00000008
 		static hProcessHeap := DllCall("GetProcessHeap")
 	
-		if (this.LinkedBytes) {
+		if (this.LinkedBytes && !LabelOnly) {
 			return this.LinkedBytes
 		}
 	
-		this.LinkedBytes := LinkedBytes := []
+		LinkedBytes := []
+		
+		if !(LabelOnly) {
+			this.LinkedBytes := LinkedBytes
+		}
+		
 		Globals := {}
 		SkipBytes := 0
 	
@@ -735,18 +740,23 @@ class X64CodeGen {
 				SkipBytes--
 			}
 			else if (IsObject(Byte)) {
-				Switch (Byte[1]) {
-					Case "Label": {
-						TargetIndex := this.Labels[Byte[2]]
-						CurrentIndex := (Index + 4) - 1
-						Offset := TargetIndex - CurrentIndex
-					
-						for k, v in SplitIntoBytes32(Offset) {
-							LinkedBytes.Push(v)
-						}
-						
-						SkipBytes += 3
+				if (Byte[1] = "Label") {
+					TargetIndex := this.Labels[Byte[2]]
+					CurrentIndex := (Index + 4) - 1
+					Offset := TargetIndex - CurrentIndex
+				
+					for k, v in SplitIntoBytes32(Offset) {
+						LinkedBytes.Push(v)
 					}
+					
+					SkipBytes += 3
+				}
+			
+				if (LabelOnly) {
+					Continue
+				}
+			
+				Switch (Byte[1]) {
 					Case "Dll": {
 						hDllFile := DllCall("GetModuleHandle", "Str", Byte[2], "Ptr")
 						pSomeFunction := DllCall("GetProcAddress", "Ptr", hDllFile, "AStr", Byte[3], "Ptr")
