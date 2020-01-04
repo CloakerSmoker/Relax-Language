@@ -178,6 +178,9 @@ class X64CodeGen {
 	MoveSX_R64_RI8(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, {"Mode": Mode.RToPtr})
 	}
+	MoveSX_R64_R32(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x63], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
 
 	; Sign extend moves END
 	;============================
@@ -257,7 +260,12 @@ class X64CodeGen {
 		this.REXOpcode([0xB0 + Register.Number], [Register.Requires.REX])
 		this.PushByte(Integer.Value)
 	}
-
+	Move_R64_I32_LabelOffset(Register, LabelName) {
+		this.REXOpcode([0xC7], Register.Requires.REX)
+		this.Mod(Mode.RToR, 0, Register.Number)
+		this.LabelPlaceholder(LabelName)
+		this.MoveSX_R64_R32(Register, Register)
+	}
 	; Imm moves END
 	;============================
 	; SIB-Based moves START
@@ -285,6 +293,10 @@ class X64CodeGen {
 		; REX.W + 8D /r
 		
 		this.REXOpcodeModSIB([0x8D], Register, SIB, {"REX": [REX.W]})
+	}
+	Move_R64_RIP(Register) {
+		this.REXOpcodeMod([0x8D], Register, {"Number": 5}, {"Mode": 0, "REX": [REX.W]})
+		this.SplitIntoBytes32(0x00000000) ; lea register, [RIP + 0]
 	}
 	
 	; SIB-Based moves END
@@ -684,54 +696,26 @@ class X64CodeGen {
 		this.Labels[Name] := this.Index()
 	}
 	LabelPlaceholder(Name) {
-		this.Bytes.Push(["Label", Name])
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		this.Placeholder(["Label", Name], 3)
 	}
 	DllFunctionPlaceholder(DllFile, DllFunction) {
-		this.Bytes.Push(["Dll", DllFile, DllFunction])
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		this.Placeholder(["Dll", DllFile, DllFunction], 7)
 	}
 	StringPlaceholder(String) {
-		this.Bytes.Push(["String", String])
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		this.Placeholder(["String", String], 7)
 	}
 	GlobalPlaceholder(Name) {
-		this.Bytes.Push(["Global", Name])
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		this.Placeholder(["Global", Name], 7)
 	}
 	ModuleCallPlaceholder(ModuleName, FunctionName, FunctionAddress) {
-		this.Bytes.Push(["Module", ModuleName, FunctionName, FunctionAddress])
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		this.Placeholder(["Module", ModuleName, FunctionName, FunctionAddress], 7)
+	}
+	Placeholder(Data, Count) {
+		this.Bytes.Push(Data)
 		
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
-		this.PushByte(0x00)
+		Loop, % Count {
+			this.PushByte(0x00)
+		}
 	}
 	
 	Link() {

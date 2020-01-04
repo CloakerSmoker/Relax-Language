@@ -657,7 +657,7 @@ class CompiledProgram {
 	}
 	
 	GetAHKType(TypeName) {
-		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64"}
+		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64", "void*": "Ptr"}
 	
 		if (AHKTypes.HasKey(TypeName)) {
 			return AHKTypes[TypeName]

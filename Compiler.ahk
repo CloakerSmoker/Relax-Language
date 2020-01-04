@@ -177,7 +177,7 @@
 				this.Compile(Statement)
 			}
 			
-			if !(HasReturn) {
+			if !(this.HasReturn) {
 				this.CodeGen.SmallMove(RAX, 0)
 			}
 			
@@ -715,8 +715,22 @@
 			return OperandType.Pointer
 		}
 		else if (Operator.Type = Tokens.ADDRESS) {
-			this.GetVariableAddress(Expression.Operand.Value)
-			return this.Typing.GetPointerType(this.Typing.GetVariableType(Expression.Operand.Value))
+			if (Function := this.Program.Functions[Expression.Operand.Value]) {
+				this.CodeGen.Move_R64_RIP(RAX)
+				this.CodeGen.Move_R64_I32_LabelOffset(RBX, "__Define__" Function.Name.Value)
+				this.CodeGen.Add(RAX, RBX)
+				
+				this.CodeGen.SmallMove(RBX, 6)
+				this.CodeGen.Add(RAX, RBX)
+				
+				this.CodeGen.Push(RAX), this.StackDepth++
+				
+				return this.Typing.GetType("void*")
+			}
+			else {
+				this.GetVariableAddress(Expression.Operand.Value)
+				return this.Typing.GetPointerType(this.Typing.GetVariableType(Expression.Operand.Value))
+			}
 		}
 		else if (Operator.Type = Tokens.NEGATE) {
 			OperandType := this.Compile(Expression.Operand)

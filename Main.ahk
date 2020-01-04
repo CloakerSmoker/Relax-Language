@@ -29,7 +29,7 @@ Module.Add("Tester", Builtins.Tester)
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.11"
+	static VERSION := "1.0.0-alpha.12"
 
 	CompileCode(CodeString) {
 		CodeLexer := new Lexer()
@@ -56,13 +56,13 @@ class LanguageName {
 
 Code = 
 ( % 
-define Int64 T1() {
+define void* T1() {
 	Int8* StringBuffer := Memory:Alloc(40) as Int8*
 	
 	StringBuffer *= 'h'
 	StringBuffer + 1 *= 'i'
 	
-	return StringBuffer as Int64
+	return (&T1) as void*
 }
 )
 
@@ -98,13 +98,12 @@ define Int64 T1() {
 ;	return 0
 ;}
 
-
 ;MsgBox, % LanguageName.FormatCode(Code)
 R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " StrGet(R.CallFunction("T1", 6, 1, 4, 3, 4), "UTF-8") "`n" A_LastError
+MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4) "`n" A_LastError "`n" R.GetFunctionPointer("T1")
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B
