@@ -4,6 +4,7 @@
 #Include Parser\Lexer.ahk
 #Include Parser\Typing.ahk
 #Include Parser\Parser.ahk
+#Include Compiler\Optimizer.ahk
 #Include Compiler\CodeGen.ahk
 #Include Compiler\Compiler.ahk
 
@@ -21,6 +22,8 @@ class LanguageName {
 	
 		CodeParser := new Parser(CodeLexer)
 		CodeAST := CodeParser.Start(CodeTokens)
+		
+		ASTOptimizer.OptimizeProgram(CodeAST)
 		
 		CodeCompiler := new Compiler(CodeLexer, CodeParser)
 		Program := CodeCompiler.CompileProgram(CodeAST)

@@ -15,15 +15,26 @@
 
 Code = 
 ( % 
-define void* T1() {
-	Int8* StringBuffer := Memory:Alloc(40) as Int8*
+define void T1() {
+	Int8 Test := 99 + 2 + 3
 	
-	StringBuffer *= 'h'
-	StringBuffer + 1 *= 'i'
-	
-	return &T1
+	1 + 2
 }
+
+
+
 )
+
+
+
+;define void* T1() {
+;	Int8* StringBuffer := Memory:Alloc(40) as Int8*
+;	
+;	StringBuffer *= 'h'
+;	StringBuffer + 1 *= 'i'
+;	
+;	return &T1
+;}
 
 ;global Int64 TestGlobal
 ;
