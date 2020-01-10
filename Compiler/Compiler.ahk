@@ -969,7 +969,7 @@
 			}
 		
 			if (IsModuleCall) {
-				this.CodeGen.ModuleCall(ModuleName, FunctionDefine.Name.Value, ModuleFunction.Address)
+				this.CodeGen.ModuleCall(ModuleName, FunctionNode.Name.Value, ModuleFunction.Address)
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)

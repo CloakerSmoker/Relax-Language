@@ -751,8 +751,8 @@ class X64CodeGen {
 					
 					SkipBytes += 3
 				}
-			
-				if (LabelOnly) {
+				else if (LabelOnly) {
+					LinkedBytes.Push(Byte)
 					Continue
 				}
 			

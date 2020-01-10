@@ -25,8 +25,6 @@ define void* T1() {
 }
 )
 
-; You were about to write CompiledProgram.ConvertToAHKFunction()
-
 ;global Int64 TestGlobal
 ;
 ;define Int64 T1(Int64 Value) {
