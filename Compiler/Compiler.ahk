@@ -340,14 +340,30 @@
 	CompileIfGroup(Statement) {
 		static Index := 0
 		
+		IfCount := Statement.Options.Count()
+		
+		if (IfCount = 1 && Statement.Options[1].Value >= 1) {
+			; If the if group only has one expression, and the one expression has a constant truthy result
+			;  We can just compile the body, and skip the branching
+			
+			for k, Line in Statement.Options[1] {
+				this.Compile(Line)
+			}
+			
+			return
+		}
+		
 		ThisIndex := Index++
-	
+		
 		for k, ElseIf in Statement.Options {
 			this.CodeGen.Label("__If__" Index)
-			this.Compile(ElseIf.Condition)
-			this.CodeGen.Pop(RCX), this.StackDepth--
-			this.CodeGen.Cmp(RCX, RSI)
-			this.CodeGen.JE("__If__" Index + 1)
+			
+			if (k != IfCount) {
+				this.Compile(ElseIf.Condition)
+				this.CodeGen.Pop(RCX), this.StackDepth--
+				this.CodeGen.Cmp(RCX, RSI)
+				this.CodeGen.JE("__If__" Index + 1)
+			}
 			
 			for k, Line in ElseIf.Body {
 				this.Compile(Line)

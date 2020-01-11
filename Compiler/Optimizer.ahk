@@ -3,8 +3,14 @@
 		if (Something.__Class = "Token") {
 			return Something
 		}
+		
+		MethodName := "Optimize" ASTNodeTypes[Something.Type]
+		
+		if !(this.HasKey(MethodName)) {
+			return Something
+		}
 	
-		return this["Optimize" ASTNodeTypes[Something.Type]].Call(this, Something)
+		return this[MethodName].Call(this, Something)
 	}
 	
 	OptimizeProgram(ProgramNode) {
@@ -40,11 +46,16 @@
 				NewOptions := []
 				
 				for k, IfStatement in Statement.Options {
+					IfStatement.Condition := this.Optimize(IfStatement.Condition)
+					
 					if (this.IsConstant(IfStatement.Condition)) {
-						; If the if statement has a constant condition
+						; If the if statement has a constant condition after optimization
 						
-						if (this.Evaluate(IfStatement.Condition)) {
+						if (IfStatement.Condition.Value != 0) {
 							; And if the condition is true, then this will be the final option
+							for k, Line in IfStatement.Body {
+								IfStatement.Body[k] := this.OptimizeLine(Line)
+							}
 							
 							NewOptions.Push(IfStatement) ; So push it
 							Break ; And break to ignore the rest
@@ -56,11 +67,34 @@
 					else {
 						; Non-constant condition, which we can't really do much about, except for optimizing what we can
 						IfStatement.Condition := this.OptimizeExpression(IfStatement.Condition)
+						
+						for k, Line in IfStatement.Body {
+							IfStatement.Body[k] := this.OptimizeLine(Line)
+						}
+						
 						NewOptions.Push(IfStatement)
 					}
 				}
 				
-				Statement.Options := NewOptions
+				if (NewOptions.Count() > 0) {
+					Statement.Options := NewOptions
+				
+					return Statement
+				}
+				else {
+					new ASTNodes.None()
+				}
+			}
+			Case ASTNodeTypes.FORLOOP: {
+				Statement.Init := this.Optimize(Statement.Init)
+				Statement.Condition := this.Optimize(Statement.Condition)
+				Statement.Step := this.Optimize(Statement.Step)
+				
+				for k, Line in Statement.Body {
+					Statement.Body[k] := this.OptimizeLine(Line)
+				}
+				
+				; TODO: Come up with an actual way to optimize here
 				
 				return Statement
 			}
@@ -70,14 +104,35 @@
 					
 					return Statement
 				}
+				
+				return new ASTNodes.None()
 			}
 		}
 		
-		return new ASTNodes.None()
+		return Statement
 	}
 	
 	OptimizeExpression(Expression) {
 		return this.Optimize(Expression)
+	}
+	
+	OptimizeGrouping(Expression) {
+		NewExpressions := []
+		
+		for k, SubExpression in Expression.Expressions {
+			if (k = 1 || this.ExpressionHasSideEffects(SubExpression)) {
+				NewExpressions.Push(this.Optimize(SubExpression))
+			}
+		}
+		
+		if (NewExpressions.Count() = 1) {
+			return NewExpressions[1]
+		}
+		else {
+			Expression.Expressions := NewExpressions
+			
+			return Expression
+		}
 	}
 	
 	OptimizeBinary(Expression) {
