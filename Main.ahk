@@ -16,19 +16,7 @@
 Code = 
 ( % 
 define void T1() {
-	Int8 Test := 99 + 2 + 3
-	
-	if (Test + 0) {
-		return 10
-	}
-	else if (1) {
-		return 20
-	}
-	else if (Test + 1) {
-		return 30
-	}
-	
-	1 + 2
+	return 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13
 }
 
 

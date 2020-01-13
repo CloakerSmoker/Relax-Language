@@ -11,8 +11,18 @@ SIB(Scale, IndexRegister, BaseRegister) {
 
 	return {"Type": "SIB", "Scale": Scale, "IndexRegister": IndexRegister, "BaseRegister": BaseRegister}
 }
-I64(Address) {
-	return {"Type": "I64", "Value": Address}
+
+I8(Integer) {
+	return {"Type": "I8", "Value": Integer}
+}
+I16(Integer) {
+	return {"Type": "I16", "Value": Integer}
+}
+I32(Integer) {
+	return {"Type": "I32", "Value": Integer}
+}
+I64(Integer) {
+	return {"Type": "I64", "Value": Integer}
 }
 
 SplitIntoBytes32(Integer) {
@@ -254,9 +264,13 @@ class X64CodeGen {
 		this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
 		this.SplitIntoBytes32(Integer.Value)
 	}
+	Move_R64_I16(Register, Integer) {
+		this.PushByte(0x66)
+		this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
+		this.PushByte(Integer.Value & 0x00FF)
+		this.PushByte(Integer.Value & 0xFF00)
+	}
 	Move_R64_I8(Register, Integer) {
-		; what a stupid mistake of an instruction. It doesn't touch the top 50+ bits, just the low 8, which is ~~totally useless~~ great
-		Throw, Exception("Don't use the idiot instruction.")
 		this.REXOpcode([0xB0 + Register.Number], [Register.Requires.REX])
 		this.PushByte(Integer.Value)
 	}
@@ -647,10 +661,9 @@ class X64CodeGen {
 		this.DllFunctionPlaceholder(DllFile, DllFunction)
 		this.Call_RI64(RAX)
 	}
-	Push_String_Pointer(String) {
-		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
+	Move_String_Pointer(Register, String) {
+		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
 		this.StringPlaceholder(String)
-		this.Push(RAX)
 	}
 	Move_R64_Global_Pointer(Register, GlobalName) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
