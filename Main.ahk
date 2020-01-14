@@ -15,8 +15,11 @@
 
 Code = 
 ( % 
+
+DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+
 define void T1() {
-	return 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13
+	return MessageBoxA(0, "Hi", "Bye", 0)
 }
 
 

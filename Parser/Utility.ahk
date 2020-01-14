@@ -1,5 +1,36 @@
 ﻿global A_Quote := """"
 
+OnError(Func("ErrorCallstack"), -1)
+
+ErrorCallstack(ExceptionObject) {
+	ExceptionObject.Message .= "`n`nCallstack:`n" StringifyCallstack(8)
+}
+StringifyCallstack(Limit := 1) {
+	Stack := GetCallstack(Limit)
+	Stack.RemoveAt(1), Stack.RemoveAt(1)
+	String := ""
+	
+	for k, v in Stack {
+		String .= v.File ":" v.Line "." v.Func "`n"
+	}
+	
+	return String
+}
+
+GetCallstack(Limit := -1) {
+	Stack := []
+		
+	loop {
+		E := Exception("", -A_Index)
+		Stack.Push({"File": E.File, "Line": E.line, "Func": E.What})
+	} until ((A_Index - 1 == Limit) || ((-A_Index . "") = E.What))
+	
+	Stack.Pop()
+	Stack.RemoveAt(1)
+	
+	return stack
+}
+
 class Error {
 	__New(Phase) {
 		this.Phase := Phase

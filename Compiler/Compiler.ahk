@@ -194,7 +194,15 @@
 		
 		this.PushA()
 			if (ParamSizes != 0) {
-				this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
+				if (ParamSizes <= 3) {
+					Loop, % ParamSizes {
+						this.CodeGen.Push(RBX), this.StackDepth++
+					}
+				}
+				else {
+					this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
+				}
+				
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
@@ -220,7 +228,14 @@
 			this.CodeGen.Label("__Return" this.FunctionIndex)
 		
 			if (ParamSizes != 0) {
-				this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+				if (ParamSizes <= 3) {
+					Loop, % ParamSizes {
+						this.CodeGen.Pop(RBX), this.StackDepth--
+					}
+				}
+				else {
+					this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+				}
 			}
 		this.PopA()
 		
@@ -351,7 +366,13 @@
 			Case Tokens.INTEGER: {
 				IntegerValue := TargetToken.Value
 				
-				if (IntegerValue <= 0xFF) {
+				if (IntegerValue = 0) {
+					this.CodeGen.Move(ResultRegister, RSI)
+				}
+				else if (IntegerValue = 1) {
+					this.CodeGen.Move(ResultRegister, RDI)
+				}
+				else if (IntegerValue <= 0xFF) {
 					this.CodeGen.XOR_R64_R64(ResultRegister, ResultRegister)
 					this.CodeGen.Move_R64_I8(ResultRegister, I8(IntegerValue))
 				}
@@ -369,7 +390,7 @@
 				return this.Typing.GetType("Int64")
 			}
 			Case Tokens.DOUBLE: {
-				this.CodeGen.Move_R64_I64(ResultRegister, FloatToBinaryInt(TargetToken.Value))
+				this.CodeGen.Move_R64_I64(ResultRegister, I64(FloatToBinaryInt(TargetToken.Value)))
 				
 				return this.Typing.GetType("Double")
 			}
@@ -531,7 +552,7 @@
 				Throw, Exception("Dummy exception")
 			}
 		}
-		Catch E {
+		catch {
 			new Error("Type")
 				.LongText("The operands of '" Expression.Stringify() "' (" LeftType.Name ", " RightType.Name ") are not compatible.")
 				.Token(Expression.Operator)
@@ -852,20 +873,20 @@
 	; Cast methods
 	
 	Cast(TypeOne, TypeTwo, StackLess := False) {
-		if (TypeOne.Name = TypeTwo.Name) {
-			return
-		}
-	
 		; Parameter should be on the register stack, or in RAX
 		; RAX is the only register used for casts
 		; StackLess param is for when the operand is already in RAX, otherwise RAX is loaded with the first thing on the stack
 		
+		Base := ObjGetBase(this)
+		Path := this.Typing.CastPath(TypeOne, TypeTwo)
+		
+		if (TypeOne.Name = TypeTwo.Name || Path.Count() = 0) {
+			return
+		}	
+		
 		if !(StackLess) {
 			this.CodeGen.Move(RAX, this.TopOfRegisterStack())
 		}
-		
-		Base := ObjGetBase(this)
-		Path := this.Typing.CastPath(TypeOne, TypeTwo)
 		
 		for k, Pair in Path {
 			Name := "Cast_" IntToI(Pair[1].Name) "_" IntToI(Pair[2].Name)
@@ -935,7 +956,7 @@
 					ModuleFunction := Module.Find(ModuleName, FunctionName)
 					FunctionNode := ModuleFunction.Define
 				}
-				Catch E {
+				catch {
 					new Error("Module")
 						.LongText(E.Message)
 						.Token(ModuleExpression)
@@ -952,29 +973,11 @@
 		if (IsModuleCall || FunctionNode := this.Program.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
-			StackParamSpace := 0 ; Remembers how much stack space to free after the call
-			
-			if (Mod(this.StackDepth, 1) != 1) {
-				; Breaks stack alignment
-				this.CodeGen.Push(0), this.StackDepth++, StackParamSpace++
+			loop, % this.RegisterStackIndex {
+				; Store whatever part of the register stack we're using, just in case the function we call doesn't 
+				;  save all registers
+				this.CodeGen.Push(this.RegisterStack[A_Index]), this.StackDepth++
 			}
-		
-			; As of right here, the stack is unaligned, and something like
-			
-			; RSP + (1 * 8) Garbage Data
-			; RSP + (0 * 8) Optional Padding to make Mod(RSP, 16) = 8
-		
-			; And we need
-			
-			; RSP + (7 * 8) Garbage Data
-			; RSP + (6 * 8) Optional Padding to make Mod(RSP, 16) = 8
-			; RSP + (6 * 8) Optional Padding for even numbers of params
-			; RSP + (5 * 8) Param 5
-			; RSP + (4 * 8) Param N
-			; RSP + (3 * 8) Shadow space
-			; RSP + (0 * 8) Shadow space (4 bytes total)
-			
-			; Along with Mod(RSP, 16) = 8. So, below we need to adjust the stack to be like that
 		
 			Params := Expression.Params.Expressions
 		
@@ -994,50 +997,30 @@
 					.Source(this.Source)
 				.Throw()
 			}
-		
-			if (Params.Count() > 4) {
-				; If we have 4+ params, then some need to be dumped onto the stack
 			
-				if (Mod(Params.Count(), 2) != 1) {
-					StackParamSpace++ ; If we have an even number of params, add an extra to break stack alignment
-					this.CodeGen.Push(0), this.StackDepth++
-				}
+			StackParamCount := Max(Params.Count() - 4, 0)
+			Straddling := False
 			
-				loop, % Params.Count() - 4 {
-					ParamNumber := Params.Count() - (A_Index - 1) ; Stack params are passed right to left, so the real index of this param needs to be calculated
-				
-					ParamType := this.Compile(Params[ParamNumber])
-					RequiredType := this.Typing.GetType(FunctionNode.Params[ParamNumber][1].Value)
-					
-					try {
-						this.Cast(ParamType, RequiredType) ; A quick param type check
-					}
-					catch E {
-						new Error("Compile")
-							.LongText("Should be " RequiredType.Name ", not " ParamType.Name ".")
-							.Token(ParamValue)
-							.Source(this.Source)
-						.Throw()
-					}
-					
-					StackParamSpace++ ; Increment the number of Int64s to free from the stack
-				}
+			if (this.RegisterStackIndex = this.RegisterStack.Count()) {
+				; If we are straddling a page of the register stack, push a dummy value just to make sure 
+				;  the repeated .PopRegisterStack calls in the for loop don't spam pushing/popping the whole stack
+				this.PushRegisterStack()
+				Straddling := True ; Remember for later so we can remove the dummy
 			}
-			
-			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
 		
-			for k, ParamValue in Params {
-				if (k > 4) {
-					Break ; Only put the first four params into registers, the others are already on the stack
-				}
-			
+			loop, % Params.Count() {
+				ReversedIndex := Params.Count() - (A_Index - 1)
+				ParamValue := Params[ReversedIndex]
+				; Push all parameters onto the stack in reverse order, the top 4 will be popped below to save the register stack
+				
 				ParamType := this.Compile(ParamValue)
-				RequiredType := this.Typing.GetType(FunctionNode.Params[k][1].Value)
+				RequiredType := this.Typing.GetType(FunctionNode.Params[A_Index][1].Value)
 				
 				try {
-					this.Cast(ParamType, RequiredType) ; Another quick type check
+					this.Cast(ParamType, RequiredType) ; Ensure the passed parameter is of the correct type
+					this.CodeGen.Push(this.PopRegisterStack()), this.StackDepth++
 				}
-				catch E {
+				catch {
 					new Error("Compile")
 						.LongText("Should be " RequiredType.Name ", not " ParamType.Name ".")
 						.Token(ParamValue)
@@ -1046,15 +1029,17 @@
 				}
 			}
 			
-			loop, % 4 - (k = "" ? 0 : k) {
-				this.CodeGen.Push(0), this.StackDepth++ ; For when we have less than 4 params, push a 0 for each unpassed param
+			loop, % Min(Params.Count(), 4) {
+				this.CodeGen.Pop(ParamRegisters[A_Index]), this.StackDepth--
 			}
 			
-			for k, Register in ParamRegisters {
-				; Then pop each compiled param into it's specific register
-				this.CodeGen.Pop(Register), this.StackDepth--
+			if (Mod(this.StackDepth, 2) != 1) {
+				; Break stack alignment if needed, since 0x20 is even, and the push return addr will align the stack
+				this.CodeGen.Push(0), this.StackDepth++, StackParamCount++
 			}
-		
+			
+			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
+			
 			if (IsModuleCall) {
 				this.CodeGen.ModuleCall(ModuleName, FunctionNode.Name.Value, ModuleFunction.Address)
 			}
@@ -1065,9 +1050,19 @@
 				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)
 			}
 			
-			this.CodeGen.SmallAdd(RSP, (StackParamSpace * 8) + 0x20), this.StackDepth -= 4, this.StackDepth -= StackParamSpace ; Free shadow space + any stack params
+			this.CodeGen.SmallAdd(RSP, (StackParamCount * 8) + 0x20)
+			this.StackDepth -= 4, this.StackDepth -= StackParamCount ; Free shadow space + any stack params/dummy space
 			
-			this.CodeGen.Push(RAX), this.StackDepth++ ; Push the return value
+			if (Straddling) {
+				this.PopRegisterStack()
+			}
+			
+			loop, % this.RegisterStackIndex {
+				ReversedIndex := this.RegisterStackIndex - A_Index + 1
+				this.CodeGen.Pop(this.RegisterStack[ReversedIndex]), this.StackDepth--
+			}
+			
+			this.CodeGen.Move(this.PushRegisterStack(), RAX) ; Push the return value
 			
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}
