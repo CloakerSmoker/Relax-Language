@@ -28,7 +28,7 @@ define Int8 T1(Int64 P1) {
 	Int8* BodyText := "this is the body text"
 	
 	for (Int64 i := 0, i <= P1, i++) {
-		(BodyText + i) *= *(BodyText + i + 3)
+		(BodyText + 1 + i) *= *(BodyText + i + 3)
 		Test2(0, TitleText, BodyText)
 	}
 

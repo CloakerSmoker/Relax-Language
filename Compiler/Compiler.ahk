@@ -294,8 +294,6 @@
 			if (ResultRegister.__Class != "RAX") {
 				this.CodeGen.Move(RAX, ResultRegister)
 			}
-			
-			;this.CodeGen.Pop(RAX), this.StackDepth--
 		}
 		
 		this.CodeGen.JMP("__Return" this.FunctionIndex)
@@ -441,7 +439,6 @@
 	
 	CompileExpressionLine(Statement) {
 		this.Compile(Statement.Expression)
-		;this.CodeGen.Pop(RAX), this.StackDepth--
 		this.PopRegisterStack()
 	}
 	
@@ -496,15 +493,11 @@
 		
 		this.Compile(Statement.Init) ; Run the init first
 		this.PopRegisterStack() ; And discard the result
-		;this.CodeGen.Pop(RCX), this.StackDepth--
 		
 		this.CodeGen.Label("__For__" ThisIndex)
 		
 		this.Compile(Statement.Condition) ; Check the condition
-		ConditionRegister := this.TopOfRegisterStack() ; Store the result
-		
-		;fucky misgenerate with R10
-		;fixit fitxt
+		ConditionRegister := this.PopRegisterStack() ; Store the result
 		
 		this.CodeGen.Cmp(ConditionRegister, RSI) ; If the condition is already false, then jump out
 		this.CodeGen.JE("__For__" ThisIndex "__End")
@@ -516,7 +509,6 @@
 		this.Compile(Statement.Step) ; After the body runs, run the step
 		this.PopRegisterStack() ; And discard the result
 		
-		;this.CodeGen.Pop(RCX), this.StackDepth--
 		this.CodeGen.Jmp("__For__" ThisIndex) ; Then jump back to the top (where the condition is checked)
 		
 		this.CodeGen.Label("__For__" ThisIndex "__End")
@@ -540,14 +532,9 @@
 		
 		LeftValueType := this.Typing.GetType(StrReplace(LeftType.Name, "*"))
 		this.Cast(RightType, LeftValueType) ; Cast the right side value to the type the left side points to
-		
-		;this.CodeGen.Pop(RBX), this.StackDepth--
-		;this.CodeGen.Pop(RAX), this.StackDepth--
-		
+
 		NewValueRegister := this.PopRegisterStack()
 		PointerRegister := this.PopRegisterStack()
-		
-		;this.CodeGen.Push(RBX), this.StackDepth++ ; Store our result back onto the stack
 		
 		ShortTypeName := IntToI(LeftValueType.Name)
 		
@@ -696,7 +683,6 @@
 			}
 		}
 		
-		;this.CodeGen.Push(RAX), this.StackDepth++
 		ResultRegister := this.PushRegisterStack()
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
@@ -704,7 +690,9 @@
 			ResultType := this.Typing.GetType("Int8")
 		}
 		else {
-			this.CodeGen.FSTP_Stack() ; Use the stack space from pushing RAX to store the actual result
+			this.CodeGen.Push(0)
+			this.CodeGen.FSTP_Stack()
+			this.CodeGen.Pop(ResultRegister)
 		}
 		
 		return ResultType

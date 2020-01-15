@@ -422,6 +422,7 @@
 		OperatorStack := []
 	
 		loop {
+			StartIndex := this.Index
 			Next := this.Next()
 		
 			Switch (Next.Type) {
@@ -443,7 +444,7 @@
 					
 					Params := this.ParseGrouping()
 					
-					if (OperandStack.Count() >= 1 && OldPrevious.IsData()) {
+					if (OperandStack.Count() >= 1 && OldPrevious.Type = Tokens.IDENTIFIER) {
 						OperandStack.Push(new ASTNodes.Expressions.Call(OperandStack.Pop(), Params))
 					}
 					else {
@@ -500,9 +501,8 @@
 				}
 			}
 			
-			if (Next.Context.Start = this.Previous().Context.Start) {
-				; When the Previous token starts at the same place as our "Next" token,
-				;  then the token was not consumed, and is unexpected
+			if (this.Index = StartIndex) {
+				; If the index has not moved since the start of the loop, then the token was not consumed, and is unexpected
 			
 				this.UnwindToNextLine()
 				
@@ -579,6 +579,7 @@
 			Expressions := [this.ParseExpression(Tokens.COMMA, Tokens.RIGHT_PAREN)]
 			
 			if (Expressions[1].Count() < 1) {
+				; Wtf? TODO: Figure out *what* this means, and then remove it
 				this.Consume(Tokens.RIGHT_PAREN, "Expression groupings must have a closing paren")
 				return new ASTNodes.Expressions.Grouping([])
 			}
