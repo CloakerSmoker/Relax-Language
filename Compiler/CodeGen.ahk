@@ -449,6 +449,9 @@ class X64CodeGen {
 	Neg_SIB(SIB) {
 		this.REXOpcodeModSIB([0xF7], {"OpcodeExtension": 3}, SIB, {"REX": [REX.W]})
 	}
+	Neg_R64(Register) {
+		this.REXOpcodeMod([0xF7], {"OpcodeExtension": 3}, Register, {"REX": [REX.W]})
+	}
 	And_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x23], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
@@ -839,7 +842,7 @@ class X64CodeGen {
 	
 	NumberSizeOf(Number, ReturnNumber := true) {
 		static Sizes := {8: "I8", 16: "I16", 32: "I32", 64: "I64"}
-	
+		
 		loop 64 {
 			NextBit := Number & (1 << (64 - A_Index))
 		

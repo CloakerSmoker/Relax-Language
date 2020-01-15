@@ -94,7 +94,9 @@
 	;========================
 	; Variable methods
 	
-	GetVariableSIB(Name) {
+	GetVariableSIB(NameToken) {
+		Name := NameToken.Value
+		
 		if (this.Variables.HasKey(Name)) {
 			Index := this.Variables[Name]
 			
@@ -105,38 +107,60 @@
 				IndexRegister := RDI
 			}
 			else {
-				this.CodeGen.SmallMove(R10, Index)
-				IndexRegister := R10
+				this.CodeGen.SmallMove(RAX, Index)
+				IndexRegister := RAX
 			}
 			
 			return SIB(8, IndexRegister, R15)
 		}
 		else if (this.Globals.HasKey(Name)) {
-			this.CodeGen.Move_R64_Global_Pointer(R10, Name)
-			return SIB(8, RSI, R10)
+			this.CodeGen.Move_R64_Global_Pointer(RAX, Name)
+			return SIB(8, RSI, RAX)
+		}
+		else {
+			new Error("Compile")
+				.LongText("Undeclared variable.")
+				.ShortText("Is not a local, global, or parameter")
+				.Token(NameToken)
+				.Source(this.Source)
+			.Throw()
 		}
 	}
-	SetVariable(Name) {
-		VariableSIB := this.GetVariableSIB(Name)
+	SetVariable(NameToken) {
+		Name := NameToken.Value
+		
+		VariableSIB := this.GetVariableSIB(NameToken)
 		this.CodeGen.Move_SIB_R64(VariableSIB, this.TopOfRegisterStack()) ;, this.StackDepth--
 	}
-	GetVariable(Name) {
-		VariableSIB := this.GetVariableSIB(Name)
+	GetVariable(NameToken) {
+		VariableSIB := this.GetVariableSIB(NameToken)
 		
 		this.CodeGen.Move_R64_SIB(this.PushRegisterStack(), VariableSIB) ;, this.StackDepth++
 		
-		return this.GetVariableType(Name)
+		return this.GetVariableType(NameToken)
 	}
-	GetVariableType(Name) {
+	GetVariableType(NameToken) {
+		Name := NameToken.Value
+		
 		if (this.Globals.HasKey(Name)) {
 			return this.Typing.GetType(this.Globals[Name])
 		}
 		else {
-			return this.Typing.GetVariableType(Name)
+			try {
+				return this.Typing.GetVariableType(Name)
+			}
+			catch {
+				new Error("Compile")
+					.LongText("Undeclared variable.")
+					.ShortText("Is not a local, global, or parameter")
+					.Token(NameToken)
+					.Source(this.Source)
+				.Throw()
+			}
 		}
 	}
-	GetVariableAddress(Name) {
-		VariableSIB := this.GetVariableSIB(Name)
+	GetVariableAddress(NameToken) {
+		VariableSIB := this.GetVariableSIB(NameToken)
 		
 		this.CodeGen.Lea(this.PushRegisterStack(), VariableSIB)
 		;this.CodeGen.Push(R10), this.StackDepth++
@@ -175,6 +199,7 @@
 		this.Function := DefineAST
 		this.Locals := DefineAST.Locals
 		
+		this.RegisterStackIndex := 0
 		this.StackDepth := 0
 		this.HasReturn := False
 		
@@ -226,7 +251,7 @@
 			}
 			
 			this.CodeGen.Label("__Return" this.FunctionIndex)
-		
+			
 			if (ParamSizes != 0) {
 				if (ParamSizes <= 3) {
 					Loop, % ParamSizes {
@@ -360,6 +385,10 @@
 	}
 	
 	CompileToken(TargetToken) {
+		if (TargetToken.Type = Tokens.IDENTIFIER) {
+			return this.GetVariable(TargetToken)
+		}
+		
 		ResultRegister := this.PushRegisterStack()
 		
 		Switch (TargetToken.Type) {
@@ -387,15 +416,12 @@
 					this.CodeGen.Move_R64_I64(ResultRegister, I64(IntegerValue))
 				}
 				
-				return this.Typing.GetType("Int64")
+				return this.Typing.GetType("Int" this.CodeGen.NumberSizeOf(IntegerValue, True))
 			}
 			Case Tokens.DOUBLE: {
 				this.CodeGen.Move_R64_I64(ResultRegister, I64(FloatToBinaryInt(TargetToken.Value)))
 				
 				return this.Typing.GetType("Double")
-			}
-			Case Tokens.IDENTIFIER: {
-				return this.GetVariable(TargetToken.Value)
 			}
 			Case Tokens.STRING: {
 				this.CodeGen.Move_String_Pointer(ResultRegister, TargetToken.Value)
@@ -475,10 +501,12 @@
 		this.CodeGen.Label("__For__" ThisIndex)
 		
 		this.Compile(Statement.Condition) ; Check the condition
-		ResultRegister := this.PopRegisterStack() ; Store the result
-		;this.CodeGen.Pop(RCX), this.StackDepth--
+		ConditionRegister := this.TopOfRegisterStack() ; Store the result
 		
-		this.CodeGen.Cmp(ResultRegister, RSI) ; If the condition is already false, then jump out
+		;fucky misgenerate with R10
+		;fixit fitxt
+		
+		this.CodeGen.Cmp(ConditionRegister, RSI) ; If the condition is already false, then jump out
 		this.CodeGen.JE("__For__" ThisIndex "__End")
 		
 		for k, Line in Statement.Body {
@@ -519,12 +547,13 @@
 		NewValueRegister := this.PopRegisterStack()
 		PointerRegister := this.PopRegisterStack()
 		
-		this.CodeGen.Move(this.PushRegisterStack(), NewValueRegister)
 		;this.CodeGen.Push(RBX), this.StackDepth++ ; Store our result back onto the stack
 		
 		ShortTypeName := IntToI(LeftValueType.Name)
 		
 		this.CodeGen["Move_R" ShortTypeName "_R64"].Call(this.CodeGen, PointerRegister, NewValueRegister)
+		
+		this.CodeGen.Move(this.PushRegisterStack(), NewValueRegister)
 		
 		return RightType
 	}
@@ -538,7 +567,7 @@
 		
 		if (IsAssignment) {
 			RightType := this.Compile(Expression.Right)
-			LeftType := this.GetVariableType(Expression.Left.Value)
+			LeftType := this.GetVariableType(Expression.Left)
 		}
 		else {
 			LeftType := this.Compile(Expression.Left)
@@ -562,7 +591,7 @@
 		
 		if (IsAssignment) {
 			if (ResultType.Family = "Decimal" && Expression.Operator.Type = Tokens.COLON_EQUAL) {
-				this.SetVariable(Expression.Left.Value)
+				this.SetVariable(Expression.Left)
 				return RightType
 			}
 			else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
@@ -588,10 +617,10 @@
 	CompileIntegerAssignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
-				this.SetVariable(Expression.Left.Value)
+				this.SetVariable(Expression.Left)
 			}
 			Case Tokens.PLUS_EQUAL, Tokens.MINUS_EQUAL: {
-				this.GetVariable(Expression.Left.Value) ; Get the current value of the variable
+				this.GetVariable(Expression.Left) ; Get the current value of the variable
 				VariableValueRegister := this.PopRegisterStack() ; And the register holding it
 				ValueRegister := this.PopRegisterStack() ; Then the value of the right side expression
 				
@@ -603,11 +632,11 @@
 				}
 				
 				this.CodeGen.Move(this.PushRegisterStack(), VariableValueRegister) ; Store the result back onto the stack
-				this.SetVariable(Expression.Left.Value) ; And set the variable using the top of stack
+				this.SetVariable(Expression.Left) ; And set the variable using the top of stack
 			}
 		}
 		
-		return this.GetVariableType(Expression.Left.Value)
+		return this.GetVariableType(Expression.Left)
 	}
 	
 	CompileBinaryDecimal(Expression, LeftType, RightType, ResultType) {
@@ -768,28 +797,28 @@
 		OperatorString := Operator.Stringify()
 		
 		if (OperatorString = "--" || OperatorString = "++") {
-			VariableSIB := this.GetVariableSIB(Expression.Operand.Value)
+			VariableSIB := this.GetVariableSIB(Expression.Operand)
 			
 			Switch (Operator.Type) {
 				Case Tokens.PLUS_PLUS_L: {
 					this.CodeGen.Inc_SIB(VariableSIB)
-					this.GetVariable(Expression.Operand.Value)
+					this.GetVariable(Expression.Operand)
 				}
 				Case Tokens.PLUS_PLUS_R: {
-					this.GetVariable(Expression.Operand.Value)
+					this.GetVariable(Expression.Operand)
 					this.CodeGen.Inc_SIB(VariableSIB)
 				}
 				Case Tokens.MINUS_MINUS_L: {
 					this.CodeGen.Dec_SIB(VariableSIB)
-					this.GetVariable(Expression.Operand.Value)
+					this.GetVariable(Expression.Operand)
 				}
 				Case Tokens.MINUS_MINUS_R: {
-					this.GetVariable(Expression.Operand.Value)
+					this.GetVariable(Expression.Operand)
 					this.CodeGen.Dec_SIB(VariableSIB)
 				}
 			}
 			
-			return this.GetVariableType(Expression.Operand.Value)
+			return this.GetVariableType(Expression.Operand)
 		}
 		else if (Operator.Type = Tokens.DEREF) {
 			OperandType := this.Compile(Expression.Operand)
@@ -802,24 +831,23 @@
 				.Throw()
 			}
 			
-			this.CodeGen.Pop(RAX), this.StackDepth--
+			OperandResultRegister := this.TopOfRegisterStack()
 			
 			Switch (OperandType.Pointer.Precision) {
 				Case 8: {
-					this.CodeGen.Move_R64_RI8(RAX, RAX)
+					this.CodeGen.Move_R64_RI8(OperandResultRegister, OperandResultRegister)
 				}
 				Case 16: {
-					this.CodeGen.Move_R64_RI16(RAX, RAX)
+					this.CodeGen.Move_R64_RI16(OperandResultRegister, OperandResultRegister)
 				}
 				Case 32: {
-					this.CodeGen.Move_R64_RI32(RAX, RAX)
+					this.CodeGen.Move_R64_RI32(OperandResultRegister, OperandResultRegister)
 				}
 				Case 64: {
-					this.CodeGen.Move_R64_RI64(RAX, RAX)
+					this.CodeGen.Move_R64_RI64(OperandResultRegister, OperandResultRegister)
 				}
 			}
 			
-			this.CodeGen.Push(RAX), this.StackDepth++
 			return OperandType.Pointer
 		}
 		else if (Operator.Type = Tokens.ADDRESS) {
@@ -831,19 +859,19 @@
 				this.CodeGen.SmallMove(RBX, 6)
 				this.CodeGen.Add(RAX, RBX)
 				
-				this.CodeGen.Push(RAX), this.StackDepth++
+				this.CodeGen.Move(this.PushRegisterStack(), RAX)
 				
 				return this.Typing.GetType("void*")
 			}
 			else {
-				this.GetVariableAddress(Expression.Operand.Value)
-				return this.Typing.GetPointerType(this.Typing.GetVariableType(Expression.Operand.Value))
+				this.GetVariableAddress(Expression.Operand)
+				return this.Typing.GetPointerType(this.GetVariableType(Expression.Operand))
 			}
 		}
 		else if (Operator.Type = Tokens.NEGATE) {
 			OperandType := this.Compile(Expression.Operand)
 		
-			this.CodeGen.Neg_SIB(SIB(8, RSI, RSP))
+			this.CodeGen.Neg_R64(this.TopOfRegisterStack())
 			return OperandType
 		}
 		
@@ -973,7 +1001,9 @@
 		if (IsModuleCall || FunctionNode := this.Program.Functions[Expression.Target.Value]) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
-			loop, % this.RegisterStackIndex {
+			OldIndex := this.RegisterStackIndex ; Store the register stack index before calling, so we know what to save, and what to restore
+			
+			loop, % OldIndex {
 				; Store whatever part of the register stack we're using, just in case the function we call doesn't 
 				;  save all registers
 				this.CodeGen.Push(this.RegisterStack[A_Index]), this.StackDepth++
@@ -1007,14 +1037,18 @@
 				this.PushRegisterStack()
 				Straddling := True ; Remember for later so we can remove the dummy
 			}
-		
+			
+			loop, % Abs(Min(0, Params.Count() - 4)) {
+				this.CodeGen.Push(RSI), this.StackDepth++
+			}
+			
 			loop, % Params.Count() {
 				ReversedIndex := Params.Count() - (A_Index - 1)
 				ParamValue := Params[ReversedIndex]
 				; Push all parameters onto the stack in reverse order, the top 4 will be popped below to save the register stack
 				
 				ParamType := this.Compile(ParamValue)
-				RequiredType := this.Typing.GetType(FunctionNode.Params[A_Index][1].Value)
+				RequiredType := this.Typing.GetType(FunctionNode.Params[ReversedIndex][1].Value)
 				
 				try {
 					this.Cast(ParamType, RequiredType) ; Ensure the passed parameter is of the correct type
@@ -1029,7 +1063,7 @@
 				}
 			}
 			
-			loop, % Min(Params.Count(), 4) {
+			loop, % 4 {
 				this.CodeGen.Pop(ParamRegisters[A_Index]), this.StackDepth--
 			}
 			
@@ -1057,10 +1091,12 @@
 				this.PopRegisterStack()
 			}
 			
-			loop, % this.RegisterStackIndex {
-				ReversedIndex := this.RegisterStackIndex - A_Index + 1
+			loop, % OldIndex {
+				ReversedIndex := OldIndex - A_Index + 1
 				this.CodeGen.Pop(this.RegisterStack[ReversedIndex]), this.StackDepth--
 			}
+			
+			this.RegisterStackIndex := OldIndex
 			
 			this.CodeGen.Move(this.PushRegisterStack(), RAX) ; Push the return value
 			

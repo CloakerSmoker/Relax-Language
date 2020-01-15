@@ -135,6 +135,10 @@
 		}
 	}
 	
+	OptimizeUnary(Expression) {
+		return Expression
+	}
+	
 	OptimizeBinary(Expression) {
 		NewLeft := this.Optimize(Expression.Left) ; Optimize any operands first
 		NewRight := this.Optimize(Expression.Right)
@@ -184,6 +188,9 @@
 			OperandHasSideEffects := this.ExpressionHasSideEffects(Expression.Operand)
 			
 			return OperandHasSideEffects
+		}
+		else if (Expression.Type = ASTNodeTypes.CALL) {
+			return True
 		}
 		else {
 			return False

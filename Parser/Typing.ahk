@@ -148,6 +148,10 @@
 	}
 	
 	GetVariableType(Name) {
+		if !(this.Variables.HasKey(Name)) {
+			Throw, Exception("Variable not found")
+		}
+		
 		return this.Variables[Name]
 	}
 	

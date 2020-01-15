@@ -17,15 +17,32 @@ Code =
 ( % 
 
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
-
-define void T1() {
-	return MessageBoxA(0, "Hi", "Bye", 0)
+define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
+	return MessageBoxA(P1, TT, BT, 0)
 }
 
+define Int8 T1(Int64 P1) {
+	Int8 A := 0
+	
+	Int8* TitleText := "this is the title" 
+	Int8* BodyText := "this is the body text"
+	
+	for (Int64 i := 0, i <= P1, i++) {
+		(BodyText + i) *= *(BodyText + i + 3)
+		Test2(0, TitleText, BodyText)
+	}
 
+	return A
+}
 
 )
 
+; (BodyText + i) *= *(BodyText + i)
+
+;	for (Int64 i := 0, i <= P1, i++) {
+;		(BodyText + i) *= *(BodyText + i)
+;		Test2(0, TitleText, BodyText)
+;	}
 
 
 ;define void* T1() {
