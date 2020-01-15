@@ -88,6 +88,9 @@
 		
 		; Because of these rules, after parameter 4, we need to use RBP as a base, and (ParamNumber - 4) + 2 + 4 as an offset into the stack for the parameter's value
 		
+		this.CodeGen.Move(RAX, RSI)
+		IndexSIB := SIB(8, RAX, R15)
+		
 		for k, Pair in Pairs {
 			Type := Pair[1].Value
 			Name := Pair[2].Value
@@ -96,46 +99,36 @@
 			
 			this.AddVariable(TrueIndex, Name)
 			this.Typing.AddVariable(Type, Name)
-			
-			if (TrueIndex = 0) {
-				IndexRegister := RSI
-			}
-			else if (TrueIndex = 1) {
-				IndexRegister := RDI
-			}
-			else {
-				this.CodeGen.SmallMove(R14, TrueIndex)
-				IndexRegister := R14
-			}
-			
-			IndexSIB := SIB(8, IndexRegister, R15)
 
-			if (Type = "Double" || Type = "Float") {
-				this.CodeGen.Move_SIB_XMM(IndexSIB, XMMFirstFour[TrueIndex + 1])
-			}
-			else {
-				this.CodeGen.Move_SIB_R64(IndexSIB, IntFirstFour[TrueIndex + 1])
+			if (A_Index <= 4) {
+				if (Type = "Double" || Type = "Float") {
+					this.CodeGen.Move_SIB_XMM(IndexSIB, XMMFirstFour[TrueIndex + 1])
+				}
+				else {
+					this.CodeGen.Move_SIB_R64(IndexSIB, IntFirstFour[TrueIndex + 1])
+				}
 			}
 			
-			if (A_Index = 4) {
-				Break
+			if (A_Index = 5) {
+				; When A_Index is 5 (aka the first stack-passed param)
+				;  Store RBP into RCX, so we can use RBP in the SIB for getting a parameter out of the stack
+				
+				this.CodeGen.Move(RCX, RBP)
+				this.CodeGen.SmallMove(RDX, 6)
 			}
-		}
-		
-		if (Pairs.Count() > 4) {
-			this.CodeGen.Move(R12, RBP) ; Save RBP into R12, since RBP/13 can't be used as SIB.Base
-		
-			loop, % Pairs.Count() - 4 {
-				Pair := Pairs[A_Index + 4]
-				TrueIndex := (A_Index - 1) + 4 ; Get the actual (0 index) parameter number
+			
+			if (A_Index > 4) {
+				this.CodeGen.Move_R64_SIB(RBX, SIB(8, RDX, RCX)) ; Then fetch the passed value
 				
-				this.AddVariable(TrueIndex, Pair[2].Value)
-				this.Typing.AddVariable(Pair[1].Value, Pair[2].Value) ; Register the variable
+				this.CodeGen.Move_SIB_R64(IndexSIB, RBX) ; And store it into our variable space
 				
-				this.CodeGen.SmallMove(R11, (TrueIndex - 4) + 2 + 4) ; Store the index into the stack into R11, so we can use it in a SIB
-				this.CodeGen.Move_R64_SIB(RBX, SIB(8, R11, R12)) ; Load the parameter value from the stack, into RBX
-				this.CodeGen.SmallMove(R11, TrueIndex) ; Load the actual index of the parameter into R11
-				this.CodeGen.Move_SIB_R64(SIB(8, R11, R15), RBX) ; Finally store the loaded value of the parameter into this function's parameter space
+				if (Pairs.Count() > A_Index) {
+					this.CodeGen.Inc_R64(RDX)
+				}
+			}
+			
+			if (A_Index != Pairs.Count()) {
+				this.CodeGen.Inc_R64(RAX)
 			}
 		}
 	}

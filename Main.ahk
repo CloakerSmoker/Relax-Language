@@ -16,23 +16,8 @@
 Code = 
 ( % 
 
-DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
-define Int64 Test2(Int64 P1, Int8* BT, Int8* TT) {
-	return MessageBoxA(P1, TT, BT, 0)
-}
-
-define Int8 T1(Int64 P1) {
-	Int8 A := 0
-	
-	Int8* TitleText := "this is the title" 
-	Int8* BodyText := "this is the body text"
-	
-	for (Int64 i := 0, i <= P1, i++) {
-		(BodyText + 1 + i) *= *(BodyText + i + 3)
-		Test2(0, TitleText, BodyText)
-	}
-
-	return A
+define Int64 T1(Int16 A, Int16 B, Int16 C, Int16 D, Int16 E, Int16 F) {
+	return A + B + C + D + E + F
 }
 
 )
@@ -91,7 +76,7 @@ R := LanguageName.CompileCode(Code)
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4) "`n" A_LastError "`n" R.GetFunctionPointer("T1")
+MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4, 2) "`n" A_LastError "`n" R.GetFunctionPointer("T1")
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B
