@@ -4,6 +4,7 @@
 		}
 	
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
+		IsBitwise := OperatorClasses.IsClass(Expression.Operator, "Bitwise")
 		
 		if (IsAssignment) {
 			RightType := this.Compile(Expression.Right)
@@ -46,7 +47,10 @@
 			}
 		}
 		else {
-			if (ResultType.Family = "Decimal") {
+			if (IsBitwise) {
+				return this.CompileBinaryBitwise(Expression, LeftType, RightType, ResultType)
+			}
+			else if (ResultType.Family = "Decimal") {
 				return this.CompileBinaryDecimal(Expression, LeftType, RightType, ResultType)
 			}
 			else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
@@ -77,6 +81,32 @@
 		}
 		
 		return this.GetVariableType(Expression.Left)
+	}
+	
+	CompileBinaryBitwise(Expression, LeftType, RightType, ResultType) {
+		this.Cast(RightType, ResultType)
+		RightRegister := this.PopRegisterStack()
+		
+		this.Cast(LeftType, ResultType)
+		LeftRegister := this.PopRegisterStack()
+		
+		ResultRegister := this.PushRegisterStack()
+		
+		Switch (Expression.Operator.Type) {
+			Case Tokens.BITWISE_AND: {
+				this.CodeGen.And_R64_R64(LeftRegister, RightRegister)
+			}
+			Case Tokens.BITWISE_OR: {
+				this.CodeGen.Or_R64_R64(LeftRegister, RightRegister)
+			}
+			Case Tokens.BITWISE_XOR: {
+				this.CodeGen.XOR_R64_R64(LeftRegister, RightRegister)
+			}
+		}
+		
+		this.CodeGen.Move(ResultRegister, LeftRegister)
+		
+		return ResultType
 	}
 	
 	CompileBinaryDecimal(Expression, LeftType, RightType, ResultType) {

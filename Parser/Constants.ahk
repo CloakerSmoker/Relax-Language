@@ -124,7 +124,7 @@ class CharacterTokens {
 class OperatorClasses {
 	static Prefix	  := {"Precedence": -1
 						, "Associative": "Right"
-						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.DEREF, Tokens.ADDRESS]}
+						, "Tokens": [Tokens.PLUS_PLUS, Tokens.MINUS_MINUS, Tokens.BANG, Tokens.BITWISE_NOT, Tokens.DEREF, Tokens.ADDRESS, Tokens.BITWISE_NOT]}
 
 	static Assignment := {"Precedence": 0
 						, "Associative": "Right"
@@ -156,7 +156,7 @@ class OperatorClasses {
 						
 	static Bitwise    := {"Precedence": 7
 						, "Associative": "Left"
-						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_NOT, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
+						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
 						
 	static Module     := {"Precedence": 8
 						, "Associative": "Left"

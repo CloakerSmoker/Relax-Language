@@ -1,16 +1,21 @@
 ﻿class ASTOptimizer {
+	__New(CodeLexer, CodeParser) {
+		this.Typing := CodeParser.Typing
+	}
+	
 	Optimize(Something) {
 		if (Something.__Class = "Token") {
 			return Something
 		}
 		
 		MethodName := "Optimize" ASTNodeTypes[Something.Type]
+		Base := ObjGetBase(this)
 		
-		if !(this.HasKey(MethodName)) {
+		if !(Base.HasKey(MethodName)) {
 			return Something
 		}
 	
-		return this[MethodName].Call(this, Something)
+		return Base[MethodName].Call(this, Something)
 	}
 	
 	OptimizeProgram(ProgramNode) {
@@ -37,7 +42,7 @@
 		}
 		
 		for k, Line in FunctionNode.Body {
-			FunctionNode.Body[k] := this.OptimizeLine(Line)	
+			FunctionNode.Body[k] := this.OptimizeLine(Line)
 		}
 	}
 	OptimizeLine(Statement) {
@@ -78,11 +83,9 @@
 				
 				if (NewOptions.Count() > 0) {
 					Statement.Options := NewOptions
-				
-					return Statement
 				}
 				else {
-					new ASTNodes.None()
+					return new ASTNodes.None()
 				}
 			}
 			Case ASTNodeTypes.FORLOOP: {
@@ -95,17 +98,17 @@
 				}
 				
 				; TODO: Come up with an actual way to optimize here
-				
-				return Statement
 			}
 			Case ASTNodeTypes.EXPRESSIONLINE: {
 				if (this.ExpressionHasSideEffects(Statement.Expression)) {
 					Statement.Expression := this.OptimizeExpression(Statement.Expression)
-					
-					return Statement
 				}
-				
-				return new ASTNodes.None()
+				else {
+					return new ASTNodes.None()
+				}
+			}
+			Case ASTNodeTypes.RETURN: {
+				Statement.Expression := this.OptimizeExpression(Statement.Expression)
 			}
 		}
 		
@@ -147,16 +150,69 @@
 			; If both operands were optimized into constants (and should be tokens) then we can manually evaluate them
 			
 			NewContext := NewLeft.Context.Merge(NewRight.Context) ; Merge contexts so errors don't go haywire
-			NewType := Tokens.INTEGER ; TODO: Dynamically figure out the type, maybe even move typing in here
+			
+			static TokenTypesToRealTypes := {Tokens.INTEGER: "Int64", Tokens.DOUBLE: "Double"}
+			LeftType := TokenTypesToRealTypes[NewLeft.Type] ; Go from a token type, to a Typing type
+			RightType := TokenTypesToRealTypes[NewRight.Type]
+			
+			NewType := this.Typing.GetType(this.Typing.ResultType(LeftType, RightType)) ; Get the result type for the two token types
+			NewType := Tokens[NewType.Family] ; And convert it back to a token type
+			
+			NewLeft := NewLeft.Value
+			NewRight := NewRight.Value
 			
 			Switch (Expression.Operator.Type) {
-				Case Tokens.EQUAL_EQUAL: {
-					NewValue := NewLeft.Value = NewRight.Value
-				}
 				Case Tokens.PLUS: {
-					NewValue := NewLeft.Value + NewRight.Value
+					NewValue := NewLeft + NewRight
 				}
-				; TODO: Implement other operators
+				Case Tokens.MINUS: {
+					NewValue := NewLeft - NewRight
+				}
+				Case Tokens.TIMES: {
+					NewValue := NewLeft * NewRight
+				}
+				Case Tokens.DIVIDE: {
+					NewValue := NewLeft / NewRight
+				}
+				Case Tokens.MOD: {
+					NewValue := Mod(NewLeft, NewRight)
+				}
+				Case Tokens.EQUAL: {
+					NewValue := NewLeft = NewRight
+				}
+				Case Tokens.BANG_EQUAL: {
+					NewValue := NewLeft != NewRight
+				}
+				Case Tokens.LESS: {
+					NewValue := NewLeft < NewRight
+				}
+				Case Tokens.LESS_EQUAL: {
+					NewValue := NewLeft <= NewRight
+				}
+				Case Tokens.GREATER: {
+					NewValue := NewLeft > NewRight
+				}
+				Case Tokens.GREATER_EQUAL: {
+					NewValue := NewLeft >= NewRight
+				}
+				Case Tokens.LOGICAL_AND: {
+					NewValue := NewLeft && NewRight
+				}
+				Case Tokens.LOGICAL_OR: {
+					NewValue := NewLeft && NewRight
+				}
+				Case Tokens.BITWISE_AND: {
+					NewValue := NewLeft & NewRight
+				}
+				Case Tokens.BITWISE_OR: {
+					NewValue := NewLeft | NewRight
+				}
+				Case Tokens.BITWISE_NOT: {
+					NewValue := NewLeft ~ NewRight
+				}
+				Case Tokens.BITWISE_XOR: {
+					NewValue := NewLeft ^ NewRight
+				}
 			}
 			
 			return new Token(NewType, NewValue, NewContext)

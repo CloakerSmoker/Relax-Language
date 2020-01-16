@@ -23,7 +23,8 @@ class LanguageName {
 		CodeParser := new Parser(CodeLexer)
 		CodeAST := CodeParser.Start(CodeTokens)
 		
-		ASTOptimizer.OptimizeProgram(CodeAST)
+		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser)
+		CodeOptimizer.OptimizeProgram(CodeAST)
 		
 		CodeCompiler := new Compiler(CodeLexer, CodeParser)
 		Program := CodeCompiler.CompileProgram(CodeAST)

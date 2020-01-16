@@ -10,14 +10,14 @@
 ; TODO: (Related to above) Shorter Jmp encodings
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
-; TODO: Start to optimize code
 ; TODO: Fix floating point comparison operators
 
 Code = 
 ( % 
 
-define Int64 T1(Int16 A, Int16 B, Int16 C, Int16 D, Int16 E, Int16 F) {
-	return A + B + C + D + E + F
+define Int64 T1() {
+	Int8 A := 0b0010
+	return A | 0b0001
 }
 
 )
