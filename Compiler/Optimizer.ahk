@@ -152,11 +152,18 @@
 			NewContext := NewLeft.Context.Merge(NewRight.Context) ; Merge contexts so errors don't go haywire
 			
 			static TokenTypesToRealTypes := {Tokens.INTEGER: "Int64", Tokens.DOUBLE: "Double"}
-			LeftType := TokenTypesToRealTypes[NewLeft.Type] ; Go from a token type, to a Typing type
-			RightType := TokenTypesToRealTypes[NewRight.Type]
+			static TypeFamilyToTokenType := {"Decimal": Tokens.DOUBLE, "Integer": Tokens.INTEGER}
 			
-			NewType := this.Typing.GetType(this.Typing.ResultType(LeftType, RightType)) ; Get the result type for the two token types
-			NewType := Tokens[NewType.Family] ; And convert it back to a token type
+			if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
+				NewType := Tokens.INTEGER ; When we have a comparison operator, the result type is just integers
+			}
+			else {
+				LeftType := TokenTypesToRealTypes[NewLeft.Type] ; Go from a token type, to a Typing type
+				RightType := TokenTypesToRealTypes[NewRight.Type]
+				
+				NewType := this.Typing.GetType(this.Typing.ResultType(LeftType, RightType)) ; Get the result type for the two token types
+				NewType := TypeFamilyToTokenType[NewType.Family] ; And convert it back to a token type
+			}
 			
 			NewLeft := NewLeft.Value
 			NewRight := NewRight.Value

@@ -16,8 +16,8 @@ Code =
 ( % 
 
 define Int64 T1() {
-	Int8 A := 0b0010
-	return A | 0b0001
+	Double A := 1.1
+	return A >= 1.1
 }
 
 )

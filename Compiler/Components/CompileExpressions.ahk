@@ -110,20 +110,28 @@
 	}
 	
 	CompileBinaryDecimal(Expression, LeftType, RightType, ResultType) {
-		; Since the operands are in the register stack somewhere, and 
+		; Since the operands are in the register stack somewhere, and we need them in the X87 register stack
+		;  we push them onto the real stack, and load them from there
 		
 		this.Cast(RightType, ResultType)
-		this.CodeGen.Push_R64(this.PopRegisterStack()), this.StackDepth++
+		
+		LeftRegister := this.PopRegisterStack()
+		this.CodeGen.Push_R64(LeftRegister), this.StackDepth++
 		this.CodeGen.FLD_Stack()
-		this.CodeGen.Pop(RBX), this.StackDepth--
+		this.CodeGen.Pop(LeftRegister), this.StackDepth--
 		
 		this.Cast(LeftType, ResultType)
-		this.CodeGen.Push_R64(this.PopRegisterStack()), this.StackDepth++
+		
+		RightRegister := this.PopRegisterStack()
+		this.CodeGen.Push_R64(RightRegister), this.StackDepth++
 		this.CodeGen.FLD_Stack()
-		this.CodeGen.Pop(RAX), this.StackDepth--
+		this.CodeGen.Pop(RightRegister), this.StackDepth--
+		
+		ResultRegister := this.PushRegisterStack()
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
-			this.CodeGen.Cmp(RAX, RBX) ; Comparisons are done as integers, since x87 equality checks are a nightmare
+			this.CodeGen.Move(ResultRegister, RSI) ; For comparisons, zero the result register, and compare the operands
+			this.CodeGen.FComiP()
 		}
 	
 		Switch (Expression.Operator.Type) {
@@ -140,22 +148,22 @@
 				this.CodeGen.FDivP()
 			}
 			Case Tokens.EQUAL: {
-				this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
+				this.CodeGen.F_C_Move_E_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.BANG_EQUAL: {
-				this.CodeGen.C_Move_NE_R64_R64(RAX, RDI)
+				this.CodeGen.F_C_Move_NE_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.LESS: {
-				this.CodeGen.C_Move_L_R64_R64(RAX, RDI) ; WARNING, ALL COMPARISIONS BELOW HERE MIGHT BE WRONG. Since floats are just used as ints for the comparisons
+				this.CodeGen.F_C_Move_L_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.LESS_EQUAL: {
-				this.CodeGen.C_Move_LE_R64_R64(RAX, RDI)
+				this.CodeGen.F_C_Move_LE_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.GREATER: {
-				this.CodeGen.C_Move_G_R64_R64(RAX, RDI)
+				this.CodeGen.F_C_Move_G_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.GREATER_EQUAL: {
-				this.CodeGen.C_Move_GE_R64_R64(RAX, RDI)
+				this.CodeGen.F_C_Move_GE_R64_R64(ResultRegister, RDI)
 			}
 			Default: {
 				new Error("Compile")
@@ -166,14 +174,12 @@
 			}
 		}
 		
-		ResultRegister := this.PushRegisterStack()
-		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
-			this.CodeGen.Move(ResultRegister, RAX)
-			ResultType := this.Typing.GetType("Int8")
+			; For comparisons, the result was already CMove'd into the result register, so no need to pop it
+			ResultType := this.Typing.GetType("Int64")
 		}
 		else {
-			this.CodeGen.Push(0)
+			this.CodeGen.Push(ResultRegister)
 			this.CodeGen.FSTP_Stack()
 			this.CodeGen.Pop(ResultRegister)
 		}

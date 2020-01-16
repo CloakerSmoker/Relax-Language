@@ -612,6 +612,37 @@ class X64CodeGen {
 	
 	; Floating point math instructions END
 	;============================
+	; Floating point comparision instructions START
+	
+	FComiP(StackIndex := 1) {
+		this.PushByte(0xDF)
+		this.PushByte(0xF0 + StackIndex)
+	}
+	
+	; All of the instructions below are actually CMoveCC, but using the unsigned versions, since FComiP
+	;  only sets some of the flags register, and not enough for the regular signed CMoveCC instructions
+	
+	F_C_Move_E_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x44], RegisterOne, RegisterTwo)
+	}
+	F_C_Move_NE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x45], RegisterOne, RegisterTwo)
+	}
+	F_C_Move_L_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x42], RegisterOne, RegisterTwo)
+	}
+	F_C_Move_LE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x46], RegisterOne, RegisterTwo)
+	}
+	F_C_Move_G_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x47], RegisterOne, RegisterTwo)
+	}
+	F_C_Move_GE_R64_R64(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0x43], RegisterOne, RegisterTwo)
+	}
+	
+	; Floating point comparision instructions END
+	;============================
 	; Floating point misc instructions START
 	
 	FLD_1() {
