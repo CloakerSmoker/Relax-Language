@@ -61,6 +61,8 @@ class X64CodeGen {
 	__New() {
 		this.Bytes := []
 		this.Labels := {}
+		this.IndexToFunction := {}
+		this.FunctionToIndex := {}
 	}
 
 	REX(Params*) {
@@ -153,6 +155,10 @@ class X64CodeGen {
 	Call_RI64(Register) {
 		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 2}, Register)
 	}
+	Call_SIB(SIB) {
+		this.REXOpcodeModSIB([0xFF], {"OpcodeExtension": 2}, SIB)
+	}
+	
 	Call_Label(Name) {
 		this.PushByte(0xE8)
 		this.LabelPlaceholder(Name)
@@ -691,13 +697,15 @@ class X64CodeGen {
 	; Magic helper pseudo-instructions
 	
 	DllCall(DllFile, DllFunction) {	
-		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
-		this.DllFunctionPlaceholder(DllFile, DllFunction)
-		this.Call_RI64(RAX)
+		MsgBox, % "DllCall called, " DllFile ": " DllFunction
 	}
 	Move_String_Pointer(Register, String) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
 		this.StringPlaceholder(String)
+	}
+	Move_R64_FunctionTable(Register) {
+		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
+		this.FunctionTablePlaceholder()
 	}
 	Move_R64_Global_Pointer(Register, GlobalName) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
@@ -745,9 +753,6 @@ class X64CodeGen {
 	LabelPlaceholder(Name) {
 		this.Placeholder(["Label", Name], 3)
 	}
-	DllFunctionPlaceholder(DllFile, DllFunction) {
-		this.Placeholder(["Dll", DllFile, DllFunction], 7)
-	}
 	StringPlaceholder(String) {
 		this.Placeholder(["String", String], 7)
 	}
@@ -765,6 +770,21 @@ class X64CodeGen {
 		}
 	}
 	
+	FunctionTablePlaceholder() {
+		this.Placeholder(["FunctionTable"], 7)
+	}
+	AddFunction(Name) {
+		this.FunctionToIndex[Name] := this.FunctionToIndex.Count()
+		this.IndexToFunction.Push(Name)
+	}
+	GetFunctionIndex(Name) {
+		if !(this.FunctionToIndex.HasKey(Name)) {
+			this.AddFunction(Name)
+		}
+		
+		return this.FunctionToIndex[Name]
+	}
+	
 	Link(LabelOnly := False) {
 		static HEAP_ZERO_MEMORY := 0x00000008
 		static hProcessHeap := DllCall("GetProcessHeap")
@@ -777,6 +797,22 @@ class X64CodeGen {
 		
 		if !(LabelOnly) {
 			this.LinkedBytes := LinkedBytes
+			
+			FunctionTable := DllCall("HeapAlloc", "Ptr", hProcessHeap, "UInt", HEAP_ZERO_MEMORY, "UInt", this.FunctionToIndex.Count())
+			
+			for k, Name in this.IndexToFunction {
+				if (InStr(Name, "@")) {
+					Name := StrSplit(Name, "@")
+					
+					FunctionName := Name[1]
+					DllFile := Name[2]
+					
+					hDllFile := DllCall("GetModuleHandle", "Str", DllFile, "Ptr")
+					pSomeFunction := DllCall("GetProcAddress", "Ptr", hDllFile, "AStr", FunctionName, "Ptr")
+					
+					NumPut(pSomeFunction, FunctionTable + 0, (k - 1) * 8, "Ptr")
+				}
+			}
 		}
 		
 		Globals := {}
@@ -804,11 +840,8 @@ class X64CodeGen {
 				}
 			
 				Switch (Byte[1]) {
-					Case "Dll": {
-						hDllFile := DllCall("GetModuleHandle", "Str", Byte[2], "Ptr")
-						pSomeFunction := DllCall("GetProcAddress", "Ptr", hDllFile, "AStr", Byte[3], "Ptr")
-						
-						for k, v in SplitIntoBytes64(pSomeFunction) {
+					Case "FunctionTable": {
+						for k, v in SplitIntoBytes64(FunctionTable) {
 							LinkedBytes.Push(v)
 						}
 						

@@ -16,11 +16,23 @@ Code =
 ( % 
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
-define Int64 T1() {
-	MessageBoxA(0, "Hellll", "What the fuck did you just fucking say about me, you little bitch? I'll have you know I graduated top of my class in the Navy Seals, and I've been involved in numerous secret raids on Al-Quaeda, and I have over 300 confirmed kills. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0)
+define Double T2() {
+	return 1.2
 }
 
 )
+
+;define Int64 T1() {
+;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
+;}
+
+;Todo: Implement dllcalls as using a table pointed to by R14 (It can probably live on stack), so we can easily compile a function to an AHK version without having to re-link every single byte
+;Todo: Maybe(???????) include modules in the table
+;
+;To call:
+;mov rax, [r14 + indexReg * 8]
+;call rax
+
 
 ; (BodyText + i) *= *(BodyText + i)
 
@@ -72,11 +84,14 @@ define Int64 T1() {
 ;}
 
 ;MsgBox, % LanguageName.FormatCode(Code)
+MsgBox, % LanguageName.CompileToAHKFunctions(Code)
+
 R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("T1", 6, 1, 4, 3, 4, 2) "`n" A_LastError "`n" R.GetFunctionPointer("T1")
+MsgBox, % R.ToAHK()
+MsgBox, % "Result: " R.CallFunction("T2", 6, 1, 4, 3, 4, 2) "`n" A_LastError "`n" ;R.GetFunctionPointer("T1")
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B

@@ -25,7 +25,7 @@
 	static F0 := LanguageNameFlags.Features.DisableAll
 	static F1 := LanguageNameFlags.Features.EnableAll
 	
-	static ToAHK := LanguageNameFlags.F0 - LanguageNameFlags.Features.DisableStrings + LanguageNameFlags.Features.UseStackStrings
+	static ToAHK := LanguageNameFlags.F0 - LanguageNameFlags.Features.DisableStrings + LanguageNameFlags.Features.UseStackStrings - LanguageNameFlags.Features.DisableDllCall
 }
 
 #Include %A_ScriptDir%
@@ -47,7 +47,13 @@ class LanguageName {
 	;  object for you
 	
 	static DefaultFlags := {"OptimizationLevel": LanguageNameFlags.O1, "Features": LanguageNameFlags.F1}
-
+	
+	CompileToAHKFunctions(CodeString, FunctionPrefix := "MyProgram") {
+		Program := this.CompileCode(CodeString, {"Features": LanguageNameFlags.ToAHK})
+		
+		return Program.ToAHK()
+	}
+	
 	CompileCode(CodeString, Flags := "") {
 		if !(IsObject(Flags)) {
 			Flags := this.DefaultFlags
@@ -66,15 +72,6 @@ class LanguageName {
 		Program := CodeCompiler.CompileProgram(CodeAST)
 		
 		return Program
-	}
-	FormatCode(CodeString) {
-		CodeLexer := new Lexer()
-		CodeTokens := CodeLexer.Start(CodeString)
-	
-		CodeParser := new Parser(CodeLexer)
-		CodeAST := CodeParser.Start(CodeTokens)
-		
-		return CodeAST.Stringify()
 	}
 }
 
@@ -160,9 +157,150 @@ class CompiledProgram {
 		return {"Address": Address, "Define": Node}
 	}
 	
-	ToAHK() {
-		; TODO: Implement
+	ToAHK(WithName := "MyProgram") {
+		CodeString := this.GenerateInitFunction(WithName)
+		CodeString .= this.GenerateCallerFunction(WithName)
+		CodeString .= this.GenerateStubFunctions(WithName)
+		
+		return CodeString
+	}
 	
+	GenerateStubFunctions(WithName) {
+		StubFunctionsString := ""
+		
+		for FunctionName, FunctionNode in this.Node.Functions {
+			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+				Continue
+			}
+			
+			DefinitionString := WithName "_" FunctionName "("
+			ParameterListString := ""
+			
+			for k, ParamPair in FunctionNode.Param {
+				ParameterListString .= ParamPair[2].Value ", "
+			}
+			
+			ParameterListString := SubStr(ParameterListString, 1, -2)
+			DefinitionString .= ParameterListString ") {`n"
+			
+			BodyString := "`treturn " WithName "_Call(""" FunctionName """" (ParameterListString = "" ? "" : ", ") ParameterListString ")`n"
+			BodyString .= "}`n"
+			
+			StubFunctionsString .= DefinitionString BodyString
+		}
+		
+		return StubFunctionsString
+	}
+	
+	
+	GenerateCallerFunction(WithName) {
+		DefinitionString := WithName "_Call(Name, Parameters*) {`n"
+		DefinitionString .= "`tstatic pProgram := " WithName "_Init()`n"
+		
+		ParameterTypesString := "`tstatic ParameterTypes := {"
+		FunctionOffsetsString := "`tstatic FunctionOffsets := {"
+		ReturnTypesString := "`tstatic ReturnTypes := {"
+		
+		for FunctionName, FunctionNode in this.Node.Functions {
+			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+				Continue
+			}
+			
+			ParameterTypesString .= """" FunctionName """: ["
+			FunctionOffsetsString .= """" FunctionName """: " this.Offsets[FunctionName] ", "
+			ReturnTypesString .= """" FunctionName """: """ this.GetAHKType(FunctionNode.ReturnType.Value) """, "
+			
+			for k, ParamPair in FunctionNode.Params {
+				ParameterTypesString .= """" this.GetAHKType(ParamPair[1].Value) """, "
+			}
+			
+			ParameterTypesString := (FunctionNode.Params.Count() ? SubStr(ParameterTypesString, 1, -2) : ParameterTypesString) "], "
+		}
+		
+		ParameterTypesString := SubStr(ParameterTypesString, 1, -2) "}`n"
+		FunctionOffsetsString := SubStr(FunctionOffsetsString, 1, -2) "}`n"
+		ReturnTypesString := SubStr(ReturnTypesString, 1, -2) "}`n"
+		
+		ParamBuilderString := "`tfor k, Type in ParameterTypes[Name] {`n"
+		ParamBuilderString .= "`t`tParameters.InsertAt(1 + ((k - 1) * 2), Type)`n"
+		ParamBuilderString .= "`t}`n`n"
+		ParamBuilderString .= "`tParameters.Push(ReturnTypes[Name])`n"
+		
+		CallingCode := "`treturn DllCall(pProgram + FunctionOffsets[Name], Parameters*)`n"
+		CallingCode .= "}`n"
+		
+		return DefinitionString "`n" ParameterTypesString ReturnTypesString FunctionOffsetsString "`n" ParamBuilderString "`n" CallingCode
+	}
+	
+	
+	GenerateInitFunction(WithName) {
+		DefinitionString := WithName "_Init() {`n"
+		DefinitionString .= "`tstatic FunctionTable`n"
+	
+		FunctionsString := "`tVarSetCapacity(FunctionTable, " this.CodeGen.IndexToFunction.Count() * 8 ", 0)`n"
+		
+		DllList := {}
+		
+		for k, Name in this.CodeGen.IndexToFunction {
+			DllFile := StrSplit(Name, "@")[2]
+			
+			if !(DllList.HasKey(DllFile)) {
+				DllList[DllFile] := {}
+				FunctionsString .= "`th" DllFile " := DllCall(""GetModuleHandle"", ""Str"", """ DllFile """, ""Ptr"")`n"
+			}
+		}
+		
+		for k, Name in this.CodeGen.IndexToFunction {
+			Name := StrSplit(Name, "@")
+			
+			FunctionName := Name[1]
+			DllFile := Name[2]
+			
+			if !(DllList[DllFile].HasKey(FunctionName)) {
+				FunctionsString .= "`tp" FunctionName " := DllCall(""GetProcAddress"", ""Ptr"", h" DllFile ", ""AStr"", """ FunctionName """, ""Ptr"")`n"
+			}
+		}
+		
+		for k, Name in this.CodeGen.IndexToFunction {
+			FunctionsString .= "`tNumPut(p" StrSplit(Name, "@")[1] ", &FunctionTable + 0, " (k - 1) * 8 ", ""Ptr"")`n"
+		}
+		
+		Bytes := this.CodeGen.Link(True)
+		
+		BytesString := "`tBytes := []`n" 
+		BytesString .= "`tBytes.Push("
+		
+		for k, Byte in Bytes {
+			if (Mod(k, 200) = 0) {
+				BytesString := SubStr(BytesString, 1, -2) ")`n"
+				BytesString .= "`tBytes.Push("
+			}
+			
+			if (IsObject(Byte) && Byte[1] = "FunctionTable") {
+				FunctionTableIndex := k - 1
+				BytesString .= "0, "
+			}
+			else {
+				BytesString .= Byte ", "
+			}
+		}
+		
+		BytesString := SubStr(BytesString, 1, -2) ")`n"
+		
+		MemoryString := "`tpMemory := DllCall(""VirtualAlloc"", ""UInt64"", 0, ""Ptr"", " Bytes.Count() ", ""Int"", 0x00001000 | 0x00002000, ""Int"", 0x04)`n"
+		MemoryString .= "`tOnExit(Func(""DllCall"").Bind(""VirtualFree"", ""Ptr"", pMemory, ""Ptr"", " Bytes.Count() ", ""UInt"", 0x00008000))`n"
+		
+		ForLoopString := "`tfor k, Byte in Bytes {`n"
+		ForLoopString .= "`t`tNumPut(Byte, pMemory + 0, k - 1, ""UChar"")`n"
+		ForLoopString .= "`t}`n"
+		
+		CleanupString := "`tNumPut(&FunctionTable, pMemory + 0, " FunctionTableIndex ", ""Ptr"")`n"
+		
+		MakeExecutableString := "`tDllCall(""VirtualProtect"", ""Ptr"", pMemory, ""Ptr"", " Bytes.Count() ", ""UInt"", 0x20, ""UInt*"", OldProtection)`n"
+		MakeExecutableString .= "`treturn pMemory`n"
+		MakeExecutableString .= "}`n"
+		
+		return DefinitionString "`n" FunctionsString "`n" BytesString "`n" MemoryString "`n" ForLoopString "`n" CleanupString "`n" MakeExecutableString
 	}
 }
 

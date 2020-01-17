@@ -71,8 +71,8 @@
 		return
 	}
 	
-	static RegisterStack := [RCX, RDX, R8, R9, R10, R11, R12, R13, R14]
-	static RegisterStackReversed := [R14, R13, R12, R11, R10, R9, R8, RDX, RCX]
+	static RegisterStack := [RCX, RDX, R8, R9, R10, R11, R12, R13]
+	static RegisterStackReversed := [R13, R12, R11, R10, R9, R8, RDX, RCX]
 	
 	PopAllRegisterStack() {
 		for k, Register in this.RegisterStackReversed {

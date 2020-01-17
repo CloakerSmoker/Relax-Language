@@ -49,6 +49,8 @@
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
+			this.CodeGen.Move_R64_FunctionTable(R14)
+			
 			this.CodeGen.SmallMove(RSI, 0)
 			this.CodeGen.SmallMove(RDI, 1)
 			
@@ -313,7 +315,7 @@
 				this.CodeGen.ModuleCall(ModuleName, FunctionNode.Name.Value, ModuleFunction.Address)
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.DllImport) {
-				if ((this.Features & this.DisableDllCall) && False) {
+				if (this.Features & this.DisableDllCall) {
 					new Error("Compile")
 						.LongText("Calling functions from Dlls is disabled by the DisableDllCall flag.")
 						.ShortText("Can't be called")
@@ -322,7 +324,8 @@
 					.Throw()
 				}
 				
-				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+				this.CodeGen.SmallMove(RAX, this.CodeGen.GetFunctionIndex(FunctionNode.FunctionName "@" FunctionNode.DllName))
+				this.CodeGen.Call_SIB(SIB(8, RAX, R14))
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.Define) {
 				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)
