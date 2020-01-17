@@ -1,6 +1,12 @@
 ﻿class ASTOptimizer {
-	__New(CodeLexer, CodeParser) {
+	static DisableDeadCodeElimination := LanguageNameFlags.Optimization.DisableDeadCodeElimination
+	static DisableDeadIfElimination := LanguageNameFlags.Optimization.DisableDeadIfElimination
+	static DisableConstantFolding := LanguageNameFlags.Optimization.DisableConstantFolding
+	
+	__New(CodeLexer, CodeParser, CodeFlags) {
 		this.Typing := CodeParser.Typing
+		this.Flags := CodeFlags
+		this.Level := CodeFlags.OptimizationLevel
 	}
 	
 	Optimize(Something) {
@@ -14,7 +20,7 @@
 		if !(Base.HasKey(MethodName)) {
 			return Something
 		}
-	
+		
 		return Base[MethodName].Call(this, Something)
 	}
 	
@@ -46,15 +52,21 @@
 		}
 	}
 	OptimizeLine(Statement) {
+		NoneNode := (this.Level & this.DisableDeadCodeElimination) ? (Statement.Clone()) : (new ASTNodes.None())
+		
 		Switch (Statement.Type) {
 			Case ASTNodeTypes.IFGROUP: {
+				if (this.Level & this.DisableDeadIfElimination) {
+					return Statement
+				}
+				
 				NewOptions := []
 				
 				for k, IfStatement in Statement.Options {
 					IfStatement.Condition := this.Optimize(IfStatement.Condition)
 					
-					if (this.IsConstant(IfStatement.Condition)) {
-						; If the if statement has a constant condition after optimization
+					if (this.IsConstant(IfStatement.Condition) && !(this.Level & this.DisableDeadCodeElimination)) {
+						; If the if statement has a constant condition after optimization, and dead code elimination is enabled
 						
 						if (IfStatement.Condition.Value != 0) {
 							; And if the condition is true, then this will be the final option
@@ -71,6 +83,7 @@
 					}
 					else {
 						; Non-constant condition, which we can't really do much about, except for optimizing what we can
+						;                      (^ or dead code elimination is off)
 						IfStatement.Condition := this.OptimizeExpression(IfStatement.Condition)
 						
 						for k, Line in IfStatement.Body {
@@ -128,7 +141,7 @@
 			}
 		}
 		
-		if (NewExpressions.Count() = 1) {
+		if (NewExpressions.Count() = 1 && !(this.DisableDeadCodeElimination)) {
 			return NewExpressions[1]
 		}
 		else {
@@ -214,9 +227,6 @@
 				Case Tokens.BITWISE_OR: {
 					NewValue := NewLeft | NewRight
 				}
-				Case Tokens.BITWISE_NOT: {
-					NewValue := NewLeft ~ NewRight
-				}
 				Case Tokens.BITWISE_XOR: {
 					NewValue := NewLeft ^ NewRight
 				}
@@ -236,6 +246,10 @@
 	}
 	
 	ExpressionHasSideEffects(Expression) {
+		if (this.Level & this.DisableDeadCodeElimination) {
+			return True
+		}
+		
 		static OtherSideEffectOperators := {"++": 1, "--": 1, "*": 1}
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Assignment") || OtherSideEffectOperators.HasKey(Expression.Operator.Stringify())) {
@@ -261,6 +275,10 @@
 	}
 	
 	IsConstant(Something) {
+		if (this.Level & this.DisableConstantFolding) {
+			return False
+		}
+		
 		if (Something.__Class = "Token") {
 			Switch (Something.Type) {
 				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING: {

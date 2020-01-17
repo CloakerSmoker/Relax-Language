@@ -1,4 +1,34 @@
-﻿#Include %A_ScriptDir%
+﻿class LanguageNameFlags {
+	class Optimization {
+		static DisableDeadCodeElimination := 1
+		static DisableDeadIfElimination := 2
+		static DisableConstantFolding := 4
+		
+		static EnableAll := 0
+		static DisableAll := 4 + 2 + 1
+	}
+	class Features {
+		static EnableAll := 0
+		static DisableAll := 8 + 4 + 2 + 1
+		
+		static DisableDllCall := 1
+		static DisableModules := 2
+		static DisableGlobals := 4
+		static DisableStrings := 8
+		
+		static UseStackStrings := 16
+	}
+	
+	static O0 := LanguageNameFlags.Optimization.DisableAll
+	static O1 := LanguageNameFlags.Optimization.EnableAll
+	
+	static F0 := LanguageNameFlags.Features.DisableAll
+	static F1 := LanguageNameFlags.Features.EnableAll
+	
+	static ToAHK := LanguageNameFlags.F0 - LanguageNameFlags.Features.DisableStrings + LanguageNameFlags.Features.UseStackStrings
+}
+
+#Include %A_ScriptDir%
 #Include Parser\Utility.ahk
 #Include Parser\Constants.ahk
 #Include Parser\Lexer.ahk
@@ -11,22 +41,28 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.12"
-
+	static VERSION := "1.0.0-alpha.16"
+	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
+	
+	static DefaultFlags := {"OptimizationLevel": LanguageNameFlags.O1, "Features": LanguageNameFlags.F1}
 
-	CompileCode(CodeString) {
+	CompileCode(CodeString, Flags := "") {
+		if !(IsObject(Flags)) {
+			Flags := this.DefaultFlags
+		}
+		
 		CodeLexer := new Lexer()
 		CodeTokens := CodeLexer.Start(CodeString)
 	
 		CodeParser := new Parser(CodeLexer)
 		CodeAST := CodeParser.Start(CodeTokens)
 		
-		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser)
+		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser, Flags)
 		CodeOptimizer.OptimizeProgram(CodeAST)
 		
-		CodeCompiler := new Compiler(CodeLexer, CodeParser)
+		CodeCompiler := new Compiler(CodeLexer, CodeParser, Flags)
 		Program := CodeCompiler.CompileProgram(CodeAST)
 		
 		return Program

@@ -367,7 +367,7 @@
 			}
 			else {
 				this.Compile(v)
-				this.CodeGen.Pop(RDX), this.StackDepth--
+				this.PopRegisterStack()
 			}
 		}
 		

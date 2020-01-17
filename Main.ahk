@@ -14,10 +14,10 @@
 
 Code = 
 ( % 
+DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
 define Int64 T1() {
-	Double A := 1.1
-	return A >= 1.1
+	MessageBoxA(0, "Hellll", "What the fuck did you just fucking say about me, you little bitch? I'll have you know I graduated top of my class in the Navy Seals, and I've been involved in numerous secret raids on Al-Quaeda, and I have over 300 confirmed kills. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0)
 }
 
 )
@@ -72,7 +72,7 @@ define Int64 T1() {
 ;}
 
 ;MsgBox, % LanguageName.FormatCode(Code)
-R := LanguageName.CompileCode(Code)
+R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())

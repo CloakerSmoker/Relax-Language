@@ -23,7 +23,7 @@
 		if (Node.Type = ASTNodeTypes.None) {
 			return
 		}
-	
+		
 		FunctionName := Node.Name.Value
 		
 		if (this.CurrentProgram.Functions.HasKey(FunctionName)) {
@@ -40,12 +40,15 @@
 		this.CurrentProgram.Functions[FunctionName] := Node
 	}
 	AddLocal(Type, Name, Default) {
-		this.CurrentProgram.CurrentFunction[Name.Value] := [Type.Value, Default]
+		this.CurrentFunction.Locals[Name.Value] := [Type.Value, Default]
 		return new ASTNodes.None()
 	}
 	AddGlobal(Type, Name) {
 		this.CurrentProgram.Globals[Name.Value] := Type.Value
 		return new ASTNodes.None()
+	}
+	AddString(Text) {
+		this.CurrentFunction.Strings.Push(Text)
 	}
 	
 	Start(Tokens) {
@@ -138,11 +141,12 @@
 		Params := this.ParseParamGrouping()
 
 		Locals := {}
-		this.CurrentProgram.CurrentFunction := Locals
+		Strings := {}
+		this.CurrentFunction := {"Locals": Locals, "Strings": Strings}
 		
 		Body := this.ParseBlock()
 		
-		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals)
+		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals, Strings)
 	}
 	ParseDllImport() {
 		ReturnType := this.ParseTypeName()
@@ -426,7 +430,11 @@
 			Next := this.Next()
 		
 			Switch (Next.Type) {
-				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER, Tokens.STRING: {
+				Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.IDENTIFIER: {
+					OperandStack.Push(Next)
+				}
+				Case Tokens.STRING: {
+					this.AddString(Next)
 					OperandStack.Push(Next)
 				}
 				Case Tokens.LEFT_PAREN: {

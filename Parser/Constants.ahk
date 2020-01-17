@@ -458,7 +458,7 @@ class ASTNodes {
 		}
 	
 		class Define extends ASTNode {
-			static Parameters := ["ReturnType", "Name", "Params", "Body", "Locals"]
+			static Parameters := ["ReturnType", "Name", "Params", "Body", "Locals", "Strings"]
 			
 			Stringify() {
 				String := "Define " this.ReturnType.Value " " this.Name.Value "("

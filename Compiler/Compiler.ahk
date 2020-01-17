@@ -44,12 +44,19 @@
 	;   help with evaluation, but get the speed of using registers. When the register stack needs another register past
 	;    R14, the entire register stack is saved, and it starts back from RCX
 	
+	static DisableDllCall := 1
+	static DisableModules := 2
+	static DisableGlobals := 4
+	static DisableStrings := 8
+	
+	static UseStackStrings := 16
 
-	__New(CodeLexer, CodeParser) {
+	__New(CodeLexer, CodeParser, Flags) {
 		this.Lexer := CodeLexer
 		this.Source := CodeLexer.CodeString
 		this.Parser := CodeParser
 		this.Typing := CodeParser.Typing
+		this.Features := Flags.Features
 		
 		this.RegisterStackIndex := 0
 	}
@@ -115,6 +122,18 @@
 		
 		this.CodeGen := new X64CodeGen()
 		this.Globals := Program.Globals
+		
+		if (this.Features & this.DisableGlobals) {
+			if (this.Globals.Count()) {
+				K := ""
+				V := ""
+				
+				this.Globals._NewEnum().Next(K, V)
+				
+				StatementError("Global variables are disabled by the DisableGlobals flag.", "global " V " " K)
+			}
+		}
+		
 		this.Program := Program
 		this.Modules := {}
 		
@@ -192,7 +211,21 @@
 				return this.Typing.GetType("Double")
 			}
 			Case Tokens.STRING: {
-				this.CodeGen.Move_String_Pointer(ResultRegister, TargetToken.Value)
+				if (this.Features & this.UseStackStrings) {
+					this.CodeGen.Lea_R64_SIB(ResultRegister, this.GetVariableSIB({"Value": "__String__" TargetToken.Value}))
+				}
+				else if (this.Features & this.DisableStrings) {
+					new Error("Compile")
+						.LongText("Strings have been disabled by the DisableStrings flag.")
+						.ShortText("")
+						.Help("Compile without the DisableStrings flag, or remove this string.")
+						.Token(TargetToken)
+						.Source(this.Source)
+					.Throw()
+				}
+				else {
+					this.CodeGen.Move_String_Pointer(ResultRegister, TargetToken.Value)
+				}
 				
 				return this.Typing.GetType("Int8*")
 			}
