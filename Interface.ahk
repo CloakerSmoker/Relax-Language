@@ -25,7 +25,7 @@
 	static F0 := LanguageNameFlags.Features.DisableAll
 	static F1 := LanguageNameFlags.Features.EnableAll
 	
-	static ToAHK := LanguageNameFlags.F0 - LanguageNameFlags.Features.DisableStrings + LanguageNameFlags.Features.UseStackStrings - LanguageNameFlags.Features.DisableDllCall
+	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.DisableGlobals + LanguageNameFlags.UseStackStrings
 }
 
 #Include %A_ScriptDir%
@@ -41,7 +41,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.16"
+	static VERSION := "1.0.0-alpha.18"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -111,7 +111,7 @@ class CompiledProgram {
 			this.CallFunction("Exit") ; Try to call the exit function, doesn't really matter if it works or not
 		}
 		
-		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x00008000) ; Free our memory
+		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", 0, "UInt", 0x00008000) ; Free our memory
 	}
 	
 	GetAHKType(TypeName) {
@@ -288,7 +288,7 @@ class CompiledProgram {
 		BytesString := SubStr(BytesString, 1, -2) ")`n"
 		
 		MemoryString := "`tpMemory := DllCall(""VirtualAlloc"", ""UInt64"", 0, ""Ptr"", " Bytes.Count() ", ""Int"", 0x00001000 | 0x00002000, ""Int"", 0x04)`n"
-		MemoryString .= "`tOnExit(Func(""DllCall"").Bind(""VirtualFree"", ""Ptr"", pMemory, ""Ptr"", " Bytes.Count() ", ""UInt"", 0x00008000))`n"
+		MemoryString .= "`tOnExit(Func(""DllCall"").Bind(""VirtualFree"", ""Ptr"", pMemory, ""Ptr"", 0, ""UInt"", 0x00008000))`n"
 		
 		ForLoopString := "`tfor k, Byte in Bytes {`n"
 		ForLoopString .= "`t`tNumPut(Byte, pMemory + 0, k - 1, ""UChar"")`n"
@@ -314,7 +314,7 @@ class Module {
 	; Note: The only way to add modules currently is through Module.Add, there is no syntax for it
 	
 	Add(Name, ModuleClass) {
-		this.Modules[Name] := {"Class": ModuleClass, "Compiled": False}
+		this.Modules[Name] := {"Class": ModuleClass, "AST": False}
 	}
 	Find(Name, FunctionName) {
 		FoundModule := this.Modules[Name]
@@ -323,11 +323,25 @@ class Module {
 			Throw, Exception("Module " Name " not found.")
 		}
 		
-		if !(IsObject(FoundModule.Compiled)) {
-			FoundModule.Compiled := LanguageName.CompileCode(FoundModule.Class.Code)
+		if !(IsObject(FoundModule.AST)) {
+			FoundModule.AST := this.Parse(Name)
 		}
 		
-		return FoundModule.Compiled.GetFunction(FunctionName)
+		return FoundModule.AST
+	}
+	Parse(Name) {
+		CodeString := this.Modules[Name].Class.Code
+		
+		CodeLexer := new Lexer()
+		CodeTokens := CodeLexer.Start(CodeString)
+	
+		CodeParser := new Parser(CodeLexer)
+		CodeAST := CodeParser.Start(CodeTokens)
+		
+		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser, Flags)
+		CodeOptimizer.OptimizeProgram(CodeAST)
+		
+		return CodeAST
 	}
 }
 
@@ -337,7 +351,7 @@ class Builtins {
 		(
 			DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
 		
-			define Int8 Close(Int64 Handle) {
+			inline Int8 Close(Int64 Handle) {
 				return CloseHandle(Handle)
 			}
 		)"
@@ -346,24 +360,23 @@ class Builtins {
 	class Memory {
 		static Code := "
 		(
-			DllImport Int64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
-			DllImport void* HeapAlloc(Int64, Int32, Int64) {Kernel32.dll, HeapAlloc}
-			DllImport Int8 HeapFree(Int64, Int32, Int8*) {Kernel32.dll, HeapFree}
+			DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
+			DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
 			
-			global Int64 hProcessHeap
-					
-			define void Main() {
-				hProcessHeap := GetProcessHeap()
+			inline void* Alloc(Int32 Count) {
+				/*
+					MEM_RESERVE_COMMIT := 0x00001000 | 0x00002000
+					PAGE_READWRITE := 0x04
+				*/
+				
+				return VirtualAlloc(0, Count, 0x00001000 | 0x00002000, 0x04)
 			}
-			define void Exit() {
-				Handle:Close(hProcessHeap)
-			}
-			
-			define void* Alloc(Int64 Count) {
-				return HeapAlloc(hProcessHeap, 0x08, Count)
-			}
-			define Int8 Free(Int8* pMemory) {
-				return HeapFree(hProcessHeap, 0, pMemory)
+			inline Int64 Free(void* Memory) {
+				/*
+					MEM_RELEASE := 0x00008000
+				*/ 
+				
+				return VirtualFree(Memory, 0, 0x00008000)
 			}
 		)"
 	}

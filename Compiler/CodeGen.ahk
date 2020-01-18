@@ -273,8 +273,8 @@ class X64CodeGen {
 	Move_R64_I16(Register, Integer) {
 		this.PushByte(0x66)
 		this.REXOpcodeMod([0xC7], {"OpcodeExtension": 0}, Register)
-		this.PushByte(Integer.Value & 0x00FF)
-		this.PushByte(Integer.Value & 0xFF00)
+		this.PushByte((Integer.Value & 0x00FF) >> 0)
+		this.PushByte((Integer.Value & 0xFF00) >> 8)
 	}
 	Move_R64_I8(Register, Integer) {
 		this.REXOpcode([0xB0 + Register.Number], [Register.Requires.REX])

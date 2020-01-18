@@ -10,22 +10,20 @@
 ; TODO: (Related to above) Shorter Jmp encodings
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
-; TODO: Fix floating point comparison operators
+
+; TODO: Switch modules to be baked into syntax
 
 Code = 
 ( % 
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
 define Int64 T2() {
-	return Add(1, 2)
-}
-
-inline Int64 Add(Int64 A, Int64 B) {
-	return A + B
+	return Memory:Alloc(8) as Int64
 }
 
 )
-
+; return VirtualAlloc(0, Count, 0x00001000 | 0x00002000, 0x04)
+; return Memory:Alloc(8) as Int64
 ;define Int64 T1() {
 ;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
 ;}

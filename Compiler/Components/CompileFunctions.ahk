@@ -299,11 +299,29 @@
 			
 			if (ModuleExpression.Operator.Type = Tokens.COLON) {
 				ModuleName := ModuleExpression.Left.Value
-				FunctionName := ModuleExpression.Right.Value
+				ModuleFunctionName := ModuleExpression.Right.Value
 				
 				Try {
-					ModuleFunction := Module.Find(ModuleName, FunctionName)
-					FunctionNode := ModuleFunction.Define
+					ModuleAST := Module.Find(ModuleName, ModuleFunctionName)
+					
+					MsgBox, % ModuleAST.Stringify()
+						
+					for FunctionName, FunctionNode in ModuleAST.Functions {
+						if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+							this.Program.Functions[FunctionNode.Name.Value] := FunctionNode
+						}
+					}
+					
+					FunctionNode := ModuleAST.Functions[ModuleFunctionName]
+					
+					if (FunctionNode.Keyword != Keywords.Inline) {
+						new Error("Module")
+							.LongText("All module functions must be inline.")
+							.ShortText("Is not inline.")
+							.Token(Expression)
+							.Source(this.Source)
+						.Throw()
+					}
 				}
 				catch {
 					new Error("Module")
@@ -312,20 +330,19 @@
 						.Source(this.Source)
 					.Throw()
 				}
-				
-				this.Modules[ModuleName] := ModuleFunction
-				IsModuleCall := True
 			}
 		}
-		
-		FunctionNode := this.Program.Functions[Expression.Target.Value]
+		else {
+			FunctionNode := this.Program.Functions[Expression.Target.Value]
+		}
 		
 		if (FunctionNode.Keyword = Keywords.INLINE) {
 			return this.CompileInline(FunctionNode, Expression.Params.Expressions)
 		}
 		
-		if (IsModuleCall || FunctionNode) {
-			static ParamRegisters := [R9, R8, RDX, RCX]
+		if (FunctionNode) {
+			;static ParamRegisters := [R9, R8, RDX, RCX]
+			static ParamRegisters := [RCX, RDX, R8, R9]
 			
 			OldIndex := this.RegisterStackIndex ; Store the register stack index before calling, so we know what to save, and what to restore
 			
@@ -400,10 +417,7 @@
 			
 			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
 			
-			if (IsModuleCall) {
-				this.CodeGen.ModuleCall(ModuleName, FunctionNode.Name.Value, ModuleFunction.Address)
-			}
-			else if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				if (this.Features & this.DisableDllCall) {
 					new Error("Compile")
 						.LongText("Calling functions from Dlls is disabled by the DisableDllCall flag.")
