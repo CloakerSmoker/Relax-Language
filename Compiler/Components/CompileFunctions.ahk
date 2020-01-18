@@ -1,10 +1,68 @@
-﻿	CompileInline(DefineAST, CallerParams) {
+﻿	StackStrings(DefineAST, StringStartingOffsets) {
+		if (this.Features & this.UseStackStrings) {
+			this.CodeGen.Move(RBX, RSP)
+			
+			for k, String in DefineAST.Strings {
+				HighAddressOffset := StringStartingOffsets[String.Value]
+				
+				this.CodeGen.SmallMove(RAX, HighAddressOffset)
+				HighAddressSIB := SIB(8, RAX, R15)
+				
+				this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
+				
+				Characters := StrSplit(String.Value)
+				
+				CharacterCountRemainder := Mod(Characters.Count(), 8) ; Gets how many characters the string is over a 8 byte boundry
+				
+				if (CharacterCountRemainder = 0) {
+					; If the string straddles the 8 byte boundry, push an extra character and update how many characters it is over the boundry by
+					Characters.Push("") ; Otherwise, the string wouldn't be null-terminated
+					CharacterCountRemainder := 1
+				}
+				
+				loop, % 8 - CharacterCountRemainder {
+					; For each byte left until the string reaches an 8 byte boundry, push an extra null character on it for padding
+					Characters.Push("")
+				}
+				
+				loop {
+					CharacterChunk := 0 ; An int64 which holds the current 8 characters being turned into a single movabs
+					
+					loop 8 {
+						; Since we are actually working with big-endian, the number we push will be reversed, so we want 
+						;  to have all the terminating null characters (at the end of the string) on the left of the 
+						;   first chunk, so by moving the first character we pop all the way left, we align the string
+						;    correctly with the start at a low address, which counts up higher until the null characters
+						;     are reached
+						
+						ReversedIndex := 8 - A_Index
+						ShiftBy := ReversedIndex * 8
+						
+						CharacterChunk |= Asc(Characters.Pop()) << ShiftBy
+					}
+					
+					this.CodeGen.Push(I64(CharacterChunk))
+				} until (Characters.Count() = 0)
+			}
+			
+			this.CodeGen.Move(RSP, RBX)
+		}
+	}
+	
+	
+	CompileInline(DefineAST, CallerParams) {
 		OldVariables := this.Variables
 		OldTypingVariables := this.Typing.Variables
 		OldLocals := this.Locals
 		OldFunction := this.Function
 		OldFunctionIndex := this.FunctionIndex
 		OldHasReturn := this.HasReturn
+		
+		OurVariables := {}
+		OurTypingVariables := {}
+		
+		this.Variables := OurVariables
+		this.Typing.Variables := OurTypingVariables
 		
 		this.FunctionIndex := "__Inline__" DefineAST.Name.Value
 		
@@ -14,8 +72,21 @@
 		StackSpace := ParamCount + LocalCount
 		StackSpace += (Mod(StackSpace, 2) != 1)
 		
+		StringStartingOffsets := {}
+
+		for k, String in DefineAST.Strings {		
+			this.AddVariable(StackSpace, "__String__" String.Value)
+			this.Typing.AddVariable("Int8*", "__String__" String.Value)
+			
+			StackSpace += Ceil((StrLen(String.Value) + 1) / 8)
+			StringStartingOffsets[String.Value] := StackSpace
+		}
+		
 		this.CodeGen.Push(R15), this.StackDepth++
 		this.CodeGen.SmallSub(RSP, StackSpace * 8), this.StackDepth += StackSpace
+		
+		this.Variables := OldVariables
+		this.Typing.Variables := OldTypingVariables
 		
 		for k, Param in CallerParams {
 			ParamType := this.Compile(Param)
@@ -26,8 +97,8 @@
 		
 		this.CodeGen.Move(R15, RSP)
 		
-		this.Variables := {}
-		this.Typing.Variables := {}
+		this.Variables := OurVariables
+		this.Typing.Variables := OurVariables
 		this.Function := DefineAST
 		this.Locals := DefineAST.Locals
 		this.HasReturn := False
@@ -43,6 +114,8 @@
 			this.AddVariable(k - 1, ParamName)
 			this.Typing.AddVariable(ParamPair[1].Value, ParamName)
 		}
+		
+		this.StackStrings(DefineAST, StringStartingOffsets)
 		
 		this.Inline := True
 			for k, LocalDefault in DefineAST.Locals {
@@ -140,54 +213,7 @@
 			
 			this.FunctionParameters(DefineAST.Params)
 			
-			if (this.Features & this.UseStackStrings) {
-				this.CodeGen.Move(RBX, RSP)
-				
-				for k, String in DefineAST.Strings {
-					HighAddressOffset := StringStartingOffsets[String.Value]
-					
-					this.CodeGen.SmallMove(RAX, HighAddressOffset)
-					HighAddressSIB := SIB(8, RAX, R15)
-					
-					this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
-					
-					Characters := StrSplit(String.Value)
-					
-					CharacterCountRemainder := Mod(Characters.Count(), 8) ; Gets how many characters the string is over a 8 byte boundry
-					
-					if (CharacterCountRemainder = 0) {
-						; If the string straddles the 8 byte boundry, push an extra character and update how many characters it is over the boundry by
-						Characters.Push("") ; Otherwise, the string wouldn't be null-terminated
-						CharacterCountRemainder := 1
-					}
-					
-					loop, % 8 - CharacterCountRemainder {
-						; For each byte left until the string reaches an 8 byte boundry, push an extra null character on it for padding
-						Characters.Push("")
-					}
-					
-					loop {
-						CharacterChunk := 0 ; An int64 which holds the current 8 characters being turned into a single movabs
-						
-						loop 8 {
-							; Since we are actually working with big-endian, the number we push will be reversed, so we want 
-							;  to have all the terminating null characters (at the end of the string) on the left of the 
-							;   first chunk, so by moving the first character we pop all the way left, we align the string
-							;    correctly with the start at a low address, which counts up higher until the null characters
-							;     are reached
-							
-							ReversedIndex := 8 - A_Index
-							ShiftBy := ReversedIndex * 8
-							
-							CharacterChunk |= Asc(Characters.Pop()) << ShiftBy
-						}
-						
-						this.CodeGen.Push(I64(CharacterChunk))
-					} until (Characters.Count() = 0)
-				}
-				
-				this.CodeGen.Move(RSP, RBX)
-			}
+			this.StackStrings(DefineAST, StringStartingOffsets)
 			
 			for k, LocalDefault in DefineAST.Locals {
 				if (LocalDefault[2].Type != ASTNodeTypes.None) {

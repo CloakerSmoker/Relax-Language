@@ -18,7 +18,11 @@ Code =
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
 define Int64 T2() {
-	return Memory:Alloc(8) as Int64
+	return IHopeThisWorks()
+}
+
+inline void IHopeThisWorks() {
+	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
 }
 
 )

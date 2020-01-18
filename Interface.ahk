@@ -25,7 +25,7 @@
 	static F0 := LanguageNameFlags.Features.DisableAll
 	static F1 := LanguageNameFlags.Features.EnableAll
 	
-	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.DisableGlobals + LanguageNameFlags.UseStackStrings
+	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.Features.DisableGlobals + LanguageNameFlags.Features.UseStackStrings
 }
 
 #Include %A_ScriptDir%
