@@ -91,12 +91,12 @@
 		
 		ResultRegister := this.PopRegisterStack()
 		
-		if (ResultType.Family = "Decimal") {
+		if (ResultType.Family = "Decimal" && !(this.Inline)) {
 			this.CodeGen.Push(ResultRegister)
 			this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 			this.CodeGen.Pop(ResultRegister)
 		}
-		else if (ResultType.Family = "Integer" || ResultType.Family = "Pointer") {
+		else {
 			if (ResultRegister.__Class != "RAX") {
 				this.CodeGen.Move(RAX, ResultRegister)
 			}

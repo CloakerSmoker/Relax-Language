@@ -97,8 +97,8 @@
 		Next := this.Next() ; A program is a list of DllImports/Defines, so this will only handle those two, and error for anything else
 	
 		if (Next.Type = Tokens.KEYWORD) {
-			if (Next.Value = Keywords.DEFINE) {
-				return this.ParseDefine()
+			if (Next.Value = Keywords.DEFINE || Next.Value = Keywords.INLINE) {
+				return this.ParseDefine(Next.Value)
 			}
 			else if (Next.Value = Keywords.DLLIMPORT) {
 				return this.ParseDllImport()
@@ -121,7 +121,7 @@
 			.Source(this.Source)
 		.Throw()
 	}
-	ParseDefine() {
+	ParseDefine(KeywordUsed) {
 		ReturnType := this.ParseTypeName()
 		
 		Name := this.ParsePrimary()
@@ -146,7 +146,7 @@
 		
 		Body := this.ParseBlock()
 		
-		return new ASTNodes.Statements.Define(ReturnType, Name, Params, Body, Locals, Strings)
+		return new ASTNodes.Statements.Define(KeywordUsed, ReturnType, Name, Params, Body, Locals, Strings)
 	}
 	ParseDllImport() {
 		ReturnType := this.ParseTypeName()

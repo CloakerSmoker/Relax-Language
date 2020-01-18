@@ -169,11 +169,11 @@ class CompiledProgram {
 		StubFunctionsString := ""
 		
 		for FunctionName, FunctionNode in this.Node.Functions {
-			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+			if (FunctionNode.Type != ASTNodeTypes.Define || FunctionNode.Keyword != Keywords.Define) {
 				Continue
 			}
 			
-			DefinitionString := WithName "_" FunctionName "("
+			DefinitionString := WithName FunctionName "("
 			ParameterListString := ""
 			
 			for k, ParamPair in FunctionNode.Param {
@@ -183,7 +183,7 @@ class CompiledProgram {
 			ParameterListString := SubStr(ParameterListString, 1, -2)
 			DefinitionString .= ParameterListString ") {`n"
 			
-			BodyString := "`treturn " WithName "_Call(""" FunctionName """" (ParameterListString = "" ? "" : ", ") ParameterListString ")`n"
+			BodyString := "`treturn " WithName "Call(""" FunctionName """" (ParameterListString = "" ? "" : ", ") ParameterListString ")`n"
 			BodyString .= "}`n"
 			
 			StubFunctionsString .= DefinitionString BodyString
@@ -194,15 +194,15 @@ class CompiledProgram {
 	
 	
 	GenerateCallerFunction(WithName) {
-		DefinitionString := WithName "_Call(Name, Parameters*) {`n"
-		DefinitionString .= "`tstatic pProgram := " WithName "_Init()`n"
+		DefinitionString := WithName "Call(Name, Parameters*) {`n"
+		DefinitionString .= "`tstatic pProgram := " WithName "Init()`n"
 		
 		ParameterTypesString := "`tstatic ParameterTypes := {"
 		FunctionOffsetsString := "`tstatic FunctionOffsets := {"
 		ReturnTypesString := "`tstatic ReturnTypes := {"
 		
 		for FunctionName, FunctionNode in this.Node.Functions {
-			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
+			if (FunctionNode.Type != ASTNodeTypes.Define || FunctionNode.Keyword != Keywords.Define) {
 				Continue
 			}
 			
@@ -234,7 +234,7 @@ class CompiledProgram {
 	
 	
 	GenerateInitFunction(WithName) {
-		DefinitionString := WithName "_Init() {`n"
+		DefinitionString := WithName "Init() {`n"
 		DefinitionString .= "`tstatic FunctionTable`n"
 	
 		FunctionsString := "`tVarSetCapacity(FunctionTable, " this.CodeGen.IndexToFunction.Count() * 8 ", 0)`n"

@@ -366,6 +366,7 @@ class Keywords extends Enum {
 		else
 		for
 		global
+		inline
 	)"
 }
 
@@ -436,7 +437,7 @@ class ASTNodes {
 				return String
 			}
 		}
-	
+		
 	
 		class DllImport extends ASTNode {
 			static Parameters := ["ReturnType", "Name", "Params", "DllName", "FunctionName"]
@@ -458,10 +459,10 @@ class ASTNodes {
 		}
 	
 		class Define extends ASTNode {
-			static Parameters := ["ReturnType", "Name", "Params", "Body", "Locals", "Strings"]
+			static Parameters := ["Keyword", "ReturnType", "Name", "Params", "Body", "Locals", "Strings"]
 			
 			Stringify() {
-				String := "Define " this.ReturnType.Value " " this.Name.Value "("
+				String := Keywords[this.Keyword] " " this.ReturnType.Value " " this.Name.Value "("
 			
 				for k, Pair in this.Params {
 					String .= Pair[1].Value " " Pair[2].Value ", "

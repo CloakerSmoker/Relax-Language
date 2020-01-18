@@ -182,13 +182,7 @@
 			Case Tokens.INTEGER: {
 				IntegerValue := TargetToken.Value
 				
-				if (IntegerValue = 0) {
-					this.CodeGen.Move(ResultRegister, RSI)
-				}
-				else if (IntegerValue = 1) {
-					this.CodeGen.Move(ResultRegister, RDI)
-				}
-				else if (IntegerValue <= 0xFF) {
+				if (IntegerValue <= 0xFF) {
 					this.CodeGen.XOR_R64_R64(ResultRegister, ResultRegister)
 					this.CodeGen.Move_R64_I8(ResultRegister, I8(IntegerValue))
 				}

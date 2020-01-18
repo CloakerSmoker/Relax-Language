@@ -16,8 +16,12 @@ Code =
 ( % 
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
-define Double T2() {
-	return 1.2
+define Int64 T2() {
+	return Add(1, 2)
+}
+
+inline Int64 Add(Int64 A, Int64 B) {
+	return A + B
 }
 
 )
@@ -25,14 +29,6 @@ define Double T2() {
 ;define Int64 T1() {
 ;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
 ;}
-
-;Todo: Implement dllcalls as using a table pointed to by R14 (It can probably live on stack), so we can easily compile a function to an AHK version without having to re-link every single byte
-;Todo: Maybe(???????) include modules in the table
-;
-;To call:
-;mov rax, [r14 + indexReg * 8]
-;call rax
-
 
 ; (BodyText + i) *= *(BodyText + i)
 
@@ -90,7 +86,6 @@ R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % R.ToAHK()
 MsgBox, % "Result: " R.CallFunction("T2", 6, 1, 4, 3, 4, 2) "`n" A_LastError "`n" ;R.GetFunctionPointer("T1")
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 

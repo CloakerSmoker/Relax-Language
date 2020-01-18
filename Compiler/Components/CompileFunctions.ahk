@@ -1,4 +1,88 @@
-﻿	CompileDefine(DefineAST) {
+﻿	CompileInline(DefineAST, CallerParams) {
+		OldVariables := this.Variables
+		OldTypingVariables := this.Typing.Variables
+		OldLocals := this.Locals
+		OldFunction := this.Function
+		OldFunctionIndex := this.FunctionIndex
+		OldHasReturn := this.HasReturn
+		
+		this.FunctionIndex := "__Inline__" DefineAST.Name.Value
+		
+		ParamCount := DefineAST.Params.Count()
+		LocalCount := DefineAST.Locals.Count()
+		
+		StackSpace := ParamCount + LocalCount
+		StackSpace += (Mod(StackSpace, 2) != 1)
+		
+		this.CodeGen.Push(R15), this.StackDepth++
+		this.CodeGen.SmallSub(RSP, StackSpace * 8), this.StackDepth += StackSpace
+		
+		for k, Param in CallerParams {
+			ParamType := this.Compile(Param)
+			
+			this.CodeGen.SmallMove(RBX, k - 1)
+			this.CodeGen.Move_SIB_R64(SIB(8, RBX, RSP), this.PopRegisterStack())
+		}
+		
+		this.CodeGen.Move(R15, RSP)
+		
+		this.Variables := {}
+		this.Typing.Variables := {}
+		this.Function := DefineAST
+		this.Locals := DefineAST.Locals
+		this.HasReturn := False
+		
+		for LocalName, LocalType in DefineAST.Locals {
+			this.AddVariable(ParamCount + (k - 1), LocalName)
+			this.Typing.AddVariable(LocalType[1], LocalName)
+		}
+		
+		for k, ParamPair in DefineAST.Params {
+			ParamName := ParamPair[2].Value
+			
+			this.AddVariable(k - 1, ParamName)
+			this.Typing.AddVariable(ParamPair[1].Value, ParamName)
+		}
+		
+		this.Inline := True
+			for k, LocalDefault in DefineAST.Locals {
+				if (LocalDefault[2].Type != ASTNodeTypes.None) {
+					this.Compile(LocalDefault[2])
+				}
+			}
+			
+			for k, Statement in DefineAST.Body {
+				this.Compile(Statement)
+			}
+			
+			if !(this.HasReturn) {
+				this.CodeGen.SmallMove(RAX, 0)
+			}
+			
+			this.CodeGen.Label("__Return" this.FunctionIndex)
+			
+			this.CodeGen.SmallAdd(RSP, StackSpace * 8), this.StackDepth -= StackSpace
+		this.CodeGen.Pop(R15), this.StackDepth--
+		this.Inline := False
+		
+		this.FunctionIndex := OldFunctionIndex
+		this.Variables := OldVariables
+		this.Typing.Variables := OldTypingVariables
+		this.Function := OldFunction
+		this.Locals := OldLocals
+		this.HasReturn := OldHasReturn
+		
+		this.CodeGen.Move(this.PushRegisterStack(), RAX)
+		
+		return this.Typing.GetType(DefineAST.ReturnType.Value)
+	}
+	
+	CompileDefine(DefineAST) {
+		if (DefineAST.Keyword = Keywords.INLINE) {
+			return
+		}
+		
+		
 		this.FunctionIndex++
 		this.Variables := {}
 		
@@ -134,7 +218,7 @@
 		this.PopA()
 		
 		if (this.StackDepth != 0) {
-			Throw, Exception("Unbalenced stack ops in " DefineAST.Name.Value ", " this.StackDepth)
+			MsgBox, % "Unbalenced stack ops in " DefineAST.Name.Value ", " this.StackDepth
 		}
 		
 		this.CodeGen.Return()
@@ -233,9 +317,14 @@
 				IsModuleCall := True
 			}
 		}
-	
-	
-		if (IsModuleCall || FunctionNode := this.Program.Functions[Expression.Target.Value]) {
+		
+		FunctionNode := this.Program.Functions[Expression.Target.Value]
+		
+		if (FunctionNode.Keyword = Keywords.INLINE) {
+			return this.CompileInline(FunctionNode, Expression.Params.Expressions)
+		}
+		
+		if (IsModuleCall || FunctionNode) {
 			static ParamRegisters := [R9, R8, RDX, RCX]
 			
 			OldIndex := this.RegisterStackIndex ; Store the register stack index before calling, so we know what to save, and what to restore
