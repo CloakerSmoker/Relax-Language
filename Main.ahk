@@ -20,7 +20,6 @@ DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBox
 define Int64 T2() {
 	return IHopeThisWorks()
 }
-
 inline void IHopeThisWorks() {
 	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
 }
@@ -32,7 +31,7 @@ inline void IHopeThisWorks() {
 ;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
 ;}
 
-; (BodyText + i) *= *(BodyText + i)
+; (BodyText + i) *=* (BodyText + i)
 
 ;	for (Int64 i := 0, i <= P1, i++) {
 ;		(BodyText + i) *= *(BodyText + i)
