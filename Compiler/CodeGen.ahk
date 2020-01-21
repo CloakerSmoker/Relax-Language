@@ -697,7 +697,7 @@ class X64CodeGen {
 	; Magic helper pseudo-instructions
 	
 	DllCall(DllFile, DllFunction) {	
-		MsgBox, % "DllCall called, " DllFile ": " DllFunction
+		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
 	}
 	Move_String_Pointer(Register, String) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])

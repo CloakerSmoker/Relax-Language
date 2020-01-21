@@ -3,6 +3,8 @@
 #Include C:\Users\Connor\Desktop\lib\JSON.ahk
 
 class MZHeader {
+	static Size := 0xF0
+	
 	BuildAndGenerate(StubString := "This program cannot be run in DOS mode.", HeaderSize := 0xF0, FillByte := 0x00) {
 		CG := new I386CodeGen()
 		CG.Push_CS()
@@ -273,7 +275,7 @@ class SectionCharacteristics {
 }
 
 class PEBuilder {
-	static ImageBase := 0x00500000
+	static ImageBase := 0x00400000
 	static SectionAlignment := 0x1000
 	static FileAlignment := 0x200
 
@@ -286,6 +288,8 @@ class PEBuilder {
 		
 		static COFF_M_AMD64 := 0x8664
 		COFF.Machine(COFF_M_AMD64)
+		
+		COFF.TimeDateStamp(this.CurrentTimeToInt32())
 		
 		COFF.SizeOfOptionalHeader(PEHeader.Size)
 		
@@ -329,12 +333,17 @@ class PEBuilder {
 		this.Sections := []
 		this.NextSectionRVA := this.SectionAlignment
 		this.FileData := {}
-		this.FileIndex := this.FileAlignment * 2
-		this.Size := this.FileIndex + this.FileAlignment
+		this.Size := this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (3 * 40), this.FileAlignment)
+		
+		this.SizeOfCode := 0
+		this.BaseOfCode := 0
+		this.BaseOfData := 0
 	}
 	
 	Build(FilePath) {
 		this.File := F := FileOpen(FilePath, "rw")
+		
+		F.Length := 0
 		
 		for k, Byte in this.DOSHeader {
 			F.WriteChar(Byte)
@@ -342,8 +351,17 @@ class PEBuilder {
 		
 		F.Write("PE"), F.WriteShort(0) ; PE\0\0 magic
 		
-		this.COFFHeader.NumberOfSections(this.Sections.Count())
-		this.PEBuilder.SizeOfHeaders(this.RoundToAlignment(F.Tell() + 240 + (this.Sections.Count() * 40)), this.FileAlignment)
+		SectionCount := this.Sections.Count()
+		
+		this.COFFHeader.NumberOfSections(SectionCount)
+		
+		this.PEHeader.SizeOfCode(this.SizeOfCode)
+		this.PEHeader.BaseOfCode(this.BaseOfCode)
+		this.PEHeader.BaseOfData(this.BaseOfData)
+		this.PEHeader.AddressOfEntryPoint(this.BaseOfCode)
+		
+		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
+		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.Size, this.SectionAlignment))
 		
 		for k, Byte in this.COFFHeader.Build() {
 			F.WriteChar(Byte)
@@ -374,11 +392,14 @@ class PEBuilder {
 		F.Close()
 	}
 	
-	AddDataSection(Name, Bytes) {
-	
-	}
 	AddCodeSection(Name, Bytes) {
-	
+		if (this.SizeOfCode = 0) {
+			this.BaseOfCode := this.NextSectionRVA
+		}
+		
+		this.SizeOfCode += Bytes.Count()
+		
+		this.AddSection(Name, Bytes, SectionCharacteristics.PackFlags("rx code"))
 	}
 	
 	AddSection(Name, Bytes, Characteristics) {
@@ -395,7 +416,7 @@ class PEBuilder {
 		NewSection.Characteristics(Characteristics)
 		NewSection.PointerToRawData(FilePointer)
 		
-		this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + RoundedSize)
+		this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + RoundedSize, this.SectionAlignment)
 		this.Sections.Push(NewSection)
 		
 		this.FileData[FilePointer] := Bytes
@@ -404,8 +425,9 @@ class PEBuilder {
 	GetFilePointer(ByteCount) {
 		RoundedCount := this.RoundToAlignment(ByteCount, this.FileAlignment)
 		
+		OldSize := this.Size
 		this.Size += RoundedCount
-		return this.FileIndex += RoundedCount
+		return OldSize
 	}
 	
 	RoundToAlignment(Value, Alignment) {
@@ -428,9 +450,39 @@ class PEBuilder {
 		
 		return Int
 	}
-
+	
+	CurrentTimeToInt32() {
+		DaysSinceEpoch := -1
+		
+		loop, % A_YYYY - 1970 {
+			if (this.IsLeapYear(A_YYYY + A_Index)) {
+				DaysSinceEpoch++
+			}
+			
+			DaysSinceEpoch += 365
+		}
+		
+		Stamp := 0
+		
+		Stamp += (DaysSinceEpoch) * 24 * 60 * 60
+		Stamp += (A_YDay) * 24 * 60 * 60
+		Stamp += (A_Hour) * 60 * 60
+		Stamp += (A_Min) * 60
+		Stamp += (A_Sec)
+		
+		return Stamp
+	}
+	IsLeapYear(Year) {
+		return (!Mod(Year, 4) && Mod(Year, 100)) || !Mod(Year, 400)
+	}
 }
 
 P := new PEBuilder()
-P.AddSection(".test", [100, 101, 102, 103], SectionCharacteristics.PackFlags("rx code"))
+P.AddCodeSection(".text", [100, 101, 102, 103])
+P.AddCodeSection(".test2", [10, 11, 12, 13])
+P.AddCodeSection(".test3", [60, 61, 62, 63])
+P.AddCodeSection(".test4", [60, 61, 62, 63])
+P.AddCodeSection(".test4", [60, 61, 62, 63])
+P.AddCodeSection(".test4", [60, 61, 62, 63])
+P.AddCodeSection(".test4", [60, 61, 62, 63])
 P.Build(A_ScriptDir "\test.exe")
