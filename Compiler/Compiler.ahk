@@ -50,6 +50,7 @@
 	static DisableStrings := 8
 	
 	static UseStackStrings := 16
+	static TargetPE := 32
 
 	__New(CodeLexer, CodeParser, Flags) {
 		this.Lexer := CodeLexer
@@ -149,7 +150,12 @@
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
 		
-		return new CompiledProgram(Program, this.CodeGen, FunctionOffsets, this.Modules)
+		if (this.Features & this.TargetPE) {
+			return this
+		}
+		else {
+			return new CompiledProgram(Program, this.CodeGen, FunctionOffsets, this.Modules)
+		}
 	}
 
 	static PushSavedRegisters := [RCX, RDX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15]

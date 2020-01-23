@@ -696,8 +696,10 @@ class X64CodeGen {
 	;============================
 	; Magic helper pseudo-instructions
 	
-	DllCall(DllFile, DllFunction) {	
+	DllCall(DllFile, DllFunction) {
 		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
+		this.Placeholder(["Dll", DllFile, DllFunction], 7)
+		this.Call_RI64(RAX)
 	}
 	Move_String_Pointer(Register, String) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
@@ -710,11 +712,6 @@ class X64CodeGen {
 	Move_R64_Global_Pointer(Register, GlobalName) {
 		this.REXOpcode([0xB8 + Register.Number], [REX.W, Register.Requires.REX])
 		this.GlobalPlaceholder(GlobalName)
-	}
-	ModuleCall(ModuleName, FunctionName, FunctionAddress) {
-		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
-		this.ModuleCallPlaceholder(ModuleName, FunctionName, FunctionAddress)
-		this.Call_RI64(RAX)
 	}
 	
 	
@@ -758,9 +755,6 @@ class X64CodeGen {
 	}
 	GlobalPlaceholder(Name) {
 		this.Placeholder(["Global", Name], 7)
-	}
-	ModuleCallPlaceholder(ModuleName, FunctionName, FunctionAddress) {
-		this.Placeholder(["Module", ModuleName, FunctionName, FunctionAddress], 7)
 	}
 	Placeholder(Data, Count) {
 		this.Bytes.Push(Data)

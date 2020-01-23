@@ -206,7 +206,9 @@
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
 			
-			this.CodeGen.Move_R64_FunctionTable(R14)
+			if !(this.Features & this.TargetPE) {
+				this.CodeGen.Move_R64_FunctionTable(R14)
+			}
 			
 			this.CodeGen.SmallMove(RSI, 0)
 			this.CodeGen.SmallMove(RDI, 1)
@@ -329,8 +331,6 @@
 				
 				Try {
 					ModuleAST := Module.Find(ModuleName, ModuleFunctionName)
-					
-					MsgBox, % ModuleAST.Stringify()
 						
 					for FunctionName, FunctionNode in ModuleAST.Functions {
 						if (FunctionNode.Type = ASTNodeTypes.DllImport) {
@@ -452,9 +452,13 @@
 						.Source(this.Source)
 					.Throw()
 				}
-				
-				this.CodeGen.SmallMove(RAX, this.CodeGen.GetFunctionIndex(FunctionNode.FunctionName "@" FunctionNode.DllName))
-				this.CodeGen.Call_SIB(SIB(8, RAX, R14))
+				else if (this.Features & this.TargetPE) {
+					this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
+				}
+				else {
+					this.CodeGen.SmallMove(RAX, this.CodeGen.GetFunctionIndex(FunctionNode.FunctionName "@" FunctionNode.DllName))
+					this.CodeGen.Call_SIB(SIB(8, RAX, R14))
+				}
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.Define) {
 				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)

@@ -1,6 +1,4 @@
-﻿#Include C:\Users\Connor\Desktop\Valite\Parser\Utility.ahk
-#Include C:\Users\Connor\Desktop\Valite\Compiler\CodeGen.ahk
-#Include C:\Users\Connor\Desktop\lib\JSON.ahk
+﻿#Include C:\Users\Connor\Desktop\Valite\Interface.ahk
 
 class MZHeader {
 	static Size := 0xF0
@@ -96,13 +94,24 @@ class Header {
 		this.SetCapacity("Buffer", 0)
 	}
 	Build() {
-		Bytes := []
+		return this
+	}
+	_NewEnum() {
+		return new BufferEnum(this.pBuffer, ObjGetBase(this).Size)
+	}
+}
+
+class BufferEnum {
+	__New(pBuffer, BufferLength) {
+		this.pBuffer := pBuffer
+		this.Length := BufferLength
+		this.Index := 0
+	}
+	Next(ByRef Key, ByRef Value) {
+		Key := this.Index
+		Value := NumGet(this.pBuffer + 0, this.Index++, "UChar") 
 		
-		loop, % ObjGetBase(this).Size {
-			Bytes.Push(NumGet(this.pBuffer + 0, A_Index - 1, "UChar"))
-		}
-		
-		return Bytes
+		return !(this.Index > this.Length)
 	}
 }
 
@@ -240,8 +249,8 @@ class SectionCharacteristics {
 	static IMAGE_SCN_MEM_WRITE := 0x80000000
 	
 	static FlagToValue := {"code": SectionCharacteristics.IMAGE_SCN_CNT_CODE
-						,  "idata": SectionCharacteristics.IMAGE_SCN_CNT_INITIALIZED_DATA
-						,  "udata": SectionCharacteristics.IMAGE_SCN_CNT_UNINITIALIZED_DATA
+						,  "initialized": SectionCharacteristics.IMAGE_SCN_CNT_INITIALIZED_DATA
+						,  "uninitialized": SectionCharacteristics.IMAGE_SCN_CNT_UNINITIALIZED_DATA
 						,  "discard": SectionCharacteristics.IMAGE_SCN_MEM_DISCARDABLE
 						,  "shared": SectionCharacteristics.IMAGE_SCN_MEM_SHARED
 						,  "x": SectionCharacteristics.IMAGE_SCN_MEM_EXECUTE
@@ -273,6 +282,19 @@ class SectionCharacteristics {
 		return FlagsValue
 	}
 }
+
+class ImportHeader extends Header {
+	static Size := 20
+	
+	class Properties {
+		static LookupTableRVA := [0, "Int"]
+		static TimeDateStamp := [4, "Int"] ; Should be left as 0
+		static ForwarderIndex := [8, "Int"] ; Should be left as 0
+		static NameRVA := [12, "Int"]
+		static ThunkTableRVA := [16, "Int"]
+	}
+}
+
 
 class PEBuilder {
 	static ImageBase := 0x00400000
@@ -309,7 +331,7 @@ class PEBuilder {
 		PE.SectionAlignment(this.SectionAlignment)
 		PE.FileAlignment(this.FileAlignment)
 		
-		static MAJOR_MIN_OS_VERSION := 10
+		static MAJOR_MIN_OS_VERSION := 6 ; These feilds are nearly ignored with how many versions there are now, 6.0 is just what VS 2019 outputs
 		static MINOR_MIN_OS_VERSION := 0
 		PE.MajorOSVersion(MAJOR_MIN_OS_VERSION), PE.MinorOSVersion(MINOR_MIN_OS_VERSION)
 		PE.MajorSubsystemVersion(MAJOR_MIN_OS_VERSION), PE.MinorSubsystemVersion(MINOR_MIN_OS_VERSION)
@@ -319,7 +341,11 @@ class PEBuilder {
 		static IMAGE_SUBSYSTEM_WINDOWS_CUI := 3
 		PE.Subsystem(IMAGE_SUBSYSTEM_WINDOWS_CUI)
 		
-		PE.DllCharacteristics(0)
+		static I_DC_TERMINAL_SERVER_AWARE := 0x8000
+		static I_DC_DYNAMIC_BASE := 0x0040
+		static I_DC_NO_SEH := 0x0400
+		static I_DC_NO_ISOLATION := 0x0200
+		PE.DllCharacteristics(I_DC_TERMINAL_SERVER_AWARE | I_DC_NO_SEH | I_DC_NO_ISOLATION)
 		
 		static DEFAULT_RESERVE := 0x00100000
 		static DEFAULT_COMMIT := 0x1000
@@ -329,15 +355,23 @@ class PEBuilder {
 		PE.SizeOfHeapCommit(DEFAULT_COMMIT)
 		
 		PE.NumberOfRvaAndSizes(16)
-	
+		
+		
 		this.Sections := []
 		this.NextSectionRVA := this.SectionAlignment
+		
 		this.FileData := {}
+		
+		this.Imports := {}
+		this.ImportFunctionCount := 0
+		this.TotalImportNameLengths := 0
+		
 		this.Size := this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (3 * 40), this.FileAlignment)
 		
 		this.SizeOfCode := 0
+		this.SizeOfData := 0
 		this.BaseOfCode := 0
-		this.BaseOfData := 0
+		this.ImportBase := 0
 	}
 	
 	Build(FilePath) {
@@ -351,13 +385,33 @@ class PEBuilder {
 		
 		F.Write("PE"), F.WriteShort(0) ; PE\0\0 magic
 		
+		IDataSize := ((this.Imports.Count() + 1) * (20 + 16)) + this.TotalImportNameLengths + (16 * this.ImportFunctionCount)
+		; Each Dll import header is 20 bytes, and each imported function has 2 8 byte feilds, and two more terminating 8 byte feilds
+		
+		IDataFilePointer := this.GetFilePointer(IDataSize)
+		
+		IData := new SectionHeader()
+		IData.Name(this.StringToInt64(".idata"))		
+		IData.VirtualSize(IDataSize)
+		IData.SizeOfRawData(this.RoundToAlignment(IDataSize, this.FileAlignment))
+		IData.VirtualAddress(this.NextSectionRVA)
+		IData.Characteristics(SectionCharacteristics.PackFlags("r initialized"))
+		IData.PointerToRawData(IDataFilePointer)
+		this.Sections.Push(IData)
+		
+		this.BuildIData(IDataSize, IDataFilePointer)
+		
+		this.PEHeader.ImportTableSize(IDataSize)
+		
+		this.Size += IDataSize
+		
 		SectionCount := this.Sections.Count()
 		
 		this.COFFHeader.NumberOfSections(SectionCount)
 		
-		this.PEHeader.SizeOfCode(this.SizeOfCode)
+		this.PEHeader.SizeOfInitializedData(this.RoundToAlignment(this.SizeOfData, this.SectionAlignment))
+		this.PEHeader.SizeOfCode(this.RoundToAlignment(this.SizeOfCode, this.SectionAlignment))
 		this.PEHeader.BaseOfCode(this.BaseOfCode)
-		this.PEHeader.BaseOfData(this.BaseOfData)
 		this.PEHeader.AddressOfEntryPoint(this.BaseOfCode)
 		
 		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
@@ -377,11 +431,30 @@ class PEBuilder {
 			}
 		}
 		
+		IATCount := this.Imports.Count() + 1
+		
 		for FilePointer, Bytes in this.FileData {
 			F.Seek(FilePointer)
+			SkipBytes := 0
 			
 			for k, Byte in Bytes {
-				F.WriteChar(Byte)
+				if (SkipBytes) {
+					SkipBytes--
+				}
+				else if (IsObject(Byte)) {
+					if (Byte[1] = "IAT") {
+						
+						
+						F.WriteUInt64(this.ImportBase + (Byte[2] * 2))
+						SkipBytes := 7
+					}
+					else {
+						Throw, Exception(Byte[1] " is unlinkable in the PE builder.")
+					}
+				}
+				else {
+					F.WriteChar(Byte)
+				}
 			}
 		}
 		
@@ -392,10 +465,76 @@ class PEBuilder {
 		F.Close()
 	}
 	
+	BuildIData(IDataSize, IDataFilePointer) {
+		this.SizeOfData += IDataSize
+		
+		Imports := this.Imports
+		
+		VarSetCapacity(Buffer, IDataSize, 0)
+		pBuffer := &Buffer
+		
+		IDataRVA := this.NextSectionRVA
+		
+		ThunkTableOffset := 0
+		ThunkTableRVA := IDataRVA
+		
+		HintNameTableOffset := (this.ImportFunctionCount * 8) + (8 * Imports.Count())
+		HintNameTableRVA := IDataRVA + HintNameTableOffset
+		
+		ImportLookupTablesOffset := HintNameTableOffset * 2
+		ImportLookupTablesRVA := IDataRVA + ImportLookupTablesOffset
+		
+		this.PEHeader.ImportTableRVA(ImportLookupTablesRVA)
+		this.PEHeader.ImportAddressTableSize(this.ImportFunctionCount * 8)
+		this.PEHeader.ImportAddressTableRVA(ThunkTableRVA)
+		
+		ImportStringsTableOffset := ImportLookupTablesOffset + ((Imports.Count() + 1) * 20)
+		ImportStringsTableRVA := IDataRVA + ImportStringsTableOffset
+		
+		StringRVAs := {}
+		CurrentStringOffset := ImportStringsTableOffset
+		CurrentLookupTableOffset := 0 ; The offset into the Thunk/HintName tables
+		
+		for DllName, DllImportList in Imports {
+			DllNameRVA := IDataRVA + CurrentStringOffset
+			
+			pThisLookupTable := pBuffer + ImportLookupTablesOffset + (20 * (A_Index - 1))
+			
+			NumPut(HintNameTableRVA + CurrentLookupTableOffset, pThisLookupTable + 0, 0, "UInt")
+			NumPut(DllNameRVA, pThisLookupTable + 0, 12, "UInt")
+			NumPut(ThunkTableRVA + CurrentLookupTableOffset, pThisLookupTable + 0, 16, "UInt")
+			
+			CurrentStringOffset += StrPut(DllName, pBuffer + CurrentStringOffset, StrLen(DllName) + 1, "UTF-8") + 2
+			
+			for k, FunctionName in DllImportList.Functions {
+				FunctionNameRVA := IDataRVA + CurrentStringOffset
+				
+				NumPut(FunctionNameRVA - 2, pBuffer + ThunkTableOffset, CurrentLookupTableOffset, "UInt")
+				NumPut(FunctionNameRVA - 2, pBuffer + HintNameTableOffset, CurrentLookupTableOffset, "UInt")
+				CurrentLookupTableOffset += 8
+				
+				CurrentStringOffset += StrPut(FunctionName, pBuffer + CurrentStringOffset, StrLen(FunctionName) + 1, "UTF-8") + 2
+			}
+			
+			CurrentLookupTableOffset += 8
+		}
+	
+		IDataBytes := []
+		
+		loop, % IDataSize {
+			IDataBytes.Push(NumGet(pBuffer + 0, A_Index - 1, "UChar"))
+		}
+		
+		this.FileData[IDataFilePointer] := IDataBytes
+	}
+	
+	
 	AddCodeSection(Name, Bytes) {
 		if (this.SizeOfCode = 0) {
 			this.BaseOfCode := this.NextSectionRVA
 		}
+		
+		Bytes := this.LinkCode(Bytes)
 		
 		this.SizeOfCode += Bytes.Count()
 		
@@ -441,6 +580,45 @@ class PEBuilder {
 		}
 	}
 	
+	LinkCode(Bytes) {
+		LinkedBytes := []
+		
+		for k, Byte in Bytes {
+			if (IsObject(Byte)) {
+				Switch (Byte[1]) {
+					Case "Dll": {
+						DllName := Byte[2]
+						FunctionName := Byte[3]
+						
+						if !(this.Imports.HasKey(DllName)) {
+							this.Imports[DllName] := {"Functions": [], "TableIndex": (this.Imports.Count() - 1), "NameLengths": 0}
+							
+							this.TotalImportNameLengths += StrLen(DllName) + 3
+						}
+						
+						ThisDll := this.Imports[DllName]
+						
+						ThisDll.Functions.Push(FunctionName)
+						
+						NameLength := StrLen(FunctionName) + 3
+						
+						ThisDll.NameLengths += NameLength
+						this.TotalImportNameLengths += NameLength
+						this.ImportFunctionCount++
+						
+						LinkedBytes.Push(["IAT", ThisDll.TableIndex, ThisDll.Functions.Count() - 1])
+					}
+				}
+			}
+			else {
+				LinkedBytes.Push(Byte)
+			}
+		}
+		
+		return LinkedBytes
+	}
+	
+	
 	StringToInt64(String) {
 		Int := 0
 		
@@ -477,12 +655,25 @@ class PEBuilder {
 	}
 }
 
+Code = 
+( % 
+DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
+DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
+DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
+
+define Int64 T2() {
+	CloseHandle(1)
+	VirtualAlloc(0, 0, 0, 0)
+	VirtualFree(0, 0, 0)
+	
+	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
+}
+
+)
+
+PECompiler := LanguageName.CompileForPE(Code)
+
 P := new PEBuilder()
-P.AddCodeSection(".text", [100, 101, 102, 103])
-P.AddCodeSection(".test2", [10, 11, 12, 13])
-P.AddCodeSection(".test3", [60, 61, 62, 63])
-P.AddCodeSection(".test4", [60, 61, 62, 63])
-P.AddCodeSection(".test4", [60, 61, 62, 63])
-P.AddCodeSection(".test4", [60, 61, 62, 63])
-P.AddCodeSection(".test4", [60, 61, 62, 63])
+P.AddCodeSection(".text", PECompiler.CodeGen.Link(True))
 P.Build(A_ScriptDir "\test.exe")

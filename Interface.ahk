@@ -17,6 +17,7 @@
 		static DisableStrings := 8
 		
 		static UseStackStrings := 16
+		static TargetPE := 32
 	}
 	
 	static O0 := LanguageNameFlags.Optimization.DisableAll
@@ -28,7 +29,7 @@
 	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.Features.DisableGlobals + LanguageNameFlags.Features.UseStackStrings
 }
 
-#Include %A_ScriptDir%
+#Include %A_LineFile%\..\
 #Include Parser\Utility.ahk
 #Include Parser\Constants.ahk
 #Include Parser\Lexer.ahk
@@ -52,6 +53,12 @@ class LanguageName {
 		Program := this.CompileCode(CodeString, {"Features": LanguageNameFlags.ToAHK})
 		
 		return Program.ToAHK()
+	}
+	
+	CompileForPE(CodeString) {
+		static Flags := {"Features": LanguageNameFlags.ToAHK | LanguageNameFlags.Features.TargetPE}
+		
+		return this.CompileCode(CodeString, Flags)
 	}
 	
 	CompileCode(CodeString, Flags := "") {
