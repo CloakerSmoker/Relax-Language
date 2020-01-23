@@ -124,10 +124,13 @@ class CompiledProgram {
 	GetAHKType(TypeName) {
 		; Converts types that don't exist in the eyes of DllCall into regular DllCall types
 		
-		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64", "void*": "Ptr"}
+		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64"}
 	
 		if (AHKTypes.HasKey(TypeName)) {
 			return AHKTypes[TypeName]
+		}
+		else if (InStr(TypeName, "*")) {
+			return "Ptr"
 		}
 		else {
 			return TypeName
@@ -183,7 +186,7 @@ class CompiledProgram {
 			DefinitionString := WithName FunctionName "("
 			ParameterListString := ""
 			
-			for k, ParamPair in FunctionNode.Param {
+			for k, ParamPair in FunctionNode.Params {
 				ParameterListString .= ParamPair[2].Value ", "
 			}
 			

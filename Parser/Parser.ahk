@@ -104,7 +104,7 @@
 				return this.ParseDllImport()
 			}
 			else if (Next.Value = Keywords.GLOBAL) {
-				return this.AddGlobal(this.ParseDeclaration(False)*) ; Parse a declaration, with no initialization allowed, since there's no time to run the initialization
+				return this.ParseDeclaration(False) ; Parse a declaration, with no initialization allowed, since there's no time to run the initialization
 			}
 		}
 		else if (Next.Type = Tokens.NEWLINE) {
@@ -198,7 +198,7 @@
 				return this.ParseKeywordStatement()
 			}
 			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
-				return this.AddLocal(this.ParseDeclaration()*) ; The declaration format is TypeName VarName (ExpressionLine|\n)
+				return this.ParseDeclaration() ; The declaration format is TypeName VarName (ExpressionLine|\n)
 			}
 			else {
 				return this.ParseExpressionStatement()
@@ -208,16 +208,15 @@
 			this.CriticalError := True
 		}
 	}
-	ParseDeclaration(AllowInitializing := True) {
+	ParseDeclaration(AsLocal := True) {
 		Type := this.ParseTypeName()
 		Name := this.Consume(Tokens.IDENTIFIER, "Variable names must be identifiers.")
 		
-		if (this.NextMatches(Tokens.NEWLINE)) {
-			return [Type, Name, new ASTNodes.None()]
-		}
-		else if (this.NextMatches(Tokens.COLON_EQUAL) && AllowInitializing) {
+		Initializer := new ASTNodes.None()
+		
+		if (this.NextMatches(Tokens.COLON_EQUAL) && AsLocal) {
 			this.Index -= 2
-			return [Type, Name, this.ParseExpressionStatement()]
+			Initializer := this.ParseExpressionStatement()
 		}
 		else {
 			ErrorToken := this.Next()
@@ -230,6 +229,14 @@
 				.Token(ErrorToken)
 				.Source(this.Source)
 			.Throw()
+		}
+		
+		if (AsLocal) {
+			this.AddLocal(Type, Name, new ASTNodes.None())
+			return Initializer
+		}
+		else {
+			this.AddGlobal(Type, Name, new ASTNodes.None())
 		}
 	}
 	

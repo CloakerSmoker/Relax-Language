@@ -205,6 +205,7 @@
 		else if (OperatorClasses.IsClass(Expression.Operator, "Division")) {
 			this.CodeGen.Push(RDX)
 			this.CodeGen.Move(RAX, LeftRegister)
+			this.CodeGen.Move(RBX, RightRegister)
 		}
 	
 		Switch (Expression.Operator.Type) {
@@ -218,11 +219,11 @@
 				this.CodeGen.IMul_R64_R64(LeftRegister, RightRegister)
 			}
 			Case Tokens.DIVIDE: {
-				this.CodeGen.IDiv_RAX_R64(RightRegister)
+				this.CodeGen.IDiv_RAX_R64(RBX)
 				this.CodeGen.Move(ResultRegister, RAX)
 			}
 			Case Tokens.MOD: {
-				this.CodeGen.IDiv_RAX_R64(RightRegister)
+				this.CodeGen.IDiv_RAX_R64(RBX)
 				this.CodeGen.Move(ResultRegister, RDX)
 			}
 			Case Tokens.EQUAL: {

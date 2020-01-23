@@ -15,20 +15,38 @@
 
 Code = 
 ( % 
-DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
 
-define Int64 T2() {
-	return IHopeThisWorks()
-}
-inline void IHopeThisWorks() {
-	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
+
+define Int64 T2(Int32* Array, Int64 Length, Int64 Step) {
+	Int32 Average := 0
+	
+	for (Int64 Index := 0, Index < Length, Index++) {
+		Int32 Next := *(Array)
+		
+		Average := (Average + Next) / 2
+		
+		Array += Step
+	}
+	
+	return Average
 }
 
 )
+; AverageInt32Array
+
 ; return VirtualAlloc(0, Count, 0x00001000 | 0x00002000, 0x04)
 ; return Memory:Alloc(8) as Int64
 ;define Int64 T1() {
 ;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
+;}
+
+;DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+;
+;define Int64 T2() {
+;	return IHopeThisWorks()
+;}
+;inline void IHopeThisWorks() {
+;	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
 ;}
 
 ; (BodyText + i) *=* (BodyText + i)
@@ -87,7 +105,12 @@ R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
 
 MsgBox, % R.Node.Stringify()
 MsgBox, % (Clipboard := R.CodeGen.Stringify())
-MsgBox, % "Result: " R.CallFunction("T2", 6, 1, 4, 3, 4, 2) "`n" A_LastError "`n" ;R.GetFunctionPointer("T1")
+
+VarSetCapacity(A, 20, 0)
+loop, 20 {
+	NumPut(5, &A + 0, A_Index - 1, "Char")
+}
+MsgBox, % "Result: " R.CallFunction("T2", &A, 20, 1, 3, 4, 2) "`n" A_LastError "`n" ;R.GetFunctionPointer("T1")
 ;MsgBox, % "Stored: " R.CallFunction("T2")
 
 ; Int64* A := &B
