@@ -38,6 +38,7 @@
 #Include Compiler\Optimizer.ahk
 #Include Compiler\CodeGen.ahk
 #Include Compiler\Compiler.ahk
+#Include Compiler\PEBuilder.ahk
 
 class LanguageName {
 	; Change ^ when you've come up with a name
@@ -55,10 +56,24 @@ class LanguageName {
 		return Program.ToAHK()
 	}
 	
-	CompileForPE(CodeString) {
+	CompileToEXE(CodeString, EXEPath := "") {
 		static Flags := {"Features": LanguageNameFlags.ToAHK | LanguageNameFlags.Features.TargetPE}
 		
-		return this.CompileCode(CodeString, Flags)
+		if !(EXEPath) {
+			EXEPath := A_ScriptDir "\out.exe"
+		}
+		
+		CodeString .= "`n" Builtins.__Runtime__.Code
+		
+		CodeCompiler := this.CompileCode(CodeString, Flags)
+		
+		MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain__"]
+		
+		CodeEXEBuilder := new PEBuilder()
+		CodeEXEBuilder.AddCodeSection(".text", CodeCompiler.CodeGen.Link(True), MainOffset)
+		CodeEXEBuilder.Build(EXEPath)
+		
+		return EXEPath
 	}
 	
 	CompileCode(CodeString, Flags := "") {
@@ -387,6 +402,21 @@ class Builtins {
 				*/ 
 				
 				return VirtualFree(Memory, 0, 0x00008000)
+			}
+		)"
+	}
+	
+	class __Runtime__ {
+		static Code := "
+		(
+			DllImport void ExitProcess(Int32) {Kernel32.dll, ExitProcess}
+			
+			define void __RunTime__CallMain__() {
+				__RunTime__ReturnFromMain__(Main())
+			}
+			
+			define void __RunTime__ReturnFromMain__(Int32 __ExitCode__) {
+				return ExitProcess(__ExitCode__)
 			}
 		)"
 	}

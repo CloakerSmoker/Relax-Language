@@ -6,77 +6,24 @@
 #Include Interface.ahk
 
 ; TODO: Pick a name
-; TODO: CodeGen linking rewrite
-; TODO: (Related to above) Shorter Jmp encodings
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
+; TODO: Redo modules, find a way to make them work better with the runtime functions
 
 ; TODO: Switch modules to be baked into syntax
 
 Code = 
 ( % 
+DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
+DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
+DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
 
-
-define Int64 T2(Int32* Array, Int64 Length, Int64 Step) {
-	Int32 Average := 0
-	
-	for (Int64 Index := 0, Index < Length, Index++) {
-		Int32 Next := *(Array)
-		
-		Average := (Average + Next) / 2
-		
-		Array += Step
-	}
-	
-	return Average
+define Int64 Main() {
+	return MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
 }
 
 )
-; AverageInt32Array
-
-; return VirtualAlloc(0, Count, 0x00001000 | 0x00002000, 0x04)
-; return Memory:Alloc(8) as Int64
-;define Int64 T1() {
-;	MessageBoxA(0, "Scumbug", "What the fuck did you just fucking say about me?", 0)
-;}
-
-;DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
-;
-;define Int64 T2() {
-;	return IHopeThisWorks()
-;}
-;inline void IHopeThisWorks() {
-;	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
-;}
-
-; (BodyText + i) *=* (BodyText + i)
-
-;	for (Int64 i := 0, i <= P1, i++) {
-;		(BodyText + i) *= *(BodyText + i)
-;		Test2(0, TitleText, BodyText)
-;	}
-
-
-;define void* T1() {
-;	Int8* StringBuffer := Memory:Alloc(40) as Int8*
-;	
-;	StringBuffer *= 'h'
-;	StringBuffer + 1 *= 'i'
-;	
-;	return &T1
-;}
-
-;global Int64 TestGlobal
-;
-;define Int64 T1(Int64 Value) {
-;	TestGlobal := Value
-;	Int8* A := Memory:HeapAlloc(8)
-;	return 0
-;}
-;define Int64 T2() {
-;	return TestGlobal
-;}
-
 
 ;define Int64 Test3(Int64 B) {if (B >= 2) {return 20} return 90}
 ;
@@ -97,6 +44,8 @@ define Int64 T2(Int32* Array, Int64 Length, Int64 Step) {
 ;
 ;	return 0
 ;}
+
+MsgBox, % LanguageName.CompileToEXE(Code)
 
 ;MsgBox, % LanguageName.FormatCode(Code)
 MsgBox, % LanguageName.CompileToAHKFunctions(Code)

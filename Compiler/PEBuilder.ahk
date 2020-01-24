@@ -1,6 +1,4 @@
-﻿#Include C:\Users\Connor\Desktop\Valite\Interface.ahk
-
-class MZHeader {
+﻿class MZHeader {
 	static Size := 0xF0
 	
 	BuildAndGenerate(StubString := "This program cannot be run in DOS mode.", HeaderSize := 0xF0, FillByte := 0x00) {
@@ -449,7 +447,13 @@ class PEBuilder {
 		this.PEHeader.SizeOfInitializedData(this.RoundToAlignment(this.SizeOfData, this.SectionAlignment))
 		this.PEHeader.SizeOfCode(this.RoundToAlignment(this.SizeOfCode, this.SectionAlignment))
 		this.PEHeader.BaseOfCode(this.BaseOfCode)
-		this.PEHeader.AddressOfEntryPoint(this.BaseOfCode + 5)
+		
+		if (this.EntryPoint) {
+			this.PEHeader.AddressOfEntryPoint(this.EntryPoint)
+		}
+		else {
+			this.PEHeader.AddressOfEntryPoint(this.BaseOfCode)
+		}
 		
 		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
 		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.Size + (this.SectionAlignment * 3), this.SectionAlignment))
@@ -610,9 +614,12 @@ class PEBuilder {
 		return Value
 	}
 	
-	AddCodeSection(Name, Bytes) {	
+	AddCodeSection(Name, Bytes, EntryPoint := 0) {	
 		if (this.SizeOfCode = 0) {
 			this.BaseOfCode := this.NextSectionRVA
+		}
+		else if (EntryPoint) {
+			this.EntryPoint := this.NextSectionRVA + EntryPoint
 		}
 		
 		Bytes := this.LinkCode(Bytes)
@@ -744,22 +751,3 @@ class PEBuilder {
 		return (!Mod(Year, 4) && Mod(Year, 100)) || !Mod(Year, 400)
 	}
 }
-
-Code = 
-( % 
-DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
-DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
-DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
-DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
-
-define Int64 T2() {
-	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
-}
-
-)
-
-PECompiler := LanguageName.CompileForPE(Code)
-
-P := new PEBuilder()
-P.AddCodeSection(".text", [0, 0, 0, 0, 0, PECompiler.CodeGen.Link(True)*])
-P.Build(A_ScriptDir "\test.exe")

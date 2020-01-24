@@ -138,7 +138,7 @@
 		this.Program := Program
 		this.Modules := {}
 		
-		FunctionOffsets := {}
+		this.FunctionOffsets := FunctionOffsets := {}
 		FunctionOffset := 0
 		
 		
