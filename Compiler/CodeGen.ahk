@@ -382,12 +382,7 @@ class X64CodeGen {
 	SmallAdd(Register, Number) {
 		this.SmallMove(RBX, Number)
 		
-		if (Number <= 0xFFFFFFFF) {
-			this.Add_R64_R32(Register, RBX)
-		}
-		else {
-			this.Add_R64_R64(Register, RBX)
-		}
+		this.Add_R64_R64(Register, RBX)
 	}
 	Add_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
@@ -412,12 +407,7 @@ class X64CodeGen {
 	SmallSub(Register, Number) {
 		this.SmallMove(RBX, Number)
 		
-		if (Number <= 0xFFFFFFFF) {
-			this.Sub_R64_R32(Register, RBX)
-		}
-		else {
-			this.Sub_R64_R64(Register, RBX)
-		}
+		this.Sub_R64_R64(Register, RBX)
 	}
 	Sub_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
@@ -699,6 +689,7 @@ class X64CodeGen {
 	DllCall(DllFile, DllFunction) {
 		this.REXOpcode([0xB8 + RAX.Number], [REX.W])
 		this.Placeholder(["Dll", DllFile, DllFunction], 7)
+		this.Move_R64_RI64(RAX, RAX)
 		this.Call_RI64(RAX)
 	}
 	Move_String_Pointer(Register, String) {

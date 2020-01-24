@@ -30,18 +30,18 @@ class MZHeader {
 		this.pBuffer := &Buffer
 		
 		this.Put(Asc("M"), "Char"), this.Put(Asc("Z"), "Char") ; Magic
-		this.Put(0, "Short") ; BytesInLastPage
-		this.Put(PageCount, "Short") ; PageCount
+		this.Put(0x90, "Short") ; BytesInLastPage
+		this.Put(3, "Short") ; PageCount
 		this.Put(0, "Short") ; RelocationCount
 		this.Put(4, "Short") ; HeaderParagraphCount (Paragraph = 16 bytes)
 		this.Put(0, "Short") ; MinimumExtraParagraphCount
-		this.Put(255, "Short") ; MaximumExtraParagraphCount
+		this.Put(0xFFFF, "Short") ; MaximumExtraParagraphCount
 		this.Put(0, "Short") ; StartingSS
-		this.Put(0, "Short") ; StartingSP
+		this.Put(0xB8, "Short") ; StartingSP
 		this.Put(0, "Short") ; Checksum
 		this.Put(0, "Short") ; StartingIP
 		this.Put(0, "Short") ; StartingCS
-		this.Put(0, "Short") ; RelocationTable
+		this.Put(0x40, "Short") ; RelocationTable
 		this.Put(0, "Short") ; OverlayNumber
 		this.Put(0, "Int64") ; Padding e_res[4]
 		this.Put(0, "Short") ; e_oemid
@@ -295,9 +295,17 @@ class ImportHeader extends Header {
 	}
 }
 
+class RelocationBlock extends Header {
+	static Size := 8
+	
+	class Properties {
+		static PageRVA := [0, "Int"]
+		static BlockSize := [4, "Int"]
+	}
+}
 
 class PEBuilder {
-	static ImageBase := 0x00400000
+	static ImageBase := 0x40000000
 	static SectionAlignment := 0x1000
 	static FileAlignment := 0x200
 
@@ -319,7 +327,7 @@ class PEBuilder {
 		static COFF_C_EXECUTABLE_IMAGE := 0x0002
 		static COFF_C_LARGE_ADDRESS_AWARE := 0x0020
 		static COFF_C_DEBUG_STRIPPED := 0x0200
-		COFF.Characteristics(COFF_C_RELOCS_STRIPPED | COFF_C_EXECUTABLE_IMAGE | COFF_C_DEBUG_STRIPPED)
+		COFF.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE)
 		
 		; PE header setup
 		this.PEHeader := PE := new PEHeader()
@@ -336,19 +344,25 @@ class PEBuilder {
 		PE.MajorOSVersion(MAJOR_MIN_OS_VERSION), PE.MinorOSVersion(MINOR_MIN_OS_VERSION)
 		PE.MajorSubsystemVersion(MAJOR_MIN_OS_VERSION), PE.MinorSubsystemVersion(MINOR_MIN_OS_VERSION)
 		
+		PE.MajorLinkerVersion(14)
+		PE.MinorLinkerVersion(24)
+		
 		PE.Win32Version(0)
 		
 		static IMAGE_SUBSYSTEM_WINDOWS_CUI := 3
 		PE.Subsystem(IMAGE_SUBSYSTEM_WINDOWS_CUI)
 		
 		static I_DC_TERMINAL_SERVER_AWARE := 0x8000
+		static I_DC_NX_COMPAT := 0x0100
 		static I_DC_DYNAMIC_BASE := 0x0040
 		static I_DC_NO_SEH := 0x0400
 		static I_DC_NO_ISOLATION := 0x0200
-		PE.DllCharacteristics(I_DC_TERMINAL_SERVER_AWARE | I_DC_NO_SEH | I_DC_NO_ISOLATION)
+		static I_DC_HIGH_ENTROPY_VA := 0x0020
+		
+		PE.DllCharacteristics(I_DC_TERMINAL_SERVER_AWARE | I_DC_DYNAMIC_BASE | I_DC_NX_COMPAT | I_DC_HIGH_ENTROPY_VA)
 		
 		static DEFAULT_RESERVE := 0x00100000
-		static DEFAULT_COMMIT := 0x1000
+		static DEFAULT_COMMIT := 0x8000
 		PE.SizeOfStackReserve(DEFAULT_RESERVE)
 		PE.SizeOfStackCommit(DEFAULT_COMMIT)
 		PE.SizeOfHeapReserve(DEFAULT_RESERVE)
@@ -365,6 +379,9 @@ class PEBuilder {
 		this.Imports := {}
 		this.ImportFunctionCount := 0
 		this.TotalImportNameLengths := 0
+		
+		this.PageRelocations := {}
+		this.RelocationCount := 0
 		
 		this.Size := this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (3 * 40), this.FileAlignment)
 		
@@ -391,7 +408,7 @@ class PEBuilder {
 		IDataFilePointer := this.GetFilePointer(IDataSize)
 		
 		IData := new SectionHeader()
-		IData.Name(this.StringToInt64(".idata"))		
+		IData.Name(this.StringToInt64(".idata"))
 		IData.VirtualSize(IDataSize)
 		IData.SizeOfRawData(this.RoundToAlignment(IDataSize, this.FileAlignment))
 		IData.VirtualAddress(this.NextSectionRVA)
@@ -400,10 +417,30 @@ class PEBuilder {
 		this.Sections.Push(IData)
 		
 		this.BuildIData(IDataSize, IDataFilePointer)
-		
+		this.IDataRVA := this.NextSectionRVA
+		this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + this.SectionAlignment, this.SectionAlignment)
+		this.Size += IDataSize
 		this.PEHeader.ImportTableSize(IDataSize)
 		
-		this.Size += IDataSize
+		
+		RelocSize := (this.PageRelocations.Count() * 32) + (this.RelocationCount * 2)
+		; Each relocation entry is a page descriptor + size for 8 bytes, and N number of 2 byte relocations
+		; But since there is padding, a size of 32 is used to ensure we have enough space to pad
+		
+		RelocFilePointer := this.GetFilePointer(RelocSize)
+		
+		Reloc := new SectionHeader()
+		Reloc.Name(this.StringToInt64(".reloc"))
+		Reloc.VirtualSize(RelocSize)
+		Reloc.SizeOfRawData(this.RoundToAlignment(RelocSize, this.FileAlignment))
+		Reloc.VirtualAddress(this.NextSectionRVA)
+		Reloc.Characteristics(SectionCharacteristics.PackFlags("r initialized discard"))
+		Reloc.PointerToRawData(RelocFilePointer)
+		this.Sections.Push(Reloc)
+		
+		this.BuildReloc(RelocSize, RelocFilePointer)
+		this.PEHeader.BaseRelocationTableRVA(this.NextSectionRVA)
+		this.PEHeader.BaseRelocationTableSize(RelocSize)
 		
 		SectionCount := this.Sections.Count()
 		
@@ -412,10 +449,10 @@ class PEBuilder {
 		this.PEHeader.SizeOfInitializedData(this.RoundToAlignment(this.SizeOfData, this.SectionAlignment))
 		this.PEHeader.SizeOfCode(this.RoundToAlignment(this.SizeOfCode, this.SectionAlignment))
 		this.PEHeader.BaseOfCode(this.BaseOfCode)
-		this.PEHeader.AddressOfEntryPoint(this.BaseOfCode)
+		this.PEHeader.AddressOfEntryPoint(this.BaseOfCode + 5)
 		
 		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
-		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.Size, this.SectionAlignment))
+		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.Size + (this.SectionAlignment * 3), this.SectionAlignment))
 		
 		for k, Byte in this.COFFHeader.Build() {
 			F.WriteChar(Byte)
@@ -431,8 +468,6 @@ class PEBuilder {
 			}
 		}
 		
-		IATCount := this.Imports.Count() + 1
-		
 		for FilePointer, Bytes in this.FileData {
 			F.Seek(FilePointer)
 			SkipBytes := 0
@@ -443,9 +478,7 @@ class PEBuilder {
 				}
 				else if (IsObject(Byte)) {
 					if (Byte[1] = "IAT") {
-						
-						
-						F.WriteUInt64(this.ImportBase + (Byte[2] * 2))
+						F.WriteUInt64(this.ImageBase + this.IDataRVA + this.IATOffsets[Byte[2]])
 						SkipBytes := 7
 					}
 					else {
@@ -481,39 +514,43 @@ class PEBuilder {
 		HintNameTableOffset := (this.ImportFunctionCount * 8) + (8 * Imports.Count())
 		HintNameTableRVA := IDataRVA + HintNameTableOffset
 		
-		ImportLookupTablesOffset := HintNameTableOffset * 2
-		ImportLookupTablesRVA := IDataRVA + ImportLookupTablesOffset
+		LookupTablesOffset := HintNameTableOffset * 2
+		LookupTablesRVA := IDataRVA + LookupTablesOffset
 		
-		this.PEHeader.ImportTableRVA(ImportLookupTablesRVA)
+		this.PEHeader.ImportTableRVA(LookupTablesRVA)
 		this.PEHeader.ImportAddressTableSize(this.ImportFunctionCount * 8)
 		this.PEHeader.ImportAddressTableRVA(ThunkTableRVA)
 		
-		ImportStringsTableOffset := ImportLookupTablesOffset + ((Imports.Count() + 1) * 20)
-		ImportStringsTableRVA := IDataRVA + ImportStringsTableOffset
+		StringsOffset := LookupTablesOffset + ((Imports.Count() + 1) * 20)
+		StringsRVA := IDataRVA + StringsOffset
 		
-		StringRVAs := {}
-		CurrentStringOffset := ImportStringsTableOffset
+		pStrings := pBuffer + StringsOffset
+		
+		CurrentStringOffset := 0
 		CurrentLookupTableOffset := 0 ; The offset into the Thunk/HintName tables
+		this.IATOffsets := {}
 		
 		for DllName, DllImportList in Imports {
-			DllNameRVA := IDataRVA + CurrentStringOffset
+			DllNameRVA := StringsRVA + CurrentStringOffset
 			
-			pThisLookupTable := pBuffer + ImportLookupTablesOffset + (20 * (A_Index - 1))
+			pThisLookupTable := pBuffer + LookupTablesOffset + (20 * (A_Index - 1))
 			
 			NumPut(HintNameTableRVA + CurrentLookupTableOffset, pThisLookupTable + 0, 0, "UInt")
 			NumPut(DllNameRVA, pThisLookupTable + 0, 12, "UInt")
 			NumPut(ThunkTableRVA + CurrentLookupTableOffset, pThisLookupTable + 0, 16, "UInt")
 			
-			CurrentStringOffset += StrPut(DllName, pBuffer + CurrentStringOffset, StrLen(DllName) + 1, "UTF-8") + 2
+			CurrentStringOffset += StrPut(DllName, pStrings + CurrentStringOffset, StrLen(DllName) + 1, "UTF-8") + 2
 			
-			for k, FunctionName in DllImportList.Functions {
-				FunctionNameRVA := IDataRVA + CurrentStringOffset
+			for k, FunctionName in DllImportList {
+				this.IATOffsets[FunctionName "@" DllName] := CurrentLookupTableOffset
+				
+				FunctionNameRVA := StringsRVA + CurrentStringOffset
 				
 				NumPut(FunctionNameRVA - 2, pBuffer + ThunkTableOffset, CurrentLookupTableOffset, "UInt")
 				NumPut(FunctionNameRVA - 2, pBuffer + HintNameTableOffset, CurrentLookupTableOffset, "UInt")
 				CurrentLookupTableOffset += 8
 				
-				CurrentStringOffset += StrPut(FunctionName, pBuffer + CurrentStringOffset, StrLen(FunctionName) + 1, "UTF-8") + 2
+				CurrentStringOffset += StrPut(FunctionName, pStrings + CurrentStringOffset, StrLen(FunctionName) + 1, "UTF-8") + 2
 			}
 			
 			CurrentLookupTableOffset += 8
@@ -528,8 +565,52 @@ class PEBuilder {
 		this.FileData[IDataFilePointer] := IDataBytes
 	}
 	
+	BuildReloc(RelocSize, RelocFilePointer) {
+		static ABSOLUTE := 0
+		static HIGHLOW := 3
+		static DIR64 := 10
+		
+		VarSetCapacity(Buffer, RelocSize, 0)
+		pBuffer := &Buffer
+		Offset := 0
+		
+		for PageRVA, RelocationsInPage in this.PageRelocations {
+			ThisPageRelocationCount := RelocationsInPage.Count()
+			
+			RelocationBlockSize := 8 + (2 * ThisPageRelocationCount)
+			
+			PaddingSpace := Mod(RelocationBlockSize, 32)
+			
+			NumPut(PageRVA, pBuffer + Offset, 0, "Int")
+			NumPut(RelocationBlockSize, pBuffer + Offset, 4, "Int")
+			
+			Offset += 8
+			
+			for k, RelocationOffset in RelocationsInPage {
+				NumPut(this.MakeRelocationEntry(DIR64, RelocationOffset), pBuffer + Offset, 0, "Short")
+				Offset += 2
+			}
+			
+			Offset += PaddingSpace
+		}
 	
-	AddCodeSection(Name, Bytes) {
+		RelocBytes := []
+		
+		loop, % RelocSize {
+			RelocBytes.Push(NumGet(pBuffer + 0, A_Index - 1, "UChar"))
+		}
+		
+		this.FileData[RelocFilePointer] := RelocBytes
+	}
+	
+	MakeRelocationEntry(RelocationType, OffsetInPage) {
+		Value := 0
+		Value |= RelocationType << 12
+		Value |= OffsetInPage & ((2 << 11) - 1)
+		return Value
+	}
+	
+	AddCodeSection(Name, Bytes) {	
 		if (this.SizeOfCode = 0) {
 			this.BaseOfCode := this.NextSectionRVA
 		}
@@ -591,22 +672,18 @@ class PEBuilder {
 						FunctionName := Byte[3]
 						
 						if !(this.Imports.HasKey(DllName)) {
-							this.Imports[DllName] := {"Functions": [], "TableIndex": (this.Imports.Count() - 1), "NameLengths": 0}
+							this.Imports[DllName] := []
 							
 							this.TotalImportNameLengths += StrLen(DllName) + 3
 						}
 						
-						ThisDll := this.Imports[DllName]
+						this.Imports[DllName].Push(FunctionName)
 						
-						ThisDll.Functions.Push(FunctionName)
-						
-						NameLength := StrLen(FunctionName) + 3
-						
-						ThisDll.NameLengths += NameLength
-						this.TotalImportNameLengths += NameLength
+						this.TotalImportNameLengths += StrLen(FunctionName) + 3
 						this.ImportFunctionCount++
 						
-						LinkedBytes.Push(["IAT", ThisDll.TableIndex, ThisDll.Functions.Count() - 1])
+						LinkedBytes.Push(["IAT", FunctionName "@" DllName])
+						this.AddRelocation(this.NextSectionRVA, k - 1)
 					}
 				}
 			}
@@ -618,6 +695,19 @@ class PEBuilder {
 		return LinkedBytes
 	}
 	
+	AddRelocation(PageRVA, OffsetInPage) {
+		if (OffsetInPage >= this.SectionAlignment) {
+			PageRVA += Floor(OffsetInPage / this.SectionAlignment)
+			OffsetInPage := Mod(OffsetInPage, this.SectionAlignment)
+		}
+		
+		if !(this.PageRelocations.HasKey(PageRVA)) {
+			this.PageRelocations[PageRVA] := []
+		}
+		
+		this.PageRelocations[PageRVA].Push(OffsetInPage)
+		this.RelocationCount++
+	}
 	
 	StringToInt64(String) {
 		Int := 0
@@ -663,10 +753,6 @@ DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualA
 DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
 
 define Int64 T2() {
-	CloseHandle(1)
-	VirtualAlloc(0, 0, 0, 0)
-	VirtualFree(0, 0, 0)
-	
 	return MessageBoxA(0, "body text here aaaa more than 8 chars", "title text", 0)
 }
 
@@ -675,5 +761,5 @@ define Int64 T2() {
 PECompiler := LanguageName.CompileForPE(Code)
 
 P := new PEBuilder()
-P.AddCodeSection(".text", PECompiler.CodeGen.Link(True))
+P.AddCodeSection(".text", [0, 0, 0, 0, 0, PECompiler.CodeGen.Link(True)*])
 P.Build(A_ScriptDir "\test.exe")
