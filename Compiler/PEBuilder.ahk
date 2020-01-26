@@ -342,8 +342,8 @@ class PEBuilder {
 		PE.MajorOSVersion(MAJOR_MIN_OS_VERSION), PE.MinorOSVersion(MINOR_MIN_OS_VERSION)
 		PE.MajorSubsystemVersion(MAJOR_MIN_OS_VERSION), PE.MinorSubsystemVersion(MINOR_MIN_OS_VERSION)
 		
-		PE.MajorLinkerVersion(14)
-		PE.MinorLinkerVersion(24)
+		PE.MajorLinkerVersion(6)
+		PE.MinorLinkerVersion(9)
 		
 		PE.Win32Version(0)
 		

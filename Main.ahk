@@ -9,18 +9,29 @@
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
 ; TODO: Redo modules, find a way to make them work better with the runtime functions
+; TODO: Figure out how to do ArgC/ArgV
+; TODO: UTF-16 support
 
 ; TODO: Switch modules to be baked into syntax
+
+; 6276 lines
 
 Code = 
 ( % 
 DllImport Int64 MessageBoxA(Int64*, Int8*, Int8*, Int32) {User32.dll, MessageBoxA}
+DllImport Int64 MessageBoxW(Int64*, Int16*, Int16*, Int32) {User32.dll, MessageBoxW}
 DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
 DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
 DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
 
-define Int64 Main() {
-	return MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
+define Int64 Main(Int64 ArgC, void* ArgV) {
+	for (Int64 Index := 0, Index < ArgC, Index++) {
+		Int16* NextArg := *(ArgV + (Index * 8))
+		MessageBoxW(0, NextArg, NextArg, 0)
+	}
+	
+	MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
+	return ArgC
 }
 
 )
@@ -45,7 +56,11 @@ define Int64 Main() {
 ;	return 0
 ;}
 
-MsgBox, % LanguageName.CompileToEXE(Code)
+Start := A_TickCount
+LanguageName.CompileToEXE(Code)
+End := A_TickCount
+MsgBox, % "Done, took: " End - Start " ms"
+;MsgBox, % LanguageName.CompileToEXE(Code)
 
 ;MsgBox, % LanguageName.FormatCode(Code)
 MsgBox, % LanguageName.CompileToAHKFunctions(Code)

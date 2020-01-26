@@ -203,7 +203,10 @@
 			ResultType := this.Typing.GetType("Int64")
 		}
 		else if (OperatorClasses.IsClass(Expression.Operator, "Division")) {
-			this.CodeGen.Push(RDX)
+			if (ResultRegister.Number != RDX.Number) {
+				this.CodeGen.Push(RDX)
+			}
+			
 			this.CodeGen.Move(RAX, LeftRegister)
 			this.CodeGen.Move(RBX, RightRegister)
 		}
@@ -260,7 +263,9 @@
 		}
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Division")) {
-			this.CodeGen.Pop(RDX)
+			if (ResultRegister.Number != RDX.Number) {
+				this.CodeGen.Pop(RDX)
+			}
 		}
 		
 		;this.CodeGen.Push(RAX), this.StackDepth++
@@ -277,22 +282,48 @@
 		if (OperatorString = "--" || OperatorString = "++") {
 			VariableSIB := this.GetVariableSIB(Expression.Operand)
 			
-			Switch (Operator.Type) {
-				Case Tokens.PLUS_PLUS_L: {
-					this.CodeGen.Inc_SIB(VariableSIB)
-					this.GetVariable(Expression.Operand)
+			OperandType := this.GetVariableType(Expression.Operand)
+			
+			if (OperandType.Pointer) {
+				ChangeBy := Floor(OperandType.Pointer.Precision / 8)
+				
+				Switch (Operator.Type) {
+					Case Tokens.PLUS_PLUS_L: {
+						this.CodeGen.SmallAddSIB(VariableSIB, ChangeBy)
+						this.GetVariable(Expression.Operand)
+					}
+					Case Tokens.PLUS_PLUS_R: {
+						this.GetVariable(Expression.Operand)
+						this.CodeGen.SmallAddSIB(VariableSIB, ChangeBy)
+					}
+					Case Tokens.MINUS_MINUS_L: {
+						this.CodeGen.SmallSubSIB(VariableSIB, ChangeBy)
+						this.GetVariable(Expression.Operand)
+					}
+					Case Tokens.MINUS_MINUS_R: {
+						this.GetVariable(Expression.Operand)
+						this.CodeGen.SmallSubSIB(VariableSIB, ChangeBy)
+					}
 				}
-				Case Tokens.PLUS_PLUS_R: {
-					this.GetVariable(Expression.Operand)
-					this.CodeGen.Inc_SIB(VariableSIB)
-				}
-				Case Tokens.MINUS_MINUS_L: {
-					this.CodeGen.Dec_SIB(VariableSIB)
-					this.GetVariable(Expression.Operand)
-				}
-				Case Tokens.MINUS_MINUS_R: {
-					this.GetVariable(Expression.Operand)
-					this.CodeGen.Dec_SIB(VariableSIB)
+			}
+			else {
+				Switch (Operator.Type) {
+					Case Tokens.PLUS_PLUS_L: {
+						this.CodeGen.Inc_SIB(VariableSIB)
+						this.GetVariable(Expression.Operand)
+					}
+					Case Tokens.PLUS_PLUS_R: {
+						this.GetVariable(Expression.Operand)
+						this.CodeGen.Inc_SIB(VariableSIB)
+					}
+					Case Tokens.MINUS_MINUS_L: {
+						this.CodeGen.Dec_SIB(VariableSIB)
+						this.GetVariable(Expression.Operand)
+					}
+					Case Tokens.MINUS_MINUS_R: {
+						this.GetVariable(Expression.Operand)
+						this.CodeGen.Dec_SIB(VariableSIB)
+					}
 				}
 			}
 			

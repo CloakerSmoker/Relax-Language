@@ -409,14 +409,21 @@ class Builtins {
 	class __Runtime__ {
 		static Code := "
 		(
-			DllImport void ExitProcess(Int32) {Kernel32.dll, ExitProcess}
+			DllImport Int16* __GetCommandLineW__() {Kernel32.dll, GetCommandLineW}
+			DllImport void* __CommandLineToArgvW__(Int16*, Int64*) {Shell32.dll, CommandLineToArgvW}
+			
+			DllImport void __LocalFree__(void*) {Kernel32.dll, LocalFree}
+			DllImport void __ExitProcess__(Int32) {Kernel32.dll, ExitProcess}
 			
 			define void __RunTime__CallMain__() {
-				__RunTime__ReturnFromMain__(Main())
-			}
-			
-			define void __RunTime__ReturnFromMain__(Int32 __ExitCode__) {
-				return ExitProcess(__ExitCode__)
+				Int64 __ArgC__ := 0
+				void* __ArgV__ := __CommandLineToArgvW__(__GetCommandLineW__(), &__ArgC__)
+				
+				Int32 __ExitCode__ := (Main(__ArgC__, __ArgV__) as Int32)
+				
+				__LocalFree__(__ArgV__)
+				
+				__ExitProcess__(__ExitCode__)
 			}
 		)"
 	}

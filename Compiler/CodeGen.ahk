@@ -384,6 +384,14 @@ class X64CodeGen {
 		
 		this.Add_R64_R64(Register, RBX)
 	}
+	SmallAddSIB(SIB, Number) {
+		this.SmallMove(RBX, Number)
+		
+		this.Add_SIB_R64(SIB, RBX)
+	}
+	Add_SIB_R64(SIB, Register) {
+		this.REXOpcodeModSIB([0x01], Register, SIB, {"REX": [REX.W]})
+	}
 	Add_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x03], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
@@ -409,6 +417,14 @@ class X64CodeGen {
 		
 		this.Sub_R64_R64(Register, RBX)
 	}
+	SmallSubSIB(SIB, Number) {
+		this.SmallMove(RBX, Number)
+		
+		this.Sub_SIB_R64(SIB, RBX)
+	}
+	Sub_SIB_R64(SIB, Register) {
+		this.REXOpcodeModSIB([0x29], Register, SIB, {"REX": [REX.W]})
+	}
 	Sub_R64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x2B], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
@@ -418,7 +434,7 @@ class X64CodeGen {
 	Sub_R64_I32(Register, Integer) {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.W]})
 		this.SplitIntoBytes32(Integer.Value)
-	}	
+	}
 	Sub_R64_I16(Register, Integer) {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
 		this.PushByte(Integer.Value & 0x00FF)
