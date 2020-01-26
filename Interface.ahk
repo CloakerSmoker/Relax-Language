@@ -331,6 +331,7 @@ class CompiledProgram {
 
 Module.Add("Handle", Builtins.Handle) ; Add some built in modules
 Module.Add("Memory", Builtins.Memory)
+Module.Add("Console", Builtins.Console)
 
 class Module {
 	static Modules := {}
@@ -406,11 +407,32 @@ class Builtins {
 		)"
 	}
 	
+	class Console {
+		static Code := "
+		(
+			DllImport Int64 Console_GetStdHandle(Int32) {Kernel32.dll, GetStdHandle}
+			DllImport Int8 Console_WriteConsole(Int64, Int16*, Int32, Int32*, void) {Kernel32.dll, WriteConsoleW}
+			
+			inline Int64 GetHandle(Int32 StreamID) {
+				return Console_GetStdHandle(-10 - StreamID)
+			}
+			inline Int32 Write(Int64 Console, Int16* Text, Int32 TextLength) {
+				Int32 Out_CharactersWritten := 0
+				
+				Console_WriteConsole(Console, Text, TextLength, &Out_CharactersWritten, 0)
+				
+				return Out_CharactersWritten
+			}
+		)"
+	}
+	
 	class __Runtime__ {
 		static Code := "
 		(
 			DllImport Int16* __GetCommandLineW__() {Kernel32.dll, GetCommandLineW}
 			DllImport void* __CommandLineToArgvW__(Int16*, Int64*) {Shell32.dll, CommandLineToArgvW}
+			
+			
 			
 			DllImport void __LocalFree__(void*) {Kernel32.dll, LocalFree}
 			DllImport void __ExitProcess__(Int32) {Kernel32.dll, ExitProcess}

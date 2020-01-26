@@ -13,6 +13,10 @@
 ; TODO: UTF-16 support
 
 ; TODO: Switch modules to be baked into syntax
+; TODO: Modules have to just flat out be redone
+; With compiling to EXE being a thing, and inline functions being so gimped to debug
+;  it's time to work modules into a real thing. I'm thinking that every time a module is called, we should merge
+;   namespaces, and have tokens track their own source for throwing errors
 
 ; 6276 lines
 
@@ -25,15 +29,16 @@ DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualA
 DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
 
 define Int64 Main(Int64 ArgC, void* ArgV) {
+	Int64 STDIN := Console:GetHandle(1)
+	
 	for (Int64 Index := 0, Index < ArgC, Index++) {
 		Int16* NextArg := *(ArgV + (Index * 8))
-		MessageBoxW(0, NextArg, NextArg, 0)
+		Console:Write(STDIN, NextArg, 3)
 	}
 	
 	MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
 	return ArgC
 }
-
 )
 
 ;define Int64 Test3(Int64 B) {if (B >= 2) {return 20} return 90}

@@ -98,7 +98,7 @@
 		this.CodeGen.Move(R15, RSP)
 		
 		this.Variables := OurVariables
-		this.Typing.Variables := OurVariables
+		this.Typing.Variables := OurTypingVariables
 		this.Function := DefineAST
 		this.Locals := DefineAST.Locals
 		this.HasReturn := False
