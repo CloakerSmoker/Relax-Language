@@ -41,13 +41,6 @@ SplitIntoBytes64(Integer) {
 	return [FirstFour[1], FirstFour[2], FirstFour[3], FirstFour[4], LastFour[1], LastFour[2], LastFour[3], LastFour[4]]
 }
 
-IntToI(IntNumber) {
-	return StrReplace(IntNumber, "Int", "I")
-}
-IToInt(INumber) {
-	return StrReplace(INumber, "I", "Int")
-}
-
 class Mode {
 	static RToR := 3
 	static SIBToR := 0

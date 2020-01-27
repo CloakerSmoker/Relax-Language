@@ -212,8 +212,8 @@
 			return this.CastPath(FromType, ToType.Pointer)
 		}
 		else if (FromType.Family != "Pointer" && ToType.Family != "Pointer") {
-			IntegerBridgeType := this.GetType("Int64")
-			DoubleBridgeType := this.GetType("Double")
+			IntegerBridgeType := this.GetType("i64")
+			DoubleBridgeType := this.GetType("f64")
 			
 			if (FromType.Family = "Integer") {
 				FirstBridge := IntegerBridgeType

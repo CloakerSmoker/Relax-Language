@@ -176,7 +176,7 @@
 		
 		if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {
 			; For comparisons, the result was already CMove'd into the result register, so no need to pop it
-			ResultType := this.Typing.GetType("Int64")
+			ResultType := this.Typing.GetType("i64")
 		}
 		else {
 			this.CodeGen.Push(ResultRegister)
@@ -200,7 +200,7 @@
 			this.CodeGen.Cmp(LeftRegister, RightRegister) ; All comparison operators have a prelude of a CMP instruction
 			this.CodeGen.Move(ResultRegister, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
 			
-			ResultType := this.Typing.GetType("Int64")
+			ResultType := this.Typing.GetType("i64")
 		}
 		else if (OperatorClasses.IsClass(Expression.Operator, "Division")) {
 			if (ResultRegister.Number != RDX.Number) {
@@ -425,9 +425,7 @@
 		NewValueRegister := this.PopRegisterStack()
 		PointerRegister := this.PopRegisterStack()
 		
-		ShortTypeName := IntToI(LeftValueType.Name)
-		
-		this.CodeGen["Move_R" ShortTypeName "_R64"].Call(this.CodeGen, PointerRegister, NewValueRegister)
+		this.CodeGen["Move_R" LeftValueType.Name "_R64"].Call(this.CodeGen, PointerRegister, NewValueRegister)
 		
 		this.CodeGen.Move(this.PushRegisterStack(), NewValueRegister)
 		

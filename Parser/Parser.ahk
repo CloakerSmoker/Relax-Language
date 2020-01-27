@@ -166,7 +166,7 @@
 		}
 		
 		Params := this.ParseParamGrouping(True) ; True = don't bother consuming a token after each time name so
-		; (Int16, Int32) is valid, and (Int16 A, Int16 B) isn't
+		; (i16, i32) is valid, and (i16 A, i16 B) isn't
 		
 		this.Consume(Tokens.LEFT_BRACE, "DllImport statements require a '{' after the parameter type list")
 		DllName := this.Consume(Tokens.IDENTIFIER, "DllImport file names must be IDENTIFIERs").Value

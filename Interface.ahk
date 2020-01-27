@@ -131,7 +131,7 @@ class CompiledProgram {
 	GetAHKType(TypeName) {
 		; Converts types that don't exist in the eyes of DllCall into regular DllCall types
 		
-		static AHKTypes := {"Int8": "Char", "Int16": "Short", "Int32": "Int", "void": "Int64"}
+		static AHKTypes := {"i8": "Char", "i16": "Short", "i32": "Int", "i64": "Int64", "void": "Int64", "f32": "float", "f64": "double"}
 	
 		if (AHKTypes.HasKey(TypeName)) {
 			return AHKTypes[TypeName]
@@ -321,10 +321,6 @@ class CompiledProgram {
 	}
 }
 
-Module.Add("Handle", Builtins.Handle) ; Add some built in modules
-Module.Add("Memory", Builtins.Memory)
-Module.Add("Console", Builtins.Console)
-
 class Module {
 	static Modules := {}
 	
@@ -364,76 +360,22 @@ class Module {
 }
 
 class Builtins {
-	class Handle {
-		static Code := "
-		(
-			DllImport Int8 CloseHandle(Int64) {Kernel32.dll, CloseHandle}
-		
-			inline Int8 Close(Int64 Handle) {
-				return CloseHandle(Handle)
-			}
-		)"
-	}
-
-	class Memory {
-		static Code := "
-		(
-			DllImport void* VirtualAlloc(void*, Int32, Int32, Int32) {Kernel32.dll, VirtualAlloc}
-			DllImport Int8 VirtualFree(void*, Int32, Int32) {Kernel32.dll, VirtualFree}
-			
-			inline void* Alloc(Int32 Count) {
-				/*
-					MEM_RESERVE_COMMIT := 0x00001000 | 0x00002000
-					PAGE_READWRITE := 0x04
-				*/
-				
-				return VirtualAlloc(0, Count, 0x00001000 | 0x00002000, 0x04)
-			}
-			inline Int64 Free(void* Memory) {
-				/*
-					MEM_RELEASE := 0x00008000
-				*/ 
-				
-				return VirtualFree(Memory, 0, 0x00008000)
-			}
-		)"
-	}
-	
-	class Console {
-		static Code := "
-		(
-			DllImport Int64 Console_GetStdHandle(Int32) {Kernel32.dll, GetStdHandle}
-			DllImport Int8 Console_WriteConsole(Int64, Int16*, Int32, Int32*, void) {Kernel32.dll, WriteConsoleW}
-			
-			inline Int64 GetHandle(Int32 StreamID) {
-				return Console_GetStdHandle(-10 - StreamID)
-			}
-			inline Int32 Write(Int64 Console, Int16* Text, Int32 TextLength) {
-				Int32 Out_CharactersWritten := 0
-				
-				Console_WriteConsole(Console, Text, TextLength, &Out_CharactersWritten, 0)
-				
-				return Out_CharactersWritten
-			}
-		)"
-	}
-	
 	class __Runtime__ {
 		static Code := "
 		(
-			DllImport Int16* __GetCommandLineW__() {Kernel32.dll, GetCommandLineW}
-			DllImport void* __CommandLineToArgvW__(Int16*, Int64*) {Shell32.dll, CommandLineToArgvW}
+			DllImport i16* __GetCommandLineW__() {Kernel32.dll, GetCommandLineW}
+			DllImport void* __CommandLineToArgvW__(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
 			
 			
 			
 			DllImport void __LocalFree__(void*) {Kernel32.dll, LocalFree}
-			DllImport void __ExitProcess__(Int32) {Kernel32.dll, ExitProcess}
+			DllImport void __ExitProcess__(i32) {Kernel32.dll, ExitProcess}
 			
 			define void __RunTime__CallMain__() {
-				Int64 __ArgC__ := 0
+				i64 __ArgC__ := 0
 				void* __ArgV__ := __CommandLineToArgvW__(__GetCommandLineW__(), &__ArgC__)
 				
-				Int32 __ExitCode__ := (Main(__ArgC__, __ArgV__) as Int32)
+				i32 __ExitCode__ := (Main(__ArgC__, __ArgV__) as i32)
 				
 				__LocalFree__(__ArgV__)
 				

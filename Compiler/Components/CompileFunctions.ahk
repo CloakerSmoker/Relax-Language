@@ -76,7 +76,7 @@
 
 		for k, String in DefineAST.Strings {		
 			this.AddVariable(StackSpace, "__String__" String.Value)
-			this.Typing.AddVariable("Int8*", "__String__" String.Value)
+			this.Typing.AddVariable("i8*", "__String__" String.Value)
 			
 			StackSpace += Ceil((StrLen(String.Value) + 1) / 8)
 			StringStartingOffsets[String.Value] := StackSpace
@@ -178,7 +178,7 @@
 
 			for k, String in DefineAST.Strings {
 				this.AddVariable(ParamSizes, "__String__" String.Value)
-				this.Typing.AddVariable("Int8*", "__String__" String.Value)
+				this.Typing.AddVariable("i8*", "__String__" String.Value)
 			
 				ParamSizes += Ceil((StrLen(String.Value) + 1) / 8)
 				StringStartingOffsets[String.Value] := ParamSizes
@@ -276,7 +276,7 @@
 			this.Typing.AddVariable(Type, Name)
 
 			if (A_Index <= 4) {
-				if (Type = "Double" || Type = "Float") {
+				if (Type = "f64" || Type = "f32") {
 					this.CodeGen.Move_SIB_XMM(IndexSIB, XMMFirstFour[TrueIndex + 1])
 				}
 				else {

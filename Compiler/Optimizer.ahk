@@ -164,7 +164,7 @@
 			
 			NewContext := NewLeft.Context.Merge(NewRight.Context) ; Merge contexts so errors don't go haywire
 			
-			static TokenTypesToRealTypes := {Tokens.INTEGER: "Int64", Tokens.DOUBLE: "Double"}
+			static TokenTypesToRealTypes := {Tokens.INTEGER: "i64", Tokens.DOUBLE: "f64"}
 			static TypeFamilyToTokenType := {"Decimal": Tokens.DOUBLE, "Integer": Tokens.INTEGER}
 			
 			if (OperatorClasses.IsClass(Expression.Operator, "Equality", "Comparison")) {

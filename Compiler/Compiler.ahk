@@ -203,12 +203,12 @@
 					this.CodeGen.Move_R64_I64(ResultRegister, I64(IntegerValue))
 				}
 				
-				return this.Typing.GetType("Int" this.CodeGen.NumberSizeOf(IntegerValue, True))
+				return this.Typing.GetType(this.CodeGen.NumberSizeOf(IntegerValue, False))
 			}
 			Case Tokens.DOUBLE: {
 				this.CodeGen.Move_R64_I64(ResultRegister, I64(FloatToBinaryInt(TargetToken.Value)))
 				
-				return this.Typing.GetType("Double")
+				return this.Typing.GetType("f64")
 			}
 			Case Tokens.STRING: {
 				if (this.Features & this.UseStackStrings) {
@@ -227,7 +227,7 @@
 					this.CodeGen.Move_String_Pointer(ResultRegister, TargetToken.Value)
 				}
 				
-				return this.Typing.GetType("Int8*")
+				return this.Typing.GetType("i8*")
 			}
 			Default: {
 				new Error("Compile")
@@ -260,7 +260,7 @@
 		}
 		
 		for k, Pair in Path {
-			Name := "Cast_" IntToI(Pair[1].Name) "_" IntToI(Pair[2].Name)
+			Name := "Cast_" Pair[1].Name "_" Pair[2].Name
 		
 			if (Base.HasKey(Name)) {
 				Base[Name].Call(this)
@@ -285,26 +285,26 @@
 		this.CodeGen.CDQE()
 	}
 	Cast_I64_I8() {
-		this.Cast(this.Typing.GetType("Int8"), this.Typing.GetType("Int64"), True)
+		this.Cast(this.Typing.GetType("i8"), this.Typing.GetType("i64"), True)
 	}
 	Cast_I64_Void() {
 	}
 	Cast_Void_I64() {
 	}
-	Cast_I64_Double() {
+	Cast_I64_F64() {
 		this.CodeGen.Push(RAX), this.StackDepth++
 		this.CodeGen.FILD_Stack()
 		this.CodeGen.FSTP_Stack()
 		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
-	Cast_Double_I64() {
+	Cast_F64_I64() {
 		this.CodeGen.Push(RAX), this.StackDepth++
 		this.CodeGen.FISTP_Stack()
 		this.CodeGen.FSTP_Stack()
 		this.CodeGen.Pop(RAX), this.StackDepth--
 	}
-	Cast_I32_Float() {
+	Cast_I32_F32() {
 	}
-	Cast_Float_I32() {
+	Cast_F32_I32() {
 	}
 }
