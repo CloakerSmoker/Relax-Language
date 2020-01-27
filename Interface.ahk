@@ -111,7 +111,7 @@ class CompiledProgram {
 		
 		LinkedCode := CodeGen.Link() ; Fixes up label offsets, allocates space for globals, and so on
 		; At this point the code is fully compiled, and can run
-	
+		
 		pMemory := this.pMemory := DllCall("VirtualAlloc", "UInt64", 0, "Ptr", LinkedCode.Count(), "Int", 0x00001000 | 0x00002000, "Int", 0x04)
 		; Allocate some RW memory
 		
@@ -122,17 +122,9 @@ class CompiledProgram {
 		DllCall("VirtualProtect", "Ptr", pMemory, "Ptr", LinkedCode.Count(), "UInt", 0x20, "UInt*", OldProtection)
 		; Switch the memory to X
 		
-		try {
-			this.CallFunction("Main") ; And try to call Main, this will fail when the program doesn't define Main
-		}
-		
 		OnExit(this.Delete.Bind(this)) ; OnExit, bind freeing the memory we wrote the compiled code into
 	}
 	Delete() {
-		try {
-			this.CallFunction("Exit") ; Try to call the exit function, doesn't really matter if it works or not
-		}
-		
 		DllCall("VirtualFree", "Ptr", this.pMemory, "Ptr", 0, "UInt", 0x00008000) ; Free our memory
 	}
 	

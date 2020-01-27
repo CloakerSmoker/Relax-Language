@@ -3,34 +3,34 @@
 		class Integer {
 			static Weight := 0
 		
-			class Int64 {
+			class i64 {
 				static Precision := 64
-				static Decimal := "Double"
+				static Decimal := "f64"
 			}
 			class Void {
 				static Precision := 64
 			}
-			class Int32 {
+			class i32 {
 				static Precision := 32
-				static Decimal := "Float"
+				static Decimal := "f32"
 			}
-			class Int16 {
+			class i16 {
 				static Precision := 16
 			}
-			class Int8 {
+			class i8 {
 				static Precision := 8
 			}
 		}
 		class Decimal {
 			static Weight := 1
 		
-			class Double {
+			class f64 {
 				static Precision := 64
-				static Integer := "Int64"
+				static Integer := "i64"
 			}
-			class Float {
+			class f32 {
 				static Precision := 32
-				static Integer := "Int32"
+				static Integer := "i32"
 			}
 		}
 		class Pointer {

@@ -213,9 +213,9 @@
 			this.CodeGen.SmallMove(RSI, 0)
 			this.CodeGen.SmallMove(RDI, 1)
 			
-			this.FunctionParameters(DefineAST.Params)
-			
 			this.StackStrings(DefineAST, StringStartingOffsets)
+			
+			this.FunctionParameters(DefineAST.Params)
 			
 			for k, LocalDefault in DefineAST.Locals {
 				if (LocalDefault[2].Type != ASTNodeTypes.None) {
