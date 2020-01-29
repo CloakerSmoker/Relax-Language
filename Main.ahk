@@ -5,6 +5,8 @@
 #Include %A_ScriptDir%
 #Include Interface.ahk
 
+SetBatchLines, -1
+
 ; TODO: Pick a name
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
@@ -23,14 +25,15 @@ Code =
 ( % 
 DllImport i64 MessageBoxA(i64*, i8*, i8*, i32) {User32.dll, MessageBoxA}
 DllImport i64 MessageBoxW(i64*, i16*, i16*, i32) {User32.dll, MessageBoxW}
-DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
-DllImport void* VirtualAlloc(void*, i32, i32, i32) {Kernel32.dll, VirtualAlloc}
-DllImport i8 VirtualFree(void*, i32, i32) {Kernel32.dll, VirtualFree} 
+
+i64 t := 0
 
 define i64 Main(i64 ArgC, void* ArgV) {
-	MessageBoxW(0, *ArgV, *ArgV, 0)
+	for (i64 Index := 0, Index < ArgC, Index++) {
+		i16* NextArg := *(ArgV + (Index * 8))
+		MessageBoxW(0, NextArg, NextArg, 0)
+	}
 	
-	MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
 	return ArgC
 }
 )
@@ -40,7 +43,8 @@ Start := A_TickCount
 LanguageName.CompileToEXE(Code)
 End := A_TickCount
 MsgBox, % "Done, took: " End - Start " ms`n`n" 
-
+exitapp
+;MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
 R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
 
 MsgBox, % R.Node.Stringify()

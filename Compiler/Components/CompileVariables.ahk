@@ -47,7 +47,7 @@
 		Name := NameToken.Value
 		
 		if (this.Globals.HasKey(Name)) {
-			return this.Typing.GetType(this.Globals[Name])
+			return this.Typing.GetType(this.Globals[Name].Type)
 		}
 		else {
 			try {

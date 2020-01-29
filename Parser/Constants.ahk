@@ -360,13 +360,15 @@ class Keywords extends Enum {
 	static Options := "
 	(
 		define
+		inline
 		dllimport
+		
 		return
 		if
 		else
 		for
-		global
-		inline
+		
+		module
 	)"
 }
 

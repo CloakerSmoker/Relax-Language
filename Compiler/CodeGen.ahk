@@ -754,7 +754,7 @@ class X64CodeGen {
 		this.Placeholder(["String", String], 7)
 	}
 	GlobalPlaceholder(Name) {
-		this.Placeholder(["Global", Name], 7)
+		this.Placeholder(["Global", Name, ".data"], 7)
 	}
 	Placeholder(Data, Count) {
 		this.Bytes.Push(Data)
@@ -827,6 +827,12 @@ class X64CodeGen {
 					}
 					
 					SkipBytes += 3
+				}
+				else if (Byte[1] = "Global" && LabelOnly) {
+					Byte.Push(Globals.Count() * 8)
+					LinkedBytes.Push(Byte)
+					Globals.Push(Byte)
+					Continue
 				}
 				else if (LabelOnly) {
 					LinkedBytes.Push(Byte)

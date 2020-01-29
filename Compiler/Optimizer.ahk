@@ -38,9 +38,8 @@
 		this.Function := FunctionNode
 		this.VariableIsStatic := {}
 		
-		for LocalName, LocalTypeAndDefaultValue in FunctionNode.Locals {
+		for LocalName, LocalType in FunctionNode.Locals {
 			this.VariableIsConstant[LocalName] := False ; A tracker for if a variable is constant
-			LocalTypeAndDefaultValue[2] := this.OptimizeLine(LocalTypeAndDefaultValue[2])
 		}
 		
 		for ParamName, ParamType in FunctionNode.Params {

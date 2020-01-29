@@ -105,7 +105,7 @@
 		
 		for LocalName, LocalType in DefineAST.Locals {
 			this.AddVariable(ParamCount + (k - 1), LocalName)
-			this.Typing.AddVariable(LocalType[1], LocalName)
+			this.Typing.AddVariable(LocalType, LocalName)
 		}
 		
 		for k, ParamPair in DefineAST.Params {
@@ -168,9 +168,9 @@
 		
 		ParamSizes := DefineAST.Params.Count()
 		
-		for LocalName, LocalType in DefineAST.Locals {
+		for LocalName, LocalInfo in DefineAST.Locals {
 			this.AddVariable(ParamSizes++, LocalName)
-			this.Typing.AddVariable(LocalType[1], LocalName)
+			this.Typing.AddVariable(LocalInfo.Type, LocalName)
 		}
 		
 		if (this.Features & this.UseStackStrings) {
@@ -217,14 +217,16 @@
 			
 			this.FunctionParameters(DefineAST.Params)
 			
-			for k, LocalDefault in DefineAST.Locals {
-				if (LocalDefault[2].Type != ASTNodeTypes.None) {
-					this.Compile(LocalDefault[2])
-				}
-			}
-			
 			for k, Statement in DefineAST.Body {
 				this.Compile(Statement)
+			}
+			
+			if (DefineAST.Name.Value = "__RunTime__SetGlobals") {
+				for GlobalName, GlobalInfo in this.Globals {
+					if (GlobalInfo.Initializer.Type != ASTNodeTypes.None) {
+						this.Compile(GlobalInfo.Initializer)
+					}
+				}
 			}
 			
 			if !(this.HasReturn) {

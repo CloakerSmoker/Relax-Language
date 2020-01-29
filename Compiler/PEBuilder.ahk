@@ -370,6 +370,7 @@ class PEBuilder {
 		
 		
 		this.Sections := []
+		this.SectionRVAs := {}
 		this.NextSectionRVA := this.SectionAlignment
 		
 		this.FileData := {}
@@ -456,7 +457,7 @@ class PEBuilder {
 		}
 		
 		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
-		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.Size + (this.SectionAlignment * 3), this.SectionAlignment))
+		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.NextSectionRVA + (this.SectionAlignment * 3) + this.Size, this.SectionAlignment))
 		
 		for k, Byte in this.COFFHeader.Build() {
 			F.WriteChar(Byte)
@@ -483,6 +484,10 @@ class PEBuilder {
 				else if (IsObject(Byte)) {
 					if (Byte[1] = "IAT") {
 						F.WriteUInt64(this.ImageBase + this.IDataRVA + this.IATOffsets[Byte[2]])
+						SkipBytes := 7
+					}
+					else if (Byte[1] = "SectionPointer") {
+						F.WriteUInt64(Byte[2])
 						SkipBytes := 7
 					}
 					else {
@@ -643,6 +648,7 @@ class PEBuilder {
 		NewSection.Characteristics(Characteristics)
 		NewSection.PointerToRawData(FilePointer)
 		
+		this.SectionRVAs[Name] := this.NextSectionRVA
 		this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + RoundedSize, this.SectionAlignment)
 		this.Sections.Push(NewSection)
 		
@@ -690,6 +696,17 @@ class PEBuilder {
 						this.ImportFunctionCount++
 						
 						LinkedBytes.Push(["IAT", FunctionName "@" DllName])
+						this.AddRelocation(this.NextSectionRVA, k - 1)
+					}
+					Case "Global": {
+						GlobalName := Byte[2]
+						SectionName := Byte[3]
+						SectionOffset := Byte[4]
+						
+						SectionRVA := this.SectionRVAs[SectionName]
+						
+						LinkedBytes.Push(["SectionPointer", this.ImageBase + SectionRVA + SectionOffset])
+						
 						this.AddRelocation(this.NextSectionRVA, k - 1)
 					}
 				}

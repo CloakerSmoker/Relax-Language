@@ -39,12 +39,12 @@
 	
 		this.CurrentProgram.Functions[FunctionName] := Node
 	}
-	AddLocal(Type, Name, Default) {
-		this.CurrentFunction.Locals[Name.Value] := [Type.Value, Default]
+	AddLocal(Type, Name) {
+		this.CurrentFunction.Locals[Name.Value] := {"Type": Type.Value}
 		return new ASTNodes.None()
 	}
-	AddGlobal(Type, Name) {
-		this.CurrentProgram.Globals[Name.Value] := Type.Value
+	AddGlobal(Type, Name, Initializer) {
+		this.CurrentProgram.Globals[Name.Value] := {"Type": Type.Value, "Initializer": Initializer}
 		return new ASTNodes.None()
 	}
 	AddString(Text) {
@@ -103,9 +103,10 @@
 			else if (Next.Value = Keywords.DLLIMPORT) {
 				return this.ParseDllImport()
 			}
-			else if (Next.Value = Keywords.GLOBAL) {
-				return this.ParseDeclaration(False) ; Parse a declaration, with no initialization allowed, since there's no time to run the initialization
-			}
+		}
+		else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
+			this.Index-- ; Backtrack to capture the type name again
+			return this.ParseDeclaration(False)
 		}
 		else if (Next.Type = Tokens.NEWLINE) {
 			return new ASTNodes.None()
@@ -214,7 +215,7 @@
 		
 		Initializer := new ASTNodes.None()
 		
-		if (this.NextMatches(Tokens.COLON_EQUAL) && AsLocal) {
+		if (this.NextMatches(Tokens.COLON_EQUAL)) {
 			this.Index -= 2
 			Initializer := this.ParseExpressionStatement()
 		}
@@ -232,11 +233,12 @@
 		}
 		
 		if (AsLocal) {
-			this.AddLocal(Type, Name, new ASTNodes.None())
+			this.AddLocal(Type, Name)
 			return Initializer
 		}
 		else {
-			this.AddGlobal(Type, Name, new ASTNodes.None())
+			this.AddGlobal(Type, Name, Initializer)
+			return new ASTNodes.None()
 		}
 	}
 	

@@ -26,7 +26,7 @@
 	static F0 := LanguageNameFlags.Features.DisableAll
 	static F1 := LanguageNameFlags.Features.EnableAll
 	
-	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.Features.DisableGlobals + LanguageNameFlags.Features.UseStackStrings
+	static ToAHK := LanguageNameFlags.F1 + LanguageNameFlags.Features.UseStackStrings
 }
 
 #Include %A_LineFile%\..\
@@ -43,7 +43,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.18"
+	static VERSION := "1.0.0-alpha.20"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -69,7 +69,14 @@ class LanguageName {
 		
 		MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain__"]
 		
+		GlobalBytes := []
+		
+		loop, % CodeCompiler.Globals.Count() * 8 {
+			GlobalBytes.Push(0)
+		}
+		
 		CodeEXEBuilder := new PEBuilder()
+		CodeEXEBuilder.AddSection(".data", GlobalBytes, SectionCharacteristics.PackFlags("rw initialized"))
 		CodeEXEBuilder.AddCodeSection(".text", CodeCompiler.CodeGen.Link(True), MainOffset)
 		CodeEXEBuilder.Build(EXEPath)
 		
@@ -371,7 +378,12 @@ class Builtins {
 			DllImport void __LocalFree__(void*) {Kernel32.dll, LocalFree}
 			DllImport void __ExitProcess__(i32) {Kernel32.dll, ExitProcess}
 			
+			define void __RunTime__SetGlobals() {
+				
+			}
 			define void __RunTime__CallMain__() {
+				__RunTime__SetGlobals()
+				
 				i64 __ArgC__ := 0
 				void* __ArgV__ := __CommandLineToArgvW__(__GetCommandLineW__(), &__ArgC__)
 				
