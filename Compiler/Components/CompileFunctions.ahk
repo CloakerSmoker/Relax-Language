@@ -331,33 +331,17 @@
 				ModuleName := ModuleExpression.Left.Value
 				ModuleFunctionName := ModuleExpression.Right.Value
 				
-				Try {
-					ModuleAST := Module.Find(ModuleName, ModuleFunctionName)
-						
-					for FunctionName, FunctionNode in ModuleAST.Functions {
-						if (FunctionNode.Type = ASTNodeTypes.DllImport) {
-							this.Program.Functions[FunctionNode.Name.Value] := FunctionNode
-						}
-					}
+				FunctionNode := this.Modules[ModuleName].Functions[ModuleFunctionName]
 					
-					FunctionNode := ModuleAST.Functions[ModuleFunctionName]
-					
-					if (FunctionNode.Keyword != Keywords.Inline) {
-						new Error("Module")
-							.LongText("All module functions must be inline.")
-							.ShortText("Is not inline.")
-							.Token(Expression)
-							.Source(this.Source)
-						.Throw()
-					}
-				}
-				catch {
+				if !(IsObject(FunctionNode)) {
 					new Error("Module")
-						.LongText(E.Message)
+						.LongText("Module or member not found.")
 						.Token(ModuleExpression)
 						.Source(this.Source)
 					.Throw()
 				}
+				
+				Expression.Target := {"Value": ModuleFunctionName}
 			}
 		}
 		else {

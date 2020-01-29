@@ -26,9 +26,13 @@ Code =
 DllImport i64 MessageBoxA(i64*, i8*, i8*, i32) {User32.dll, MessageBoxA}
 DllImport i64 MessageBoxW(i64*, i16*, i16*, i32) {User32.dll, MessageBoxW}
 
+Import Test
+
 i64 t := 0
 
 define i64 Main(i64 ArgC, void* ArgV) {
+	Test:t()
+	
 	for (i64 Index := 0, Index < ArgC, Index++) {
 		i16* NextArg := *(ArgV + (Index * 8))
 		MessageBoxW(0, NextArg, NextArg, 0)

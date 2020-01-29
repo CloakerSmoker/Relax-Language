@@ -76,7 +76,7 @@
 	}
 	
 	ParseProgram() {
-		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}}
+		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}, "Modules": []}
 	
 		while !(this.AtEOF()) {
 			try {
@@ -91,7 +91,7 @@
 			Throw, Exception("Critical error while parsing, aborting...")
 		}
 		
-		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals)
+		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals, Current.Modules)
 	}
 	ParseProgramStatement() {
 		Next := this.Next() ; A program is a list of DllImports/Defines, so this will only handle those two, and error for anything else
@@ -102,6 +102,10 @@
 			}
 			else if (Next.Value = Keywords.DLLIMPORT) {
 				return this.ParseDllImport()
+			}
+			else if (Next.Value = Keywords.IMPORT) {
+				this.CurrentProgram.Modules.Push(this.Next().Value)
+				return new ASTNodes.None()
 			}
 		}
 		else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {

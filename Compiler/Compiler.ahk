@@ -136,11 +136,23 @@
 		}
 		
 		this.Program := Program
-		this.Modules := {}
-		
 		this.FunctionOffsets := FunctionOffsets := {}
+		this.Modules := {}
 		FunctionOffset := 0
 		
+		for k, ModuleName in Program.Modules {
+			ModuleAST := Module.Find(ModuleName)
+			
+			for FunctionName, FunctionDefine in ModuleAST.Functions {
+				Program.Functions[FunctionName] := FunctionDefine
+			}
+			
+			for GlobalName, GlobalInfo in ModuleAST.Globals {
+				Program.Globals[GlobalName] := GlobalInfo
+			}
+			
+			this.Modules[ModuleName] := ModuleAST
+		}
 		
 		for FunctionName, FunctionDefine in Program.Functions {
 			FunctionOffsets[FunctionName] := FunctionOffset

@@ -337,7 +337,7 @@ class Module {
 	Add(Name, ModuleClass) {
 		this.Modules[Name] := {"Class": ModuleClass, "AST": False}
 	}
-	Find(Name, FunctionName) {
+	Find(Name) {
 		FoundModule := this.Modules[Name]
 		
 		if !(FoundModule) {
@@ -366,7 +366,21 @@ class Module {
 	}
 }
 
+Module.Add("Test", Builtins.Test)
+
 class Builtins {
+	class Test {
+		static Code := "
+		(
+			DllImport void MessageBeep(i32) {User32.dll, MessageBeep}
+			
+			define void t() {
+				MessageBeep(0)
+				return MessageBeep(0)
+			}
+		)"
+	}
+	
 	class __Runtime__ {
 		static Code := "
 		(

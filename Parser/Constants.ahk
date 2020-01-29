@@ -361,6 +361,7 @@ class Keywords extends Enum {
 	(
 		define
 		inline
+		import
 		dllimport
 		
 		return
@@ -423,8 +424,8 @@ class ASTNodes {
 
 	class Statements {
 		class Program extends ASTNode {
-			static Parameters := ["Functions", "Globals"]
-		
+			static Parameters := ["Functions", "Globals", "Modules"]
+			
 			Stringify() {
 				String := "/* " LanguageName.VERSION " */`n"
 				
@@ -435,7 +436,7 @@ class ASTNodes {
 				for k, FunctionDefine in this.Functions {
 					String .= FunctionDefine.Stringify()
 				}
-			
+				
 				return String
 			}
 		}
