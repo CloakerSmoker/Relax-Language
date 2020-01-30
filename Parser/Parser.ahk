@@ -375,7 +375,7 @@
 				Group.Push(new ASTNodes.Statements.If(this.ParseExpression(Tokens.LEFT_BRACE), this.ParseBlock()))
 			}
 			else {
-				Group.Push(new ASTNodes.Statements.If(new Token(Tokens.INTEGER, True, {}), this.ParseBlock()))
+				Group.Push(new ASTNodes.Statements.If(new Token(Tokens.INTEGER, True, {}, ""), this.ParseBlock()))
 				Break
 			}
 		}

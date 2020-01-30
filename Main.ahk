@@ -8,6 +8,7 @@
 SetBatchLines, -1
 
 ; TODO: Pick a name
+; TODO: Change string literals to be i16* instead of i8*, with Console using wide strings, it might as well be the default
 
 ; 6276 lines
 
@@ -33,15 +34,21 @@ define i64 Main(i64 ArgC, void* ArgV) {
 	Console:Blue()
 	i16* Input := Console:ReadLine()
 	
-	Console:Red()
+	if (String:WEquals(Input, String:AToW("abc"))) {
+		Console:Blue()
+	}
+	else {
+		Console:Red()
+	}
+	
 	Console:Write(String:AToW("You entered: "))
 	
-	Console:Blue()
 	Console:Write(Input)
 	
 	Console:ResetColors()
 }
 )
+;Console:Blue()
 ; MessageBoxW(0, NextArg, NextArg, 0)
 
 Start := A_TickCount

@@ -411,6 +411,45 @@ class Builtins {
 				return (Length / 2)
 			}
 			
+			define i8 WEquals(i16* WStringOne, i16* WStringTwo) {
+				return String:WEqual(String:WTrimNewline(WStringOne), String:WTrimNewline(WStringTwo))
+			}
+			
+			define i8 WEqual(i16* WStringOne, i16* WStringTwo) {
+				i32 LengthOne := String:WLen(WStringOne)
+				i32 LengthTwo := String:WLen(WStringTwo)
+				
+				if (LengthOne != LengthTwo) {
+					return 0
+				}
+				
+				for (i32 Index := 0, Index < LengthOne, Index++) {
+					i16 CharacterOne := *(WStringOne + (Index * 2))
+					i16 CharacterTwo := *(WStringTwo + (Index * 2))
+					
+					if (CharacterOne != CharacterTwo) {
+						return 0
+					}
+				}
+				
+				return 1
+			}
+			
+			define i16* WTrimNewline(i16* WString) {
+				i32 Length := String:WLen(WString) * 2
+				i8* AString := WString As i8*
+				
+				if (*(WString + Length - 2) = 0x0A) {
+					(WString + Length - 2) *= 0
+				}
+				
+				if (*(WString + Length - 4) = 0x0D) {
+					(WString + Length - 4) *= 0
+				}
+				
+				return WString
+			}
+			
 			Import Memory
 			
 			define void AReverse(i8* Buffer) {
