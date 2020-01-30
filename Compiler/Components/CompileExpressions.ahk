@@ -344,18 +344,20 @@
 			
 			Switch (OperandType.Pointer.Precision) {
 				Case 8: {
-					this.CodeGen.Move_R64_RI8(OperandResultRegister, OperandResultRegister)
+					this.CodeGen.Move_R64_RI8(RAX, OperandResultRegister)
 				}
 				Case 16: {
-					this.CodeGen.Move_R64_RI16(OperandResultRegister, OperandResultRegister)
+					this.CodeGen.Move_R64_RI16(RAX, OperandResultRegister)
 				}
 				Case 32: {
-					this.CodeGen.Move_R64_RI32(OperandResultRegister, OperandResultRegister)
+					this.CodeGen.Move_R64_RI32(RAX, OperandResultRegister)
 				}
 				Case 64: {
-					this.CodeGen.Move_R64_RI64(OperandResultRegister, OperandResultRegister)
+					this.CodeGen.Move_R64_RI64(RAX, OperandResultRegister)
 				}
 			}
+			
+			this.CodeGen.Move(OperandResultRegister, RAX)
 			
 			return OperandType.Pointer
 		}

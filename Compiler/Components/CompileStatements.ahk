@@ -24,16 +24,12 @@
 		for k, ElseIf in Statement.Options {
 			this.CodeGen.Label("__If__" Index)
 			
-			if (k != IfCount) {
-				; If this is the last else if, don't bother with the condition, since it is pretty much just 'else'
+			this.Compile(ElseIf.Condition)
 			
-				this.Compile(ElseIf.Condition)
-				
-				ResultRegister := this.PopRegisterStack()
-				
-				this.CodeGen.Cmp(ResultRegister, RSI)
-				this.CodeGen.JE("__If__" Index + 1)
-			}
+			ResultRegister := this.PopRegisterStack()
+			
+			this.CodeGen.Cmp(ResultRegister, RSI)
+			this.CodeGen.JE("__If__" Index + 1)
 			
 			for k, Line in ElseIf.Body {
 				this.Compile(Line)
@@ -56,6 +52,7 @@
 		this.PopRegisterStack() ; And discard the result
 		
 		this.CodeGen.Label("__For__" ThisIndex)
+		this.CurrentForLoop := "__For__" ThisIndex
 		
 		this.Compile(Statement.Condition) ; Check the condition
 		ConditionRegister := this.PopRegisterStack() ; Store the result

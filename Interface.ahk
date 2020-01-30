@@ -67,7 +67,7 @@ class LanguageName {
 		
 		CodeCompiler := this.CompileCode(CodeString, Flags)
 		
-		MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain__"]
+		MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain"]
 		
 		GlobalBytes := []
 		
@@ -366,17 +366,126 @@ class Module {
 	}
 }
 
-Module.Add("Test", Builtins.Test)
+
+Module.Add("Memory", Builtins.Memory)
+Module.Add("String", Builtins.String)
+Module.Add("Console", Builtins.Console)
 
 class Builtins {
-	class Test {
+	class Memory {
+		static Code = "
+		(
+			DllImport i64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
+			DllImport void* HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
+			DllImport i8 HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
+			
+			i64 ProcessHeap := GetProcessHeap()
+			i32 HEAP_ZERO_MEMORY := 0x00000008
+			
+			define void* Alloc(i64 Count) {
+				return HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Count)
+			}
+			define i8 Free(void* Memory) {
+				return HeapFree(ProcessHeap, 0, Memory)
+			}
+		)"
+	}
+	
+	class String {
 		static Code := "
 		(
-			DllImport void MessageBeep(i32) {User32.dll, MessageBeep}
+			define i32 ALen(i8* AString) {
+				for (i32 Length := 0, *(AString + Length) != 0, Length += 1) {
+				}
+				
+				return Length
+			}
+			define i32 WLen(i16* WString) {
+				for (i32 Length := 0, *(WString + Length) != 0, Length += 2) {
+				}
+				
+				return (Length / 2)
+			}
 			
-			define void t() {
-				MessageBeep(0)
-				return MessageBeep(0)
+			Import Memory
+			
+			define void AReverse(i8* Buffer) {
+				i8 Temp := 0
+				i32 Length := ALen(Buffer)
+				
+				for (i32 Index := 0, Index < Length, Index++) {
+					Temp := *(Buffer + Index)
+					(Buffer + Index) *= *(Buffer + Length - 1)
+					(Buffer + Length - 1) *= Temp
+					
+					Length--
+				}
+			}
+			
+			define i8* IToA(i64 Number) {
+				i8* Buffer := (Memory:Alloc(100) As i8*)
+				i8 Sign := 0
+				
+				if (Number < 0) {
+					Sign := 1
+					Number := -Number
+				}
+				
+				for (i32 Index := 0, Number > 0, Index++) {
+					(Buffer + Index) *= (Number % 10) + '0'
+					Number := Number / 10
+				}
+				
+				if (Sign) {
+					(Buffer + Index) *= '-'
+				}
+				
+				(Buffer + Index + 1) *= 0
+				
+				AReverse(Buffer)
+				
+				return Buffer
+			}
+			define i16* IToW(i64 Number) {
+				i8* AString := IToA(Number)
+				i16* WString := AToW(AString)
+				
+				Memory:Free(AString As void*)
+				
+				return WString
+			}
+			
+			define i16* AToW(i8* AString) {
+				i32 Length := ALen(AString)
+				i16* NewBuffer := (Memory:Alloc((Length * 2) + 2) As i16*)
+				
+				for (i32 Index := 0, Index < Length, Index++) {
+					(NewBuffer + (Index * 2)) *= *(AString + Index)
+				}
+				
+				return NewBuffer
+			}
+		)"
+	}
+	
+	class Console {
+		static Code := "
+		(
+			DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
+			DllImport i8 WriteConsole(i64, i16*, i32, i32*, i64) {Kernel32.dll, WriteConsoleW}
+			
+			Import String
+			
+			i64 STDIN := GetStdHandle(-10)
+			i64 STDOUT := GetStdHandle(-11)
+			i64 STDERR := GetStdHandle(-12)
+			
+			define i32 Write(i16* Characters) {
+				i32 CharactersWritten := 0
+				
+				WriteConsole(STDOUT, Characters, String:WLen(Characters), &CharactersWritten, 0)
+				
+				return CharactersWritten
 			}
 		)"
 	}
@@ -384,28 +493,28 @@ class Builtins {
 	class __Runtime__ {
 		static Code := "
 		(
-			DllImport i16* __GetCommandLineW__() {Kernel32.dll, GetCommandLineW}
-			DllImport void* __CommandLineToArgvW__(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+			DllImport i16* __GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+			DllImport void* __CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
 			
 			
 			
-			DllImport void __LocalFree__(void*) {Kernel32.dll, LocalFree}
-			DllImport void __ExitProcess__(i32) {Kernel32.dll, ExitProcess}
+			DllImport void __LocalFree(void*) {Kernel32.dll, LocalFree}
+			DllImport void __ExitProcess(i32) {Kernel32.dll, ExitProcess}
 			
 			define void __RunTime__SetGlobals() {
 				
 			}
-			define void __RunTime__CallMain__() {
+			define void __RunTime__CallMain() {
 				__RunTime__SetGlobals()
 				
-				i64 __ArgC__ := 0
-				void* __ArgV__ := __CommandLineToArgvW__(__GetCommandLineW__(), &__ArgC__)
+				i64 __ArgC := 0
+				void* __ArgV := __CommandLineToArgvW(__GetCommandLineW(), &__ArgC)
 				
-				i32 __ExitCode__ := (Main(__ArgC__, __ArgV__) as i32)
+				i32 __ExitCode := (Main(__ArgC, __ArgV) as i32)
 				
-				__LocalFree__(__ArgV__)
+				__LocalFree(__ArgV)
 				
-				__ExitProcess__(__ExitCode__)
+				__ExitProcess(__ExitCode)
 			}
 		)"
 	}

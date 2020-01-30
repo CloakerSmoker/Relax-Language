@@ -829,9 +829,13 @@ class X64CodeGen {
 					SkipBytes += 3
 				}
 				else if (Byte[1] = "Global" && LabelOnly) {
-					Byte.Push(Globals.Count() * 8)
+					if !(Globals.HasKey(Byte[2])) {
+						Globals[Byte[2]] := Globals.Count()
+					}
+					
+					Byte.Push(Globals[Byte[2]] * 8)
 					LinkedBytes.Push(Byte)
-					Globals.Push(Byte)
+					
 					Continue
 				}
 				else if (LabelOnly) {

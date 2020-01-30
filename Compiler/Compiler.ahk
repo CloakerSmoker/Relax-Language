@@ -140,19 +140,7 @@
 		this.Modules := {}
 		FunctionOffset := 0
 		
-		for k, ModuleName in Program.Modules {
-			ModuleAST := Module.Find(ModuleName)
-			
-			for FunctionName, FunctionDefine in ModuleAST.Functions {
-				Program.Functions[FunctionName] := FunctionDefine
-			}
-			
-			for GlobalName, GlobalInfo in ModuleAST.Globals {
-				Program.Globals[GlobalName] := GlobalInfo
-			}
-			
-			this.Modules[ModuleName] := ModuleAST
-		}
+		this.FlattenModuleList(Program)
 		
 		for FunctionName, FunctionDefine in Program.Functions {
 			FunctionOffsets[FunctionName] := FunctionOffset
@@ -167,6 +155,24 @@
 		}
 		else {
 			return new CompiledProgram(Program, this.CodeGen, FunctionOffsets, this.Modules)
+		}
+	}
+	
+	FlattenModuleList(ForProgram) {
+		for k, ModuleName in ForProgram.Modules {
+			ModuleAST := Module.Find(ModuleName)
+			
+			for FunctionName, FunctionDefine in ModuleAST.Functions {
+				this.Program.Functions[FunctionName] := FunctionDefine
+			}
+			
+			for GlobalName, GlobalInfo in ModuleAST.Globals {
+				this.Program.Globals[GlobalName] := GlobalInfo
+			}
+			
+			this.FlattenModuleList(ModuleAST)
+			
+			this.Modules[ModuleName] := ModuleAST
 		}
 	}
 
