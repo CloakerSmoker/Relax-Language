@@ -272,6 +272,15 @@
 			Case Keywords.FOR: {
 				return this.ParseFor()
 			}
+			Default: {
+				new Error("Parse")
+					.LongText("Unexpected statement.")
+					.ShortText("Is not allowed in this position.")
+					.Help("This keyword is only allowed outside of function definitions, and cannot be run conditionally or dynamically.")
+					.Token(this.Current())
+					.Source(this.Source)
+				.Throw()
+			}
 		}
 	}
 	

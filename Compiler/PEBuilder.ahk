@@ -690,10 +690,20 @@ class PEBuilder {
 							this.TotalImportNameLengths += StrLen(DllName) + 3
 						}
 						
-						this.Imports[DllName].Push(FunctionName)
+						AlreadyImported := False
 						
-						this.TotalImportNameLengths += StrLen(FunctionName) + 3
-						this.ImportFunctionCount++
+						for k, ImportName in this.Imports[DllName] {
+							if (ImportName = FunctionName) {
+								AlreadyImported := True
+							}
+						}
+						
+						if !(AlreadyImported) {
+							this.Imports[DllName].Push(FunctionName)
+							
+							this.TotalImportNameLengths += StrLen(FunctionName) + 3
+							this.ImportFunctionCount++
+						}
 						
 						LinkedBytes.Push(["IAT", FunctionName "@" DllName])
 						this.AddRelocation(this.NextSectionRVA, k - 1)
