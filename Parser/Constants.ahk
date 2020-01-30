@@ -369,6 +369,8 @@ class Keywords extends Enum {
 		if
 		else
 		for
+		continue
+		break
 		
 		module
 	)"
@@ -406,6 +408,7 @@ class ASTNodeTypes extends Enum {
 		IFGROUP
 		IF
 		FORLOOP
+		CONTINUEBREAK
 		
 		GROUPING
 		CALL
@@ -552,6 +555,14 @@ class ASTNodes {
 				String .= Indent "`n" Indent "};`n"
 				
 				return String
+			}
+		}
+		
+		class ContinueBreak extends ASTNode {
+			static Parameters := ["Keyword"]
+			
+			Stringify(Indent := "") {
+				return Indent this.Keyword.Stringify()
 			}
 		}
 	}

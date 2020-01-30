@@ -8,8 +8,6 @@
 SetBatchLines, -1
 
 ; TODO: Pick a name
-; TODO: Write more tests
-; TODO: Eventually find a smarted way to handle variables
 
 ; 6276 lines
 
@@ -23,6 +21,7 @@ define i64 Main(i64 ArgC, void* ArgV) {
 	Console:WriteLine(String:IToW(ArgC))
 	
 	Console:SetColor(1, 1, 0, 1, 0, 0, 0, 0)
+	
 	
 	for (i64 Index := 0, Index < ArgC, Index++) {
 		i16* NextArg := *(ArgV + (Index * 8))

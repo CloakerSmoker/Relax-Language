@@ -136,6 +136,7 @@
 		}
 		
 		this.Program := Program
+		this.CurrentForLoop := False
 		
 		this.Modules := {}
 		this.ModuleFunctions := {}

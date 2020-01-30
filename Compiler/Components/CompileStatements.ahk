@@ -47,6 +47,7 @@
 		static Index := 0
 		
 		ThisIndex := Index++
+		PreviousForLoop := this.CurrentForLoop
 		
 		this.Compile(Statement.Init) ; Run the init first
 		this.PopRegisterStack() ; And discard the result
@@ -64,12 +65,33 @@
 			this.Compile(Line)
 		}
 		
+		this.CodeGen.Label("__For__" ThisIndex "__EarlyExit")
 		this.Compile(Statement.Step) ; After the body runs, run the step
 		this.PopRegisterStack() ; And discard the result
 		
 		this.CodeGen.Jmp("__For__" ThisIndex) ; Then jump back to the top (where the condition is checked)
 		
 		this.CodeGen.Label("__For__" ThisIndex "__End")
+		
+		this.CurrentForLoop := PreviousForLoop
+	}
+	
+	CompileContinueBreak(Statement) {
+		if !(this.CurrentForLoop) {
+			new Error("Type")
+				.LongText("Unexpected continue/break.")
+				.ShortText("Is not owned by a loop.")
+				.Token(Statement.Keyword)
+				.Source(this.Source)
+			.Throw()
+		}
+		
+		if (Statement.Keyword.Value = Keywords.Continue) {
+			this.CodeGen.Jmp(this.CurrentForLoop "__EarlyExit")
+		}
+		else {
+			this.CodeGen.Jmp(this.CurrentForLoop "__End")
+		}
 	}
 	
 	CompileReturn(Statement) {

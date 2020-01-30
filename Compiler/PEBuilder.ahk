@@ -391,7 +391,11 @@ class PEBuilder {
 	}
 	
 	Build(FilePath) {
-		this.File := F := FileOpen(FilePath, "rw")
+		this.File := F := FileOpen(FilePath, "rw-rwd")
+		
+		if !(IsObject(F)) {
+			Throw, Exception("Could not lock output file: " FilePath)
+		}
 		
 		F.Length := 0
 		

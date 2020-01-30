@@ -272,6 +272,9 @@
 			Case Keywords.FOR: {
 				return this.ParseFor()
 			}
+			Case Keywords.CONTINUE, Keywords.BREAK: {
+				return new ASTNodes.Statements.ContinueBreak(this.Current())
+			}
 			Default: {
 				new Error("Parse")
 					.LongText("Unexpected statement.")
