@@ -231,7 +231,7 @@
 				}
 			}
 			
-			return new Token(NewType, NewValue, NewContext)
+			return new Token(NewType, NewValue, NewContext, NewLeft.Source)
 		}
 		else {
 			; Else one (or both) of the operands aren't static

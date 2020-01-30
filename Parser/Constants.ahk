@@ -260,7 +260,7 @@ class Operators {
 	}
 	EnsureXXXfix(Operator, Form) {
 		if (this.IsPrefix(Operator) && this.IsPostfix(Operator)) {
-			return new Token(Tokens[Tokens[Operator.Type] Form], Operator.Value, Operator.Context)
+			return new Token(Tokens[Tokens[Operator.Type] Form], Operator.Value, Operator.Context, Operator.Source)
 		}
 		
 		return Operator
@@ -275,10 +275,11 @@ class Operators {
 }
 
 class Token {
-	__New(Type, Value, Context) {
+	__New(Type, Value, Context, Source) {
 		this.Type := Type
 		this.Value := Value
 		this.Context := Context
+		this.Source := Source
 		this.HumanReadable := this.Debug()
 	}
 	

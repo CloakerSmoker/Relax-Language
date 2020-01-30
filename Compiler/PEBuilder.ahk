@@ -623,7 +623,8 @@ class PEBuilder {
 		if (this.SizeOfCode = 0) {
 			this.BaseOfCode := this.NextSectionRVA
 		}
-		else if (EntryPoint) {
+		
+		if (EntryPoint > 0) {
 			this.EntryPoint := this.NextSectionRVA + EntryPoint
 		}
 		

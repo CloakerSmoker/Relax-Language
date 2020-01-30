@@ -136,16 +136,20 @@
 		}
 		
 		this.Program := Program
-		this.FunctionOffsets := FunctionOffsets := {}
-		this.Modules := {}
-		FunctionOffset := 0
 		
+		this.Modules := {}
+		this.ModuleFunctions := {}
+		this.ModuleGlobals := {}
+		
+		this.FunctionOffsets := FunctionOffsets := {}
 		this.FlattenModuleList(Program)
+		
+		FunctionOffset := 0
 		
 		for FunctionName, FunctionDefine in Program.Functions {
 			FunctionOffsets[FunctionName] := FunctionOffset
 			
-			this.Compile(FunctionDefine) ; Compile a function starting from FunctionOffset
+			this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
 			
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
@@ -158,16 +162,22 @@
 		}
 	}
 	
+	EncodeModuleName(ModuleName, Name) {
+		return "__" ModuleName "__" Name
+	}
+	
 	FlattenModuleList(ForProgram) {
 		for k, ModuleName in ForProgram.Modules {
 			ModuleAST := Module.Find(ModuleName)
 			
 			for FunctionName, FunctionDefine in ModuleAST.Functions {
-				this.Program.Functions[FunctionName] := FunctionDefine
+				this.Program.Functions[this.EncodeModuleName(ModuleName, FunctionName)] := FunctionDefine
+				this.ModuleFunctions[FunctionName] := FunctionDefine
 			}
 			
 			for GlobalName, GlobalInfo in ModuleAST.Globals {
-				this.Program.Globals[GlobalName] := GlobalInfo
+				this.Program.Globals[this.EncodeModuleName(ModuleName, GlobalName)] := GlobalInfo
+				this.ModuleGlobals[GlobalName] := GlobalInfo
 			}
 			
 			this.FlattenModuleList(ModuleAST)

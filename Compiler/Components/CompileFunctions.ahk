@@ -150,8 +150,8 @@
 		return this.Typing.GetType(DefineAST.ReturnType.Value)
 	}
 	
-	CompileDefine(DefineAST) {
-		if (DefineAST.Keyword = Keywords.INLINE) {
+	CompileDefine(Name, DefineAST) {
+		if (DefineAST.Type != ASTNodeTypes.Define) {
 			return
 		}
 		
@@ -190,7 +190,7 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		this.CodeGen.Label("__Define__" DefineAST.Name.Value)
+		this.CodeGen.Label("__Define__" Name)
 		
 		this.PushA()
 			if (ParamSizes != 0) {
@@ -221,9 +221,16 @@
 				this.Compile(Statement)
 			}
 			
-			if (DefineAST.Name.Value = "__RunTime__SetGlobals") {
+			if (Name = "__RunTime__SetGlobals") {
 				for GlobalName, GlobalInfo in this.Globals {
-					if (GlobalInfo.Initializer.Type != ASTNodeTypes.None) {
+					Initializer := GlobalInfo.Initializer
+					Expression := Initializer.Expression
+					
+					if (Initializer.Type != ASTNodeTypes.None) {
+						if (Expression.Type = ASTNodeTypes.Binary && Expression.Operator.Type = Tokens.COLON_EQUAL) {
+							Expression.Left.Value := GlobalName
+						}
+						
 						this.Compile(GlobalInfo.Initializer)
 					}
 				}
@@ -248,7 +255,7 @@
 		this.PopA()
 		
 		if (this.StackDepth != 0) {
-			MsgBox, % "Unbalenced stack ops in " DefineAST.Name.Value ", " this.StackDepth
+			MsgBox, % "Unbalenced stack ops in " Name ", " this.StackDepth
 		}
 		
 		this.CodeGen.Return()
@@ -330,8 +337,9 @@
 			if (ModuleExpression.Operator.Type = Tokens.COLON) {
 				ModuleName := ModuleExpression.Left.Value
 				ModuleFunctionName := ModuleExpression.Right.Value
+				TrueName := this.EncodeModuleName(ModuleName, ModuleFunctionName)
 				
-				FunctionNode := this.Modules[ModuleName].Functions[ModuleFunctionName]
+				FunctionNode := this.Program.Functions[TrueName]
 					
 				if !(IsObject(FunctionNode)) {
 					new Error("Module")
@@ -341,7 +349,7 @@
 					.Throw()
 				}
 				
-				Expression.Target := {"Value": ModuleFunctionName}
+				Expression.Target.Value := TrueName
 			}
 		}
 		else {
@@ -363,9 +371,9 @@
 				;  save all registers
 				this.CodeGen.Push(this.RegisterStack[A_Index]), this.StackDepth++
 			}
-		
+			
 			Params := Expression.Params.Expressions
-		
+			
 			if (Params.Count() > FunctionNode.Params.Count()) {
 				new Error("Compile")
 					.LongText("Too many parameters passed to function.")

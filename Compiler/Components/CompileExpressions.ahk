@@ -2,6 +2,15 @@
 		if (Expression.Operator.Type = Tokens.TIMES_EQUAL) {
 			return this.CompileDerefAssign(Expression)
 		}
+		else if (Expression.Operator.Type = Tokens.COLON) {
+			ModuleName := Expression.Left
+			MemberName := Expression.Right
+			TrueName := this.EncodeModuleName(ModuleName.Value, MemberName.Value)
+			NameToken := new Token(Tokens.Identifier, TrueName, ModuleName.Context.Merge(MemberName.Context), ModuleName.Source)
+			
+			this.GetVariable(NameToken)
+			return this.GetVariableType(NameToken)
+		}
 	
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
 		IsBitwise := OperatorClasses.IsClass(Expression.Operator, "Bitwise")

@@ -10,7 +10,7 @@
 		ErrorAreaText := this.SubStr(this.TokenStart, this.TokenStart + Length) ; We can't trust this.Index, since whatever caused the error probably currupted it
 		ErrorAreaContext := new Context(this.TokenStart, this.TokenStart + Length, this.LineNumber)
 		
-		return new Token(Tokens.IDENTIFIER, ErrorAreaText, ErrorAreaContext)
+		return new Token(Tokens.IDENTIFIER, ErrorAreaText, ErrorAreaContext, this.CodeString)
 	}
 	
 	Start(Code) {
@@ -201,7 +201,7 @@
 	AddToken(Type, Value := false) {
 		Value := Value ? Value : this.SubStr(this.TokenStart, this.Index)
 		Context := new Context(this.TokenStart, this.Index, this.LineNumber)
-		this.Tokens.Push(new Token(Type, Value, Context))
+		this.Tokens.Push(new Token(Type, Value, Context, this.CodeString))
 	}
 	SubStr(From, To) {
 		String := ""

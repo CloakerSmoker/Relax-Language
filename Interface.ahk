@@ -43,7 +43,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.20"
+	static VERSION := "1.0.0-alpha.23"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -380,17 +380,17 @@ class Builtins {
 			DllImport void* HeapReAlloc(i64, i32, void*, i64) {Kernel32.dll, HeapReAlloc}
 			DllImport i8 HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
 			
-			i64 ProcessHeap := GetProcessHeap()
+			i64 ProcessHeap := Memory:GetProcessHeap()
 			i32 HEAP_ZERO_MEMORY := 0x00000008
 			
 			define void* Alloc(i64 Size) {
-				return HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Size)
+				return Memory:HeapAlloc(Memory:ProcessHeap, Memory:HEAP_ZERO_MEMORY, Size)
 			}
 			define void* ReAlloc(void* Memory, i64 NewSize) {
-				return HeapReAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Memory, NewSize)
+				return Memory:HeapReAlloc(Memory:ProcessHeap, Memory:HEAP_ZERO_MEMORY, Memory, NewSize)
 			}
 			define i8 Free(void* Memory) {
-				return HeapFree(ProcessHeap, 0, Memory)
+				return Memory:HeapFree(Memory:ProcessHeap, 0, Memory)
 			}
 		)"
 	}
@@ -415,7 +415,7 @@ class Builtins {
 			
 			define void AReverse(i8* Buffer) {
 				i8 Temp := 0
-				i32 Length := ALen(Buffer)
+				i32 Length := String:ALen(Buffer)
 				
 				for (i32 Index := 0, Index < Length, Index++) {
 					Temp := *(Buffer + Index)
@@ -451,13 +451,13 @@ class Builtins {
 				
 				(Buffer + Index + 1) *= 0
 				
-				AReverse(Buffer)
+				String:AReverse(Buffer)
 				
 				return Buffer
 			}
 			define i16* IToW(i64 Number) {
-				i8* AString := IToA(Number)
-				i16* WString := AToW(AString)
+				i8* AString := String:IToA(Number)
+				i16* WString := String:AToW(AString)
 				
 				Memory:Free(AString As void*)
 				
@@ -465,7 +465,7 @@ class Builtins {
 			}
 			
 			define i16* AToW(i8* AString) {
-				i32 Length := ALen(AString)
+				i32 Length := String:ALen(AString)
 				i16* NewBuffer := (Memory:Alloc((Length * 2) + 2) As i16*)
 				
 				for (i32 Index := 0, Index < Length, Index++) {
@@ -487,14 +487,14 @@ class Builtins {
 			
 			Import String
 			
-			i64 STDIN := GetStdHandle(-10)
-			i64 STDOUT := GetStdHandle(-11)
-			i64 STDERR := GetStdHandle(-12)
+			i64 STDIN := Console:GetStdHandle(-10)
+			i64 STDOUT := Console:GetStdHandle(-11)
+			i64 STDERR := Console:GetStdHandle(-12)
 			
 			define i32 Write(i16* Characters) {
 				i32 CharactersWritten := 0
 				
-				WriteConsole(STDOUT, Characters, String:WLen(Characters), &CharactersWritten, 0)
+				Console:WriteConsole(Console:STDOUT, Characters, String:WLen(Characters), &CharactersWritten, 0)
 				
 				return CharactersWritten
 			}
@@ -502,27 +502,27 @@ class Builtins {
 			define i32 WriteLine(i16* Characters) {
 				i64 NewLine := 0x000D000A
 				
-				i32 ReturnValue := Write(Characters)
-				Write((&NewLine) As i16*)
+				i32 ReturnValue := Console:Write(Characters)
+				Console:Write((&NewLine) As i16*)
 				
 				return ReturnValue
 			}
 			
 			define void White() {
-				SetColor(1, 1, 1, 1, 0, 0, 0, 0)
+				Console:SetColor(1, 1, 1, 1, 0, 0, 0, 0)
 			}
 			define void Red() {
-				SetColor(0, 1, 0, 0, 0, 0, 0, 0)
+				Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
 			}
 			define void Green() {
-				SetColor(0, 0, 1, 0, 0, 0, 0, 0)
+				Console:SetColor(0, 0, 1, 0, 0, 0, 0, 0)
 			}
 			define void Blue() {
-				SetColor(0, 0, 0, 1, 0, 0, 0, 0)
+				Console:SetColor(0, 0, 0, 1, 0, 0, 0, 0)
 			}
 			
 			define void ResetColors() {
-				SetColor(1, 1, 1, 1, 0, 0, 0, 0)
+				Console:SetColor(1, 1, 1, 1, 0, 0, 0, 0)
 			}
 			
 			define void SetColor(i8 ForegroundBright, i8 ForegroundRed, i8 ForegroundGreen, i8 ForegroundBlue, i8 BackgroundBright, i8 BackgroundRed, i8 BackgroundBlue, i8 BackgroundGreen) {
@@ -538,7 +538,7 @@ class Builtins {
 				ColorSettings := ColorSettings | (ForegroundGreen * 0x02)
 				ColorSettings := ColorSettings | (ForegroundBlue * 0x01)
 				
-				SetConsoleTextAttribute(STDOUT, ColorSettings)
+				Console:SetConsoleTextAttribute(Console:STDOUT, ColorSettings)
 			}
 			
 			define i16* ReadLine() {
@@ -549,7 +549,7 @@ class Builtins {
 					i32 BufferOffset := (ChunkCount - 1) * 64
 					CharactersRead := 32
 					
-					ReadConsole(STDIN, Buffer + BufferOffset, 32, &CharactersRead, 0)
+					Console:ReadConsole(Console:STDIN, Buffer + BufferOffset, 32, &CharactersRead, 0)
 					
 					Buffer := Memory:ReAlloc(Buffer, BufferOffset + 128)
 				}
