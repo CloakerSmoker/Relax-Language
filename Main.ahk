@@ -10,36 +10,37 @@ SetBatchLines, -1
 ; TODO: Pick a name
 ; TODO: Write more tests
 ; TODO: Eventually find a smarted way to handle variables
-; TODO: Redo modules, find a way to make them work better with the runtime functions
-; TODO: UTF-16 support
-
-; TODO: Switch modules to be baked into syntax
-; TODO: Modules have to just flat out be redone
-; With compiling to EXE being a thing, and inline functions being so gimped to debug
-;  it's time to work modules into a real thing. I'm thinking that every time a module is called, we should merge
-;   namespaces, and have tokens track their own source for throwing errors
 
 ; 6276 lines
 
 Code = 
 ( % 
-DllImport i64 MessageBoxA(i64*, i8*, i8*, i32) {User32.dll, MessageBoxA}
-DllImport i64 MessageBoxW(i64*, i16*, i16*, i32) {User32.dll, MessageBoxW}
-
 Import Console
 Import String
 
 define i64 Main(i64 ArgC, void* ArgV) {
-	Console:Write(String:IToW(ArgC))
+	Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
+	Console:WriteLine(String:IToW(ArgC))
 	
-	return 0
+	Console:SetColor(1, 1, 0, 1, 0, 0, 0, 0)
 	
 	for (i64 Index := 0, Index < ArgC, Index++) {
 		i16* NextArg := *(ArgV + (Index * 8))
-		Console:Write(NextArg)
+		Console:WriteLine(NextArg)
 	}
 	
-	return ArgC
+	Console:WriteLine(String:AToW("Enter some text!"))
+	
+	Console:Blue()
+	i16* Input := Console:ReadLine()
+	
+	Console:Red()
+	Console:Write(String:AToW("You entered: "))
+	
+	Console:Blue()
+	Console:Write(Input)
+	
+	Console:ResetColors()
 }
 )
 ; MessageBoxW(0, NextArg, NextArg, 0)

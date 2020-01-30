@@ -920,7 +920,7 @@ class X64CodeGen {
 			}
 		}
 		
-		NewLength := 64 - Length
+		NewLength := 65 - Length
 		
 		while !(Sizes.HasKey(NewLength)) {
 			NewLength++

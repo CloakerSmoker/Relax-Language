@@ -377,13 +377,17 @@ class Builtins {
 		(
 			DllImport i64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
 			DllImport void* HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
+			DllImport void* HeapReAlloc(i64, i32, void*, i64) {Kernel32.dll, HeapReAlloc}
 			DllImport i8 HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
 			
 			i64 ProcessHeap := GetProcessHeap()
 			i32 HEAP_ZERO_MEMORY := 0x00000008
 			
-			define void* Alloc(i64 Count) {
-				return HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Count)
+			define void* Alloc(i64 Size) {
+				return HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Size)
+			}
+			define void* ReAlloc(void* Memory, i64 NewSize) {
+				return HeapReAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Memory, NewSize)
 			}
 			define i8 Free(void* Memory) {
 				return HeapFree(ProcessHeap, 0, Memory)
@@ -425,6 +429,11 @@ class Builtins {
 			define i8* IToA(i64 Number) {
 				i8* Buffer := (Memory:Alloc(100) As i8*)
 				i8 Sign := 0
+				
+				if (Number = 0) {
+					Buffer *= '0'
+					return Buffer
+				}
 				
 				if (Number < 0) {
 					Sign := 1
@@ -473,6 +482,8 @@ class Builtins {
 		(
 			DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
 			DllImport i8 WriteConsole(i64, i16*, i32, i32*, i64) {Kernel32.dll, WriteConsoleW}
+			DllImport i8 SetConsoleTextAttribute(i64, i16) {Kernel32.dll, SetConsoleTextAttribute}
+			DllImport i8 ReadConsole(i64, void*, i32, i32*, void) {Kernel32.dll, ReadConsoleW}
 			
 			Import String
 			
@@ -486,6 +497,64 @@ class Builtins {
 				WriteConsole(STDOUT, Characters, String:WLen(Characters), &CharactersWritten, 0)
 				
 				return CharactersWritten
+			}
+			
+			define i32 WriteLine(i16* Characters) {
+				i64 NewLine := 0x000D000A
+				
+				i32 ReturnValue := Write(Characters)
+				Write((&NewLine) As i16*)
+				
+				return ReturnValue
+			}
+			
+			define void White() {
+				SetColor(1, 1, 1, 1, 0, 0, 0, 0)
+			}
+			define void Red() {
+				SetColor(0, 1, 0, 0, 0, 0, 0, 0)
+			}
+			define void Green() {
+				SetColor(0, 0, 1, 0, 0, 0, 0, 0)
+			}
+			define void Blue() {
+				SetColor(0, 0, 0, 1, 0, 0, 0, 0)
+			}
+			
+			define void ResetColors() {
+				SetColor(1, 1, 1, 1, 0, 0, 0, 0)
+			}
+			
+			define void SetColor(i8 ForegroundBright, i8 ForegroundRed, i8 ForegroundGreen, i8 ForegroundBlue, i8 BackgroundBright, i8 BackgroundRed, i8 BackgroundBlue, i8 BackgroundGreen) {
+				i16 ColorSettings := 0
+				
+				ColorSettings := ColorSettings | (BackgroundBright * 0x80)
+				ColorSettings := ColorSettings | (BackgroundRed * 0x40)
+				ColorSettings := ColorSettings | (BackgroundGreen * 0x20)
+				ColorSettings := ColorSettings | (BackgroundBlue * 0x10)
+				
+				ColorSettings := ColorSettings | (ForegroundBright * 0x08)
+				ColorSettings := ColorSettings | (ForegroundRed * 0x04)
+				ColorSettings := ColorSettings | (ForegroundGreen * 0x02)
+				ColorSettings := ColorSettings | (ForegroundBlue * 0x01)
+				
+				SetConsoleTextAttribute(STDOUT, ColorSettings)
+			}
+			
+			define i16* ReadLine() {
+				void* Buffer := Memory:Alloc(64)
+				i32 ChunkCount := 1
+				
+				for (i32 CharactersRead := 32, CharactersRead = 32, ChunkCount++) {
+					i32 BufferOffset := (ChunkCount - 1) * 64
+					CharactersRead := 32
+					
+					ReadConsole(STDIN, Buffer + BufferOffset, 32, &CharactersRead, 0)
+					
+					Buffer := Memory:ReAlloc(Buffer, BufferOffset + 128)
+				}
+				
+				return (Buffer As i16*)
 			}
 		)"
 	}

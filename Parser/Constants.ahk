@@ -299,7 +299,7 @@ class Token {
 		}
 	
 		Switch (this.Type) {
-			Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING, Tokens.IDENTIFIER: {
+			Case Tokens.INTEGER, Tokens.DOUBLE, Tokens.STRING, Tokens.IDENTIFIER, Tokens.RIGHT_PAREN: {
 				return False
 			}
 		}
