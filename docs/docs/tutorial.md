@@ -55,3 +55,15 @@ define i32 Main(i64 ArgC, void* ArgV) {
 }
 ```
 Congrats, you just wrote hello world. You might notice that it takes ~2 seconds to compile. That is because I am an idiot.
+
+
+
+### Summary
+So, you know the format for defining functions, declaring variables, along with setting variables, which is good. And just in case you didn't quite catch those, here they are in a list:
+
+* Function definitions follow the format `define ReturnType Name(ParameterList) {}`
+* Parameter lists follow the format `ParameterType ParameterName, ParameterType ParameterName` which can be repeated as much as you like.
+* Function bodies are just lists of lines, including more function calls, variable declarations, and statements like `if`, `for`, and `return`
+* Variable declarations follow the format `TypeName VariableName` with the optional `:= Value`.
+* Function calls follow the foramt `Name(Parameters)` where `Parameters` is a list of comma-seperated values. Function calls into modules are prefixed with `ModuleName:`
+* the `Main` function is always declared as `define i32 Main(i64 ArgC, void* ArgV)` and is always the first function called.
