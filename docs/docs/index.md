@@ -21,6 +21,9 @@ Call `(Replace with language class name).CompileToEXE` with a string of code as 
 
 That's it. Except that most of the work is writing the string of code.
 
+## How to do most of the work:
+(I recommend you follow these in the order 1-2-3 if you already know a C-like language, and 2-1-3 otherwise)
+
 For a quick(-ish) rundown of the syntax, and some quirks, see [the basic syntax page](basic-syntax.md).
 
 For a tutorial sort of thing, see [the tutorial page](tutorial.md).

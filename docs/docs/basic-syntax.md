@@ -91,3 +91,9 @@ i64* PointerVariable := &SomeNumber
 ++PointerVariable
 ```
 Would increment `PointerVariable` by 8 
+
+## What next?
+
+For a tutorial sort of thing, see [the tutorial page](tutorial.md).
+
+For a full writeup of the syntax, see [the full syntax page](full-syntax.md).
