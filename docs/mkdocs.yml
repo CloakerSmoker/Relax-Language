@@ -1,0 +1,6 @@
+site_name: LanguageName Docs
+theme:
+    name: readthedocs
+    highlightjs: true
+    hljs_languages:
+        - ahk
