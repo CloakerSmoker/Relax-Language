@@ -257,10 +257,10 @@
 				this.CodeGen.C_Move_GE_R64_R64(ResultRegister, RDI)
 			}
 			Case Tokens.LOGICAL_AND: {
-				this.CodeGen.And_R64_R64(ResultRegister, RBX)
+				this.CodeGen.And_R64_R64(LeftRegister, RightRegister)
 			}
 			Case Tokens.LOGICAL_OR: {
-				this.CodeGen.Or_R64_R64(ResultRegister, RBX)
+				this.CodeGen.Or_R64_R64(LeftRegister, RightRegister)
 			}
 			Default: {
 				new Error("Compile")
@@ -393,6 +393,16 @@
 		
 			this.CodeGen.Neg_R64(this.TopOfRegisterStack())
 			return OperandType
+		}
+		else if (Operator.Type = Tokens.BANG) {
+			this.Compile(Expression.Operand)
+			
+			this.CodeGen.Move(RAX, RSI)
+			this.CodeGen.Cmp(this.TopOfRegisterStack(), RSI) ; if (operand = 0) {result := 1} else {result := 0}
+			this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
+			this.CodeGen.Move(this.TopOfRegisterStack(), RAX)
+			
+			return this.Type.GetType("i8")
 		}
 		
 		new Error("Compile")

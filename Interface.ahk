@@ -243,6 +243,47 @@ class Builtins {
 				}
 			}
 			
+			define i64 WToI(i16* WString, i8* Success) {
+				i64 Result := 0
+				i64 Negative := 0
+				
+				i16 FirstCharacter := *(WString)
+				
+				if (FirstCharacter = '-') {
+					Negative := 1
+					WString += 2
+					FirstCharacter := *(WString)
+				}
+				else if !(String:WIsNumeric(FirstCharacter)) {
+					Success *= 0
+					return 0
+				}
+				
+				i32 Length := String:WLen(WString)
+				
+				for (i32 Index := 0, Index < Length, Index++) {
+					i16 NextCharacter := *(WString + (Index * 2))
+					
+					if !(String:WIsNumeric(NextCharacter)) {
+						Break
+					}
+					
+					Result := (Result * 10) + (NextCharacter - '0')
+				}
+				
+				Success *= 1
+				
+				if (Negative) {
+					Result := -Result
+				}
+				
+				return Result
+			}
+			
+			define i64 WIsNumeric(i16 Character) {
+				return (Character >= '0') && 1
+			}
+			
 			define i8* IToA(i64 Number) {
 				i8* Buffer := (Memory:Alloc(100) As i8*)
 				i8 Sign := 0
@@ -344,6 +385,25 @@ class Builtins {
 				Console:Write((&NewLine) As i16*)
 				
 				return ReturnValue
+			}
+			
+			define i32 IWrite(i64 Number) {
+				i16* WString := String:IToW(Number)
+				
+				i32 Result := Console:Write(WString)
+			
+				Memory:Free(WString As void*)
+				
+				return Result
+			}
+			define i32 IWriteLine(i64 Number) {
+				i16* WString := String:IToW(Number)
+				
+				i32 Result := Console:WriteLine(WString)
+			
+				Memory:Free(WString As void*)
+				
+				return Result
 			}
 			
 			define void White() {

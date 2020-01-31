@@ -13,9 +13,9 @@ Import Console
 Import String
 Import Memory
 
-define i64 Main(i64 ArgC, void* ArgV) {
+define i64 Main(i64 ArgC, void* ArgV) {	
 	Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
-	Console:WriteLine(String:IToW(ArgC))
+	Console:IWriteLine(ArgC)
 	
 	Console:SetColor(1, 1, 0, 1, 0, 0, 0, 0)
 	
@@ -30,6 +30,15 @@ define i64 Main(i64 ArgC, void* ArgV) {
 	
 	i16* Input := Console:ReadLine()
 	
+	i8 InputIsInt := 0
+	i64 AsInt := String:WToI(Input, &InputIsInt)
+	
+	if !(InputIsInt) {
+		Console:AWriteLine("You should have entered a number")
+	}
+	else {
+		Console:IWriteLine(AsInt + 1)
+	}
 	
 	if (String:WAEquals(Input, "abc")) {
 		Console:Blue()
