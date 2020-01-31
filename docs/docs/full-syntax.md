@@ -15,9 +15,9 @@ Import ModuleName
 ```
 Where `ModuleName` is the name of a built in module. The current list of built in modules is:
 
-* [Memory](../module-memory.md)
-* [String](../module-string.md)
-* [Console](../module-console.md)
+* [Memory](../module-memory)
+* [String](../module-string)
+* [Console](../module-console)
 
 ### DllImport
 DllImport statements follow the format:

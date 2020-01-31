@@ -17,6 +17,10 @@ Top 10 reasons I hate the Windows Console API.
 | i64 Console:STDIN  | Console:GetStdHandle(-10) |
 | i64 Console:STDOUT | Console:GetStdHandle(-11) |
 | i64 Console:STDERR | Console:GetStdHandle(-12) |
+| i16 Console:Bright | 0x08                      |
+| i16 Console:Red    | 0x04                      |
+| i16 Console:Green  | 0x02                      |
+| i16 Console:Blue   | 0x01                      |
 
 ## Functions
 
