@@ -14,10 +14,10 @@ Import String
 Import Memory
 
 define i64 Main(i64 ArgC, void* ArgV) {	
-	Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
+	Console:TextColor(Console:Red)
 	Console:IWriteLine(ArgC)
 	
-	Console:SetColor(1, 1, 0, 1, 0, 0, 0, 0)
+	Console:TextColor(Console:Bright | Console:Red | Console:Blue)
 	
 	
 	for (i64 Index := 0, Index < ArgC, Index++) {
@@ -25,7 +25,7 @@ define i64 Main(i64 ArgC, void* ArgV) {
 		Console:WriteLine(NextArg)
 	}
 	
-	Console:Blue()
+	Console:TextColor(Console:Blue)
 	Console:AWrite("Enter some text!")
 	
 	i16* Input := Console:ReadLine()
@@ -41,10 +41,10 @@ define i64 Main(i64 ArgC, void* ArgV) {
 	}
 	
 	if (String:WAEquals(Input, "abc")) {
-		Console:Blue()
+		Console:TextColor(Console:Blue)
 	}
 	else {
-		Console:Red()
+		Console:TextColor(Console:Red)
 	}
 	
 	Console:AWrite("You entered: ")

@@ -406,37 +406,25 @@ class Builtins {
 				return Result
 			}
 			
-			define void White() {
-				Console:SetColor(1, 1, 1, 1, 0, 0, 0, 0)
-			}
-			define void Red() {
-				Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
-			}
-			define void Green() {
-				Console:SetColor(0, 0, 1, 0, 0, 0, 0, 0)
-			}
-			define void Blue() {
-				Console:SetColor(0, 0, 0, 1, 0, 0, 0, 0)
-			}
+			i16 Bright := 0x08
+			i16 Red := 0x04
+			i16 Green := 0x02
+			i16 Blue := 0x01
+			
+			i16 White := 0x0F
+			i16 Black := 0x00
 			
 			define void ResetColors() {
-				Console:SetColor(1, 1, 1, 1, 0, 0, 0, 0)
+				Console:SetColor(Console:White, Console:Black)
+			}
+			define void TextColor(i16 Foreground) {
+				return Console:SetColor(Foreground, Console:Black)
 			}
 			
-			define void SetColor(i8 ForegroundBright, i8 ForegroundRed, i8 ForegroundGreen, i8 ForegroundBlue, i8 BackgroundBright, i8 BackgroundRed, i8 BackgroundBlue, i8 BackgroundGreen) {
-				i16 ColorSettings := 0
+			define void SetColor(i8 Foreground, i8 Background) {
+				Background := Background * 10
 				
-				ColorSettings := ColorSettings | (BackgroundBright * 0x80)
-				ColorSettings := ColorSettings | (BackgroundRed * 0x40)
-				ColorSettings := ColorSettings | (BackgroundGreen * 0x20)
-				ColorSettings := ColorSettings | (BackgroundBlue * 0x10)
-				
-				ColorSettings := ColorSettings | (ForegroundBright * 0x08)
-				ColorSettings := ColorSettings | (ForegroundRed * 0x04)
-				ColorSettings := ColorSettings | (ForegroundGreen * 0x02)
-				ColorSettings := ColorSettings | (ForegroundBlue * 0x01)
-				
-				Console:SetConsoleTextAttribute(Console:STDOUT, ColorSettings)
+				Console:SetConsoleTextAttribute(Console:STDOUT, Foreground | Background)
 			}
 			
 			define i16* ReadLine() {
