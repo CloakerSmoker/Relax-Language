@@ -155,12 +155,7 @@
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 		}
 		
-		if (this.Features & this.TargetPE) {
-			return this
-		}
-		else {
-			return new CompiledProgram(Program, this.CodeGen, FunctionOffsets, this.Modules)
-		}
+		return this
 	}
 	
 	EncodeModuleName(ModuleName, Name) {

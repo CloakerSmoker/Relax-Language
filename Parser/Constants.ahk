@@ -188,8 +188,6 @@ class Operators {
 				}
 			}
 		}
-	
-		Assert.Unreachable(this.ToString(Operator))
 	}
 	GetPrecedence(Operator) {
 		try {

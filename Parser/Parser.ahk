@@ -639,34 +639,6 @@
 		}
 	}
 	
-	; Tests
-	
-	static ExpressionTests := {"A + B + C": "((A + B) + C)"
-							,  "A == B == C": "((A == B) == C)"
-							,  "A := B := 1": "(A := (B := 1))"
-							,  "1 + 2 - 3 * 4 / 5 == 6 := 7": "((((1 + 2) - ((3 * 4) / 5)) == 6) := 7)"
-							,  "0xFF == 0o377 == 0b11111111 == 255": "(((255 == 255) == 255) == 255)"}
-
-	static _ := Parser.Tests()
-	
-	Tests() {
-		if (Config.DEBUG) {
-			this.RunTests()
-		}
-	}
-	RunTests() {
-		for Input, Output in Parser.ExpressionTests {
-			TestLexer := new Lexer()
-			InputTokens := TestLexer.Start(Input)
-			
-			TestParser := new Parser(TestLexer)
-			TestParser.Tokens := InputTokens
-			InputAST := TestParser.ParseExpression()
-			
-			Assert.String.True(InputAST.Stringify(), Output)
-		}
-	}
-	
 	; Helper methods
 	
 	EnsureValidType(TypeToken) {

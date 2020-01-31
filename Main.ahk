@@ -1,14 +1,9 @@
-﻿class Config {
-	static DEBUG := True
-}
-
-#Include %A_ScriptDir%
+﻿#Include %A_ScriptDir%
 #Include Interface.ahk
 
 SetBatchLines, -1
 
 ; TODO: Pick a name
-; TODO: Change string literals to be i16* instead of i8*, with Console using wide strings, it might as well be the default
 
 ; 6276 lines
 
@@ -16,6 +11,7 @@ Code =
 ( % 
 Import Console
 Import String
+Import Memory
 
 define i64 Main(i64 ArgC, void* ArgV) {
 	Console:SetColor(0, 1, 0, 0, 0, 0, 0, 0)
@@ -29,21 +25,23 @@ define i64 Main(i64 ArgC, void* ArgV) {
 		Console:WriteLine(NextArg)
 	}
 	
-	Console:WriteLine(String:AToW("Enter some text!"))
-	
 	Console:Blue()
+	Console:AWrite("Enter some text!")
+	
 	i16* Input := Console:ReadLine()
 	
-	if (String:WEquals(Input, String:AToW("abc"))) {
+	
+	if (String:WAEquals(Input, "abc")) {
 		Console:Blue()
 	}
 	else {
 		Console:Red()
 	}
 	
-	Console:Write(String:AToW("You entered: "))
+	Console:AWrite("You entered: ")
 	
 	Console:Write(Input)
+	Memory:Free(Input As void*)
 	
 	Console:ResetColors()
 }
@@ -52,18 +50,6 @@ define i64 Main(i64 ArgC, void* ArgV) {
 ; MessageBoxW(0, NextArg, NextArg, 0)
 
 Start := A_TickCount
-LanguageName.CompileToEXE(Code)
+C := LanguageName.CompileToEXE(Code)
 End := A_TickCount
-MsgBox, % "Done, took: " End - Start " ms`n`n" 
-exitapp
-;MessageBoxA(0, "I embrace the .exe format now, it is a work of art.", "My Life Is Complete", 0)
-R := LanguageName.CompileCode(Code, {"Features": LanguageNameFlags.ToAHK})
-
-MsgBox, % R.Node.Stringify()
-MsgBox, % (Clipboard := R.CodeGen.Stringify())
-
-VarSetCapacity(A, 20, 0)
-loop, 20 {
-	NumPut(5, &A + 0, A_Index - 1, "Char")
-}
-MsgBox, % "Result: " R.CallFunction("T2", &A, 20, 1, 3, 4, 2) "`n" A_LastError 
+MsgBox, % "Done, took: " End - Start " ms`n`n" ; C.Program.Stringify()

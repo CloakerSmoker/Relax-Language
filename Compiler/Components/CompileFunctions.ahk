@@ -5,7 +5,7 @@
 			for k, String in DefineAST.Strings {
 				HighAddressOffset := StringStartingOffsets[String.Value]
 				
-				this.CodeGen.SmallMove(RAX, HighAddressOffset)
+				this.CodeGen.Move(RAX, I32(HighAddressOffset))
 				HighAddressSIB := SIB(8, RAX, R15)
 				
 				this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
