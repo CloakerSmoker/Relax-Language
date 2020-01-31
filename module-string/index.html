@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>The String Module - LanguageName Docs</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "The String Module";
+    var mkdocs_page_input_path = "module-string.md";
+    var mkdocs_page_url = null;
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> LanguageName Docs</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">(Replace with name)</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-syntax/">Basic syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-tutorial/">Basic tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../details/">Implementation Details</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../dumb-errors/">Dumb errors</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../full-syntax/">Full syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-console/">The Console Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-memory/">The Memory Module</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">The String Module</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#the-string-module">The String Module</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#dllimports">DllImports</a></li>
+        
+            <li><a class="toctree-l3" href="#globals">Globals</a></li>
+        
+            <li><a class="toctree-l3" href="#functions">Functions</a></li>
+        
+            <li><a class="toctree-l3" href="#usage-impact">Usage Impact</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../tutorial/">Tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../undefined/">Undefined</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">LanguageName Docs</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>The String Module</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="the-string-module">The String Module</h1>
+<p>Lots and lots of unsafe code.</p>
+<h2 id="dllimports">DllImports</h2>
+<p>None</p>
+<h2 id="globals">Globals</h2>
+<p>None</p>
+<h2 id="functions">Functions</h2>
+<table>
+<thead>
+<tr>
+<th>Function Name</th>
+<th>Return Type</th>
+<th>Parameter List</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALen</td>
+<td><code>i32</code></td>
+<td><code>i8* AString</code></td>
+<td>Counts how long the given ASCII string is by finding the null-terminator of the string.</td>
+</tr>
+<tr>
+<td>WLen</td>
+<td><code>i32</code></td>
+<td><code>i16* WString</code></td>
+<td>Counts how long the given UTF-16 string is by finding the null-terminator of the string.</td>
+</tr>
+<tr>
+<td>WAEquals</td>
+<td><code>i8</code></td>
+<td><code>i16* WString</code>, <code>i8* AString</code></td>
+<td>Compares the two given strings using <code>String:WEquals</code> after converting <code>AString</code> to a wide string.</td>
+</tr>
+<tr>
+<td>WEquals</td>
+<td><code>i8</code></td>
+<td><code>i16* WStringOne</code>, <code>i16* WStringTwo</code></td>
+<td>Trims \r\n from both strings using <code>String:WTrimNewline</code>, and compares the two using <code>String:WEqual</code>.</td>
+</tr>
+<tr>
+<td>WEqual</td>
+<td><code>i8</code></td>
+<td><code>i16* WStringOne</code>, <code>i16* WStringTwo</code></td>
+<td>Compares the two strings character by character, and returns <code>1</code> if the strings are equal.</td>
+</tr>
+<tr>
+<td>WTrimNewline</td>
+<td><code>i16*</code></td>
+<td><code>i16* WString</code></td>
+<td>Removes \r\n from the last two characters of the string, if they are there.</td>
+</tr>
+<tr>
+<td>AReverse</td>
+<td><code>i8*</code></td>
+<td><code>i8* AString</code></td>
+<td>Reverses <code>AString</code> character by character, leaving the null-terminator in place.</td>
+</tr>
+<tr>
+<td>WToI</td>
+<td><code>i64</code></td>
+<td><code>i16* WString</code>, <code>i8* Success</code></td>
+<td>Trys to read an integer from <code>WString</code>, sets <code>Succes</code> to 1 when an integer was read, and returns it.</td>
+</tr>
+<tr>
+<td>WIsNumeric</td>
+<td><code>i8</code></td>
+<td><code>i16 Character</code></td>
+<td>Returns if the character is in the range of '0'-&gt;'9'.</td>
+</tr>
+<tr>
+<td>IToA</td>
+<td><code>i8*</code></td>
+<td><code>i64 Number</code></td>
+<td>Converts <code>Number</code> to an ASCII string, including '-' if <code>Number</code> is negative.</td>
+</tr>
+<tr>
+<td>IToW</td>
+<td><code>i16*</code></td>
+<td><code>i64 Number</code></td>
+<td>Calls <code>String:IToA</code>, converts the result to a wide string with <code>String:AToW</code> and returns it.</td>
+</tr>
+<tr>
+<td>AToW</td>
+<td><code>i16*</code></td>
+<td><code>i8* AString</code></td>
+<td>Converts <code>AString</code> to a wide string, and returns the new wide string.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="usage-impact">Usage Impact</h2>
+<p><code>String</code> imports the <a href="../module-memory/"><code>Memory</code></a> module, which alone is not very impactful.
+However, since <code>String</code> is entirely implemented in (Replace with language name), and many of the <code>String:</code> functions depend on each other, the module generates upwards of 5 KB of code, and adds around 900 MS to compile times.</p>
+<p>Yes, I know this is terrible. I blame AHK.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../tutorial/" class="btn btn-neutral float-right" title="Tutorial">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../module-memory/" class="btn btn-neutral" title="The Memory Module"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../module-memory/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../tutorial/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>

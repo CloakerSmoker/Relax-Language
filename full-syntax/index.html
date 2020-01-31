@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Full syntax - LanguageName Docs</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Full syntax";
+    var mkdocs_page_input_path = "full-syntax.md";
+    var mkdocs_page_url = null;
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> LanguageName Docs</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">(Replace with name)</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-syntax/">Basic syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-tutorial/">Basic tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../details/">Implementation Details</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../dumb-errors/">Dumb errors</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Full syntax</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#the-full-syntax-description">The full syntax description</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#program">Program</a></li>
+        
+            <li><a class="toctree-l3" href="#import">Import</a></li>
+        
+            <li><a class="toctree-l3" href="#dllimport">DllImport</a></li>
+        
+            <li><a class="toctree-l3" href="#define">Define</a></li>
+        
+            <li><a class="toctree-l3" href="#global">Global</a></li>
+        
+            <li><a class="toctree-l3" href="#statements">Statements</a></li>
+        
+            <li><a class="toctree-l3" href="#declarations">Declarations</a></li>
+        
+            <li><a class="toctree-l3" href="#keywords">Keywords</a></li>
+        
+            <li><a class="toctree-l3" href="#if">If</a></li>
+        
+            <li><a class="toctree-l3" href="#for">For</a></li>
+        
+            <li><a class="toctree-l3" href="#break-continue">Break-Continue</a></li>
+        
+            <li><a class="toctree-l3" href="#return">Return</a></li>
+        
+            <li><a class="toctree-l3" href="#expression-statements">Expression-Statements</a></li>
+        
+            <li><a class="toctree-l3" href="#expression">Expression</a></li>
+        
+            <li><a class="toctree-l3" href="#operator-list">Operator list</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-console/">The Console Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-memory/">The Memory Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-string/">The String Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../tutorial/">Tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../undefined/">Undefined</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">LanguageName Docs</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Full syntax</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h2 id="the-full-syntax-description">The full syntax description</h2>
+<h3 id="program">Program</h3>
+<p>The compiler expects input code to be a "program", a program is defined as a list of the following statements:</p>
+<ul>
+<li><a href="#import">Import statements</a></li>
+<li><a href="#dllimport">DllImport statements</a></li>
+<li><a href="#define">Define statements</a></li>
+<li><a href="#global">Global declarations</a></li>
+</ul>
+<h3 id="import">Import</h3>
+<p>Import statements follow the format:</p>
+<pre><code>Import ModuleName
+</code></pre>
+
+<p>Where <code>ModuleName</code> is the name of a built in module. The current list of built in modules is:</p>
+<ul>
+<li><a href="../module-memory">Memory</a></li>
+<li><a href="../module-string">String</a></li>
+<li><a href="../module-console">Console</a></li>
+</ul>
+<h3 id="dllimport">DllImport</h3>
+<p>DllImport statements follow the format:</p>
+<pre><code>DllImport ReturnType FunctionName(ParameterTypeList) {DllFileName.dll, FunctionNameInsideDLL}
+</code></pre>
+
+<ul>
+<li><code>ReturnType</code> is the <a href="#types">type</a> that the function is expected to return.</li>
+<li><code>FunctionName</code> is the <a href="#names">name</a> that the function will have internally, and is the name you use to call it. This name does not need to be the same as <code>FunctionNameInsideDLL</code>.</li>
+<li><code>ParameterTypeList</code> is a list of comma-seperated <a href="#types">types</a>, without any names, since the parameter names are not needed.</li>
+<li><code>DllFileName.dll</code> is the name of the file which contains the given function.</li>
+<li><code>FunctionNameInsideDLL</code> is the name of the function, as it is exported in from the DLL.</li>
+</ul>
+<h3 id="define">Define</h3>
+<p>Define statements follow the format:</p>
+<pre><code>Define ReturnType Functionname(ParameterList) {
+    Body
+}
+</code></pre>
+
+<ul>
+<li><code>ReturnType</code> is the <a href="#types">type</a> that the function is expected to return.</li>
+<li><code>FunctionName</code> is the <a href="#names">name</a> that the function will have, and is the name you use to call it.</li>
+<li><code>ParameterList</code> is a list of comma-seperated <a href="#types">type</a> <a href="#names">name</a> pairs.</li>
+<li><code>Body</code> is a list of <a href="#statements">statements</a>.</li>
+</ul>
+<h3 id="global">Global</h3>
+<p>Global declarations follow the same format as regular <a href="#declarations">declarations</a>.
+However, global declarations make variables that are <a href="#program">program</a>-wide, and can be used from any function.
+Additionally, global declarations run just before <code>Main</code> is called (and ArgC/ArgV are set), making them a suitable method to run setup code.</p>
+<h3 id="statements">Statements</h3>
+<p>Statements follow multiple different formats, depending on the type of statement.</p>
+<ul>
+<li><a href="#declarations">Declarations</a></li>
+<li><a href="#keywords">Keyword statements</a></li>
+<li><a href="#expression-statements">Expression statements</a></li>
+</ul>
+<p>It is important to note that this 'statement' category does not include the <a href="#program">program</a> statements, which are not allowed inside of functions.</p>
+<p>All of the above statements are allowed inside of functions and other structures such as <a href="#for">for loops</a> or <a href="#if">if statements</a>.</p>
+<h3 id="declarations">Declarations</h3>
+<p>Declarations follow the format(s):</p>
+<pre><code>TypeName VariableName
+TypeName VariableName := Value
+</code></pre>
+
+<ul>
+<li><code>TypeName</code> is the <a href="#types">type</a> that the variable will have.</li>
+<li><code>VariableName</code> is the <a href="#names">name</a> the variable will have.</li>
+<li><code>:= Value</code> is an optional <a href="#assignment">assignment</a> to give the variable a default value.</li>
+</ul>
+<p>Variables that do not have a default value should be considered to have an <a href="..\undefined#undefined-values">undefined value</a> until they are otherwise assigned.</p>
+<h3 id="keywords">Keywords</h3>
+<p>Keyword statements follow multiple different formats, depending on the keyword used.</p>
+<ul>
+<li><a href="#if">if/else if/else statements</a></li>
+<li><a href="#for">for loops</a></li>
+<li><a href="#break-continue">break/continue statements</a></li>
+<li><a href="#return">return statements</a></li>
+</ul>
+<p>These are all of the statements implemented, there are no <code>while</code> loops.</p>
+<h3 id="if">If</h3>
+<p>If statements follow a single variable format, depending on the structure of the if statement:</p>
+<pre><code>if (Condition) {
+    Body
+}
+else if (OtherCondition) {
+    Body
+}
+else {
+    Body
+}
+</code></pre>
+
+<ul>
+<li><code>if</code> is the required keyword to start an if statement.</li>
+<li><code>(Condition)</code> an <a href="#expression">expression</a> which will be tested in order to decide if the next block will run or not.</li>
+<li><code>Body</code> (in all places) is a list of statements(#statements) which will run if the prior condition resulted in a non-zero result.</li>
+<li><code>else if</code> the required keyword to add another <a href="#expression">condition</a> and <a href="#statements">body</a> to the entire if statement.</li>
+<li><code>else</code> the required keyword to add a finaly <a href="#statements">body</a> to the if statement, which will only run when no other conditions are met.</li>
+</ul>
+<p><code>else if</code> can be repeated any number of times, for any number of conditions. There can only be one <code>else</code> for each if statement.</p>
+<h3 id="for">For</h3>
+<p>For loops follow the format:</p>
+<pre><code>for (Init, Condition, Step) {
+    Body
+}
+</code></pre>
+
+<ul>
+<li><code>Init</code>, <code>Condition</code>, and <code>Step</code> are all <a href="#expresion">expressions</a> which run at different points. </li>
+<li><code>Body</code> is a list of statements(#statements) which will run each iteration of the loop.</li>
+</ul>
+<p><code>Init</code> can optionally be a <a href="#declaration">declaration</a> and is run before the loop first stats, and never again. </p>
+<p><code>Condition</code> is checked before the loop runs an iteration, and if it is false, the loop will stop. </p>
+<p><code>Step</code> is run after each iteration of the loop.</p>
+<h3 id="break-continue">Break-Continue</h3>
+<p>Break and continue both follow the format:</p>
+<pre><code>Break
+Continue
+</code></pre>
+
+<p>With no extra code.</p>
+<p>The break and continue statements are only valid inside of <a href="#for">for loops</a>.</p>
+<h3 id="return">Return</h3>
+<p>Return statements follow the format:</p>
+<pre><code>Return Value
+</code></pre>
+
+<ul>
+<li><code>Value</code> is any kind of <a href="#expression">expression</a>, which will be returned to the caller.</li>
+</ul>
+<p><code>Value</code> must evaluate to a type compatible to the return type of the current <a href="#define">function</a>.</p>
+<h3 id="expression-statements">Expression-Statements</h3>
+<p>Expression statements follow the format:</p>
+<pre><code>Expression
+</code></pre>
+
+<ul>
+<li><code>Expression</code> is any kind of <a href="#expression">expression</a>.</li>
+</ul>
+<p>If <code>Expression</code> does not call a function or set a variable, it will be eliminated by the compiler during dead-code elimination.</p>
+<h3 id="expression">Expression</h3>
+<p>Expressions follow many formats, examples:</p>
+<pre><code>A := B + C
+(2 - E) / 2.5
+9999 + *(G) % H
+</code></pre>
+
+<ul>
+<li>Any unquoted text inside an expression is treated as a variable.</li>
+<li>Quoted text is treated as an <code>i8*</code> typed value.</li>
+<li>Numbers are treated as the smallest possible type to hold them (ex: <code>58</code> would be an <code>i8</code>, <code>9999</code> would be an <code>i16</code>)</li>
+<li>Operands of any given operator must be a someone-similar type (ex: <code>2.6 * SomePointer</code> is invalid).</li>
+<li>Operators are evaluated according to precedence and associativity, which is defined in <code>Constants.ahk</code>.</li>
+<li>Some operators may not be implemented for a given type</li>
+<li>Some expressions may be used as booleans inside of <a href="#for">for loops</a> or <a href="#if">if statements</a>. This is done by checking if the expressions results in <code>0</code> or not.</li>
+</ul>
+<h3 id="operator-list">Operator list</h3>
+<h5 id="binary-operators">Binary Operators</h5>
+<table>
+<thead>
+<tr>
+<th>Category Name</th>
+<th>Precedence</th>
+<th>Associativity</th>
+<th>Operators in category</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Assignment</td>
+<td>0</td>
+<td>Right</td>
+<td><code>:=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code></td>
+</tr>
+<tr>
+<td>Logic</td>
+<td>1</td>
+<td>Right</td>
+<td><code>&amp;&amp;</code>, <code>||</code></td>
+</tr>
+<tr>
+<td>Equality</td>
+<td>2</td>
+<td>Left</td>
+<td><code>!=</code>, <code>=</code></td>
+</tr>
+<tr>
+<td>Comparison</td>
+<td>3</td>
+<td>Right</td>
+<td><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></td>
+</tr>
+<tr>
+<td>Unused</td>
+<td>4</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Addition</td>
+<td>5</td>
+<td>Left</td>
+<td><code>+</code>, <code>-</code></td>
+</tr>
+<tr>
+<td>Division</td>
+<td>6</td>
+<td>Left</td>
+<td><code>/</code>, <code>*</code>, <code>%</code></td>
+</tr>
+<tr>
+<td>Bitwise</td>
+<td>7</td>
+<td>Left</td>
+<td><code>&amp;</code>, <code>|</code>, <code>^</code></td>
+</tr>
+<tr>
+<td>Module</td>
+<td>8</td>
+<td>N/A</td>
+<td><code>:</code></td>
+</tr>
+</tbody>
+</table>
+<h5 id="unary-operators">Unary Operators</h5>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Prefix/Postfix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>++</code></td>
+<td>Both</td>
+</tr>
+<tr>
+<td><code>--</code></td>
+<td>Both</td>
+</tr>
+<tr>
+<td><code>!</code></td>
+<td>Prefix</td>
+</tr>
+<tr>
+<td><code>~</code></td>
+<td>Prefix</td>
+</tr>
+<tr>
+<td><code>*</code></td>
+<td>Prefix</td>
+</tr>
+<tr>
+<td><code>&amp;</code></td>
+<td>Prefix</td>
+</tr>
+</tbody>
+</table>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../module-console/" class="btn btn-neutral float-right" title="The Console Module">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../dumb-errors/" class="btn btn-neutral" title="Dumb errors"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../dumb-errors/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../module-console/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Tutorial - LanguageName Docs</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Tutorial";
+    var mkdocs_page_input_path = "tutorial.md";
+    var mkdocs_page_url = null;
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> LanguageName Docs</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">(Replace with name)</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-syntax/">Basic syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-tutorial/">Basic tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../details/">Implementation Details</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../dumb-errors/">Dumb errors</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../full-syntax/">Full syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-console/">The Console Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-memory/">The Memory Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-string/">The String Module</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Tutorial</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#so-you-want-to-write-a-program-eh">So you want to write a program, eh?</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#for-if-you-dont-know-c-or-have-problems-guessing-syntax-from-examples">For if you don't know C, or have problems guessing syntax from examples</a></li>
+        
+            <li><a class="toctree-l3" href="#the-goal-write-a-nice-hello-world-program">The goal: Write a nice hello world program</a></li>
+        
+            <li><a class="toctree-l3" href="#summary">Summary</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../undefined/">Undefined</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">LanguageName Docs</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Tutorial</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h2 id="so-you-want-to-write-a-program-eh">So you want to write a program, eh?</h2>
+<h3 id="for-if-you-dont-know-c-or-have-problems-guessing-syntax-from-examples">For if you don't know C, or have problems guessing syntax from examples</h3>
+<p>See the <a href="../basic-tutorial/">basic tutorial</a> before reading this.</p>
+<p>And since the basic tutorial is a mess, don't expect much more from this one.</p>
+<h3 id="the-goal-write-a-nice-hello-world-program">The goal: Write a nice hello world program</h3>
+<p>So, we'll start with the <code>Main</code> function, which is automatically run when you run the output <code>.exe</code> file.
+<code>Main</code> always has the same definition:</p>
+<pre><code>define i32 Main(i64 ArgC, void* ArgV) {
+
+}
+</code></pre>
+
+<p>You can ignore the parameters for this tutorial, they might be explained later.</p>
+<p>"But wait" I hear you ask, "How are we going to print 'hello world'?".
+We're going to use the <code>Console</code> module, which is part of the painstakingly written standard library.</p>
+<p>To use the <code>Console</code> module, we need to import it with <code>Import Console</code>, so our code is now:</p>
+<pre><code>Import Console
+
+define i32 Main(i64 ArgC, void* ArgV) {
+
+}
+</code></pre>
+
+<p>Now, we need to get to printing.</p>
+<p>First we'll store the text we want to print into the variable <code>Message</code>, which will be a <code>i8*</code>. This is because a string of text is stored as a list of <code>i8</code> values.</p>
+<pre><code>Import Console
+
+define i32 Main(i64 ArgC, void* ArgV) {
+    i8* Message := &quot;Hello world!&quot;
+}
+</code></pre>
+
+<p>Now, we'll use the <code>Console</code> module's function <code>AWrite</code> to write <code>Message</code> to the console. </p>
+<p>The <code>AWrite</code> name stands for <code>ASCII Write</code> because <code>i8*</code> text is stored as ASCII characters, and require special treatment.</p>
+<p>In order to call <code>AWrite</code>, we need to prefix it with the module name, and a <code>:</code> character, like:</p>
+<pre><code>Console:AWrite()
+</code></pre>
+
+<p>Now we'll just add that, and get:</p>
+<pre><code>Import Console
+
+define i32 Main(i64 ArgC, void* ArgV) {
+    i8* Message := &quot;Hello world!&quot;
+    Console:AWrite(Message)
+}
+</code></pre>
+
+<p>Congrats, you just wrote hello world. You might notice that it takes ~2 seconds to compile. That is because I am an idiot.</p>
+<h3 id="summary">Summary</h3>
+<p>So, you know the format for defining functions, declaring variables, along with setting variables, which is good. And just in case you didn't quite catch those, here they are in a list:</p>
+<ul>
+<li>Function definitions follow the format <code>define ReturnType Name(ParameterList) {}</code></li>
+<li>Parameter lists follow the format <code>ParameterType ParameterName, ParameterType ParameterName</code> which can be repeated as much as you like.</li>
+<li>Function bodies are just lists of lines, including more function calls, variable declarations, and statements like <code>if</code>, <code>for</code>, and <code>return</code></li>
+<li>Variable declarations follow the format <code>TypeName VariableName</code> with the optional <code>:= Value</code>.</li>
+<li>Function calls follow the foramt <code>Name(Parameters)</code> where <code>Parameters</code> is a list of comma-seperated values. Function calls into modules are prefixed with <code>ModuleName:</code></li>
+<li>the <code>Main</code> function is always declared as <code>define i32 Main(i64 ArgC, void* ArgV)</code> and is always the first function called.</li>
+</ul>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../undefined/" class="btn btn-neutral float-right" title="Undefined">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../module-string/" class="btn btn-neutral" title="The String Module"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../module-string/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../undefined/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>

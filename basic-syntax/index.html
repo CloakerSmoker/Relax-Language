@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Basic syntax - LanguageName Docs</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Basic syntax";
+    var mkdocs_page_input_path = "basic-syntax.md";
+    var mkdocs_page_url = null;
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> LanguageName Docs</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">(Replace with name)</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Basic syntax</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#the-basic-syntax">The basic syntax</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#types">Types</a></li>
+        
+            <li><a class="toctree-l3" href="#general-things">General Things</a></li>
+        
+            <li><a class="toctree-l3" href="#assignment-operators">Assignment operators</a></li>
+        
+            <li><a class="toctree-l3" href="#binary-operators">Binary operators</a></li>
+        
+            <li><a class="toctree-l3" href="#unary-operators">Unary operators</a></li>
+        
+        </ul>
+    
+
+    <li class="toctree-l2"><a href="#what-next">What next?</a></li>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../basic-tutorial/">Basic tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../details/">Implementation Details</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../dumb-errors/">Dumb errors</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../full-syntax/">Full syntax</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-console/">The Console Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-memory/">The Memory Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../module-string/">The String Module</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../tutorial/">Tutorial</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../undefined/">Undefined</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">LanguageName Docs</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Basic syntax</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h2 id="the-basic-syntax">The basic syntax</h2>
+<p>It's pretty much C, but with minor changes. Although many things are borrowed from C, this is <em>not</em> a C compiler, and does not have all the features C has.</p>
+<h4 id="types">Types</h4>
+<p>Type names are changed to be more concise, and shorter.</p>
+<p>Integer types:</p>
+<table>
+<thead>
+<tr>
+<th>Precision</th>
+<th>C Name</th>
+<th>(LanguageName) Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8 bits</td>
+<td><code>char</code></td>
+<td><code>i8</code></td>
+</tr>
+<tr>
+<td>16 bits</td>
+<td><code>short</code></td>
+<td><code>i16</code></td>
+</tr>
+<tr>
+<td>32 bits</td>
+<td><code>long</code></td>
+<td><code>i32</code></td>
+</tr>
+<tr>
+<td>64 bits</td>
+<td><code>long long</code>/<code>__int64</code></td>
+<td><code>i64</code></td>
+</tr>
+</tbody>
+</table>
+<p>Floating point types:</p>
+<table>
+<thead>
+<tr>
+<th>Precision</th>
+<th>C Name</th>
+<th>(LanguageName) Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32 bits</td>
+<td><code>float</code></td>
+<td><code>f32</code></td>
+</tr>
+<tr>
+<td>64 bits</td>
+<td><code>double</code></td>
+<td><code>f64</code></td>
+</tr>
+</tbody>
+</table>
+<p>Additionally, there is the <code>void</code> type, which is exactly what you'd expect it to be: a 64 bit integer (I can't remember why I made it this way).</p>
+<p>Of course, there are also pointer types, which follow C syntax of <code>TypeName*</code>. Pointer-pointer types are not implemented.</p>
+<h4 id="general-things">General Things</h4>
+<p>String literals are supported, and are replaced with an <code>i8*</code> to the given string. This <code>i8*</code> will point into the stack, so <strong>DO NOT</strong> try to free this memory. You can alter it, but changing the size of it, or overrunning it's length is <strong><em>VERY VERY BAD</em></strong>.</p>
+<p>If a function does not have a return, a <code>return 0</code> is implicitly added.</p>
+<p>The magic entry-point function is named <code>Main</code>, and recieves a <code>i64</code> parameter containing the number of command line arguments, along with a <code>void*</code> which is actually an array of <code>i16*</code> pointers to the individual command line arguments (Just like how in C you have <code>ArgC</code> and <code>ArgV</code>)</p>
+<p><code>Main</code> should have a return type of <code>i32</code>, as the return value will be given to the Windows API <code>ExitProcess</code> function as the program's exit code.</p>
+<p>Now's a good time to note: If you prefix the name of a variable or function with <code>__</code>, you are very likely to break something internal. The <code>__</code> prefix is reserved, and I will be <em>very unhappy</em> with you if you use it.</p>
+<h4 id="assignment-operators">Assignment operators</h4>
+<p>Most assignment operators act as you'd expect, except for <code>*=</code>. </p>
+<p>Since I really like the C syntax for pointers, but <strong><em>hate</em></strong> the C syntax to assign the value a pointer points to, the <code>*=</code> is used for assignment of a memory address to a new value. </p>
+<p>For example <code>(PointerToAString + 90) *= 'H'</code> would set the character at <code>PointerToAString + 90</code> to be <code>H</code>.</p>
+<p>Since <code>*=</code> is taken, <code>/=</code> is also not implemented, <code>+=</code> and <code>-=</code> are the only shorthand assignment operators.</p>
+<p>Additionally, since floating point number support is half-baked (at best), <code>+=</code> and <code>-=</code> are not implemented for floating point numbers.</p>
+<p>So, that leaves us with the 4 assignment operators: <code>:=</code>, <code>*=</code>, <code>+=</code>, <code>-=</code>.</p>
+<h4 id="binary-operators">Binary operators</h4>
+<p>Another minor change is with the logical operators <code>&amp;&amp;</code> and <code>||</code>. 
+I can't think of a good way to generate code which will have these operators short-circuit, so they don't.</p>
+<p>Additionally, some operators are not implemented for floating point operands. This is mostly because I do floating point math with the (actually older than me) x87 FPU, and can't figure out the FPU instructions needed for some operators.</p>
+<p>These operators are: <code>%</code> (Modulo), <code>&amp;&amp;</code>, and <code>||</code>. (You'll get an error message when you try to use them on floating point operands)</p>
+<p>Bitwise operators are allowed on all data types, simply because I think it's dumb that they aren't in some languages. If you want to mangle the floating point number format, go for it.</p>
+<p>The full list of binary operators: <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code> (Modulo), <code>=</code> (regular equality, there's no <code>==</code>), <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>&amp;</code>, <code>|</code>, <code>^</code></p>
+<p>Yes, I know there's no bit-shifts. If anyone besides me ever uses this language and wants bit-shifts, I'll implement them.</p>
+<h5 id="casting">Casting</h5>
+<p>Casting between types is usually implicit, but if you want to explicitly cast between two obviously incompatible types, the <code>As</code> operator does it.
+The format is <code>Operand As TypeName</code>, just be careful with <code>Operand</code>, since <code>As</code> will take the closest thing on its left, so <code>1 + 2 As f32</code> would be parsed as <code>1 + (2 As f32)</code>.</p>
+<p>This funky word operator is because I honestly fear for my mental and physical health if I have to modify the expression parser to handle C style casting.</p>
+<h4 id="unary-operators">Unary operators</h4>
+<p>Unary operators also have some odd bits, mostly because I forgot to implement how they work with different types. (All data types are treated like integers with unary operators)</p>
+<p>So make sure not to have something like <code>-AFloatingPointNumber</code>, because that'll cause some problems. <code>0 - AFloatingPointNumber</code> works fine though.
+Oh, and <code>AFloatingPointNumber</code> with <code>++</code> or <code>--</code> will also cause some problems.</p>
+<p><code>&amp;</code> Functions as you'd expect in C, same with <code>*</code> (which requires a pointer type as the operand).</p>
+<p><code>++Variable</code> and <code>Variable++</code> also function as you'd expect, I made sure.</p>
+<p><code>++PointerVariable</code> is also implemented to increment <code>PointerVariable</code> by however big the value it points to is, ex:</p>
+<pre><code class="c">i64 SomeNumber := 99
+i64* PointerVariable := &amp;SomeNumber
+++PointerVariable
+</code></pre>
+
+<p>Would increment <code>PointerVariable</code> by 8 </p>
+<h2 id="what-next">What next?</h2>
+<p>For a tutorial sort of thing, see <a href="../tutorial/">the tutorial page</a>.</p>
+<p>For a full writeup of the syntax, see <a href="../full-syntax/">the full syntax page</a>.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../basic-tutorial/" class="btn btn-neutral float-right" title="Basic tutorial">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href=".." class="btn btn-neutral" title="(Replace with name)"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href=".." style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../basic-tutorial/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>
