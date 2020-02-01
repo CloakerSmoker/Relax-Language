@@ -234,6 +234,10 @@
 						this.Compile(GlobalInfo.Initializer)
 					}
 				}
+				
+				for ModuleName, ModuleInfo in this.Modules {
+					this.CodeGen.Call_Label("__Define____" ModuleName "__SetGlobals")
+				}
 			}
 			
 			if !(this.HasReturn) {
@@ -344,7 +348,7 @@
 				if !(IsObject(FunctionNode)) {
 					new Error("Module")
 						.LongText("Module or member not found.")
-						.Token(ModuleExpression)
+						.Token(Expression)
 						.Source(this.Source)
 					.Throw()
 				}

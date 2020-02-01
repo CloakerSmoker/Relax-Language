@@ -348,7 +348,7 @@ class Context {
 		NewEnd := Max(OtherContext.End, this.End)
 		NewLine := Min(OtherContext.Line, this.Line)
 
-		return new Context(NewStart, NewEnd, NewLine)
+		return new Context(NewStart, NewEnd, NewLine, this.Source)
 	}
 	ExtractFrom(String) {
 		return SubStr(String, this.Start + 1, this.End - this.Start)
@@ -628,6 +628,12 @@ class ASTNodes {
 			GetContext() {
 				StartContext := this.Target.GetContext()
 				EndContext := this.Params.Expressions[this.Params.Expressions.Count()].GetContext()
+				
+				if !(IsObject(EndContext)) {
+					EndContext := StartContext.Clone()
+					EndContext.End += 1
+				}
+				
 				EndContext.End += 1
 				
 				FullContext := StartContext.Merge(EndContext)

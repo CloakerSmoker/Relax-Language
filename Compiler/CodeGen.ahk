@@ -779,7 +779,7 @@ class X64CodeGen {
 		return this.FunctionToIndex[Name]
 	}
 	
-	Link(LabelOnly := False) {
+	Link(LabelOnly := False, IgnoreInvalidLabels := False) {
 		static HEAP_ZERO_MEMORY := 0x00000008
 		static hProcessHeap := DllCall("GetProcessHeap")
 	
@@ -809,7 +809,6 @@ class X64CodeGen {
 			}
 		}
 		
-		Globals := {}
 		SkipBytes := 0
 	
 		for Index, Byte in this.Bytes {
@@ -818,6 +817,16 @@ class X64CodeGen {
 			}
 			else if (IsObject(Byte)) {
 				if (Byte[1] = "Label") {
+					if !(this.Labels.HasKey(Byte[2])) {
+						if (IgnoreInvalidLabels) {
+							LinkedBytes.Push(Byte)
+							Continue
+						}
+						else {
+							Throw, Exception("CodeGen, label not found: " Byte[2])
+						}
+					}
+					
 					TargetIndex := this.Labels[Byte[2]]
 					CurrentIndex := (Index + 4) - 1
 					Offset := TargetIndex - CurrentIndex
@@ -833,7 +842,6 @@ class X64CodeGen {
 						Globals[Byte[2]] := Globals.Count()
 					}
 					
-					Byte.Push(Globals[Byte[2]] * 8)
 					LinkedBytes.Push(Byte)
 					
 					Continue

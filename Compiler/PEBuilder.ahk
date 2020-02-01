@@ -681,6 +681,7 @@ class PEBuilder {
 	
 	LinkCode(Bytes) {
 		LinkedBytes := []
+		Globals := {}
 		
 		for k, Byte in Bytes {
 			if (IsObject(Byte)) {
@@ -713,11 +714,15 @@ class PEBuilder {
 						LinkedBytes.Push(["IAT", FunctionName "@" DllName])
 						this.AddRelocation(this.NextSectionRVA, k - 1)
 					}
-					Case "Global": {
+					Case "Global": {					
 						GlobalName := Byte[2]
 						SectionName := Byte[3]
-						SectionOffset := Byte[4]
 						
+						if !(Globals.HasKey(GlobalName)) {
+							Globals[GlobalName] := Globals.Count()
+						}
+						
+						SectionOffset := Globals[GlobalName] * 8
 						SectionRVA := this.SectionRVAs[SectionName]
 						
 						LinkedBytes.Push(["SectionPointer", this.ImageBase + SectionRVA + SectionOffset])

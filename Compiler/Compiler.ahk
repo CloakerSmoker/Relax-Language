@@ -118,11 +118,12 @@
 	#Include %A_LineFile%\..\Components\CompileExpressions.ahk
 	; Compiles all expressions but function calls
 	
-	CompileProgram(Program) {
+	CompileProgram(Program, ModuleName := "") {
 		this.FunctionIndex := 0 ; A unique number to keep different functions from reusing label names
 		
 		this.CodeGen := new X64CodeGen()
 		this.Globals := Program.Globals
+		this.Name := ModuleName
 		
 		if (this.Features & this.DisableGlobals) {
 			if (this.Globals.Count()) {
@@ -143,6 +144,7 @@
 		this.ModuleGlobals := {}
 		
 		this.FunctionOffsets := FunctionOffsets := {}
+		
 		this.FlattenModuleList(Program)
 		
 		FunctionOffset := 0
@@ -150,25 +152,75 @@
 		for FunctionName, FunctionDefine in Program.Functions {
 			FunctionOffsets[FunctionName] := FunctionOffset
 			
-			this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
+			if !(this.ModuleFunctions.HasKey(FunctionName)) {
+				this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
+			}
 			
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
+			
+			if (FunctionOffsets[FunctionName] = FunctionOffset) {
+				FunctionOffsets.Delete(FunctionName)
+			}
+		}
+		
+		if (this.Name) {
+			FunctionOffsets["SetGlobals"] := this.CodeGen.Index()
+			
+			for GlobalName, GlobalInfo in this.Globals {
+				Initializer := GlobalInfo.Initializer
+				Expression := Initializer.Expression
+				
+				if (Initializer.Type != ASTNodeTypes.None) {
+					if (Expression.Type = ASTNodeTypes.Binary && Expression.Operator.Type = Tokens.COLON_EQUAL) {
+						Expression.Left.Value := GlobalName
+					}
+					
+					this.Compile(GlobalInfo.Initializer)
+				}
+			}
+			
+			this.CodeGen.Return()
+		}
+		else {
+			; If we're not compiling a standalone module, then actually gather the implementation for the modules used
+			
+			for ModuleName, ModuleInfo in this.Modules {
+				ModuleOffset := this.CodeGen.Index()
+				
+				for LabelName, LabelOffset in ModuleInfo.Offsets {
+					this.CodeGen.Labels[LabelName] := ModuleOffset + LabelOffset
+				}
+				
+				this.CodeGen.Bytes.Push(ModuleInfo.Bytes*)
+			}
 		}
 		
 		return this
 	}
 	
 	EncodeModuleName(ModuleName, Name) {
-		return "__" ModuleName "__" Name
+		if (ModuleName = this.Name) {
+			return Name
+		}
+		else {
+			return "__" ModuleName "__" Name
+		}
 	}
 	
 	FlattenModuleList(ForProgram) {
 		for k, ModuleName in ForProgram.Modules {
-			ModuleAST := Module.Find(ModuleName)
+			if (this.Modules.HasKey(ModuleName)) {
+				Continue
+			}
+			
+			ModuleInfo := Module.Find(ModuleName)
+			ModuleAST := ModuleInfo.AST
 			
 			for FunctionName, FunctionDefine in ModuleAST.Functions {
-				this.Program.Functions[this.EncodeModuleName(ModuleName, FunctionName)] := FunctionDefine
-				this.ModuleFunctions[FunctionName] := FunctionDefine
+				EncodedName := this.EncodeModuleName(ModuleName, FunctionName)
+				
+				this.Program.Functions[EncodedName] := FunctionDefine
+				this.ModuleFunctions[EncodedName] := FunctionDefine
 			}
 			
 			for GlobalName, GlobalInfo in ModuleAST.Globals {
@@ -176,9 +228,10 @@
 				this.ModuleGlobals[GlobalName] := GlobalInfo
 			}
 			
+			
 			this.FlattenModuleList(ModuleAST)
 			
-			this.Modules[ModuleName] := ModuleAST
+			this.Modules[ModuleName] := ModuleInfo
 		}
 	}
 

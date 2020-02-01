@@ -367,7 +367,7 @@ class Conversions {
 		static HexCharacters := ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"]
 		End := (NoZeros ? "" : "0x")
 		HexString := ""
-		Quotient := Int
+		Quotient := Abs(Int)
 		
 		loop {
 			Remainder := Mod(Quotient, 16)
@@ -385,4 +385,49 @@ class Conversions {
 		
 		return End HexString
 	}
+}
+
+Hash(String) {
+	Len := StrLen(String)
+	VarSetCapacity(pString, Len, 0)
+	StrPut(String, &pString, Len, "UTF-8")
+	return _Hash(&pString, Len)
+}
+_Hash(pData, DataSize) {
+	static PROV_RSA_FULL := 1
+	static PROV_RSA_AES := 0x00000018
+	static CRYPT_VERIFYCONTEXT := 0xF0000000
+	static CALG_MD5	:= 0x00008003
+	static HP_HASHVAL := 0x2
+	
+	VarSetCapacity(pCSPHandle, 8, 0)
+	VarSetCapacity(RandomBuffer, 8, 0)
+	
+	DllCall("advapi32.dll\CryptAcquireContextA", "Ptr", &pCSPHandle, "UInt", 0, "UInt", 0, "UInt", PROV_RSA_FULL, "UInt", CRYPT_VERIFYCONTEXT)
+	CSPHandle := NumGet(&pCSPHandle, 0, "UInt64")
+	;MsgBox, % "CSP: " CSPHandle
+	
+	VarSetCapacity(pHashHandle, 8, 0)
+	DllCall("advapi32.dll\CryptCreateHash", "Ptr", CSPHandle, "UInt", CALG_MD5, "UInt", 0, "UInt", 0, "Ptr", &pHashHandle)
+	HashHandle := NumGet(&pHashHandle, 0, "UInt64")
+	;MsgBox, % "Hash: " HashHandle
+	
+	DllCall("advapi32.dll\CryptHashData", "Ptr", HashHandle, "Ptr", pData, "UInt", DataSize, "UInt", 0)
+	
+	VarSetCapacity(pHashSize, 8, 0)
+	DllCall("advapi32.dll\CryptGetHashParam", "Ptr", HashHandle, "UInt", HP_HASHVAL, "UInt", 0, "Ptr", &pHashSize, "UInt", 0)
+	HashSize := NumGet(pHashSize, 0, "UInt64")
+	;MsgBox, % "Hash Size: " HashSize
+	
+	VarSetCapacity(pHashData, HashSize, 0)
+	DllCall("advapi32.dll\CryptGetHashParam", "Ptr", HashHandle, "UInt", HP_HASHVAL, "Ptr", &pHashData, "Ptr", &pHashSize, "UInt", 0)
+	
+	FirstHalf := NumGet(&pHashData, 0, "UInt64")
+	SecondHalf := NumGet(&pHashData, 7, "UInt64")
+	Hash := Conversions.IntToHex(Floor(FirstHalf), true) Conversions.IntToHex(Floor(SecondHalf), true)
+	
+	DllCall("advapi32.dll\CryptDestroyHash", "Ptr", HashHandle)
+	DllCall("advapi32.dll\CryptReleaseContext", "Ptr", CSPHandle, "UInt", 0)
+	
+	return Hash
 }

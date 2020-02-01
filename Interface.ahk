@@ -75,7 +75,7 @@ class LanguageName {
 		return CodeCompiler
 	}
 	
-	CompileCode(CodeString, Flags := "") {
+	CompileCode(CodeString, Flags := "", Name := "") {
 		if !(IsObject(Flags)) {
 			Flags := this.DefaultFlags
 		}
@@ -90,7 +90,7 @@ class LanguageName {
 		CodeOptimizer.OptimizeProgram(CodeAST)
 		
 		CodeCompiler := new Compiler(CodeLexer, CodeParser, Flags)
-		CodeCompiler.CompileProgram(CodeAST)
+		CodeCompiler.CompileProgram(CodeAST, Name)
 		
 		return CodeCompiler
 	}
@@ -116,7 +116,11 @@ class Module {
 			FoundModule.AST := this.Parse(Name)
 		}
 		
-		return FoundModule.AST
+		if !(FoundModule.Bytes.Count()) {
+			Module.LoadPrecompiledModule(Name)
+		}
+		
+		return FoundModule
 	}
 	Parse(Name) {
 		CodeString := this.Modules[Name].Class.Code
@@ -131,6 +135,90 @@ class Module {
 		CodeOptimizer.OptimizeProgram(CodeAST)
 		
 		return CodeAST
+	}
+	
+	LoadPrecompiledModule(Name) {
+		File := FileOpen(A_ScriptDir "\__Precompiled__" Name ".bin", "rw")
+		
+		SourceHash := Hash(Builtins[Name].Code)
+		FileHash := SubStr(File.ReadLine(), 1, StrLen(SourceHash))
+		
+		if (SourceHash != FileHash) {
+			return this.PrecompileModule(Name)
+		}
+		
+		RequiredModules := StrReplace(File.ReadLine(), "`n")
+		
+		Offsets := StrSplit(StrReplace(File.ReadLine(), "`n"), ",")
+		FunctionOffsets := {}
+		
+		for k, Offset in Offsets {
+			SplitOffset := StrSplit(Offset, ":")
+			FunctionOffsets[SplitOffset[1]] := SplitOffset[2]
+		}
+		
+		Bytes := StrReplace(File.ReadLine(), "`n")
+		
+		Bytes := StrSplit(Bytes, ",")
+		
+		for k, Byte in Bytes {
+			if (InStr(Byte, ":")) {
+				Bytes[k] := StrSplit(Byte, ":")
+			}
+		}
+		
+		this.Modules[Name].Modules := RequiredModules
+		this.Modules[Name].Offsets := FunctionOffsets
+		this.Modules[Name].Bytes := Bytes
+	}
+	
+	PrecompileModule(Name) {
+		CompiledModule := LanguageName.CompileCode(Builtins[Name].Code,, Name)
+		Bytes := CompiledModule.CodeGen.Link(True, True)
+		
+		this.Modules[Name].Bytes := Bytes
+		this.Modules[Name].Offsets := {}
+		
+		FileContents := Hash(Builtins[Name].Code) "`n"
+		
+		for ModuleName, ModuleInfo in CompiledModule.Modules {
+			FileContents .= ModuleName ","
+		}
+		
+		if !(CompiledModule.Modules.Count()) {
+			FileContents .= "`n"
+		}
+		
+		FileContents := SubStr(FileContents, 1, -1) "`n"
+		
+		for FunctionName, FunctionOffset in CompiledModule.FunctionOffsets {
+			LabelName := "__Define____" Name "__" FunctionName
+			
+			this.Modules[Name].Offsets[LabelName] := FunctionOffset
+			FileContents .= LabelName ":" FunctionOffset ","
+		}
+		
+		FileContents := SubStr(FileContents, 1, -1) "`n"
+		
+		for k, Byte in Bytes {
+			if (IsObject(Byte)) {
+				for k, v in Byte {
+					FileContents .= v ":"
+				}
+				
+				FileContents := SubStr(FileContents, 1, -1) ","
+			}
+			else {
+				FileContents .= Byte ","
+			}
+		}
+		
+		FileContents := SubStr(FileContents, 1, -1)
+		
+		File := FileOpen(A_ScriptDir "\__Precompiled__" Name ".bin", "w")
+		File.Length := 0
+		File.Write(FileContents)
+		File.Close()
 	}
 }
 

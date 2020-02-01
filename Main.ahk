@@ -55,6 +55,7 @@ define i64 Main(i64 ArgC, void* ArgV) {
 	Console:ResetColors()
 }
 )
+
 ;Console:Blue()
 ; MessageBoxW(0, NextArg, NextArg, 0)
 

@@ -200,8 +200,8 @@
 	}
 	AddToken(Type, Value := false) {
 		Value := Value ? Value : this.SubStr(this.TokenStart, this.Index)
-		Context := new Context(this.TokenStart, this.Index, this.LineNumber)
-		this.Tokens.Push(new Token(Type, Value, Context, this.CodeString))
+		NewContext := new Context(this.TokenStart, this.Index, this.LineNumber)
+		this.Tokens.Push(new Token(Type, Value, NewContext, this.CodeString))
 	}
 	SubStr(From, To) {
 		String := ""
