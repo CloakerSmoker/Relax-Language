@@ -1,6 +1,6 @@
 site_name: LanguageName Docs
 theme:
-    name: readthedocs
+    name: 'windmill-dark'
     highlightjs: true
     hljs_languages:
         - ahk

@@ -20,15 +20,20 @@ None
 | WEqual        | `i8`        | `i16* WStringOne`, `i16* WStringTwo`    | Compares the two strings character by character, and returns `1` if the strings are equal.            |
 | WTrimNewline  | `i16*`      | `i16* WString`                          | Removes \r\n from the last two characters of the string, if they are there.                           |
 | AReverse      | `i8*`       | `i8* AString`                           | Reverses `AString` character by character, leaving the null-terminator in place.                      |
-| WToI          | `i64`       | `i16* WString`, `i8* Success`           | Trys to read an integer from `WString`, sets `Succes` to 1 when an integer was read, and returns it.  |
+| WToI          | `i64`       | `i16* WString`, `i8* Success`           | Tries to read an integer from `WString`, sets `Success` to 1 when an integer was read, and returns it.  |
 | WIsNumeric    | `i8`        | `i16 Character`                         | Returns if the character is in the range of '0'->'9'.                                                 |
 | IToA          | `i8*`       | `i64 Number`                            | Converts `Number` to an ASCII string, including '-' if `Number` is negative.                          |
 | IToW          | `i16*`      | `i64 Number`                            | Calls `String:IToA`, converts the result to a wide string with `String:AToW` and returns it.          |
 | AToW          | `i16*`      | `i8* AString`                           | Converts `AString` to a wide string, and returns the new wide string.                                 |
 
+## Notes
+
+None of these functions take string lengths, mostly because memory safety is lying dead on the floor. They work as long as you don't break things.
+
+Also, they don't take an output buffer as parameters, mostly because that would just shift the blame of who needs to allocate memory.
+If a function returns a string type, you are expected to free it with `Memory:Free`.
+
 ## Usage Impact
 
 `String` imports the [`Memory`](module-memory.md) module, which alone is not very impactful.
-However, since `String` is entirely implemented in (Replace with language name), and many of the `String:` functions depend on each other, the module generates upwards of 5 KB of code, and adds around 900 MS to compile times.
-
-Yes, I know this is terrible. I blame AHK.
+However, since `String` is entirely implemented in (Replace with language name), and many of the `String:` functions depend on each other, the module generates upwards of 5 KB of code.

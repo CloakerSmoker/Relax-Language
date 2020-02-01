@@ -21,6 +21,8 @@ Top 10 reasons I hate the Windows Console API.
 | i16 Console:Red    | 0x04                      |
 | i16 Console:Green  | 0x02                      |
 | i16 Console:Blue   | 0x01                      |
+| i16 Console:White  | 0x0F                      |
+| i16 Console:Black  | 0x00                      |
 
 ## Functions
 
@@ -37,6 +39,12 @@ Top 10 reasons I hate the Windows Console API.
 | TextColor     | `void`      | `i8 Foreground`                         | Sets the console foreground color to `Foreground` and the background to black with `Console:SetColor`.|
 | ReadLine      | `i16*`      |                                         | Waits for the user to enter a line of input and press enter using `ReadConsole`.                      |
 
+## Notes
+
+Console is a relatively high-level module, and manages a lot of things for you. For example, `IWriteXXXX` and `AWriteXXXX` both free any intermediate buffers allocated for you, and `SetColor` builds the correct structure for color settings for you. 
+
+`ReadLine` handles the allocation and extension of a buffer for console input, and calling `ReadConsole` in a loop to read all input.
+
 ## Usage Impact
 
-`Console` imports both `String` and `Memory`, which generate ~6 KB of code together. Console itself generates another ~4 KB of code on top of that, and has ~70 bytes of globals and imports. `Console` adds ~1 second to compile time.
+`Console` imports both `String` and `Memory`, which results in ~8 KB of extra code being generated.

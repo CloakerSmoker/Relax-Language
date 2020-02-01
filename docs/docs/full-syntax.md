@@ -27,21 +27,21 @@ DllImport ReturnType FunctionName(ParameterTypeList) {DllFileName.dll, FunctionN
 
 * `ReturnType` is the [type](#types) that the function is expected to return.
 * `FunctionName` is the [name](#names) that the function will have internally, and is the name you use to call it. This name does not need to be the same as `FunctionNameInsideDLL`.
-* `ParameterTypeList` is a list of comma-seperated [types](#types), without any names, since the parameter names are not needed.
+* `ParameterTypeList` is a list of comma-separated [types](#types), without any names, since the parameter names are not needed.
 * `DllFileName.dll` is the name of the file which contains the given function.
 * `FunctionNameInsideDLL` is the name of the function, as it is exported in from the DLL.
 
 ### Define
 Define statements follow the format:
 ```
-Define ReturnType Functionname(ParameterList) {
+Define ReturnType FunctionName(ParameterList) {
     Body
 }
 ```
 
 * `ReturnType` is the [type](#types) that the function is expected to return.
 * `FunctionName` is the [name](#names) that the function will have, and is the name you use to call it.
-* `ParameterList` is a list of comma-seperated [type](#types) [name](#names) pairs.
+* `ParameterList` is a list of comma-separated [type](#types) [name](#names) pairs.
 * `Body` is a list of [statements](#statements).
 
 ### Global
@@ -101,7 +101,7 @@ else {
 * `(Condition)` an [expression](#expression) which will be tested in order to decide if the next block will run or not.
 * `Body` (in all places) is a list of statements(#statements) which will run if the prior condition resulted in a non-zero result.
 * `else if` the required keyword to add another [condition](#expression) and [body](#statements) to the entire if statement.
-* `else` the required keyword to add a finaly [body](#statements) to the if statement, which will only run when no other conditions are met.
+* `else` the required keyword to add a final [body](#statements) to the if statement, which will only run when no other conditions are met.
 
 `else if` can be repeated any number of times, for any number of conditions. There can only be one `else` for each if statement.
 
@@ -113,7 +113,7 @@ for (Init, Condition, Step) {
 }
 ```
 
-* `Init`, `Condition`, and `Step` are all [expressions](#expresion) which run at different points. 
+* `Init`, `Condition`, and `Step` are all [expressions](#expression) which run at different points. 
 * `Body` is a list of statements(#statements) which will run each iteration of the loop.
 
 `Init` can optionally be a [declaration](#declaration) and is run before the loop first stats, and never again. 

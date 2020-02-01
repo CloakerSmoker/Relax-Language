@@ -1,11 +1,11 @@
 # Implementation Details
 Oooo, goodie, I get to explain the fun parts.
 
-Spoiler: Most of the lexer and parser follow the format described in [this wonderful book (that I stopped following after the parser chapter)](https://www.craftinginterpreters.com/)
+Spoiler: Most of the lexer and parser follow the format described in [this wonderful book (that I stopped following after the parser chapters)](https://www.craftinginterpreters.com/)
 
 The optimizer and compiler themselves are all of my own design, same with `CodeGen` and `PEBuilder`.
 
-Of course, the holy bible of AMD64 parts [one](https://www.amd.com/system/files/TechDocs/24592.pdf) and [three](http://support.amd.com/TechDocs/24594.pdf) were wonderful reasources, along with [the holy bible of AMD64 cheat sheet](https://www.felixcloutier.com/x86/index.html) which I got most of the instruction encodings from.
+Of course, the holy bible of AMD64 (parts [one](https://www.amd.com/system/files/TechDocs/24592.pdf) and [three](http://support.amd.com/TechDocs/24594.pdf) specifically) was a wonderful resource, along with [the holy bible cheat sheet](https://www.felixcloutier.com/x86/index.html) which I got most of the instruction encodings from.
 
 And you can't forget the absolute mess of deprecated things that is the [MSDN page for the PE/`.exe` file format](https://docs.microsoft.com/en-us/windows/win32/debug/pe-format) along with [the 25 year old article](https://docs.microsoft.com/en-us/previous-versions/ms809762(v=msdn.10)) it recommends you read if you ever want to understand the format (Note: that article is still really good though).
 
@@ -29,7 +29,7 @@ The part that scares me the most.
 
 A good old fashioned [recursive descent parser](https://en.wikipedia.org/wiki/Recursive_descent_parser) that handles everything but expressions. 
 
-Expressions are handled by a somewhat seperate [shunting yard](https://en.wikipedia.org/wiki/Shunting-yard_algorithm) parser, which works with `Constants.ahk` to get operator precendence/associativity.
+Expressions are handled by a somewhat separate [shunting yard](https://en.wikipedia.org/wiki/Shunting-yard_algorithm) parser, which works with `Constants.ahk` to get operator precedence/associativity.
 
 All kinds of functions `inline/define/dllimport` are stored inside of the `.CurrentProgram.Functions` object, which is why you can call a `DllImport` function just like any other, since they are treated nearly exactly the same.
 
@@ -65,7 +65,7 @@ The (second) most boring part.
 
 You wouldn't expect walking an AST and generating machine code to be boring, but after so many hours of debugging, it 100% is.
 
-Debugging compiled code isn't usually that bad, since you get a nice disassembly to look at. Except for when you're debugging code that `DllCall` is jumping into. Every single code generation bug until I got `PEBuilder` working was fixed by manually disassemling the code, and running it in my head. 
+Debugging compiled code isn't usually that bad, since you get a nice disassembly to look at. Except for when you're debugging code that `DllCall` is jumping into. Every single code generation bug until I got `PEBuilder` working was fixed by manually disassembling the code, and running it in my head. 
 
 You ever count the stack-depth using your fingers? Well, I have. It's not fun.
 
@@ -80,7 +80,7 @@ What's not as nice is the number of shims and odd-implementations I had to put i
 <br/>
 
 For example, expressions used to be evaluated using the CPU stack to hold operands until use, but then I realized that the stack is in memory, and memory is slow.
-So, I sat there thinking and thinking. And then I had a terrrible idea. In the x87 FPU, registers work as a stack, which is a massive pain to deal with.
+So, I sat there thinking and thinking. And then I had a terrible idea. In the x87 FPU, registers work as a stack, which is a massive pain to deal with.
 
 But of course, my genius idea was to use `[RCX, RDX, R8-R13]` as a fake stack, which is dumped onto the real stack when another register is needed past `R13`.
 
@@ -144,7 +144,29 @@ define a_invalid_type_name Main() {}
 That, is a `PrettyError()`. I borrowed some of the visual style from Rust, but the implementation is my own. 
 It's gone through a few versions, but at this point I think it's nearly bug-free (with correct input), and is a very good display of where the error is, and what the problem is.
 
-A life-saver during actual developement has been `OnError(Func("ErrorCallstack"), -1)`, which adds a printout of the callstack to uncaught exceptions, which should really be in AHK by default.
+A life-saver during actual development has been `OnError(Func("ErrorCallstack"), -1)`, which adds a printout of the call stack to uncaught exceptions, which should really be in AHK by default.
+
+## Modules
+
+A good idea, that was far too complex to fully implement.
+
+Modules were my great idea on how I could get away from thinking my language is just a C clone. Sadly, modules turned out to be an incredible amount of work to implement.
+
+At first, they were just a shim, and not even a syntax. Modules only functioned because AHK would allocate/manage them, and modules even had reference counters.
+
+Of course, this doesn't translate to executables very well, so modules got redone.
+
+## Compiler targets
+
+Originally, I planned to convince myself this would be a tool to be used inside of AHK for speed boosts, so I had methods to run compiled code directly with `DllCall`.
+
+Then I decided that that method depended on AHK too much, so I wrote a way to compiled a program down to an AHK script, which just needed a bit of boilerplate to run.
+
+And then finally, `PEBuilder` became a thing, and I added support for it too.
+
+So, there's the 3 possible targets. All implemented in different ways, even with different code being generated for different targets. Obviously, this wouldn't work long-term.
+
+And that's why all targets except for `.exe` files got scrapped. The others were just to much to maintain over core compiler changes (like the module rewrites).
 
 ## Other things
 

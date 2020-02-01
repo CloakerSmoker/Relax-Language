@@ -31,7 +31,7 @@ String literals are supported, and are replaced with an `i8*` to the given strin
 
 If a function does not have a return, a `return 0` is implicitly added.
 
-The magic entry-point function is named `Main`, and recieves a `i64` parameter containing the number of command line arguments, along with a `void*` which is actually an array of `i16*` pointers to the individual command line arguments (Just like how in C you have `ArgC` and `ArgV`)
+The magic entry-point function is named `Main`, and receives a `i64` parameter containing the number of command line arguments, along with a `void*` which is actually an array of `i16*` pointers to the individual command line arguments (Just like how in C you have `ArgC` and `ArgV`)
 
 `Main` should have a return type of `i32`, as the return value will be given to the Windows API `ExitProcess` function as the program's exit code.
 

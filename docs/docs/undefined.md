@@ -7,6 +7,8 @@ Also the same with any code I can't read.
 
 Also the same with any code that's so dumb I can't believe that it didn't get caught as an error.
 
+___
+
 ## Undefined-Behavior
 
 When you write code which does things I didn't expect. 
@@ -23,11 +25,15 @@ When I've forgotten to set a variable to something, or you go peeking into somet
 
 This includes variables before they are initialized, or other places where I've forgotten to make an operator actually work.
 
+___
+
 ## How to deal with undefined-anything
-Well, it's a: 
+Well, it's a 
 
+```
 > Doctor, it hurts when I do X
+```
 
-kind of situation, just don't do X.
+kind of situation, just don't do `X`.
 
 Unless it's a perfectly normal operation which doesn't work, then maybe let me know.
