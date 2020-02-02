@@ -14,8 +14,10 @@ All without any outside tools. Every step is personally written by me. (Which pr
 
 For more info, see [the implementation details](details.md)
 
-## How to use
-open `Main.ahk`, and change `Code =` to a different string of code. Run `Main.ahk`, and then `out.exe` will have the compiled version of the `Code =` program.
+## How to use it
+Open `Main.ahk`, and change `Code =` to a different string of code. Run `Main.ahk`, and then `out.exe` will have the compiled version of the `Code =` program.
+
+Additionally, you can change `.CompileToEXE(Code)` to `.CompileToAHK(Code)`, which will generate an AHK script containing the compiled code, which can then be `#Include`'d and run like any other script. For more info, see [compiling to AHK](compile-to-ahk)
 
 That's it. Except that most of the work is writing the string of code.
 
@@ -28,13 +30,17 @@ For a tutorial sort of thing, see [the tutorial page](tutorial.md).
 
 For a full writeup of the syntax, see [the full syntax page](full-syntax.md).
 
+## How it works
+
+I wanted the header for this on this page, but it's long enough that you'll need to go [to this page](how-it-works) to read that.
+
 ## Why I did this
 
 I feel like I need to defend myself here, mostly because I know it's 100% insane to use AHK for a project like this.
 
 AHK was the first language I ever really mastered, and I got used to how everything works, and all of the quirks. 
 
-Because of this, when I decided I wanted to write a toy language, I didn't think of using a "real" language since I had a language that you can easily (and quickly) prototype things in right in front of me.
+Because of this, when I decided I wanted to write a toy language, I didn't think of doing it in a "real" language since I already had a language that you can easily (and quickly) prototype things in right in front of me.
 
 ---
 
@@ -46,7 +52,7 @@ Try your hand at a quick [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) in
 
 Just make sure that your first project ***is not*** a full on compiled language.
 
-Working on this language has been a rollercoaster, I have had incredible peaks, and very low-lows. For the past ~5 months, I've always had some kind of thought in the back of my head about the next thing that will be implemented, and set a grueling pase for myself.
+Working on this language has been a rollercoaster, and I blame 100% of that on my ambitions being *way* too high.
 
 If you decide to write your own language, *do not* push yourself to work on it constantly. I did that, and now I'm burnt out enough to stop writing in AHK entirely.
 

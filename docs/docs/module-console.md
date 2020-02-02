@@ -41,6 +41,15 @@ Top 10 reasons I hate the Windows Console API.
 
 ## Notes
 
+If you are using the `Console` module while [compiling to AHK](compile-to-ahk), you will need to include the following snippet (in `out.ahk`) to create a console window, and have `Console` get the correct handles to STD(IN|OUT|ERR).
+
+```
+DllCall("AllocConsole")
+__RunTime__SetGlobals()
+```
+
+<br/>
+
 Console is a relatively high-level module, and manages a lot of things for you. For example, `IWriteXXXX` and `AWriteXXXX` both free any intermediate buffers allocated for you, and `SetColor` builds the correct structure for color settings for you. 
 
 `ReadLine` handles the allocation and extension of a buffer for console input, and calling `ReadConsole` in a loop to read all input.

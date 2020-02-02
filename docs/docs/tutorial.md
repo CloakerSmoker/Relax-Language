@@ -88,6 +88,4 @@ So, you know the format for defining functions, declaring variables, along with 
 * the `Main` function is always declared as `define i32 Main(i64 ArgC, void* ArgV)` and is always the first function called.
 
 #### One last thing
-I'm sorry if this tutorial wasn't very helpful. 
-
-I've put so much work into this language over the last half a year that I am 100% burnt out.
+Sorry if this wasn't the most helpful tutorial, I'm not very good at writing them.

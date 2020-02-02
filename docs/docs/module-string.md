@@ -28,7 +28,7 @@ None
 
 ## Notes
 
-None of these functions take string lengths, mostly because memory safety is lying dead on the floor. They work as long as you don't break things.
+None of these functions take string lengths, mostly because memory safety has been bleeding out on the floor since the start of this project. They work as long as you don't break things.
 
 Also, they don't take an output buffer as parameters, mostly because that would just shift the blame of who needs to allocate memory.
 If a function returns a string type, you are expected to free it with `Memory:Free`.
