@@ -42,7 +42,7 @@
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.26"
+	static VERSION := "1.0.0-alpha.27"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -51,7 +51,7 @@ class LanguageName {
 	
 	CompileToAHK(CodeString, FilePath := "") {
 		if !(FilePath) {
-			FilePath := A_ScriptDir "\out.exe"
+			FilePath := A_ScriptDir "\out.ahk"
 		}
 		
 		CodeString .= "`n" Builtins.__Runtime__.Code

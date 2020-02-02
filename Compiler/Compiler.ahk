@@ -288,21 +288,7 @@
 				return this.Typing.GetType("f64")
 			}
 			Case Tokens.STRING: {
-				if (this.Features & this.UseStackStrings) {
-					this.CodeGen.Lea_R64_SIB(ResultRegister, this.GetVariableSIB({"Value": "__String__" TargetToken.Value}))
-				}
-				else if (this.Features & this.DisableStrings) {
-					new Error("Compile")
-						.LongText("Strings have been disabled by the DisableStrings flag.")
-						.ShortText("")
-						.Help("Compile without the DisableStrings flag, or remove this string.")
-						.Token(TargetToken)
-						.Source(this.Source)
-					.Throw()
-				}
-				else {
-					this.CodeGen.Move_String_Pointer(ResultRegister, TargetToken.Value)
-				}
+				this.CodeGen.Lea_R64_SIB(ResultRegister, this.GetVariableSIB({"Value": "__String__" TargetToken.Value}))
 				
 				return this.Typing.GetType("i8*")
 			}

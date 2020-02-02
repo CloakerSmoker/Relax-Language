@@ -97,7 +97,7 @@
 		Next := this.Next() ; A program is a list of DllImports/Defines, so this will only handle those two, and error for anything else
 	
 		if (Next.Type = Tokens.KEYWORD) {
-			if (Next.Value = Keywords.DEFINE || Next.Value = Keywords.INLINE) {
+			if (Next.Value = Keywords.DEFINE) {
 				return this.ParseDefine(Next.Value)
 			}
 			else if (Next.Value = Keywords.DLLIMPORT) {

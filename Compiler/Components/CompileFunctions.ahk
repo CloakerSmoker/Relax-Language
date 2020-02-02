@@ -1,153 +1,54 @@
 ﻿	StackStrings(DefineAST, StringStartingOffsets) {
-		if (this.Features & this.UseStackStrings) {
-			this.CodeGen.Move(RBX, RSP)
+		if (DefineAST.Strings.Count() = 0) {
+			return
+		}
+		
+		this.CodeGen.Move(RBX, RSP)
+		
+		for k, String in DefineAST.Strings {
+			HighAddressOffset := StringStartingOffsets[String.Value]
 			
-			for k, String in DefineAST.Strings {
-				HighAddressOffset := StringStartingOffsets[String.Value]
+			this.CodeGen.Move(RAX, I32(HighAddressOffset))
+			HighAddressSIB := SIB(8, RAX, R15)
+			
+			this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
+			
+			Characters := StrSplit(String.Value)
+			
+			CharacterCountRemainder := Mod(Characters.Count(), 8) ; Gets how many characters the string is over a 8 byte boundry
+			
+			if (CharacterCountRemainder = 0) {
+				; If the string straddles the 8 byte boundry, push an extra character and update how many characters it is over the boundry by
+				Characters.Push("") ; Otherwise, the string wouldn't be null-terminated
+				CharacterCountRemainder := 1
+			}
+			
+			loop, % 8 - CharacterCountRemainder {
+				; For each byte left until the string reaches an 8 byte boundry, push an extra null character on it for padding
+				Characters.Push("")
+			}
+			
+			loop {
+				CharacterChunk := 0 ; An int64 which holds the current 8 characters being turned into a single movabs
 				
-				this.CodeGen.Move(RAX, I32(HighAddressOffset))
-				HighAddressSIB := SIB(8, RAX, R15)
-				
-				this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
-				
-				Characters := StrSplit(String.Value)
-				
-				CharacterCountRemainder := Mod(Characters.Count(), 8) ; Gets how many characters the string is over a 8 byte boundry
-				
-				if (CharacterCountRemainder = 0) {
-					; If the string straddles the 8 byte boundry, push an extra character and update how many characters it is over the boundry by
-					Characters.Push("") ; Otherwise, the string wouldn't be null-terminated
-					CharacterCountRemainder := 1
-				}
-				
-				loop, % 8 - CharacterCountRemainder {
-					; For each byte left until the string reaches an 8 byte boundry, push an extra null character on it for padding
-					Characters.Push("")
-				}
-				
-				loop {
-					CharacterChunk := 0 ; An int64 which holds the current 8 characters being turned into a single movabs
+				loop 8 {
+					; Since we are actually working with big-endian, the number we push will be reversed, so we want 
+					;  to have all the terminating null characters (at the end of the string) on the left of the 
+					;   first chunk, so by moving the first character we pop all the way left, we align the string
+					;    correctly with the start at a low address, which counts up higher until the null characters
+					;     are reached
 					
-					loop 8 {
-						; Since we are actually working with big-endian, the number we push will be reversed, so we want 
-						;  to have all the terminating null characters (at the end of the string) on the left of the 
-						;   first chunk, so by moving the first character we pop all the way left, we align the string
-						;    correctly with the start at a low address, which counts up higher until the null characters
-						;     are reached
-						
-						ReversedIndex := 8 - A_Index
-						ShiftBy := ReversedIndex * 8
-						
-						CharacterChunk |= Asc(Characters.Pop()) << ShiftBy
-					}
+					ReversedIndex := 8 - A_Index
+					ShiftBy := ReversedIndex * 8
 					
-					this.CodeGen.Push(I64(CharacterChunk))
-				} until (Characters.Count() = 0)
-			}
-			
-			this.CodeGen.Move(RSP, RBX)
-		}
-	}
-	
-	
-	CompileInline(DefineAST, CallerParams) {
-		OldVariables := this.Variables
-		OldTypingVariables := this.Typing.Variables
-		OldLocals := this.Locals
-		OldFunction := this.Function
-		OldFunctionIndex := this.FunctionIndex
-		OldHasReturn := this.HasReturn
-		
-		OurVariables := {}
-		OurTypingVariables := {}
-		
-		this.Variables := OurVariables
-		this.Typing.Variables := OurTypingVariables
-		
-		this.FunctionIndex := "__Inline__" DefineAST.Name.Value
-		
-		ParamCount := DefineAST.Params.Count()
-		LocalCount := DefineAST.Locals.Count()
-		
-		StackSpace := ParamCount + LocalCount
-		StackSpace += (Mod(StackSpace, 2) != 1)
-		
-		StringStartingOffsets := {}
-
-		for k, String in DefineAST.Strings {		
-			this.AddVariable(StackSpace, "__String__" String.Value)
-			this.Typing.AddVariable("i8*", "__String__" String.Value)
-			
-			StackSpace += Ceil((StrLen(String.Value) + 1) / 8)
-			StringStartingOffsets[String.Value] := StackSpace
-		}
-		
-		this.CodeGen.Push(R15), this.StackDepth++
-		this.CodeGen.SmallSub(RSP, StackSpace * 8), this.StackDepth += StackSpace
-		
-		this.Variables := OldVariables
-		this.Typing.Variables := OldTypingVariables
-		
-		for k, Param in CallerParams {
-			ParamType := this.Compile(Param)
-			
-			this.CodeGen.SmallMove(RBX, k - 1)
-			this.CodeGen.Move_SIB_R64(SIB(8, RBX, RSP), this.PopRegisterStack())
-		}
-		
-		this.CodeGen.Move(R15, RSP)
-		
-		this.Variables := OurVariables
-		this.Typing.Variables := OurTypingVariables
-		this.Function := DefineAST
-		this.Locals := DefineAST.Locals
-		this.HasReturn := False
-		
-		for LocalName, LocalType in DefineAST.Locals {
-			this.AddVariable(ParamCount + (k - 1), LocalName)
-			this.Typing.AddVariable(LocalType, LocalName)
-		}
-		
-		for k, ParamPair in DefineAST.Params {
-			ParamName := ParamPair[2].Value
-			
-			this.AddVariable(k - 1, ParamName)
-			this.Typing.AddVariable(ParamPair[1].Value, ParamName)
-		}
-		
-		this.StackStrings(DefineAST, StringStartingOffsets)
-		
-		this.Inline := True
-			for k, LocalDefault in DefineAST.Locals {
-				if (LocalDefault[2].Type != ASTNodeTypes.None) {
-					this.Compile(LocalDefault[2])
+					CharacterChunk |= Asc(Characters.Pop()) << ShiftBy
 				}
-			}
-			
-			for k, Statement in DefineAST.Body {
-				this.Compile(Statement)
-			}
-			
-			if !(this.HasReturn) {
-				this.CodeGen.SmallMove(RAX, 0)
-			}
-			
-			this.CodeGen.Label("__Return" this.FunctionIndex)
-			
-			this.CodeGen.SmallAdd(RSP, StackSpace * 8), this.StackDepth -= StackSpace
-		this.CodeGen.Pop(R15), this.StackDepth--
-		this.Inline := False
+				
+				this.CodeGen.Push(I64(CharacterChunk))
+			} until (Characters.Count() = 0)
+		}
 		
-		this.FunctionIndex := OldFunctionIndex
-		this.Variables := OldVariables
-		this.Typing.Variables := OldTypingVariables
-		this.Function := OldFunction
-		this.Locals := OldLocals
-		this.HasReturn := OldHasReturn
-		
-		this.CodeGen.Move(this.PushRegisterStack(), RAX)
-		
-		return this.Typing.GetType(DefineAST.ReturnType.Value)
+		this.CodeGen.Move(RSP, RBX)
 	}
 	
 	CompileDefine(Name, DefineAST) {
@@ -204,10 +105,6 @@
 				}
 				
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
-			}
-			
-			if !(this.Features & this.TargetPE) {
-				this.CodeGen.Move_R64_FunctionTable(R14)
 			}
 			
 			this.CodeGen.SmallMove(RSI, 0)
@@ -442,21 +339,7 @@
 			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
 			
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
-				if (this.Features & this.DisableDllCall) {
-					new Error("Compile")
-						.LongText("Calling functions from Dlls is disabled by the DisableDllCall flag.")
-						.ShortText("Can't be called")
-						.Token(Expression)
-						.Source(this.Source)
-					.Throw()
-				}
-				else if (this.Features & this.TargetPE) {
-					this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
-				}
-				else {
-					this.CodeGen.SmallMove(RAX, this.CodeGen.GetFunctionIndex(FunctionNode.FunctionName "@" FunctionNode.DllName))
-					this.CodeGen.Call_SIB(SIB(8, RAX, R14))
-				}
+				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
 			}
 			else if (FunctionNode.Type = ASTNodeTypes.Define) {
 				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)
