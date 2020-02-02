@@ -13,6 +13,10 @@ Import Console
 Import String
 Import Memory
 
+DllImport i8 MessageBeep(void) {User32.dll, MessageBeep}
+
+i8 t := MessageBeep(0)
+
 define i64 Main(i64 ArgC, void* ArgV) {	
 	Console:TextColor(Console:Red)
 	Console:IWriteLine(ArgC)
@@ -59,7 +63,11 @@ define i64 Main(i64 ArgC, void* ArgV) {
 ;Console:Blue()
 ; MessageBoxW(0, NextArg, NextArg, 0)
 
+FileAppend, % LanguageName.CompileToAHK(Code), % A_ScriptDir "\out.ahk"
+MsgBox, % "DDDone"
+
 Start := A_TickCount
 C := LanguageName.CompileToEXE(Code)
 End := A_TickCount
 MsgBox, % "Done, took: " End - Start " ms`n`n" ; C.Program.Stringify()
+ExitApp

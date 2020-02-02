@@ -37,16 +37,29 @@
 #Include Compiler\CodeGen.ahk
 #Include Compiler\Compiler.ahk
 #Include Compiler\PEBuilder.ahk
+#Include Compiler\ToAHK.ahk
 
 class LanguageName {
 	; Change ^ when you've come up with a name
 	
-	static VERSION := "1.0.0-alpha.24"
+	static VERSION := "1.0.0-alpha.26"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
 	
 	static DefaultFlags := {"OptimizationLevel": LanguageNameFlags.O1, "Features": LanguageNameFlags.F1}
+	
+	CompileToAHK(CodeString, FilePath := "") {
+		if !(FilePath) {
+			FilePath := A_ScriptDir "\out.exe"
+		}
+		
+		CodeString .= "`n" Builtins.__Runtime__.Code
+		
+		CodeCompiler := this.CompileCode(CodeString)
+		
+		FileOpen(FilePath, "w").Write(Build(CodeCompiler))
+	}
 	
 	CompileToEXE(CodeString, EXEPath := "") {
 		static Flags := {"Features": LanguageNameFlags.F1}

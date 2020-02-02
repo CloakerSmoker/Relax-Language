@@ -53,6 +53,10 @@ class Error {
 PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	TokenContext := Token.Context
 	
+	if !(IsObject(TokenContext)) {
+		Throw, Exception("There was an error while displaying the error:`n" LongText)
+	}
+	
 	TokenText := TokenContext.ExtractFrom(Source)
 	
 	Lines := StrSplit(Source, "`n", "`r")
