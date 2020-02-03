@@ -1,222 +1,225 @@
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="None">
   
-  <link rel="shortcut icon" href="img/favicon.ico">
-  <title>(Replace with name) - LanguageName Docs</title>
-  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+  
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="None">
+    
+    
+    <link rel="shortcut icon" href="./img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>LanguageName Docs</title>
+    <link href="./css/bootstrap-3.3.7.min.css" rel="stylesheet">
+    <link href="./css/font-awesome-4.7.0.css" rel="stylesheet">
+    <link href="./css/base.css" rel="stylesheet">
+    <link rel="stylesheet" href="./css/highlight.css">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
 
-  <link rel="stylesheet" href="css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="css/theme_extra.css" type="text/css" />
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
-  
-  <script>
-    // Current page data
-    var mkdocs_page_name = "(Replace with name)";
-    var mkdocs_page_input_path = "index.md";
-    var mkdocs_page_url = null;
-  </script>
-  
-  <script src="js/jquery-2.1.1.min.js" defer></script>
-  <script src="js/modernizr-2.8.3.min.js" defer></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
-  <script>hljs.initHighlightingOnLoad();</script> 
-  
+    <script src="./js/jquery-3.2.1.min.js"></script>
+    <script src="./js/bootstrap-3.3.7.min.js"></script>
+    <script src="./js/highlight.pack.js"></script>
+    
+      <script src="./js/elasticlunr.min.js"></script>
+    
+    <base target="_top">
+    <script>
+      var base_url = '.';
+      var is_top_frame = (window === window.parent);
+        
+        var pageToc = [
+          {title: "(Replace with name)", url: "#_top", children: [
+              {title: "FAQ", url: "#faq" },
+              {title: "How to use it", url: "#how-to-use-it" },
+              {title: "How to do most of the work:", url: "#how-to-do-most-of-the-work" },
+              {title: "How it works", url: "#how-it-works" },
+              {title: "Why I did this", url: "#why-i-did-this" },
+          ]},
+        ];
+
+    </script>
+    <script src="./js/base.js"></script>
+      <script src="search/main.js"></script> 
 </head>
 
-<body class="wy-body-for-nav" role="document">
+<body>
+<script>
+if (is_top_frame) { $('body').addClass('wm-top-page'); }
+</script>
 
-  <div class="wy-grid-for-nav">
-
+<nav class="navbar wm-page-top-frame">
+  <div class="container-fluid wm-top-container">
     
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
-      <div class="wy-side-nav-search">
-        <a href="." class="icon icon-home"> LanguageName Docs</a>
-        <div role="search">
-  <form id ="rtd-search-form" class="wy-form" action="./search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
-  </form>
-</div>
-      </div>
+    <div class="wm-top-tool pull-right wm-vcenter">
+      <form class="dropdown wm-vcentered" id="wm-search-form" action="./search.html">
+        
+        <button id="wm-search-show" class="btn btn-sm btn-default" type="submit"
+          ><i class="fa fa-search" aria-hidden="true"></i></button>
 
-      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-	<ul class="current">
-	  
-          
-            <li class="toctree-l1 current">
-		
-    <a class="current" href=".">(Replace with name)</a>
-    <ul class="subnav">
+        <div class="input-group input-group-sm wm-top-search">
+          <input type="text" name="q" class="form-control" id="mkdocs-search-query" placeholder="Search" autocomplete="off">
+          <span class="input-group-btn" role="search">
             
-    <li class="toctree-l2"><a href="#replace-with-name">(Replace with name)</a></li>
+            <button class="btn btn-default dropdown-toggle collapse" data-toggle="dropdown" type="button"><span class="caret"></span></button>
+            <ul id="mkdocs-search-results" class="dropdown-menu dropdown-menu-right"></ul>
+            <button id="wm-search-go" class="btn btn-default" type="submit"><i class="fa fa-search" aria-hidden="true"></i></button>
+          </span>
+        </div>
+      </form>
+    </div>
+
     
-        <ul>
-        
-            <li><a class="toctree-l3" href="#faq">FAQ</a></li>
-        
-            <li><a class="toctree-l3" href="#how-to-use">How to use</a></li>
-        
-            <li><a class="toctree-l3" href="#how-to-do-most-of-the-work">How to do most of the work:</a></li>
-        
-        </ul>
+    <div class="wm-top-tool wm-vcenter pull-right wm-small-left">
+      <button id="wm-toc-button" type="button" class="btn btn-sm btn-default wm-vcentered"><i class="fa fa-th-list" aria-hidden="true"></i></button>
+    </div>
+
+    
     
 
-    </ul>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="basic-syntax/">Basic syntax</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="basic-tutorial/">Basic tutorial</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="details/">Implementation Details</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="dumb-errors/">Dumb errors</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="full-syntax/">Full syntax</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="module-console/">The Console Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="module-memory/">The Memory Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="module-string/">The String Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="tutorial/">Tutorial</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="undefined/">Undefined</a>
-	    </li>
-          
-        </ul>
+    
+    <a href="" class="wm-top-brand wm-top-link wm-vcenter">
+      
+      <div class="wm-top-title">
+        LanguageName Docs<br>
+        
       </div>
-      &nbsp;
-    </nav>
+    </a>
+  </div>
+</nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
-        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-        <a href=".">LanguageName Docs</a>
-      </nav>
-
-      
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="breadcrumbs navigation">
-  <ul class="wy-breadcrumbs">
-    <li><a href=".">Docs</a> &raquo;</li>
+  <div id="main-content" class="wm-page-top-frame">
     
-      
-    
-    <li>(Replace with name)</li>
-    <li class="wy-breadcrumbs-aside">
-      
-    </li>
+<nav class="wm-toc-pane">
+  
+  <ul class="wm-toctree">
+        <li class="wm-toc-li wm-toc-lev1 "><a href="" class="wm-article-link wm-toc-text">(Replace with name)</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="basic-syntax/" class="wm-article-link wm-toc-text">Basic syntax</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="basic-tutorial/" class="wm-article-link wm-toc-text">Basic tutorial</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="compile-to-ahk/" class="wm-article-link wm-toc-text">Compiling To AHK</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="dumb-errors/" class="wm-article-link wm-toc-text">Dumb errors</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="full-syntax/" class="wm-article-link wm-toc-text">Full syntax</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="how-it-works/" class="wm-article-link wm-toc-text">How it works</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="module-console/" class="wm-article-link wm-toc-text">The Console Module</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="module-memory/" class="wm-article-link wm-toc-text">The Memory Module</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="module-string/" class="wm-article-link wm-toc-text">The String Module</a>
+</li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="tutorial/" class="wm-article-link wm-toc-text">Tutorial</a>
+</li>
   </ul>
-  <hr/>
-</div>
-          <div role="main">
-            <div class="section">
-              
-                <h1 id="replace-with-name">(Replace with name)</h1>
+</nav>
+
+    <div class="wm-content-pane">
+      <iframe class="wm-article" name="article"></iframe>
+    </div>
+  </div>
+
+<div class="container-fluid wm-page-content">
+  <a name="_top"></a>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="basic-syntax/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="basic-syntax/" class="btn btn-xs btn-link">
+        Basic syntax
+      </a>
+    </div>
+    
+  </div>
+
+    
+
+    <h1 id="replace-with-name">(Replace with name)</h1>
 <p>A compiled programming language, implemented entirely in AHK</p>
 <h2 id="faq">FAQ</h2>
 <h5 id="q-what-the-fuck-why-dear-god-why">Q: What the fuck, why, dear god, why?!</h5>
-<p>A: ¯\<em>(ツ)</em>/¯</p>
+<p>A: ¯\<em>(ツ)</em>/¯ (see "Why I Did This")</p>
 <h5 id="q-wait-so-this-is-an-actual-compiler">Q: Wait, so this is an actual compiler?</h5>
 <p>A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a <code>.exe</code> file holding the compiled code.</p>
-<p>All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud)</p>
-<p>For more info, see <a href="details/">the implementation details</a></p>
-<h2 id="how-to-use">How to use</h2>
-<p><code>#Include</code> the file <code>Interface.ahk</code>, which will <code>#Include</code> all of the components of the compiler.</p>
-<p>Call <code>(Replace with language class name).CompileToEXE</code> with a string of code as the first parameter, and a path to an output file which the code will be compiled into.</p>
+<p>All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)</p>
+<p>For more info, see <a href="how-it-works">how it all works</a></p>
+<h2 id="how-to-use-it">How to use it</h2>
+<p>Open <code>Main.ahk</code>, and change <code>Code =</code> to a different string of code. Run <code>Main.ahk</code>, and then <code>out.exe</code> will have the compiled version of the <code>Code =</code> program.</p>
+<p>Additionally, you can change <code>.CompileToEXE(Code)</code> to <code>.CompileToAHK(Code)</code>, which will generate an AHK script containing the compiled code, which can then be <code>#Include</code>'d and run like any other script. For more info, see <a href="compile-to-ahk">compiling to AHK</a></p>
 <p>That's it. Except that most of the work is writing the string of code.</p>
 <h2 id="how-to-do-most-of-the-work">How to do most of the work:</h2>
 <p>(I recommend you follow these in the order 1-2-3 if you already know a C-like language, and 2-1-3 otherwise)</p>
 <p>For a quick(-ish) rundown of the syntax, and some quirks, see <a href="basic-syntax/">the basic syntax page</a>.</p>
 <p>For a tutorial sort of thing, see <a href="tutorial/">the tutorial page</a>.</p>
 <p>For a full writeup of the syntax, see <a href="full-syntax/">the full syntax page</a>.</p>
-              
-            </div>
-          </div>
-          <footer>
-  
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+<h2 id="how-it-works">How it works</h2>
+<p>I wanted the header for this on this page, but it's long enough that you'll need to go <a href="how-it-works">to this page</a> to read that.</p>
+<h2 id="why-i-did-this">Why I did this</h2>
+<p>I feel like I need to defend myself here, mostly because I know it's 100% insane to use AHK for a project like this.</p>
+<p>AHK was the first language I ever really mastered, and I got used to how everything works, and all of the quirks. </p>
+<p>Because of this, when I decided I wanted to write a toy language, I didn't think of doing it in a "real" language since I already had a language that you can easily (and quickly) prototype things in right in front of me.</p>
+<hr />
+<p>As for why I'd want to write a language, it's just an interesting topic. I seriously recommend checking out the basics of language design, it's a field which I didn't even know existed until I stumbled on <a href="https://www.craftinginterpreters.com/">this ungodly useful (and high quality) free book</a> and started reading.</p>
+<p>Try your hand at a quick <a href="https://en.wikipedia.org/wiki/Brainfuck">brainfuck</a> interpreter, and if you like the concept, give that book I mentioned a try.</p>
+<p><br/></p>
+<p>Just make sure that your first project <strong><em>is not</em></strong> a full on compiled language.</p>
+<p>Working on this language has been a rollercoaster, and I blame 100% of that on my ambitions being <em>way</em> too high.</p>
+<p>If you decide to write your own language, <em>do not</em> push yourself to work on it constantly. I did that, and now I'm burnt out enough to stop writing in AHK entirely.</p>
+<p>Also, embrace things like LLVM, and pre-made linkers. At some point in this project I decided I wanted to do it all on my own. Which was an <strong><em>absolutely terrible</em></strong> idea.</p>
+<p>Reinventing every part in the car instead of just a wheel will teach you a lot, but its not fun.</p>
+<p>Not to mention LLVM can generate much better code than you will manually.</p>
+
+  <br>
+    
+
+    
+    
       
-        <a href="basic-syntax/" class="btn btn-neutral float-right" title="Basic syntax">Next <span class="icon icon-circle-arrow-right"></span></a>
-      
-      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="basic-syntax/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="basic-syntax/" class="btn btn-xs btn-link">
+        Basic syntax
+      </a>
     </div>
-  
-
-  <hr/>
-
-  <div role="contentinfo">
-    <!-- Copyright etc -->
     
   </div>
 
-  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
-</footer>
-      
-        </div>
-      </div>
-
-    </section>
-
-  </div>
-
-  <div class="rst-versions" role="note" style="cursor: pointer">
-    <span class="rst-current-version" data-toggle="rst-current-version">
-      
-      
-      
-        <span style="margin-left: 15px"><a href="basic-syntax/" style="color: #fcfcfc">Next &raquo;</a></span>
-      
-    </span>
+    <br>
 </div>
-    <script>var base_url = '.';</script>
-    <script src="js/theme.js" defer></script>
-      <script src="search/main.js" defer></script>
+
+<footer class="col-md-12 wm-page-content">
+  <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a> using <a href="">Windmill Dark</a> theme by None (noraj).</p>
+</footer>
 
 </body>
 </html>
-
 <!--
 MkDocs version : 1.0.4
-Build Date UTC : 2020-01-31 17:39:29
+Build Date UTC : 2020-02-03 13:46:12
 -->

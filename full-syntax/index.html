@@ -1,182 +1,102 @@
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   
-  <link rel="shortcut icon" href="../img/favicon.ico">
-  <title>Full syntax - LanguageName Docs</title>
-  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    
+    <link rel="shortcut icon" href="../img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>Full syntax - LanguageName Docs</title>
+    <link href="../css/bootstrap-3.3.7.min.css" rel="stylesheet">
+    <link href="../css/font-awesome-4.7.0.css" rel="stylesheet">
+    <link href="../css/base.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/highlight.css">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
 
-  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
-  
-  <script>
-    // Current page data
-    var mkdocs_page_name = "Full syntax";
-    var mkdocs_page_input_path = "full-syntax.md";
-    var mkdocs_page_url = null;
-  </script>
-  
-  <script src="../js/jquery-2.1.1.min.js" defer></script>
-  <script src="../js/modernizr-2.8.3.min.js" defer></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/ahk.min.js"></script>
-  <script>hljs.initHighlightingOnLoad();</script> 
-  
+    <script src="../js/jquery-3.2.1.min.js"></script>
+    <script src="../js/bootstrap-3.3.7.min.js"></script>
+    <script src="../js/highlight.pack.js"></script>
+    
+    <base target="_top">
+    <script>
+      var base_url = '..';
+      var is_top_frame = false;
+        
+        var pageToc = [
+          {title: "The full syntax description", url: "#_top", children: [
+              {title: "Program", url: "#program" },
+              {title: "Import", url: "#import" },
+              {title: "DllImport", url: "#dllimport" },
+              {title: "Define", url: "#define" },
+              {title: "Global", url: "#global" },
+              {title: "Statements", url: "#statements" },
+              {title: "Declarations", url: "#declarations" },
+              {title: "Keywords", url: "#keywords" },
+              {title: "If", url: "#if" },
+              {title: "For", url: "#for" },
+              {title: "Break-Continue", url: "#break-continue" },
+              {title: "Return", url: "#return" },
+              {title: "Expression-Statements", url: "#expression-statements" },
+              {title: "Expression", url: "#expression" },
+              {title: "Operator list", url: "#operator-list" },
+          ]},
+        ];
+
+    </script>
+    <script src="../js/base.js"></script>
+      <script src="../search/main.js"></script> 
 </head>
 
-<body class="wy-body-for-nav" role="document">
+<body>
+<script>
+if (is_top_frame) { $('body').addClass('wm-top-page'); }
+</script>
 
-  <div class="wy-grid-for-nav">
 
-    
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
-      <div class="wy-side-nav-search">
-        <a href=".." class="icon icon-home"> LanguageName Docs</a>
-        <div role="search">
-  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
-  </form>
-</div>
-      </div>
 
-      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-	<ul class="current">
-	  
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="..">(Replace with name)</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../basic-syntax/">Basic syntax</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../basic-tutorial/">Basic tutorial</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../details/">Implementation Details</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../dumb-errors/">Dumb errors</a>
-	    </li>
-          
-            <li class="toctree-l1 current">
-		
-    <a class="current" href="./">Full syntax</a>
-    <ul class="subnav">
-            
-    <li class="toctree-l2"><a href="#the-full-syntax-description">The full syntax description</a></li>
-    
-        <ul>
-        
-            <li><a class="toctree-l3" href="#program">Program</a></li>
-        
-            <li><a class="toctree-l3" href="#import">Import</a></li>
-        
-            <li><a class="toctree-l3" href="#dllimport">DllImport</a></li>
-        
-            <li><a class="toctree-l3" href="#define">Define</a></li>
-        
-            <li><a class="toctree-l3" href="#global">Global</a></li>
-        
-            <li><a class="toctree-l3" href="#statements">Statements</a></li>
-        
-            <li><a class="toctree-l3" href="#declarations">Declarations</a></li>
-        
-            <li><a class="toctree-l3" href="#keywords">Keywords</a></li>
-        
-            <li><a class="toctree-l3" href="#if">If</a></li>
-        
-            <li><a class="toctree-l3" href="#for">For</a></li>
-        
-            <li><a class="toctree-l3" href="#break-continue">Break-Continue</a></li>
-        
-            <li><a class="toctree-l3" href="#return">Return</a></li>
-        
-            <li><a class="toctree-l3" href="#expression-statements">Expression-Statements</a></li>
-        
-            <li><a class="toctree-l3" href="#expression">Expression</a></li>
-        
-            <li><a class="toctree-l3" href="#operator-list">Operator list</a></li>
-        
-        </ul>
+<div class="container-fluid wm-page-content">
+  <a name="_top"></a>
     
 
-    </ul>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../module-console/">The Console Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../module-memory/">The Memory Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../module-string/">The String Module</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../tutorial/">Tutorial</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../undefined/">Undefined</a>
-	    </li>
-          
-        </ul>
-      </div>
-      &nbsp;
-    </nav>
-
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
-        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-        <a href="..">LanguageName Docs</a>
-      </nav>
-
-      
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="breadcrumbs navigation">
-  <ul class="wy-breadcrumbs">
-    <li><a href="..">Docs</a> &raquo;</li>
+    
     
       
     
-    <li>Full syntax</li>
-    <li class="wy-breadcrumbs-aside">
-      
-    </li>
-  </ul>
-  <hr/>
-</div>
-          <div role="main">
-            <div class="section">
-              
-                <h2 id="the-full-syntax-description">The full syntax description</h2>
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../how-it-works/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../how-it-works/" class="btn btn-xs btn-link">
+        How it works
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
+      </a>
+    </div>
+    
+  </div>
+
+    
+
+    <h2 id="the-full-syntax-description">The full syntax description</h2>
 <h3 id="program">Program</h3>
 <p>The compiler expects input code to be a "program", a program is defined as a list of the following statements:</p>
 <ul>
@@ -204,13 +124,13 @@
 <ul>
 <li><code>ReturnType</code> is the <a href="#types">type</a> that the function is expected to return.</li>
 <li><code>FunctionName</code> is the <a href="#names">name</a> that the function will have internally, and is the name you use to call it. This name does not need to be the same as <code>FunctionNameInsideDLL</code>.</li>
-<li><code>ParameterTypeList</code> is a list of comma-seperated <a href="#types">types</a>, without any names, since the parameter names are not needed.</li>
+<li><code>ParameterTypeList</code> is a list of comma-separated <a href="#types">types</a>, without any names, since the parameter names are not needed.</li>
 <li><code>DllFileName.dll</code> is the name of the file which contains the given function.</li>
 <li><code>FunctionNameInsideDLL</code> is the name of the function, as it is exported in from the DLL.</li>
 </ul>
 <h3 id="define">Define</h3>
 <p>Define statements follow the format:</p>
-<pre><code>Define ReturnType Functionname(ParameterList) {
+<pre><code>Define ReturnType FunctionName(ParameterList) {
     Body
 }
 </code></pre>
@@ -218,7 +138,7 @@
 <ul>
 <li><code>ReturnType</code> is the <a href="#types">type</a> that the function is expected to return.</li>
 <li><code>FunctionName</code> is the <a href="#names">name</a> that the function will have, and is the name you use to call it.</li>
-<li><code>ParameterList</code> is a list of comma-seperated <a href="#types">type</a> <a href="#names">name</a> pairs.</li>
+<li><code>ParameterList</code> is a list of comma-separated <a href="#types">type</a> <a href="#names">name</a> pairs.</li>
 <li><code>Body</code> is a list of <a href="#statements">statements</a>.</li>
 </ul>
 <h3 id="global">Global</h3>
@@ -273,7 +193,7 @@ else {
 <li><code>(Condition)</code> an <a href="#expression">expression</a> which will be tested in order to decide if the next block will run or not.</li>
 <li><code>Body</code> (in all places) is a list of statements(#statements) which will run if the prior condition resulted in a non-zero result.</li>
 <li><code>else if</code> the required keyword to add another <a href="#expression">condition</a> and <a href="#statements">body</a> to the entire if statement.</li>
-<li><code>else</code> the required keyword to add a finaly <a href="#statements">body</a> to the if statement, which will only run when no other conditions are met.</li>
+<li><code>else</code> the required keyword to add a final <a href="#statements">body</a> to the if statement, which will only run when no other conditions are met.</li>
 </ul>
 <p><code>else if</code> can be repeated any number of times, for any number of conditions. There can only be one <code>else</code> for each if statement.</p>
 <h3 id="for">For</h3>
@@ -284,7 +204,7 @@ else {
 </code></pre>
 
 <ul>
-<li><code>Init</code>, <code>Condition</code>, and <code>Step</code> are all <a href="#expresion">expressions</a> which run at different points. </li>
+<li><code>Init</code>, <code>Condition</code>, and <code>Step</code> are all <a href="#expression">expressions</a> which run at different points. </li>
 <li><code>Body</code> is a list of statements(#statements) which will run each iteration of the loop.</li>
 </ul>
 <p><code>Init</code> can optionally be a <a href="#declaration">declaration</a> and is run before the loop first stats, and never again. </p>
@@ -435,52 +355,43 @@ Continue
 </tr>
 </tbody>
 </table>
-              
-            </div>
-          </div>
-          <footer>
-  
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+
+  <br>
+    
+
+    
+    
       
-        <a href="../module-console/" class="btn btn-neutral float-right" title="The Console Module">Next <span class="icon icon-circle-arrow-right"></span></a>
-      
-      
-        <a href="../dumb-errors/" class="btn btn-neutral" title="Dumb errors"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../how-it-works/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../how-it-works/" class="btn btn-xs btn-link">
+        How it works
+      </a>
     </div>
-  
-
-  <hr/>
-
-  <div role="contentinfo">
-    <!-- Copyright etc -->
+    
+    <div class="wm-article-nav">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
+      </a>
+    </div>
     
   </div>
 
-  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
-</footer>
-      
-        </div>
-      </div>
-
-    </section>
-
-  </div>
-
-  <div class="rst-versions" role="note" style="cursor: pointer">
-    <span class="rst-current-version" data-toggle="rst-current-version">
-      
-      
-        <span><a href="../dumb-errors/" style="color: #fcfcfc;">&laquo; Previous</a></span>
-      
-      
-        <span style="margin-left: 15px"><a href="../module-console/" style="color: #fcfcfc">Next &raquo;</a></span>
-      
-    </span>
+    <br>
 </div>
-    <script>var base_url = '..';</script>
-    <script src="../js/theme.js" defer></script>
-      <script src="../search/main.js" defer></script>
+
+<footer class="col-md-12 wm-page-content">
+  <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a> using <a href="">Windmill Dark</a> theme by None (noraj).</p>
+</footer>
 
 </body>
 </html>
