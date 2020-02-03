@@ -41,7 +41,7 @@ Top 10 reasons I hate the Windows Console API.
 
 ## Notes
 
-If you are using the `Console` module while [compiling to AHK](compile-to-ahk), you will need to include the following snippet (in `out.ahk`) to create a console window, and have `Console` get the correct handles to STD(IN|OUT|ERR).
+If you are using the `Console` module while [compiling to AHK](../compile-to-ahk), you will need to include the following snippet (in `out.ahk`) to create a console window, and have `Console` get the correct handles to STD(IN|OUT|ERR).
 
 ```
 DllCall("AllocConsole")

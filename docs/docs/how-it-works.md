@@ -9,6 +9,18 @@ The compiler is laid out in various separate stages, in the order:
 * [CodeGen](#codegen)
 * [PEBuilder](#pebuilder)/[ToAHK](#toahk)
 
+### A quick rundown
+
+* The lexer takes source code, makes it into an array of tokens.
+* The parser takes an array of tokens, builds it into a tree that represents the code.
+* The optimizer takes that tree, and removes useless bits.
+* The compiler takes that optimized tree, and converts it into CPU instructions.
+* CodeGen takes the CPU instructions that the compiler is trying to generate, but assembles them into raw machine code.
+* PEBuilder packs the raw machine code into a `.exe` file.
+* ToAHK packs the raw machine code into a `.ahk` file with helper functions to call the code.
+
+Simple enough, right? ((((it only took me 6000+ lines to do))))
+
 ### Lexer
 
 The lexer is used to transform plain text like `define i32 Main` or `i32 test := 99 + 2` into an array of "tokens".
@@ -75,6 +87,17 @@ Now, applying these same rules to the rest of the string, we get the following a
 
 ---
 
+One thing that I haven't mentioned is that all token actually contain a bit more data.
+
+Each `Token` object contains a `Context` object, which stores: 
+
+* The source code that the token was extracted from
+* Where in the source code the token was extracted from
+
+`Context` objects are used to display errors by taking `Context.End - Context.Start`, and appending that many `^` characters to the `-` line, which is drawn by appending `Context.Start - LineStart` `-` characters.
+
+---
+
 And that's all the lexer really does. Of course, there's many-many more token types than I mentioned, and the lexer also has cases for hex/binary/octal literals, which are given the type `Tokens.INTEGER`.
 
 ## Parser
@@ -106,6 +129,8 @@ For example, the AST of `1 + 2` would be:
 ```
 
 This concept is the same throughout the entire parser, you have an AST node, which has other AST nodes inside of it, which can represent any part of a program.
+
+Additionally, most AST nodes (that are single lines, like all expressions) also have `Context` properties, which are built using the `Context` of each token the node is mad up of.
 
 The hard part is actually building the AST.
 
@@ -413,64 +438,314 @@ Statements are compiled in mostly-similar ways, with a condition being compiled,
 
 Expressions are a little less label/`jmp` intensive, but more complex to understand.
 
-Expressions are evaluated using a "register stack". This means that instead of pushing operands onto the regular stack, operands are moved into certain registers, which are used like a stack. 
+So, to evaluate expressions, a stack is used to hold operands until they are needed, which means that:
 
-So `1 + 2` could be 
-```asm
-push 1
-push 2
-pop rbx
-pop rax
-add rax, rbx
-push rax
-```
-using the regular stack, but with the register stack, it would be
-```asm
-mov rcx, 1
-mov rdx, 2
-add rcx, rdx
-```
-Which allows us to generate much more compact code, while also improving speed (since operands stay in registers).
+* When we compile a binary operator, we should pop two operands of the stack, and push our result onto the stack.
+* When we compile a unary operator, we should pop one operand, and push our result onto the the stack.
+* When we compile a function call, we should pop as many operands as the function takes as parameters, and then push the return value onto the stack.
+
+As long as all generated code to evaluate expressions follows these rules, you can always trust an expression to leave its result on the stack.
+
+If this promise of operands/results is every broken, then there has been a code mis-generation, and something is wrong. However, since it isn't broken, expressions can be compiled into a series of very basic instructions.
 
 ---
 
-Now, this technique is used for everything but: local variables, global variables, and floating point numbers.
+So, let's walk through code generation for `1 + (2 * A)`.
 
-And for everything but those mentioned, it works great.
+The very first step is to push `1` onto the stack, since the first `+` requires two operands, both of which will need to be on the stack according to our evaluation rules from above.
 
-Local variables and parameters are treated exactly the same, and live on the stack, in space allocated by the current function's prelude.
+The AST walking for this is actually
 
-`R15` is always set to a pointer into the stack where the locals are for simplicity.
+```
+.Compile(Expression.Left)
+.Compile(Expression.Right)
+```
 
-Global variables live in pre-allocated memory from either: the windows loader, or the AHK boilerplate code.
+Where a token is compiled down to a simple
 
-And finally, floating point numbers. Floating point numbers are handled with the x87 FPU, which is older than me, and not very fun to work with.
-Back when the x87 FPU was first dreamt up, general purpose registers (GPRs) were only 16 bits, while x87 registers were up to 80 bits. So, there are 0 instructions to load an x87 register from a 64 bit GPR.
+```
+push 1
+```
+
+Now that `Expression.Left` is compiled, we need to compiled `Expression.Right`, which happens to be another `ASTNodeTypes.BINARY`, so we'll do the same thing again:
+
+```
+.Compile(Expression.Left)
+```
+
+Will generate
+
+```
+push 2
+```
+
+And then 
+
+```
+.Compile(Expression.Left)
+```
+
+Will generate
+
+```
+push [r15 + (0 * 8)]
+```
+(`0 * 8` since `A` is the 0th variable, and `R15` always holds a pointer to the local variables in a given function)
+
+Now to compile `*`, we'll pop two operands off the stack, into `RBX` and then `RAX`
+
+```
+pop RBX
+pop RAX
+```
+
+So, `RAX = ResultOf(Expression.Left)` and `RBX = ResultOf(Expression.Right)`, which means we're ready to generate code to do the first operation (`*`)
+
+```
+imul RAX, RBX
+```
+
+And in order to follow the rule of pushing our result back onto the stack for another expression, we finish with
+
+```
+push RAX
+```
+
+Which gives us this (see below) code to evaluate the expression `(2 * A)`
+
+```
+push 1
+push 2
+push [r15 + (0 * 8)]
+pop RBX
+pop RAX
+add RAX, RBX
+push RAX
+```
+
+<br/>
+<br/>
+
+Once the CPU finishes the `push RAX` instruction, the stack will be laid out as so:
+
+```
+[1, ResultOf("2 * A")]
+```
+
+Which you might notice are the two operands for `1 + (2 * A)`, so now all we need to do to compile the `+` operator is
+
+```
+pop RBX
+pop RAX
+```
+To load the two operands, and then
+
+```
+add RAX, RBX
+```
+
+to do the operation, and finally
+
+```
+push RAX
+```
+
+to store the result.
 
 <br/>
 
-To get around this, when a value is going to be used in floating point math, it is pushed onto the CPU stack, and then a x87 register is loaded by using `RSP + 0` as an address to load from.
-Then, once the x87 register is loaded, the stack is popped, and all things are good in the world.
+Now we're left with the final generated code of:
 
-Except for when you reach the point where you actually need to do the floating point operation. All x87 instructions only work with x87 registers, so after an x87 operation completes, you need to push some dummy data onto the stack, tell x87 to write a value into `RSP + 0`, and then pop the stack into the true result register.
+```asm
+push 1                ; The result of the token '1'
 
-Now's a good time to mention some fun x87 instruction names.
+push 2                ; The result of the token '2'
+push [r15 + (0 * 8)]  ; The result of the token 'A'
 
-To cast a floating point number in an x87 register to an integer, and then store that integer, you use the 
-```
-FISTP
-```
-instruction.
+pop RBX               ; Right operand, the result of the last expression evaluated ('A' in this case)
+pop RAX               ; Left operand, the result of the 2nd to last expression evaluated ('2' in this case)
+imul RAX, RBX
+push RAX              ; Stores the result of (Left * Right) as the result of the last expression evaluated
 
-To compare two floating point numbers, and to set the standard flags register accordingly, you use the
+pop RBX               ; Right operand, result of the last expression evaluated ('2 * A' in this case)
+pop RAX               ; Left operand, result of the 2nd to last expression evaluated ('1' in this case)
+add RAX, RBX
+push RAX              ; Stores the result of `(Left + Right)` as the result of the last expression evaluated
 ```
-FCOMI
-```
-instruction. (Which I'm pretty sure would have been added some time during the cold war)
 
 ---
 
-And that's pretty much the compiler. It's a lot more lines than it needs to be, mostly because as much work as possible in the compiler instead of in the generated code.
+And a quick example with a unary operator instead, `1 + !2`:
+
+`.Compile(Expression.Left)` Generates:
+```
+push 1
+```
+
+`.Compile(Expression.Right)` Generates code to evaluate `!2`, which in itself runs `.Compile(UnaryExpression.Operand)`, generating the code:
+
+```
+push 2
+```
+
+And then evaluating the operand with
+
+```
+pop RAX
+not RAX
+push RAX
+```
+
+And now we've got both the operands on the stack, so we generate code for `+`:
+
+```
+pop RBX
+pop RAX
+add RAX, RBX
+push RAX
+```
+
+Which leaves us with
+
+```
+push 1
+
+push 2
+
+pop RAX
+not RAX
+push RAX
+
+pop RBX
+pop RAX
+add RAX, RBX
+push RAX
+```
+
+---
+
+So, thanks to these expression evaluation rules, all that's needed to add an new operator is to add it to `CodeGen`, and implement it enough that it will use `RAX` and `RBX` as operands, and `push` a result onto the stack.
+
+---
+
+Now, you might notice that this generates some pretty bad code, with lots of stack usage, which is bad for speed and code size.
+
+To get around this, I lied I little bit during these examples.
+
+The generated code doesn't actually use the CPU stack, instead it uses the registers `[RCX, RDX, R8, R9, R10, R11, R12, R13]` as a fake stack, which the compiler will automatically keep track of what parts are being used.
+
+This eliminates lots of the extra `push` and `pop`-ing, since our `1 + (2 * A)` example would be generated as
+
+```asm
+mov RCX, 1              ; Push register stack, store value into new top of stack
+
+mov RDX, 2              ; Same as above 
+mov R8, [r15 + (0 * 8)] ; Same as above
+
+imul RDX, R8            ; Pop register stack twice, multiply popped registers, store result into the top of stack
+add RCX, RDX            ; Same as above, just with multiplication.
+```
+
+Of course, this optimization isn't perfect, and extra instructions are still generated, but this reduces the bloat a lot, and by keeping operands in registers, it also improves speed.
+
+#### Type Checking
+
+Type checking is done as a bit of an afterthought, but the general idea is that each `.CompileXXXX` method will return the type of the value which it has pushed onto the stack.
+
+And by using the returned type, we can check if it is compatible with the types of other components of a given AST node.
+
+For example, to compile a binary expression, we have the code:
+
+```
+LeftType := this.Compile(Expression.Left)
+RightType := this.Compile(Expression.Right)
+```
+
+And then later on, we have:
+
+```
+ResultType := this.Typing.ResultType(LeftType, RightType)
+```
+
+And when there is no result type for that combination of operand types, and exception is thrown.
+
+For example
+
+```
+"Abc" * 2.5
+```
+
+Would have `LeftType` = `i8*`, and `RightType` = `f64`. Which are two obviously incompatible types.
+
+<br/>
+
+However, if we have two operands that are similar types, but not the exact same type, there can be an implicit cast, for example:
+
+```
+1 * 2.5
+```
+
+Would have `LeftType` = `i8`, and `RightType` = `f64`. However, since both types are numeric, and floating pointer numbers are considered more precise, the compiler would get `ResultType` = `f64`.
+
+And to ensure that both operands are *actually* compatible, and not just theoretically compatible, each `.CompileXXXXXExpression` will include calls to `this.Cast(RightType, ResultType)` and `this.Cast(LeftType, ResultType)`.
+
+`.Cast` takes the current type of the value on top of the stack, and the desired type, and converts them via the `.Cast_FirstTypeName_SecondTypeName` methods.
+
+So, in this case, first `2.5` would be cast to `f64` (which requires no extra code to be generated, since it is already that type), and then `1` would be cast to `f64`.
+
+For casting to/from floating point numbers, the instructions `FILD`/`FSTP` and `FLD`/`FISTP` instructions are used, which 
+
+* For `FILD`/`FSTP`: loads an integer into an FPU register as a floating point number, and then writes that integer back as a floating point number
+* For `FLD`/`FISTP`: loads a floating point number into an FPU register, and then writes that float back as an integer
+
+The only other casts are integer size conversions, which are done by the `CBWE`, `CWDE`, `CDQE` instructions, aka:
+
+* Convert byte to word (i8 -> i16)
+* Convert word to double word (i16 -> i32)
+* Convert double word to quad word (i32 -> i64)
+
+---
+
+Type checking is also done for function calls and return values through checking if each parameter is of the correct type while compiling each parameter, and for return types, it is done when compiling `return` statements.
+
+<br/>
+
+#### Strings And Other Stuff
+
+The compiler handles strings by allocating `StrLen(String) + 1` bytes much of stack space for each string, and encodes string literals into 64 bit integers, which when pushed onto the stack, will build the correctly ordered string.
+
+Actual references to strings are replaced by references to the hidden local variables `__String__Full Text Of The String`, which is then set to a pointer into the stack where the string was pushed.
+
+So, `"Hello world"` is compiled into a series of instructions like
+
+```
+mov rax, 0  
+push rax  
+mov rax, 217478657420656D  
+push rax  
+mov rax, 6F73207265746E45
+push rax
+```
+
+(Note, that's not actually "Hello World", I just copied that out of a random example `.exe`)
+
+---
+
+Parameters are treated exactly the same as locals, and all variables can be addressed using a "SIB" (See CodeGen for what that means), which allows getting/setting variables with minimum boilerplate.
+
+---
+
+Function calls are a bit of a mess. Since the register stack uses some of the parameter registers, first the register stack has to be saved, and then the parameter registers have to be 0'd, and finally, the parameters can be compiled and moved into the parameter registers.
+
+---
+
+When a function never has a `return` statement compiled, the return value is automatically set to 0.
+
+This is the only difference for omitting `return`, since the code to return from a function is automatically generated at the end of a function either way.
+
+---
+
+Signed numbers are the only kind of numbers, unsigned operations require entirely different instructions for operations, which is why I don't plan on adding unsigned types.
 
 ## CodeGen
 

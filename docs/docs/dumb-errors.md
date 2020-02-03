@@ -1,7 +1,5 @@
 ## A list stupid errors
 
-#### Big thanks to SALZKARTOFFEEEL#9805 for being the honorable judge of dumb errors.
-
 ![](https://media.discordapp.net/attachments/566430502567804959/672432418099167321/unknown.png)
 
 > Apparently this variable is undeclared, while I am declaring it

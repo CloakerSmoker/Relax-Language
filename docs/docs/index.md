@@ -12,7 +12,7 @@ A: Yes, this script takes source code as input, tokenizes it, parses the tokens,
 
 All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)
 
-For more info, see [the implementation details](details.md)
+For more info, see [how it all works](how-it-works)
 
 ## How to use it
 Open `Main.ahk`, and change `Code =` to a different string of code. Run `Main.ahk`, and then `out.exe` will have the compiled version of the `Code =` program.

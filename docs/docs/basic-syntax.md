@@ -1,6 +1,7 @@
 ## The basic syntax
 It's pretty much C, but with minor changes. Although many things are borrowed from C, this is *not* a C compiler, and does not have all the features C has.
 
+Mainly, it's missing structures, pointer-pointer types, and arrays.
 
 #### Types
 
@@ -27,9 +28,9 @@ Additionally, there is the `void` type, which is exactly what you'd expect it to
 Of course, there are also pointer types, which follow C syntax of `TypeName*`. Pointer-pointer types are not implemented.
 
 #### General Things
-String literals are supported, and are replaced with an `i8*` to the given string. This `i8*` will point into the stack, so **DO NOT** try to free this memory. You can alter it, but changing the size of it, or overrunning it's length is ***VERY VERY BAD***.
+String literals are supported, and are replaced with an `i8*` to the given string. This `i8*` will point into the stack, so **DO NOT** try to free this memory. You can alter it, but changing the size of it, or overrunning its length is ***VERY VERY BAD***.
 
-If a function does not have a return, a `return 0` is implicitly added.
+If a function does not have a return in it, a `return 0` is implicitly added.
 
 The magic entry-point function is named `Main`, and receives a `i64` parameter containing the number of command line arguments, along with a `void*` which is actually an array of `i16*` pointers to the individual command line arguments (Just like how in C you have `ArgC` and `ArgV`)
 
@@ -45,7 +46,7 @@ Since I really like the C syntax for pointers, but ***hate*** the C syntax to as
 
 For example `(PointerToAString + 90) *= 'H'` would set the character at `PointerToAString + 90` to be `H`.
 
-Since `*=` is taken, `/=` is also not implemented, `+=` and `-=` are the only shorthand assignment operators.
+Since `*=` is taken, `/=` is also implemented to prevent confusion, `+=` and `-=` are the only shorthand assignment operators.
 
 Additionally, since floating point number support is half-baked (at best), `+=` and `-=` are not implemented for floating point numbers.
 
