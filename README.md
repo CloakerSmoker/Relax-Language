@@ -14,4 +14,4 @@ And then run with
 out.exe
 ```
 
-For more info, see the docs, which I don't have a link to yet, since github pages requires a public repo.
+For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
