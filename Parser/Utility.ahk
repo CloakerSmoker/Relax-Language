@@ -54,7 +54,7 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 	TokenContext := Token.Context
 	
 	if !(IsObject(TokenContext)) {
-		Throw, Exception("There was an error while displaying the error:`n" LongText)
+		Throw, Exception("There was an error while displaying the error:`n" Phase ": " LongText "`n" ShortText "`n" Token.Value)
 	}
 	
 	TokenText := TokenContext.ExtractFrom(Source)
@@ -149,18 +149,6 @@ StatementError(Statement, Message) {
 	ShowError("Error: " Message "`n" Statement)
 }
 
-ShowError(Message) {
-	Gui, ShowError:New
-	Gui, ShowError:Font, s10, Terminal
-	Gui, ShowError:Add, Text, w800 0x80, % Message
-	Gui, ShowError:Show
-	
-	KeyWait, Enter, D
-	
-	Gui, ShowError:Destroy
-	
-	Throw, Exception(Message)
-}
 Spaces(Count) {
 	String := ""
 	

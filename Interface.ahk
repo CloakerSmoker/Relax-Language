@@ -1,4 +1,4 @@
-﻿class LanguageNameFlags {
+﻿class RelaxFlags {
 	class Optimization {
 		static DisableDeadCodeElimination := 1
 		static DisableDeadIfElimination := 2
@@ -20,11 +20,11 @@
 		static TargetPE := 32
 	}
 	
-	static O0 := LanguageNameFlags.Optimization.DisableAll
-	static O1 := LanguageNameFlags.Optimization.EnableAll
+	static O0 := RelaxFlags.Optimization.DisableAll
+	static O1 := RelaxFlags.Optimization.EnableAll
 	
-	static F0 := LanguageNameFlags.Features.DisableAll
-	static F1 := LanguageNameFlags.Features.EnableAll
+	static F0 := RelaxFlags.Features.DisableAll
+	static F1 := RelaxFlags.Features.EnableAll
 }
 
 #Include %A_LineFile%\..\
@@ -39,15 +39,13 @@
 #Include Compiler\PEBuilder.ahk
 #Include Compiler\ToAHK.ahk
 
-class LanguageName {
-	; Change ^ when you've come up with a name
-	
-	static VERSION := "1.0.0-alpha.27"
+class Relax {
+	static VERSION := "1.0.0-alpha.28"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
 	
-	static DefaultFlags := {"OptimizationLevel": LanguageNameFlags.O1, "Features": LanguageNameFlags.F1}
+	static DefaultFlags := {"OptimizationLevel": RelaxFlags.O1, "Features": RelaxFlags.F1}
 	
 	CompileToAHK(CodeString, FilePath := "") {
 		if !(FilePath) {
@@ -62,7 +60,7 @@ class LanguageName {
 	}
 	
 	CompileToEXE(CodeString, EXEPath := "") {
-		static Flags := {"Features": LanguageNameFlags.F1}
+		static Flags := {"Features": RelaxFlags.F1}
 		
 		if !(EXEPath) {
 			EXEPath := A_ScriptDir "\out.exe"
@@ -186,7 +184,7 @@ class Module {
 	}
 	
 	PrecompileModule(Name) {
-		CompiledModule := LanguageName.CompileCode(Builtins[Name].Code,, Name)
+		CompiledModule := Relax.CompileCode(Builtins[Name].Code,, Name)
 		Bytes := CompiledModule.CodeGen.Link(True, True)
 		
 		this.Modules[Name].Bytes := Bytes
@@ -382,7 +380,7 @@ class Builtins {
 			}
 			
 			define i64 WIsNumeric(i16 Character) {
-				return (Character >= '0') && 1
+				return (Character >= '0') && (Character <= '9')
 			}
 			
 			define i8* IToA(i64 Number) {

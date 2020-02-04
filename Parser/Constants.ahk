@@ -429,7 +429,7 @@ class ASTNodes {
 			static Parameters := ["Functions", "Globals", "Modules"]
 			
 			Stringify() {
-				String := "/* " LanguageName.VERSION " */`n"
+				String := "/* " Relax.VERSION " */`n"
 				
 				for k, GlobalVariable in this.Imports {
 					String .= GlobalVariable[1] " " GlobalVariable[2]

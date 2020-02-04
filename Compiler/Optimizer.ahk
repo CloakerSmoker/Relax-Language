@@ -1,7 +1,7 @@
 ﻿class ASTOptimizer {
-	static DisableDeadCodeElimination := LanguageNameFlags.Optimization.DisableDeadCodeElimination
-	static DisableDeadIfElimination := LanguageNameFlags.Optimization.DisableDeadIfElimination
-	static DisableConstantFolding := LanguageNameFlags.Optimization.DisableConstantFolding
+	static DisableDeadCodeElimination := RelaxFlags.Optimization.DisableDeadCodeElimination
+	static DisableDeadIfElimination := RelaxFlags.Optimization.DisableDeadIfElimination
+	static DisableConstantFolding := RelaxFlags.Optimization.DisableConstantFolding
 	
 	__New(CodeLexer, CodeParser, CodeFlags) {
 		this.Typing := CodeParser.Typing
