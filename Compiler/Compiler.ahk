@@ -76,11 +76,15 @@
 	static RegisterStackReversed := [R13, R12, R11, R10, R9, R8, RDX, RCX]
 	
 	PopAllRegisterStack() {
+		Log("Register stack empty, popping saved register stack")
+		
 		for k, Register in this.RegisterStackReversed {
 			this.CodeGen.Pop(Register), this.StackDepth--
 		}
 	}
 	PushAllRegisterStack() {
+		Log("Register stack full, saving register stack")
+		
 		for k, Register in this.RegisterStack {
 			this.CodeGen.Push(Register), this.StackDepth++
 		}
@@ -145,7 +149,9 @@
 		
 		this.FunctionOffsets := FunctionOffsets := {}
 		
+		Log({})
 		this.FlattenModuleList(Program)
+		Log({})
 		
 		FunctionOffset := 0
 		
@@ -153,6 +159,7 @@
 			FunctionOffsets[FunctionName] := FunctionOffset
 			
 			if !(this.ModuleFunctions.HasKey(FunctionName)) {
+				Log("Compiling function '" FunctionName "' into index " FunctionOffset " inside assembled code")
 				this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
 			}
 			
@@ -186,6 +193,8 @@
 			
 			for ModuleName, ModuleInfo in this.Modules {
 				ModuleOffset := this.CodeGen.Index()
+				
+				Log("Copying pre-compiled module " ModuleName " into offset " ModuleOffset " of compiled code")
 				
 				for LabelName, LabelOffset in ModuleInfo.Offsets {
 					this.CodeGen.Labels[LabelName] := ModuleOffset + LabelOffset

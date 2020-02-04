@@ -22,18 +22,17 @@ class Colors {
 
 HelpText =
 (
-		Options:
-			-i [InputFile]
-			-o [OutputFile] (Should have the extension "exe" or "ahk")
-			--no-confirm    (Does not ask if arguments are correct before running)
-			--no-overwrite-output-file (Exit when the output file already exists)
-			--fast-exit (Skips asking to press {Enter} before exiting)
-			--silent (Skips asking for use input)
+	Options:
+		-i [InputFile]
+		-o [OutputFile]	(Should have the extension "exe" or "ahk")
+		--no-confirm	(Does not ask if arguments are correct before running)
+		--no-overwrite-output-file (Exit when the output file already exists)
+		--fast-exit 	(Skips asking to press {Enter} before exiting)
+		--silent 	(Skips asking for user input)
+		--verbose	(Includes detailed logs of what the compiler is doing)
 )
 
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
-
-;A_Args := ["-i", "Examples\HelloWorld.rlx", "-o", "a.exe"]
 
 ArgCount := A_Args.Count()
 
@@ -69,14 +68,15 @@ for k, Arg in A_Args {
 			SkipConfirm := True
 			SkipExitConfirm := True
 		}
+		Case "--verbose": {
+			IsVerbose := True
+		}
 		Default: {
 			ConsoleWrite(Colors.Red, "Unknown arg: '" Arg "'")
 			Exit()
 		}
 	}
 }
-
-MsgBox, % SkipConfirm
 
 if !(SkipConfirm) {
 	ConsoleWrite(Colors.White, "	Input path: " InputFile)
@@ -107,13 +107,24 @@ if (StrLen(Source) = 0) {
 	Exit()
 }
 
+HasHadError := False
 Start := A_TickCount
 
-if (OutputType = "ahk") {
-	Relax.CompileToAHK(Source, OutputFile)
+try {
+	if (OutputType = "ahk") {
+		Relax.CompileToAHK(Source, OutputFile)
+	}
+	else {
+		Relax.CompileToEXE(Source, OutputFile)
+	}
+	
+	if (HasHadError) {
+		Throw, Exception("Dummy error")
+	}
 }
-else {
-	Relax.CompileToEXE(Source, OutputFile)
+catch {
+	ConsoleWrite(Colors.Red, "Fatal error, bailing out.")
+	Exit()
 }
 
 End := A_TickCount
@@ -122,14 +133,25 @@ ConsoleWrite(Colors.Green, "Done, took " ((End - Start) / 1000) " seconds to com
 
 Exit()
 
+Log(Info) {
+	global IsVerbose
+	static Silenced := False
+	
+	if (IsObject(Info)) {
+		Silenced := !Silenced
+	}
+	else if (IsVerbose && !Silenced) {
+		ConsoleWrite(Colors.BrightBlue, A_Hour ":" A_Min ":" A_Sec "." A_MSec "`t" Info)
+	}
+}
+
 Exit() {
 	global SkipExitConfirm
 	
 	if !(SkipExitConfirm) {
 		ConsoleWrite(Colors.White, "Press {Enter} to close.")
 		
-		Sleep, 250
-		KeyWait, Enter, D
+		ConsoleReadLine()
 	}
 	
 	ExitApp (A_IsCompiled ? 0 : DllCall("FreeConsole"))
@@ -164,28 +186,11 @@ ConsoleReadLine() {
 	}
 }
 
-;Console:Blue()
-; MessageBoxW(0, NextArg, NextArg, 0)
-
-Relax.CompileToAHK(Code)
-MsgBox, % "DDDone"
-
-Start := A_TickCount
-C := Relax.CompileToEXE(Code)
-End := A_TickCount
-MsgBox, % "Done, took: " End - Start " ms`n`n" ; C.Program.Stringify()
-ExitApp
-
-
 ShowError(Message) {
-	Gui, ShowError:New
-	Gui, ShowError:Font, s10, Terminal
-	Gui, ShowError:Add, Text, w800 0x80, % Message
-	Gui, ShowError:Show
+	global HasHadError
 	
-	KeyWait, Enter, D
-	
-	Gui, ShowError:Destroy
+	HasHadError := True
+	ConsoleWrite(Colors.Red, Message)
 	
 	Throw, Exception(Message)
 }

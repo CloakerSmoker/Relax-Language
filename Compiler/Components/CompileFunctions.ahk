@@ -91,6 +91,8 @@
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
+		Log("Function '" Name "' uses " ParamSizes * 8 " bytes of stack, with " this.Locals.Count() " locals, " DefineAST.Params.Count() " parameters, and " DefineAST.Strings.Count() " strings")
+		
 		this.CodeGen.Label("__Define__" Name)
 		
 		this.PushA()
@@ -138,6 +140,7 @@
 			}
 			
 			if !(this.HasReturn) {
+				Log("Function '" Name "' had no return, inserting one")
 				this.CodeGen.SmallMove(RAX, 0)
 			}
 			
@@ -156,6 +159,7 @@
 		this.PopA()
 		
 		if (this.StackDepth != 0) {
+			Log("Code generation error in '" Name "'")
 			MsgBox, % "Unbalenced stack ops in " Name ", " this.StackDepth
 		}
 		

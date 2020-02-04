@@ -61,6 +61,8 @@ Build(CodeCompiler) {
 	
 	Bytes := CodeCompiler.CodeGen.Link(True, True)
 	
+	Log("Building " Bytes.Count() " bytes of compiled code into AHK functions")
+	
 	FunctionOffsetsString := ""
 	
 	for FunctionName, FunctionOffset in CodeCompiler.FunctionOffsets {

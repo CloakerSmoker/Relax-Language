@@ -19,6 +19,8 @@
 		this.Code := StrSplit(Code)
 		this.CodeLength := this.Code.Count()
 		this.CriticalError := False
+		
+		Log("Starting lexer job for " this.CodeLength " characters")
 	
 		try {
 			loop {
@@ -34,6 +36,8 @@
 		if (this.CriticalError) {
 			Throw, Exception("Critical error while tokenizing, aborting...")
 		}
+		
+		Log("Finished lexer job for " this.CodeLength " characters, with " this.Tokens.Count() " tokens generated")
 		
 		return this.Tokens
 	}
@@ -125,7 +129,11 @@
 						Case "x", "b", "o": {
 							NumberBounds := this.AdvanceThroughFilter(Conversions[Next].Filter)
 							Number := this.SubStr(NumberBounds[1], NumberBounds[2])
-							this.AddToken(Tokens.INTEGER, Conversions[Next].Converter(Number))
+							AsInteger := Conversions[Next].Converter(Number)
+							
+							Log("Found non-base10 number '" Number "' with base10 value " AsInteger)
+							
+							this.AddToken(Tokens.INTEGER, AsInteger)
 						}
 						Default: {
 							this.Index -= 2 

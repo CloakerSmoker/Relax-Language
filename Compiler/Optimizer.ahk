@@ -73,9 +73,13 @@
 								IfStatement.Body[k] := this.OptimizeLine(Line)
 							}
 							
+							Log("Found constant true if-statement condition (or else statement) '" IfStatement.Condition.Stringify() "', eliminating all following branches")
+							
 							NewOptions.Push(IfStatement) ; So push it
 							Break ; And break to ignore the rest
 						}
+						
+						Log("Found constant false if-statement condition '" IfStatement.Condition.Stringify() "', removing branch")
 						
 						; If we haven't broken the loop by now, then the statement has a constant condition, but
 						;  the condition is false, so we can just not push it, since it would never run
@@ -97,6 +101,7 @@
 					Statement.Options := NewOptions
 				}
 				else {
+					Log("Removed all branches from an if-statement at " Statement.Options[1].Condition.Context.Start )
 					return new ASTNodes.None()
 				}
 			}
@@ -116,6 +121,7 @@
 					Statement.Expression := this.OptimizeExpression(Statement.Expression)
 				}
 				else {
+					Log("Eliminated useless expression statement '" Statement.Expression.Stringify() "'")
 					return new ASTNodes.None()
 				}
 			}
@@ -230,6 +236,8 @@
 					NewValue := NewLeft ^ NewRight
 				}
 			}
+			
+			Log("Optimized expression '" Expression.Stringify() "' to '" NewValue "'")
 			
 			return new Token(NewType, NewValue, NewContext, NewLeft.Source)
 		}

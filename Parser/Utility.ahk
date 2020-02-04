@@ -140,8 +140,6 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 		Message .= "`nHelp: " Help
 	}
 	
-	Message .= "`n{Enter} to continue."
-	
 	ShowError(Message)
 }
 

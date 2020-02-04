@@ -41,18 +41,29 @@
 	}
 	AddLocal(Type, Name) {
 		this.CurrentFunction.Locals[Name.Value] := {"Type": Type.Value}
+		
+		Log("Found local variable '" Name.Value "' with type '" Type.Value "'")
+		
 		return new ASTNodes.None()
 	}
 	AddGlobal(Type, Name, Initializer) {
 		this.CurrentProgram.Globals[Name.Value] := {"Type": Type.Value, "Initializer": Initializer}
+		
+		Log("Found global variable '" Name.Value "' with type '" Type.Value "' and " (Initializer.Type = ASTNodeTypes.None ? "no" : "a") " default value.")
+		
 		return new ASTNodes.None()
 	}
 	AddString(Text) {
+		Log("Found string '" Text.Value "' used")
+		
 		this.CurrentFunction.Strings.Push(Text)
 	}
 	
 	Start(Tokens) {
 		this.Tokens := Tokens
+		
+		Log("Started parser job for " Tokens.Count() " tokens")
+		
 		return this.ParseProgram()
 	}
 	
@@ -151,6 +162,8 @@
 		
 		Body := this.ParseBlock()
 		
+		Log("Found function definition '" Name.Value "' with return type '" ReturnType.Value "' and " Params.Count() " parameters")
+		
 		return new ASTNodes.Statements.Define(KeywordUsed, ReturnType, Name, Params, Body, Locals, Strings)
 	}
 	ParseDllImport() {
@@ -190,6 +203,8 @@
 		if !(this.NextMatches(Tokens.NEWLINE, Tokens.EOF)) {
 			this.Consume(Tokens.NEWLINE, "DllImport statements must be followed by \n.")
 		}
+		
+		Log("Found DllImport '" Name.Value "' with return type '" ReturnType.Value "' from " FunctionName "@" DllName)
 		
 		return new ASTNodes.Statements.DllImport(ReturnType, Name, Params, DllName, FunctionName)
 	}

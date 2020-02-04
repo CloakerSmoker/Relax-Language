@@ -2,6 +2,8 @@
 	static Size := 0xF0
 	
 	BuildAndGenerate(StubString := "This program cannot be run in DOS mode.", HeaderSize := 0xF0, FillByte := 0x00) {
+		Log("Building DOS header with string '" StubString "'")
+		
 		CG := new I386CodeGen()
 		CG.Push_CS()
 		CG.Pop_DS()
@@ -397,6 +399,8 @@ class PEBuilder {
 			Throw, Exception("Could not lock output file: " FilePath)
 		}
 		
+		Log("Started building PE file at '" FilePath "'")
+		
 		F.Length := 0
 		
 		for k, Byte in this.DOSHeader {
@@ -445,6 +449,8 @@ class PEBuilder {
 		this.PEHeader.BaseRelocationTableRVA(this.NextSectionRVA)
 		this.PEHeader.BaseRelocationTableSize(RelocSize)
 		
+		Log("Done building utility sections")
+		
 		SectionCount := this.Sections.Count()
 		
 		this.COFFHeader.NumberOfSections(SectionCount)
@@ -463,6 +469,8 @@ class PEBuilder {
 		this.PEHeader.SizeOfHeaders(this.RoundToAlignment(MZHeader.Size + COFFHeader.Size + PEHeader.Size + (SectionCount * 40), this.FileAlignment))
 		this.PEHeader.SizeOfImage(this.RoundToAlignment(this.NextSectionRVA + (this.SectionAlignment * 3) + this.Size, this.SectionAlignment))
 		
+		Log("Done setting up headers, writing raw header data to file")
+		
 		for k, Byte in this.COFFHeader.Build() {
 			F.WriteChar(Byte)
 		}
@@ -470,6 +478,8 @@ class PEBuilder {
 		for k, Byte in this.PEHeader.Build() {
 			F.WriteChar(Byte)
 		}
+		
+		Log("Done writing headers, writing raw section data")
 		
 		for k, Section in this.Sections {
 			for k, Byte in Section.Build() {
@@ -504,14 +514,20 @@ class PEBuilder {
 			}
 		}
 		
+		Log("Padding exe file to " this.Size " bytes with " this.Size - F.Tell() " 0s")
+		
 		loop, % this.Size - F.Tell() {
 			F.WriteChar(0)
 		}
 		
 		F.Close()
+		
+		Log("Done building exe file at '" FilePath "'")
 	}
 	
 	BuildIData(IDataSize, IDataFilePointer) {
+		Log("Building .idata section for " this.ImportFunctionCount " imported functions from " this.Imports.Count() " Dll files")
+		
 		this.SizeOfData += IDataSize
 		
 		Imports := this.Imports
@@ -576,9 +592,13 @@ class PEBuilder {
 		}
 		
 		this.FileData[IDataFilePointer] := IDataBytes
+		
+		Log("Done building .idata section")
 	}
 	
 	BuildReloc(RelocSize, RelocFilePointer) {
+		Log("Building .reloc for " this.PageRelocations.Count() " relocations")
+		
 		static ABSOLUTE := 0
 		static HIGHLOW := 3
 		static DIR64 := 10
@@ -613,6 +633,8 @@ class PEBuilder {
 			RelocBytes.Push(NumGet(pBuffer + 0, A_Index - 1, "UChar"))
 		}
 		
+		Log("Done building .reloc")
+		
 		this.FileData[RelocFilePointer] := RelocBytes
 	}
 	
@@ -635,6 +657,8 @@ class PEBuilder {
 		Bytes := this.LinkCode(Bytes)
 		
 		this.SizeOfCode += Bytes.Count()
+		
+		Log("Adding a code section with " Bytes.Count() " bytes of code")
 		
 		this.AddSection(Name, Bytes, SectionCharacteristics.PackFlags("rx code"))
 	}
@@ -682,6 +706,8 @@ class PEBuilder {
 	LinkCode(Bytes) {
 		LinkedBytes := []
 		Globals := {}
+		
+		Log("PEBuilder secondary linking " Bytes.Count() " bytes of code")
 		
 		for k, Byte in Bytes {
 			if (IsObject(Byte)) {
@@ -735,6 +761,8 @@ class PEBuilder {
 				LinkedBytes.Push(Byte)
 			}
 		}
+		
+		Log("PEBuilder secondary linking done")
 		
 		return LinkedBytes
 	}
