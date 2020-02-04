@@ -48,6 +48,7 @@
               {title: "Expression-Statements", url: "#expression-statements" },
               {title: "Expression", url: "#expression" },
               {title: "Operator list", url: "#operator-list" },
+              {title: "Names", url: "#names" },
           ]},
         ];
 
@@ -163,9 +164,9 @@ TypeName VariableName := Value
 <ul>
 <li><code>TypeName</code> is the <a href="#types">type</a> that the variable will have.</li>
 <li><code>VariableName</code> is the <a href="#names">name</a> the variable will have.</li>
-<li><code>:= Value</code> is an optional <a href="#assignment">assignment</a> to give the variable a default value.</li>
+<li><code>:= Value</code> is an optional <a href="#expression">assignment</a> to give the variable a default value.</li>
 </ul>
-<p>Variables that do not have a default value should be considered to have an <a href="..\undefined#undefined-values">undefined value</a> until they are otherwise assigned.</p>
+<p>Variables that do not have a default value should be considered to have an undefined value until they are otherwise assigned.</p>
 <h3 id="keywords">Keywords</h3>
 <p>Keyword statements follow multiple different formats, depending on the keyword used.</p>
 <ul>
@@ -207,7 +208,7 @@ else {
 <li><code>Init</code>, <code>Condition</code>, and <code>Step</code> are all <a href="#expression">expressions</a> which run at different points. </li>
 <li><code>Body</code> is a list of statements(#statements) which will run each iteration of the loop.</li>
 </ul>
-<p><code>Init</code> can optionally be a <a href="#declaration">declaration</a> and is run before the loop first stats, and never again. </p>
+<p><code>Init</code> can optionally be a <a href="#declarations">declaration</a> and is run before the loop first stats, and never again. </p>
 <p><code>Condition</code> is checked before the loop runs an iteration, and if it is false, the loop will stop. </p>
 <p><code>Step</code> is run after each iteration of the loop.</p>
 <h3 id="break-continue">Break-Continue</h3>
@@ -355,6 +356,17 @@ Continue
 </tr>
 </tbody>
 </table>
+<h4 id="types">Types</h4>
+<p>A type is simply a combination of a identifier, with an optional <code>*</code> after (if you need a pointer type)</p>
+<p>The base type names are </p>
+<ul>
+<li><code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code></li>
+<li><code>f32</code>, <code>f64</code></li>
+<li><code>void</code></li>
+</ul>
+<p>With an extra type possible as a pointer type to each, for example: <code>void*</code> or <code>i32*</code>.</p>
+<h3 id="names">Names</h3>
+<p>Names are simply combinations of characters and numbers. Names must start with a-z, but can contain numbers after the first letter.</p>
 
   <br>
     

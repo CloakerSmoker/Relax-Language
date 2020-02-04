@@ -33,6 +33,7 @@
         
         var pageToc = [
           {title: "Main", url: "#_top", children: [
+              {title: "Note", url: "#note" },
               {title: "Programs", url: "#programs" },
               {title: "How to use it", url: "#how-to-use-it" },
           ]},
@@ -87,6 +88,8 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <p><code>Main.ahk</code> contains pretty basic command line interface, which is used to compile Relax programs.</p>
 <p><code>Main.exe</code> is simply a compiled (by AHK) version of <code>Main.ahk</code> with the <code>Subsystem</code> header field set to <code>IMAGE_SUBSYSTEM_WINDOWS_CUI</code> instead of the standard <code>IMAGE_SUBSYSTEM_WINDOWS_GUI</code> for AHK files, which allows it to run like another other command line program.</p>
 <p>Since both <code>Main.ahk</code> and <code>Main.exe</code> function the same, I'll just be referring to them as <code>Main</code> from here on.</p>
+<h3 id="note">Note</h3>
+<p>If <code>Main.exe</code> has problems building a program (ex: has no output, doesn't write to output file), it might have been blocked by windows. To solve this, just use <code>Main.ahk</code>, which just opens a new console window when run.</p>
 <h3 id="programs">Programs</h3>
 <p>A Relax program is described in a few different places, so I won't describe it again, but you should know that the unofficial <code>.rlx</code> file type can be used for Relax source files.</p>
 <p>This is not official in any way, and <code>Main</code> doesn't even check the extensions.</p>

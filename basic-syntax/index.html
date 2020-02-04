@@ -159,7 +159,7 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <p>Most assignment operators act as you'd expect, except for <code>*=</code>. </p>
 <p>Since I really like the C syntax for pointers, but <strong><em>hate</em></strong> the C syntax to assign the value a pointer points to, the <code>*=</code> is used for assignment of a memory address to a new value. </p>
 <p>For example <code>(PointerToAString + 90) *= 'H'</code> would set the character at <code>PointerToAString + 90</code> to be <code>H</code>.</p>
-<p>Since <code>*=</code> is taken, <code>/=</code> is also implemented to prevent confusion, <code>+=</code> and <code>-=</code> are the only shorthand assignment operators.</p>
+<p>Since <code>*=</code> is taken, <code>/=</code> is not implemented to prevent confusion over only one of the two working like normal, <code>+=</code> and <code>-=</code> are the only shorthand assignment operators.</p>
 <p>Additionally, since floating point number support is half-baked (at best), <code>+=</code> and <code>-=</code> are not implemented for floating point numbers.</p>
 <p>So, that leaves us with the 4 assignment operators: <code>:=</code>, <code>*=</code>, <code>+=</code>, <code>-=</code>.</p>
 <h4 id="binary-operators">Binary operators</h4>
