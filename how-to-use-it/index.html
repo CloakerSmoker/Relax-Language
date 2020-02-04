@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+  
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    
+    <link rel="shortcut icon" href="../img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>How to use it - Relax Docs</title>
+    <link href="../css/bootstrap-3.3.7.min.css" rel="stylesheet">
+    <link href="../css/font-awesome-4.7.0.css" rel="stylesheet">
+    <link href="../css/base.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/highlight.css">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
+
+    <script src="../js/jquery-3.2.1.min.js"></script>
+    <script src="../js/bootstrap-3.3.7.min.js"></script>
+    <script src="../js/highlight.pack.js"></script>
+    
+    <base target="_top">
+    <script>
+      var base_url = '..';
+      var is_top_frame = false;
+        
+        var pageToc = [
+          {title: "Main", url: "#_top", children: [
+              {title: "Programs", url: "#programs" },
+              {title: "How to use it", url: "#how-to-use-it" },
+          ]},
+        ];
+
+    </script>
+    <script src="../js/base.js"></script>
+      <script src="../search/main.js"></script> 
+</head>
+
+<body>
+<script>
+if (is_top_frame) { $('body').addClass('wm-top-page'); }
+</script>
+
+
+
+<div class="container-fluid wm-page-content">
+  <a name="_top"></a>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../module-console/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../module-console/" class="btn btn-xs btn-link">
+        The Console Module
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../how-it-works/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../how-it-works/" class="btn btn-xs btn-link">
+        How it works
+      </a>
+    </div>
+    
+  </div>
+
+    
+
+    <h2 id="main">Main</h2>
+<p><code>Main.ahk</code> contains pretty basic command line interface, which is used to compile Relax programs.</p>
+<p><code>Main.exe</code> is simply a compiled (by AHK) version of <code>Main.ahk</code> with the <code>Subsystem</code> header field set to <code>IMAGE_SUBSYSTEM_WINDOWS_CUI</code> instead of the standard <code>IMAGE_SUBSYSTEM_WINDOWS_GUI</code> for AHK files, which allows it to run like another other command line program.</p>
+<p>Since both <code>Main.ahk</code> and <code>Main.exe</code> function the same, I'll just be referring to them as <code>Main</code> from here on.</p>
+<h3 id="programs">Programs</h3>
+<p>A Relax program is described in a few different places, so I won't describe it again, but you should know that the unofficial <code>.rlx</code> file type can be used for Relax source files.</p>
+<p>This is not official in any way, and <code>Main</code> doesn't even check the extensions.</p>
+<h3 id="how-to-use-it">How to use it</h3>
+<p><code>Main</code> takes the arguments:</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Parameter</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-i</code></td>
+<td>[InputFile]</td>
+<td>Read the source code to compile from the given path</td>
+</tr>
+<tr>
+<td><code>-o</code></td>
+<td>[OutputFile]</td>
+<td>Write the compiled code to the given path. If this path has the extension <code>.ahk</code>, then the input file will be compiled into AHK functions. Otherwise, a <code>.exe</code> file will be built at the path.</td>
+</tr>
+<tr>
+<td><code>--no-confirm</code></td>
+<td>N/A</td>
+<td>Stops a confirmation message and user input being required before <code>[InputFile]</code> is compiled.</td>
+</tr>
+<tr>
+<td><code>--no-overwrite-output-file</code></td>
+<td>N/A</td>
+<td>Causes <code>Main</code> to exit when <code>[OutputFile]</code> already exists. (for safety)</td>
+</tr>
+<tr>
+<td><code>--fast-exit</code></td>
+<td>N/A</td>
+<td>Skips asking the user to press <code>{Enter}</code> before <code>Main</code> closes.</td>
+</tr>
+<tr>
+<td><code>--silent</code></td>
+<td>N/A</td>
+<td>Skips all steps that require user input.</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>N/A</td>
+<td>Prints a log of what the compiler is doing.</td>
+</tr>
+</tbody>
+</table>
+<p>Where <code>[InputFile]</code> and <code>[OutputFile]</code> must both be given.</p>
+<p>For example, compiling <code>Examples\SimpleConsoleProgram.rlx</code> with no extra confirmation message into <code>a.exe</code> with verbose mode enabled would be:</p>
+<pre><code>Main.exe --no-confirm --verbose -i Examples\SimpleConsoleProgram.rlx -o a.exe
+</code></pre>
+
+<hr />
+<p>If there are any errors while compiling, they will be printed, and the compiler will abort.</p>
+
+  <br>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../module-console/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../module-console/" class="btn btn-xs btn-link">
+        The Console Module
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../how-it-works/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../how-it-works/" class="btn btn-xs btn-link">
+        How it works
+      </a>
+    </div>
+    
+  </div>
+
+    <br>
+</div>
+
+<footer class="col-md-12 wm-page-content">
+  <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a> using <a href="">Windmill Dark</a> theme by None (noraj).</p>
+</footer>
+
+</body>
+</html>
