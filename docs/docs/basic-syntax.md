@@ -46,7 +46,7 @@ Since I really like the C syntax for pointers, but ***hate*** the C syntax to as
 
 For example `(PointerToAString + 90) *= 'H'` would set the character at `PointerToAString + 90` to be `H`.
 
-Since `*=` is taken, `/=` is also implemented to prevent confusion, `+=` and `-=` are the only shorthand assignment operators.
+Since `*=` is taken, `/=` is not implemented to prevent confusion over only one of the two working like normal, `+=` and `-=` are the only shorthand assignment operators.
 
 Additionally, since floating point number support is half-baked (at best), `+=` and `-=` are not implemented for floating point numbers.
 

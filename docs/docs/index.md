@@ -1,7 +1,13 @@
 # Relax
 A compiled programming language, implemented entirely in AHK
 
-You might notice that the name is a bit ironic, since writing this in AHK gave me absolutely 0 changes to just *relax*.
+You might notice that the name is a bit ironic, since writing this in AHK gave me absolutely 0 chances to just *relax*.
+
+## Note
+
+Relax generates 64 bit machine code, and depends on certain features that only exist on 64 bit processors. This means that there is *no* 32 bit support.
+
+I have no plans for adding 32 bit support, considering that 32 bit machine code is actually much more complex, and would need lots of special cases compared to 64 bit code.
 
 ## FAQ
 ##### Q: What the fuck, why, dear god, why?!

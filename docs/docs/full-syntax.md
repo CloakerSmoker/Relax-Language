@@ -69,9 +69,9 @@ TypeName VariableName := Value
 
 * `TypeName` is the [type](#types) that the variable will have.
 * `VariableName` is the [name](#names) the variable will have.
-* `:= Value` is an optional [assignment](#assignment) to give the variable a default value.
+* `:= Value` is an optional [assignment](#expression) to give the variable a default value.
 
-Variables that do not have a default value should be considered to have an [undefined value](..\undefined#undefined-values) until they are otherwise assigned.
+Variables that do not have a default value should be considered to have an undefined value until they are otherwise assigned.
 
 ### Keywords
 Keyword statements follow multiple different formats, depending on the keyword used.
@@ -116,7 +116,7 @@ for (Init, Condition, Step) {
 * `Init`, `Condition`, and `Step` are all [expressions](#expression) which run at different points. 
 * `Body` is a list of statements(#statements) which will run each iteration of the loop.
 
-`Init` can optionally be a [declaration](#declaration) and is run before the loop first stats, and never again. 
+`Init` can optionally be a [declaration](#declarations) and is run before the loop first stats, and never again. 
 
 `Condition` is checked before the loop runs an iteration, and if it is false, the loop will stop. 
 
@@ -193,3 +193,20 @@ A := B + C
 | `~`      | Prefix         |
 | `*`      | Prefix         |
 | `&`      | Prefix         |
+
+
+#### Types
+
+A type is simply a combination of a identifier, with an optional `*` after (if you need a pointer type)
+
+The base type names are 
+
+* `i8`, `i16`, `i32`, `i64`
+* `f32`, `f64`
+* `void`
+
+With an extra type possible as a pointer type to each, for example: `void*` or `i32*`.
+
+### Names
+
+Names are simply combinations of characters and numbers. Names must start with a-z, but can contain numbers after the first letter.

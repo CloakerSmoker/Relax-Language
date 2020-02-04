@@ -6,6 +6,10 @@
 
 Since both `Main.ahk` and `Main.exe` function the same, I'll just be referring to them as `Main` from here on.
 
+### Note
+
+If `Main.exe` has problems building a program (ex: has no output, doesn't write to output file), it might have been blocked by windows. To solve this, just use `Main.ahk`, which just opens a new console window when run.
+
 ### Programs
 
 A Relax program is described in a few different places, so I won't describe it again, but you should know that the unofficial `.rlx` file type can be used for Relax source files.
