@@ -1,5 +1,7 @@
-# (Replace with name)
+# Relax
 A compiled programming language, implemented entirely in AHK
+
+You might notice that the name is a bit ironic, since writing this in AHK gave me absolutely 0 changes to just *relax*.
 
 ## FAQ
 ##### Q: What the fuck, why, dear god, why?!
@@ -15,11 +17,7 @@ All without any outside tools. Every step is personally written by me. (Which pr
 For more info, see [how it all works](how-it-works)
 
 ## How to use it
-Open `Main.ahk`, and change `Code =` to a different string of code. Run `Main.ahk`, and then `out.exe` will have the compiled version of the `Code =` program.
-
-Additionally, you can change `.CompileToEXE(Code)` to `.CompileToAHK(Code)`, which will generate an AHK script containing the compiled code, which can then be `#Include`'d and run like any other script. For more info, see [compiling to AHK](compile-to-ahk)
-
-That's it. Except that most of the work is writing the string of code.
+See [this page](how-to-use-it) for the different ways Relax can be used.
 
 ## How to do most of the work:
 (I recommend you follow these in the order 1-2-3 if you already know a C-like language, and 2-1-3 otherwise)

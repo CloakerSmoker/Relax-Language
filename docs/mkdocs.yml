@@ -1,4 +1,4 @@
-site_name: LanguageName Docs
+site_name: Relax Docs
 theme:
     name: 'windmill-dark'
     highlightjs: true

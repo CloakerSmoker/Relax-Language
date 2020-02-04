@@ -1,8 +1,8 @@
 # Compiling To AHK
 
-(Replace with language name) supports compiling to AHK through a boilerplate function which is used as a linker+loader for the compiled code.
+Relax supports compiling to AHK through a boilerplate function which is used as a linker+loader for the compiled code.
 
-All you need to do to compile to `.ahk` instead of `.exe` is change `.CompileToEXE(Code)` to `.CompileToAHK(Code)` in `Main.ahk`.
+All you need to do to compile to `.ahk` instead of `.exe` is change the `[OutputFile]` path given to [`Main`](how-to-use-it) to have the `.ahk` extension.
 
 ## The boilerplate
 

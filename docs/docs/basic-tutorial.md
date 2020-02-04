@@ -5,7 +5,7 @@ Either way, I've got time to waste. Get ready for a bad intro to low-level compi
 
 ##### Ignore that part right above here
 
-In (Replace with language name) all variables and values have 'types'. This means that a variable can only hold one kind of thing, and that variables will only *ever* hold one kind of thing.
+In Relax, all variables and values have 'types'. This means that a variable can only hold one kind of thing, and that variables will only *ever* hold one kind of thing.
 
 Additionally, you can only use two variables when they have compatible types, so you can't do something like `"This Is My String Of Text" * 9.2`.
 
