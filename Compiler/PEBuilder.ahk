@@ -327,7 +327,7 @@ class PEBuilder {
 		static COFF_C_EXECUTABLE_IMAGE := 0x0002
 		static COFF_C_LARGE_ADDRESS_AWARE := 0x0020
 		static COFF_C_DEBUG_STRIPPED := 0x0200
-		COFF.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE)
+		COFF.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE | COFF_C_DEBUG_STRIPPED)
 		
 		; PE header setup
 		this.PEHeader := PE := new PEHeader()
@@ -359,7 +359,7 @@ class PEBuilder {
 		static I_DC_NO_ISOLATION := 0x0200
 		static I_DC_HIGH_ENTROPY_VA := 0x0020
 		
-		PE.DllCharacteristics(I_DC_TERMINAL_SERVER_AWARE | I_DC_DYNAMIC_BASE | I_DC_NX_COMPAT | I_DC_HIGH_ENTROPY_VA)
+		PE.DllCharacteristics(I_DC_DYNAMIC_BASE | I_DC_HIGH_ENTROPY_VA)
 		
 		static DEFAULT_RESERVE := 0x00100000
 		static DEFAULT_COMMIT := 0x8000
@@ -453,6 +453,8 @@ class PEBuilder {
 		
 		SectionCount := this.Sections.Count()
 		
+		Log("Output will have " SectionCount " total sections")
+		
 		this.COFFHeader.NumberOfSections(SectionCount)
 		
 		this.PEHeader.SizeOfInitializedData(this.RoundToAlignment(this.SizeOfData, this.SectionAlignment))
@@ -460,9 +462,11 @@ class PEBuilder {
 		this.PEHeader.BaseOfCode(this.BaseOfCode)
 		
 		if (this.EntryPoint) {
+			Log("Entry point at " this.EntryPoint)
 			this.PEHeader.AddressOfEntryPoint(this.EntryPoint)
 		}
 		else {
+			Log("No entry point given, using " this.BaseOfCode)
 			this.PEHeader.AddressOfEntryPoint(this.BaseOfCode)
 		}
 		
@@ -475,17 +479,22 @@ class PEBuilder {
 			F.WriteChar(Byte)
 		}
 		
+		Log("Done writing COFF header")
+		
 		for k, Byte in this.PEHeader.Build() {
 			F.WriteChar(Byte)
 		}
 		
-		Log("Done writing headers, writing raw section data")
+		Log("Done writing PE header")
 		
 		for k, Section in this.Sections {
 			for k, Byte in Section.Build() {
 				F.WriteChar(Byte)
 			}
 		}
+		
+		Log("Done writing section headers")
+		Log("Writing raw section data")
 		
 		for FilePointer, Bytes in this.FileData {
 			F.Seek(FilePointer)
@@ -513,6 +522,8 @@ class PEBuilder {
 				}
 			}
 		}
+		
+		Log("Done writing raw section data")
 		
 		Log("Padding exe file to " this.Size " bytes with " this.Size - F.Tell() " 0s")
 		
