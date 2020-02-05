@@ -65,3 +65,9 @@ Also, embrace things like LLVM, and pre-made linkers. At some point in this proj
 Reinventing every part in the car instead of just a wheel will teach you a lot, but its not fun.
 
 Not to mention LLVM can generate much better code than you will manually.
+
+## Credits
+
+`@SALZKARTOFFEEEL#9805` On Discord, for listening to all of my complaints while I worked on this.
+`@mordecai#2885` On Discord, for catching some of the numerous mistakes I made in these docs.
+`rommmcek` On the AHK forums, for finding some kind of bug which I haven't quite figured out yet.

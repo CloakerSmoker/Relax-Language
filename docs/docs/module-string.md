@@ -36,4 +36,4 @@ If a function returns a string type, you are expected to free it with `Memory:Fr
 ## Usage Impact
 
 `String` imports the [`Memory`](module-memory.md) module, which alone is not very impactful.
-However, since `String` is entirely implemented in (Replace with language name), and many of the `String:` functions depend on each other, the module generates upwards of 5 KB of code.
+However, since `String` is entirely implemented in Relax, and many of the `String:` functions depend on each other, the module generates upwards of 5 KB of code.

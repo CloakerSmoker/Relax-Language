@@ -9,7 +9,7 @@ In Relax, all variables and values have 'types'. This means that a variable can 
 
 Additionally, you can only use two variables when they have compatible types, so you can't do something like `"This Is My String Of Text" * 9.2`.
 
-The way you decide what type a variable has is by 'declaring' the variable to be a certain type. In (language name) you declare a variable to be a certain type by typing a 'type name' along with the variable name, for example:
+The way you decide what type a variable has is by 'declaring' the variable to be a certain type. In Relax you declare a variable to be a certain type by typing a 'type name' along with the variable name, for example:
 ```
 i64 MyVariable
 f32 MyOtherVariable
