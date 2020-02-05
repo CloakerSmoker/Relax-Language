@@ -81,7 +81,7 @@
 				this.AddVariable(ParamSizes, "__String__" String.Value)
 				this.Typing.AddVariable("i8*", "__String__" String.Value)
 			
-				ParamSizes += Ceil((StrLen(String.Value) + 1) / 8)
+				ParamSizes += Ceil((StrLen(String.Value) + 2) / 8)
 				StringStartingOffsets[String.Value] := ParamSizes
 			}
 		}
@@ -97,14 +97,7 @@
 		
 		this.PushA()
 			if (ParamSizes != 0) {
-				if (ParamSizes <= 3) {
-					Loop, % ParamSizes {
-						this.CodeGen.Push(RBX), this.StackDepth++
-					}
-				}
-				else {
-					this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
-				}
+				this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
 				
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 			}
@@ -147,14 +140,7 @@
 			this.CodeGen.Label("__Return" this.FunctionIndex)
 			
 			if (ParamSizes != 0) {
-				if (ParamSizes <= 3) {
-					Loop, % ParamSizes {
-						this.CodeGen.Pop(RBX), this.StackDepth--
-					}
-				}
-				else {
-					this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
-				}
+				this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
 			}
 		this.PopA()
 		
