@@ -57,6 +57,12 @@ PrettyError(Phase, LongText, ShortText, Token, Source, Help := False) {
 		Throw, Exception("There was an error while displaying the error:`n" Phase ": " LongText "`n" ShortText "`n" Token.Value)
 	}
 	
+	if (TokenContext.End < TokenContext.Start) {
+		Temp := TokenContext.End
+		TokenContext.End := TokenContext.Stack
+		TokenContext.Start := Temp
+	}
+	
 	TokenText := TokenContext.ExtractFrom(Source)
 	
 	Lines := StrSplit(Source, "`n", "`r")

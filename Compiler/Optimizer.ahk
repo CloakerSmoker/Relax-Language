@@ -159,6 +159,11 @@
 	OptimizeUnary(Expression) {
 		return Expression
 	}
+	OptimizeArrayAccess(Expression) {
+		Expression.Index := this.Optimize(Expression.Index)
+		
+		return Expression
+	}
 	
 	OptimizeBinary(Expression) {
 		NewLeft := this.Optimize(Expression.Left) ; Optimize any operands first
@@ -273,7 +278,7 @@
 			
 			return OperandHasSideEffects
 		}
-		else if (Expression.Type = ASTNodeTypes.CALL) {
+		else if (Expression.Type = ASTNodeTypes.CALL || Expression.Type = ASTNodeTypes.ARRAYACCESS) {
 			return True
 		}
 		else {

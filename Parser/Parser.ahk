@@ -81,6 +81,7 @@
 		
 		while (this.NextMatches(Tokens.TIMES)) {
 			BaseTypeName.Value .= "*"
+			BaseTypeName.Context.End += 1
 		}
 		
 		return BaseTypeName
@@ -498,6 +499,14 @@
 					else {
 						OperandStack.Push(Params)
 					}
+				}
+				Case Tokens.LEFT_BRACKET: {
+					Target := OperandStack.Pop()
+					Index := this.ParseExpression(Tokens.RIGHT_BRACKET)
+					
+					this.Consume(Tokens.RIGHT_BRACKET, "Array accesses require a closing ]")
+					
+					OperandStack.Push(new ASTNodes.Expressions.ArrayAccess(Target, Index))
 				}
 				Case Next.CaseIsOperator(): {
 					Operator := Next

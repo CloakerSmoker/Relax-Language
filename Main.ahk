@@ -35,7 +35,7 @@ HelpText =
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
-;A_Args := StrSplit("-i Test.rlx -o Out.exe", " ")
+A_Args := StrSplit("-i Test.rlx -o Out.exe", " ")
 
 ArgCount := A_Args.Count()
 
@@ -122,11 +122,11 @@ try {
 	}
 	
 	if (HasHadError) {
-		Throw, Exception("Dummy error")
+		Throw, Exception("Dummy error|")
 	}
 }
 catch E {
-	ConsoleWrite(Colors.Red, "Fatal error, bailing out.`n" (E.Message = "Dummy Error" ? "" : E.Message))
+	ConsoleWrite(Colors.Red, "Fatal error, bailing out.`n" (InStr(E.Message, "|") ? "" : E.Message))
 	Exit()
 }
 

@@ -336,8 +336,6 @@ class Token {
 	}
 }
 class Context {
-	; TODO: Implement this in all AST nodes so we can have errors spanning multiple lines 
-
 	__New(Start, End, Line := 0) {
 		this.Start := Start
 		this.End := End
@@ -348,7 +346,7 @@ class Context {
 		NewEnd := Max(OtherContext.End, this.End)
 		NewLine := Min(OtherContext.Line, this.Line)
 
-		return new Context(NewStart, NewEnd, NewLine, this.Source)
+		return new Context(NewStart, NewEnd, NewLine)
 	}
 	ExtractFrom(String) {
 		return SubStr(String, this.Start + 1, this.End - this.Start)
@@ -383,6 +381,10 @@ class ASTNode {
 		}
 	
 		for k, v in this.Parameters {
+			if (Params[k].__Class = "Token") {
+				this.Source := Params[k].Source
+			}
+			
 			this[v] := Params[k]
 		}
 		
@@ -412,6 +414,7 @@ class ASTNodeTypes extends Enum {
 		CALL
 		UNARY
 		BINARY
+		ARRAYACCESS
 	)"
 }
 
@@ -587,7 +590,8 @@ class ASTNodes {
 				LeftMost.Start -= 1
 				
 				RightMost := this.Expressions[this.Expressions.Count()].GetContext()
-			
+				RightMost.End += 1
+				
 				return LeftMost.Merge(RightMost)
 			}
 		}
@@ -639,6 +643,23 @@ class ASTNodes {
 				FullContext := StartContext.Merge(EndContext)
 			
 				return FullContext
+			}
+		}
+		
+		class ArrayAccess extends ASTNode {
+			static Parameters := ["Target", "Index"]
+			
+			Stringify() {
+				return this.Target.Stringify() "[" this.Index.Stringify() "]"
+			}
+			GetContext() {
+				TargetContext := this.Target.GetContext()
+				IndexContext := this.Index.GetContext()
+				
+				ThisContext := TargetContext.Merge(IndexContext)
+				ThisContext.End += 1
+				
+				return ThisContext
 			}
 		}
 	}

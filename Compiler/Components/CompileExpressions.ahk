@@ -457,3 +457,41 @@
 		
 		return RightType
 	}
+	
+	CompileArrayAccess(Expression) {
+		TargetType := this.Compile(Expression.Target)
+		IndexType := this.Compile(Expression.Index)
+		
+		if (IndexType.Family != "Integer") {
+			new Error("Type")
+				.LongText("The index expression must result in an integer type.")
+				.ShortText("Is not an integer")
+				.Token(Expression.Index)
+				.Source(this.Source)
+			.Throw()
+		}
+		else if (TargetType.Family != "Pointer") {
+			new Error("Type")
+				.LongText("The target expression must be a pointer type.")
+				.ShortText("Isn't a pointer")
+				.Token(Expression.Target)
+				.Source(this.Source)
+			.Throw()
+		}
+		
+		IndexRegister := this.PopRegisterStack()
+		TargetRegister := this.PopRegisterStack()
+		ResultRegister := this.PushRegisterStack()
+		
+		IndexMultiplier := 8 ; By default, multiply Index by 8 to get the element needed
+		
+		if !(TargetType.Pointer.Pointer) {
+			; But if we're not dealing with a pointer-pointer type, use the pointed-to type size as the multiplier
+			IndexMultiplier := TargetType.Pointer.Precision / 8
+		}
+		
+		this.CodeGen.Lea_R64_SIB(RAX, SIB(IndexMultiplier, IndexRegister, TargetRegister))
+		this.CodeGen["Move_R64_RI" (IndexMultiplier * 8)].Call(this.CodeGen, ResultRegister, RAX)
+		
+		return TargetType.Pointer
+	}
