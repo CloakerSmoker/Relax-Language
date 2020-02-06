@@ -1,6 +1,6 @@
 ﻿Import Console
 
-define i32 Main(i64 ArgC, void* ArgV) {
+define i32 Main(i64 ArgC, i16** ArgV) {
 	Console:AWrite("Hello world!")
 	return 0o27
 }

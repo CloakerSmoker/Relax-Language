@@ -34,6 +34,9 @@ HelpText =
 
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
+SetWorkingDir, % A_ScriptDir
+;A_Args := StrSplit("-i Test.rlx -o Out.exe", " ")
+
 ArgCount := A_Args.Count()
 
 if (ArgCount = 0) {
@@ -122,8 +125,8 @@ try {
 		Throw, Exception("Dummy error")
 	}
 }
-catch {
-	ConsoleWrite(Colors.Red, "Fatal error, bailing out.")
+catch E {
+	ConsoleWrite(Colors.Red, "Fatal error, bailing out.`n" (E.Message = "Dummy Error" ? "" : E.Message))
 	Exit()
 }
 

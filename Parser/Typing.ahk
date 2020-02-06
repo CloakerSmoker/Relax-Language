@@ -76,13 +76,12 @@
 	}
 	
 	GetPointerType(Type) {
-		return {"Name": Type.Name "*", "Precision": Type.Precision + 64, "Pointer": Type, "Family": "Pointer", "Weight": this.TypeSet.Pointer.Weight}
+		return {"Name": Type.Name "*", "Precision": (Type.Precision > 64 ? 64 : Type.Precision + 64), "Pointer": Type, "Family": "Pointer", "Weight": this.TypeSet.Pointer.Weight}
 	}
 	
 	GetType(TypeName) {
 		if (InStr(TypeName, "*")) {
-			Pointer := True
-			TypeName := StrReplace(TypeName, "*")
+			TypeName := StrReplace(TypeName, "*", "", PointerDepth)
 		}
 		
 		for k, TypeFamily in this.TypeSet {
@@ -94,12 +93,12 @@
 		if !(FoundType) {
 			Throw, Exception("Invalid Type: '" TypeName "'")
 		}
-		else if (Pointer) {
-			return this.GetPointerType(FoundType)
+		
+		loop, % PointerDepth {
+			FoundType := this.GetPointerType(FoundType)
 		}
-		else {
-			return FoundType
-		}
+		
+		return FoundType
 	}
 
 	ResultType(LeftType, RightType) {

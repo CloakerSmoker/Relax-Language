@@ -5,7 +5,7 @@ DllImport i8 MessageBeep(void) {User32.dll, MessageBeep}
 
 i8 t := MessageBeep(0)
 
-define i64 Main(i64 ArgC, void* ArgV) {	
+define i64 Main(i64 ArgC, i16** ArgV) {	
 	Console:TextColor(Console:Red)
 	Console:IWriteLine(ArgC)
 	

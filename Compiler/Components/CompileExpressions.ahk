@@ -361,7 +361,7 @@
 				Case 32: {
 					this.CodeGen.Move_R64_RI32(RAX, OperandResultRegister)
 				}
-				Case 64: {
+				Default: {
 					this.CodeGen.Move_R64_RI64(RAX, OperandResultRegister)
 				}
 			}
@@ -402,7 +402,7 @@
 			this.CodeGen.C_Move_E_R64_R64(RAX, RDI)
 			this.CodeGen.Move(this.TopOfRegisterStack(), RAX)
 			
-			return this.Type.GetType("i8")
+			return this.Typing.GetType("i8")
 		}
 		
 		new Error("Compile")
@@ -430,7 +430,7 @@
 	CompileDerefAssign(Expression) {
 		LeftType := this.Compile(Expression.Left)
 		
-		if !(InStr(LeftType.Name, "*")) {
+		if !(LeftType.Pointer) {
 			new Error("Type")
 				.LongText("The left operand of '" Expression.Stringify() "' (" LeftType.Name ") must be a pointer type.")
 				.Token(Expression.Left)
@@ -439,14 +439,19 @@
 		}
 		
 		RightType := this.Compile(Expression.Right)
+		LeftTypeSize := 64 ; Default number of bits to write, will only be changed if the left type doesn't point to an 8 byte value
 		
-		LeftValueType := this.Typing.GetType(StrReplace(LeftType.Name, "*"))
-		this.Cast(RightType, LeftValueType) ; Cast the right side value to the type the left side points to
-
+		if !(LeftType.Pointer.Pointer) {
+			; If the left type does not point to a pointer, then:
+			
+			LeftTypeSize := LeftType.Pointer.Precision ; The size of the left type should be used to decide how many bytes to write
+			this.Cast(RightType, LeftType.Pointer) ; Cast the right side value to the type the left side points to
+		}
+		
 		NewValueRegister := this.PopRegisterStack()
 		PointerRegister := this.PopRegisterStack()
 		
-		this.CodeGen["Move_R" LeftValueType.Name "_R64"].Call(this.CodeGen, PointerRegister, NewValueRegister)
+		this.CodeGen["Move_RI" LeftTypeSize "_R64"].Call(this.CodeGen, PointerRegister, NewValueRegister)
 		
 		this.CodeGen.Move(this.PushRegisterStack(), NewValueRegister)
 		

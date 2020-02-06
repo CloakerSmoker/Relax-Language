@@ -68,22 +68,22 @@
 	}
 	
 	ParseTypeName() {
-		TypeToken := this.Next()
+		BaseTypeName := this.Next()
 		
-		if (this.NextMatches(Tokens.TIMES)) {
-			TypeToken.Value .= "*"
-		}
-	
-		if !(this.Typing.IsValidType(TypeToken.Value)) {
+		if !(this.Typing.IsValidType(BaseTypeName.Value)) {
 			new Error("Type")
 				.LongText("Invalid type.")
 				.ShortText("Not a valid type name.")
-				.Token(TypeToken)
+				.Token(BaseTypeName)
 				.Source(this.Source)
 			.Throw()
 		}
 		
-		return TypeToken
+		while (this.NextMatches(Tokens.TIMES)) {
+			BaseTypeName.Value .= "*"
+		}
+		
+		return BaseTypeName
 	}
 	
 	ParseProgram() {

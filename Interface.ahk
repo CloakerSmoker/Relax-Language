@@ -79,7 +79,11 @@ class Relax {
 		}
 		
 		CodeEXEBuilder := new PEBuilder()
-		CodeEXEBuilder.AddSection(".data", GlobalBytes, SectionCharacteristics.PackFlags("rw initialized"))
+		
+		if (GlobalBytes.Count()) {
+			CodeEXEBuilder.AddSection(".data", GlobalBytes, SectionCharacteristics.PackFlags("rw initialized"))
+		}
+		
 		CodeEXEBuilder.AddCodeSection(".text", CodeCompiler.CodeGen.Link(True), MainOffset)
 		CodeEXEBuilder.Build(EXEPath)
 		
@@ -548,7 +552,7 @@ class Builtins {
 		static Code := "
 		(
 			DllImport i16* __GetCommandLineW() {Kernel32.dll, GetCommandLineW}
-			DllImport void* __CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+			DllImport i16** __CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
 			
 			
 			
@@ -562,11 +566,11 @@ class Builtins {
 				__RunTime__SetGlobals()
 				
 				i64 __ArgC := 0
-				void* __ArgV := __CommandLineToArgvW(__GetCommandLineW(), &__ArgC)
+				i16** __ArgV := __CommandLineToArgvW(__GetCommandLineW(), &__ArgC)
 				
 				i32 __ExitCode := (Main(__ArgC, __ArgV) as i32)
 				
-				__LocalFree(__ArgV)
+				__LocalFree(__ArgV As void*)
 				
 				__ExitProcess(__ExitCode)
 			}
