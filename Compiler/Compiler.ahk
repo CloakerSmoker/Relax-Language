@@ -222,8 +222,11 @@
 				Continue
 			}
 			
-			ModuleInfo := Module.Find(ModuleName)
+			ModuleInfo := Module.Find(ModuleName, this.Name != "")
+			this.Modules[ModuleName] := ModuleInfo ; Add the module to the list of already found modules
 			ModuleAST := ModuleInfo.AST
+			
+			; Merge namespaces, prefixing each module function/global
 			
 			for FunctionName, FunctionDefine in ModuleAST.Functions {
 				EncodedName := this.EncodeModuleName(ModuleName, FunctionName)
@@ -237,10 +240,10 @@
 				this.ModuleGlobals[GlobalName] := GlobalInfo
 			}
 			
-			
-			this.FlattenModuleList(ModuleAST)
-			
-			this.Modules[ModuleName] := ModuleInfo
+			if !(this.Name) {
+				; If we're not compiling a standalone module, then recursively get the list of modules
+				this.FlattenModuleList(ModuleAST)
+			}
 		}
 	}
 

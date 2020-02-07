@@ -110,7 +110,7 @@
 		
 		ResultRegister := this.PopRegisterStack()
 		
-		if (ResultType.Family = "Decimal" && !(this.Inline)) {
+		if (ResultType.Family = "Decimal") {
 			this.CodeGen.Push(ResultRegister)
 			this.CodeGen.Move_XMM_SIB(XMM0, SIB(8, RSI, RSP))
 			this.CodeGen.Pop(ResultRegister)

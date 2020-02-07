@@ -278,7 +278,6 @@ class Token {
 		this.Value := Value
 		this.Context := Context
 		this.Source := Source
-		this.HumanReadable := this.Debug()
 	}
 	
 	IsOperator() {
@@ -310,18 +309,6 @@ class Token {
 	}
 	GetContext() {
 		return this.Context
-	}
-
-	
-	Debug() {
-		if (this.Type = Tokens.KEYWORD) {
-			return "KEYWORD: " Keywords[this.Value]
-		}
-		else if (this.IsOperator()) {
-			return "OPERATOR: " Tokens[this.Type]
-		}
-		
-		return Tokens[this.Type] ": " this.Value
 	}
 	
 	Stringify() {
@@ -357,7 +344,6 @@ class Keywords extends Enum {
 	static Options := "
 	(
 		define
-		inline
 		import
 		dllimport
 		
@@ -381,7 +367,7 @@ class ASTNode {
 		}
 	
 		for k, v in this.Parameters {
-			if (Params[k].__Class = "Token") {
+			if (Params[k].__Class = "Token" || Params[k].HasKey("Source")) {
 				this.Source := Params[k].Source
 			}
 			

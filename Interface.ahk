@@ -40,7 +40,7 @@
 #Include Compiler\ToAHK.ahk
 
 class Relax {
-	static VERSION := "1.0.0-alpha.28"
+	static VERSION := "1.0.0-alpha.29"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -120,7 +120,7 @@ class Module {
 	Add(Name, ModuleClass) {
 		this.Modules[Name] := {"Class": ModuleClass, "AST": False}
 	}
-	Find(Name) {
+	Find(Name, SkipCompile := False) {
 		FoundModule := this.Modules[Name]
 		
 		if !(FoundModule) {
@@ -131,7 +131,7 @@ class Module {
 			FoundModule.AST := this.Parse(Name)
 		}
 		
-		if !(FoundModule.Bytes.Count()) {
+		if (!FoundModule.Bytes.Count() && !SkipCompile) {
 			Module.LoadPrecompiledModule(Name)
 		}
 		
@@ -350,14 +350,16 @@ class Builtins {
 				i64 Result := 0
 				i64 Negative := 0
 				
-				i16 FirstCharacter := *(WString)
+				i16 FirstCharacter := WString[0]
 				
 				if (FirstCharacter = '-') {
 					Negative := 1
 					WString += 2
-					FirstCharacter := *(WString)
+					FirstCharacter := WString[0]
 				}
-				else if !(String:WIsNumeric(FirstCharacter)) {
+				
+				
+				if !(String:WIsNumeric(FirstCharacter)) {
 					Success *= 0
 					return 0
 				}
@@ -365,7 +367,7 @@ class Builtins {
 				i32 Length := String:WLen(WString)
 				
 				for (i32 Index := 0, Index < Length, Index++) {
-					i16 NextCharacter := *(WString + (Index * 2))
+					i16 NextCharacter := WString[Index]
 					
 					if !(String:WIsNumeric(NextCharacter)) {
 						Break
@@ -383,7 +385,7 @@ class Builtins {
 				return Result
 			}
 			
-			define i64 WIsNumeric(i16 Character) {
+			define i8 WIsNumeric(i16 Character) {
 				return (Character >= '0') && (Character <= '9')
 			}
 			

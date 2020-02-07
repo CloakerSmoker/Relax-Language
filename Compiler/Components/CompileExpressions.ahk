@@ -209,7 +209,10 @@
 			this.CodeGen.Cmp(LeftRegister, RightRegister) ; All comparison operators have a prelude of a CMP instruction
 			this.CodeGen.Move(ResultRegister, RSI) ; And a 0-ing of the output register, so the output defaults to false when the MoveCC fails
 			
-			ResultType := this.Typing.GetType("i64")
+			ResultType := this.Typing.GetType("i8")
+		}
+		else if (OperatorClasses.IsClass(Expression.Operator, "Logic")) {
+			ResultType := this.Typing.GetType("i8")
 		}
 		else if (OperatorClasses.IsClass(Expression.Operator, "Division")) {
 			if (ResultRegister.Number != RDX.Number) {
@@ -487,10 +490,11 @@
 		
 		if !(TargetType.Pointer.Pointer) {
 			; But if we're not dealing with a pointer-pointer type, use the pointed-to type size as the multiplier
-			IndexMultiplier := TargetType.Pointer.Precision / 8
+			IndexMultiplier := Round(TargetType.Pointer.Precision / 8)
 		}
 		
 		this.CodeGen.Lea_R64_SIB(RAX, SIB(IndexMultiplier, IndexRegister, TargetRegister))
+		this.CodeGen.Move(ResultRegister, RSI)
 		this.CodeGen["Move_R64_RI" (IndexMultiplier * 8)].Call(this.CodeGen, ResultRegister, RAX)
 		
 		return TargetType.Pointer

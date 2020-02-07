@@ -247,10 +247,6 @@
 			FunctionNode := this.Program.Functions[Expression.Target.Value]
 		}
 		
-		if (FunctionNode.Keyword = Keywords.INLINE) {
-			return this.CompileInline(FunctionNode, Expression.Params.Expressions)
-		}
-		
 		if (FunctionNode) {
 			;static ParamRegisters := [R9, R8, RDX, RCX]
 			static ParamRegisters := [RCX, RDX, R8, R9]
