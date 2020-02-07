@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+  
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    
+    <link rel="shortcut icon" href="../img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>Changelog - Relax Docs</title>
+    <link href="../css/bootstrap-3.3.7.min.css" rel="stylesheet">
+    <link href="../css/font-awesome-4.7.0.css" rel="stylesheet">
+    <link href="../css/base.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/highlight.css">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
+
+    <script src="../js/jquery-3.2.1.min.js"></script>
+    <script src="../js/bootstrap-3.3.7.min.js"></script>
+    <script src="../js/highlight.pack.js"></script>
+    
+    <base target="_top">
+    <script>
+      var base_url = '..';
+      var is_top_frame = false;
+        
+        var pageToc = [
+          {title: "Changelog", url: "#_top", children: [
+              {title: "1.0.0-alpha.29", url: "#100-alpha29" },
+              {title: "1.0.0-alpha.28 (And lower)", url: "#100-alpha28-and-lower" },
+          ]},
+        ];
+
+    </script>
+    <script src="../js/base.js"></script>
+      <script src="../search/main.js"></script> 
+</head>
+
+<body>
+<script>
+if (is_top_frame) { $('body').addClass('wm-top-page'); }
+</script>
+
+
+
+<div class="container-fluid wm-page-content">
+  <a name="_top"></a>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../compile-to-ahk/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../compile-to-ahk/" class="btn btn-xs btn-link">
+        Compiling To AHK
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../basic-tutorial/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../basic-tutorial/" class="btn btn-xs btn-link">
+        Basic tutorial
+      </a>
+    </div>
+    
+  </div>
+
+    
+
+    <h1 id="changelog">Changelog</h1>
+<p>Top of page = most recent.</p>
+<h2 id="100-alpha29">1.0.0-alpha.29</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li>Pointer-pointer types, allowing things like <code>i64**</code> or <code>void*******************</code>. (Maybe don't use that second one though)</li>
+<li>An array-access syntax for pointers which scales the index for you, so <code>ArgV[Index]</code> would be equal to <code>*(ArgV + (8 * Index))</code> and <code>ArrayOfI16s[Index]</code> would be equal to <code>*(ArrayOfI16s + (2 * Index))</code></li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>The <code>ArgV</code> parameter to <code>Main</code> to be of the type <code>i16**</code>.</li>
+<li>The version number</li>
+<li>Binary expressions with the operators <code>||</code> or <code>&amp;&amp;</code> to result in <code>i8</code> typed values.</li>
+<li>The <code>String</code> module to use the array access syntax when possible.</li>
+<li>The example programs to use the new <code>ArgV</code> type, and to use the array access syntax.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Programs with 0 global variables generating broken output files.</li>
+<li>Most error messages not have any source code shown.</li>
+<li>Some error messages having the wrong code/not enough code highlighted.</li>
+<li><code>*=</code> Only working with some types.</li>
+<li>Modules which <code>Import</code> each other crashing the compiler.</li>
+<li>Regular AHK exceptions causing the compiler to print <code>"Fatal error, bailing out."</code> and exit without any context.</li>
+</ul>
+<h3 id="docs-changes">Docs Changes</h3>
+<ul>
+<li>Edited <a href="../basic-syntax">Basic Syntax</a> to remove the mention of not having pointer-pointer types.</li>
+<li>Added <a href="../basic-syntax#array-access">an explanation of array accesses</a> on the basic syntax page.</li>
+<li>Added <a href="../full-syntax#expressions">the syntax for an array access</a> on the full syntax page.</li>
+<li>Added <a href="../full-syntax#types">an explanation of pointer-pointer types</a> on the full syntax page.</li>
+<li>Added <a href="../changelog">this page</a> to act as a changelog</li>
+</ul>
+<h2 id="100-alpha28-and-lower">1.0.0-alpha.28 (And lower)</h2>
+<p>None, the change log is new as of <code>alpha.29</code>.</p>
+
+  <br>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../compile-to-ahk/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../compile-to-ahk/" class="btn btn-xs btn-link">
+        Compiling To AHK
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../basic-tutorial/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../basic-tutorial/" class="btn btn-xs btn-link">
+        Basic tutorial
+      </a>
+    </div>
+    
+  </div>
+
+    <br>
+</div>
+
+<footer class="col-md-12 wm-page-content">
+  <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a> using <a href="">Windmill Dark</a> theme by None (noraj).</p>
+</footer>
+
+</body>
+</html>

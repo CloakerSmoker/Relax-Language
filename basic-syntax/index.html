@@ -38,6 +38,7 @@
               {title: "Assignment operators", url: "#assignment-operators" },
               {title: "Binary operators", url: "#binary-operators" },
               {title: "Unary operators", url: "#unary-operators" },
+              {title: "Array-access", url: "#array-access" },
           ]},
           {title: "What next?", url: "#what-next", children: [
           ]},
@@ -90,7 +91,7 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 
     <h2 id="the-basic-syntax">The basic syntax</h2>
 <p>It's pretty much C, but with minor changes. Although many things are borrowed from C, this is <em>not</em> a C compiler, and does not have all the features C has.</p>
-<p>Mainly, it's missing structures, pointer-pointer types, and arrays.</p>
+<p>Mainly, it's missing structures, and arrays.</p>
 <h4 id="types">Types</h4>
 <p>Type names are changed to be more concise, and shorter.</p>
 <p>Integer types:</p>
@@ -187,6 +188,19 @@ i64* PointerVariable := &amp;SomeNumber
 </code></pre>
 
 <p>Would increment <code>PointerVariable</code> by 8 </p>
+<h4 id="array-access">Array-access</h4>
+<p>Array accesses are really just pointer syntax sugar, but god do they make things easier.</p>
+<p><code>Pointer[Index]</code> will do the same operation as <code>*(Pointer + (SizeOfPointedToType(Pointer) * Index))</code>, except in ~3 instructions.</p>
+<p>Instead of evaluating a bunch of expressions manually, the addition and multiplication steps are both done by the CPU directly, which should be a speed up.</p>
+<p>The actual instructions are</p>
+<pre><code>lea rax, [PointerRegister + IndexRegister * TYPESIZE]
+mov ResultRegister, 0
+mov ResultRegister, TYPENAME PTR [rax]
+</code></pre>
+
+<p>Where <code>TYPESIZE</code> is the size of each element in the array (1, 2, 4, or 8 bytes), and <code>TYPENAME</code> is the name of the type of each element.</p>
+<p>The <code>mov ResultRegister, 0</code> is because depending on <code>TYPENAME</code>, the <code>mov ResultRegister, [rax]</code> might only move 1/2/4 bytes into the 8 byte register, which could leave garbage data in the top few bytes. But by zeroing the result register, we clear any garbage.</p>
+<p>For example, <code>mov rcx, BYTE PTR [rax]</code> would only set the low 1 byte of <code>rcx</code>, leaving the top 7 bytes unchanged.</p>
 <h2 id="what-next">What next?</h2>
 <p>For a tutorial sort of thing, see <a href="../tutorial/">the tutorial page</a>.</p>
 <p>For a full writeup of the syntax, see <a href="../full-syntax/">the full syntax page</a>.</p>

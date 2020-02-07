@@ -48,6 +48,7 @@
               {title: "Expression-Statements", url: "#expression-statements" },
               {title: "Expression", url: "#expression" },
               {title: "Operator list", url: "#operator-list" },
+              {title: "Types", url: "#types" },
               {title: "Names", url: "#names" },
           ]},
         ];
@@ -253,6 +254,11 @@ Continue
 <li>Some operators may not be implemented for a given type</li>
 <li>Some expressions may be used as booleans inside of <a href="#for">for loops</a> or <a href="#if">if statements</a>. This is done by checking if the expressions results in <code>0</code> or not.</li>
 </ul>
+<p>Additionally, there is the format:</p>
+<pre><code>Something[SomethingElse]
+</code></pre>
+
+<p>Where <code>Something</code> is an expression which results in a pointer-type, and <code>SomethingElse</code> results in an integer, which will be used as an index into <code>Something</code>.</p>
 <h3 id="operator-list">Operator list</h3>
 <h5 id="binary-operators">Binary Operators</h5>
 <table>
@@ -356,15 +362,22 @@ Continue
 </tr>
 </tbody>
 </table>
-<h4 id="types">Types</h4>
-<p>A type is simply a combination of a identifier, with an optional <code>*</code> after (if you need a pointer type)</p>
+<h3 id="types">Types</h3>
+<p>A type is simply a combination of a identifier, with any number of <code>*</code>s after it (each <code>*</code> increases the level of nested pointers)</p>
 <p>The base type names are </p>
 <ul>
 <li><code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code></li>
 <li><code>f32</code>, <code>f64</code></li>
 <li><code>void</code></li>
 </ul>
-<p>With an extra type possible as a pointer type to each, for example: <code>void*</code> or <code>i32*</code>.</p>
+<p>With pointer (and pointer-pointer) types for each, like:</p>
+<pre><code>void*  - Pointer to void
+i16**  - Pointer to a pointer to an i16
+i8*    - Pointer to an i8
+
+void*****************    - Pointer to a pointer to a pointer to a pointer to a pointer to a pointer to a pointer.... you get it
+</code></pre>
+
 <h3 id="names">Names</h3>
 <p>Names are simply combinations of characters and numbers. Names must start with a-z, but can contain numbers after the first letter.</p>
 
