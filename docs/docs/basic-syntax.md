@@ -1,7 +1,7 @@
 ## The basic syntax
 It's pretty much C, but with minor changes. Although many things are borrowed from C, this is *not* a C compiler, and does not have all the features C has.
 
-Mainly, it's missing structures, pointer-pointer types, and arrays.
+Mainly, it's missing structures, and arrays.
 
 #### Types
 
@@ -92,6 +92,28 @@ i64* PointerVariable := &SomeNumber
 ++PointerVariable
 ```
 Would increment `PointerVariable` by 8 
+
+#### Array-access
+
+Array accesses are really just pointer syntax sugar, but god do they make things easier.
+
+`Pointer[Index]` will do the same operation as `*(Pointer + (SizeOfPointedToType(Pointer) * Index))`, except in ~3 instructions.
+
+Instead of evaluating a bunch of expressions manually, the addition and multiplication steps are both done by the CPU directly, which should be a speed up.
+
+The actual instructions are
+
+```
+lea rax, [PointerRegister + IndexRegister * TYPESIZE]
+mov ResultRegister, 0
+mov ResultRegister, TYPENAME PTR [rax]
+```
+
+Where `TYPESIZE` is the size of each element in the array (1, 2, 4, or 8 bytes), and `TYPENAME` is the name of the type of each element.
+
+The `mov ResultRegister, 0` is because depending on `TYPENAME`, the `mov ResultRegister, [rax]` might only move 1/2/4 bytes into the 8 byte register, which could leave garbage data in the top few bytes. But by zeroing the result register, we clear any garbage.
+
+For example, `mov rcx, BYTE PTR [rax]` would only set the low 1 byte of `rcx`, leaving the top 7 bytes unchanged.
 
 ## What next?
 

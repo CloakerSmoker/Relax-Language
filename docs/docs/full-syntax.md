@@ -168,6 +168,12 @@ A := B + C
 * Some operators may not be implemented for a given type
 * Some expressions may be used as booleans inside of [for loops](#for) or [if statements](#if). This is done by checking if the expressions results in `0` or not.
 
+Additionally, there is the format:
+```
+Something[SomethingElse]
+```
+Where `Something` is an expression which results in a pointer-type, and `SomethingElse` results in an integer, which will be used as an index into `Something`.
+
 ### Operator list
 
 ##### Binary Operators
@@ -195,9 +201,9 @@ A := B + C
 | `&`      | Prefix         |
 
 
-#### Types
+### Types
 
-A type is simply a combination of a identifier, with an optional `*` after (if you need a pointer type)
+A type is simply a combination of a identifier, with any number of `*`s after it (each `*` increases the level of nested pointers)
 
 The base type names are 
 
@@ -205,7 +211,15 @@ The base type names are
 * `f32`, `f64`
 * `void`
 
-With an extra type possible as a pointer type to each, for example: `void*` or `i32*`.
+With pointer (and pointer-pointer) types for each, like:
+
+```
+void*  - Pointer to void
+i16**  - Pointer to a pointer to an i16
+i8*    - Pointer to an i8
+
+void*****************    - Pointer to a pointer to a pointer to a pointer to a pointer to a pointer to a pointer.... you get it
+```
 
 ### Names
 
