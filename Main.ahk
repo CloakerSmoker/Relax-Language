@@ -94,6 +94,8 @@ if !(SkipConfirm) {
 	}
 }
 
+
+
 if !(FileExist(InputFile)) {
 	ConsoleWrite(Colors.Red, "Input file does not exist.")
 	Exit()

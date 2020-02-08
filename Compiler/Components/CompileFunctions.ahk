@@ -8,7 +8,7 @@
 		for k, String in DefineAST.Strings {
 			HighAddressOffset := StringStartingOffsets[String.Value]
 			
-			this.CodeGen.Move(RAX, I32(HighAddressOffset))
+			this.CodeGen.SmallMove(RAX, HighAddressOffset)
 			HighAddressSIB := SIB(8, RAX, R15)
 			
 			this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
@@ -210,8 +210,14 @@
 	
 	CompileCall(Expression) {
 		if (this.Typing.IsValidType(Expression.Target.Value) && Expression.Params.Expressions.Count() = 1) {
-			this.Compile(Expression.Params.Expressions[1])
-			return this.Typing.GetType(Expression.Target.Value)
+			OperandType := this.Compile(Expression.Params.Expressions[1])
+			ResultType := this.Typing.GetType(Expression.Target.Value)
+			
+			try {
+				this.Cast(OperandType, ResultType)
+			}
+			
+			return ResultType
 		}
 		else if (Expression.Target.Type = ASTNodeTypes.Binary) {
 			if (this.Features & this.DisableModules) {
@@ -289,7 +295,7 @@
 			}
 			
 			loop, % Abs(Min(0, Params.Count() - 4)) {
-				this.CodeGen.Push(RSI), this.StackDepth++
+				this.CodeGen.Move(ParamRegisters[A_Index - 1 + 4])
 			}
 			
 			loop, % Params.Count() {
@@ -302,7 +308,13 @@
 				
 				try {
 					this.Cast(ParamType, RequiredType) ; Ensure the passed parameter is of the correct type
-					this.CodeGen.Push(this.PopRegisterStack()), this.StackDepth++
+					
+					if (ReversedIndex <= 4) {
+						this.CodeGen.Move(ParamRegisters[ReversedIndex], this.PopRegisterStack())
+					}
+					else {
+						this.CodeGen.Push(this.PopRegisterStack()), this.StackDepth++
+					}
 				}
 				catch {
 					new Error("Compile")
@@ -314,15 +326,17 @@
 			}
 			
 			loop, % 4 {
-				this.CodeGen.Pop(ParamRegisters[A_Index]), this.StackDepth--
+				;this.CodeGen.Pop(ParamRegisters[A_Index]), this.StackDepth--
 			}
+			
+			ShadowSpaceSize := 4
 			
 			if (Mod(this.StackDepth, 2) != 1) {
 				; Break stack alignment if needed, since 0x20 is even, and the push return addr will align the stack
-				this.CodeGen.Push(0), this.StackDepth++, StackParamCount++
+				ShadowSpaceSize += 1
 			}
 			
-			this.CodeGen.SmallSub(RSP, 0x20), this.StackDepth += 4 ; Allocate shadow space (below the stack parameters)
+			this.CodeGen.SmallSub(RSP, ShadowSpaceSize * 8), this.StackDepth += ShadowSpaceSize ; Allocate shadow space (below the stack parameters)
 			
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
 				this.CodeGen.DllCall(FunctionNode.DllName, FunctionNode.FunctionName)
@@ -331,8 +345,8 @@
 				this.CodeGen.Call_Label("__Define__" Expression.Target.Value)
 			}
 			
-			this.CodeGen.SmallAdd(RSP, (StackParamCount * 8) + 0x20)
-			this.StackDepth -= 4, this.StackDepth -= StackParamCount ; Free shadow space + any stack params/dummy space
+			this.CodeGen.SmallAdd(RSP, (StackParamCount * 8) + (ShadowSpaceSize * 8))
+			this.StackDepth -= StackParamCount, this.StackDepth -= ShadowSpaceSize ; Free shadow space + any stack params/dummy space
 			
 			if (Straddling) {
 				this.PopRegisterStack()

@@ -277,20 +277,7 @@
 			Case Tokens.INTEGER: {
 				IntegerValue := TargetToken.Value
 				
-				if (IntegerValue <= 0x7F) {
-					this.CodeGen.XOR_R64_R64(ResultRegister, ResultRegister)
-					this.CodeGen.Move_R64_I8(ResultRegister, I8(IntegerValue))
-				}
-				else if (IntegerValue <= 0x7FFF) {
-					this.CodeGen.XOR_R64_R64(ResultRegister, ResultRegister)
-					this.CodeGen.Move_R64_I16(ResultRegister, I16(IntegerValue))
-				}
-				else if (IntegerValue <= 0x7FFFFFFF) {
-					this.CodeGen.Move_R64_I32(ResultRegister, I32(IntegerValue))
-				}
-				else {
-					this.CodeGen.Move_R64_I64(ResultRegister, I64(IntegerValue))
-				}
+				this.CodeGen.SmallMove(ResultRegister, IntegerValue)
 				
 				return this.Typing.GetType(this.CodeGen.NumberSizeOf(IntegerValue, False))
 			}
@@ -318,68 +305,48 @@
 	;========================
 	; Cast methods
 	
-	Cast(TypeOne, TypeTwo, StackLess := False) {
-		; Parameter should be on the register stack, or in RAX
-		; RAX is the only register used for casts
-		; StackLess param is for when the operand is already in RAX, otherwise RAX is loaded with the first thing on the stack
-		
+	Cast(TypeOne, TypeTwo) {		
 		Base := ObjGetBase(this)
 		Path := this.Typing.CastPath(TypeOne, TypeTwo)
 		
 		if (TypeOne.Name = TypeTwo.Name || Path.Count() = 0) {
 			return
-		}	
-		
-		if !(StackLess) {
-			this.CodeGen.Move(RAX, this.TopOfRegisterStack())
 		}
 		
-		for k, Pair in Path {
-			Name := "Cast_" Pair[1].Name "_" Pair[2].Name
+		TargetRegister := this.TopOfRegisterStack()
 		
-			if (Base.HasKey(Name)) {
-				Base[Name].Call(this)
+		if (TypeOne.Family = "Decimal" && TypeTwo.Family = "Integer") {
+			return this.Cast_F64_I64(TargetRegister)
+		}
+		else if (TypeOne.Family = "Integer" && TypeTwo.Family = "Decimal") {
+			return this.Cast_I64_F64(TargetRegister)
+		}
+		else if (TypeOne.Family = "Integer" && TypeTwo.Family = "Integer") {
+			StartingTypeName := TypeOne.Name
+			
+			if (StartingTypeName = "Void") {
+				StartingTypeName := "I64"
 			}
-			else {
-				Throw, Exception("Invalid cast: " Name)
-			}
+			
+			return this.CodeGen["MoveSX_R64_" TypeOne.Name].Call(this, TargetRegister, TargetRegister)
+		}
+		else if ((TypeOne.Pointer && TypeTwo.Family = "Integer") || (TypeTwo.Pointer && TypeOne.Family = "Integer")) {
+			return
 		}
 		
-		if !(StackLess) {
-			this.CodeGen.Move(this.TopOfRegisterStack(), RAX)
-		}
+		Throw, Exception("Invalid cast")
 	}
 	
-	Cast_I8_I16() {
-		this.CodeGen.CBWE()
-	}
-	Cast_I16_I32() {
-		this.CodeGen.CWDE()
-	}
-	Cast_I32_I64() {
-		this.CodeGen.CDQE()
-	}
-	Cast_I64_I8() {
-		this.Cast(this.Typing.GetType("i8"), this.Typing.GetType("i64"), True)
-	}
-	Cast_I64_Void() {
-	}
-	Cast_Void_I64() {
-	}
-	Cast_I64_F64() {
-		this.CodeGen.Push(RAX), this.StackDepth++
+	Cast_I64_F64(TargetRegister) {
+		this.CodeGen.Push(TargetRegister), this.StackDepth++
 		this.CodeGen.FILD_Stack()
 		this.CodeGen.FSTP_Stack()
-		this.CodeGen.Pop(RAX), this.StackDepth--
+		this.CodeGen.Pop(TargetRegister), this.StackDepth--
 	}
-	Cast_F64_I64() {
-		this.CodeGen.Push(RAX), this.StackDepth++
+	Cast_F64_I64(TargetRegister) {
+		this.CodeGen.Push(TargetRegister), this.StackDepth++
 		this.CodeGen.FISTP_Stack()
 		this.CodeGen.FSTP_Stack()
-		this.CodeGen.Pop(RAX), this.StackDepth--
-	}
-	Cast_I32_F32() {
-	}
-	Cast_F32_I32() {
+		this.CodeGen.Pop(TargetRegister), this.StackDepth--
 	}
 }

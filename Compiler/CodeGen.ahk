@@ -133,15 +133,15 @@ class X64CodeGen {
 	;  ex: changing jumps to use 8bit offsets instead of 32 shouln't clobber other jumps
 	
 	SmallMove(Register, Integer) {
-		if (Integer = 0 && False) {
-			; o7 RIP XOR 0ing, if only it didn't touch the flags register
-			this.XOR_R64_R64(Register, Register)
+		if (Integer < 0x7FFFFFFF) {
+			this.Move_R64_I32(Register, I32(Integer))
 		}
 		else {
-			this.Push(Integer)
-			this.Pop(Register)
+			this.Move_R64_I64(Register, I64(Integer))
 		}
 	}
+	
+	static LEGACY_SIZE_PREFIX := 0x66
 	
 	; Calls START
 	
@@ -187,10 +187,25 @@ class X64CodeGen {
 	MoveSX_R64_RI8(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, {"Mode": Mode.RToPtr})
 	}
+	
+	MoveSX_R64_R8(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
+	MoveSX_R64_R16(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xBF], RegisterOne, RegisterTwo, {"REX": [REX.W]})
+	}
 	MoveSX_R64_R32(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x63], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
-
+	
+	MoveSX_R32_R8(RegisterOne, RegisterTwo) {
+		this.REXOpcodeMod([0x0F, 0xBE], RegisterOne, RegisterTwo)
+	}
+	MoveSX_R32_R16(RegisterOne, RegisterTwo) {
+		this.PushByte(this.LEGACY_SIZE_PREFIX)
+		this.REXOpcodeMod([0x0F, 0xBF], RegisterOne, RegisterTwo)
+	}
+	
 	; Sign extend moves END
 	;============================
 	; Misc/Register to register moves START
@@ -198,6 +213,9 @@ class X64CodeGen {
 	Move_R64_R64(DestRegister, SourceRegister) {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
+		if (DestRegister.__Class = SourceRegister.__Class) {
+			return
+		}
 	
 		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"REX": [REX.W]})
 	}
@@ -373,10 +391,20 @@ class X64CodeGen {
 	}
 	
 	SmallAdd(Register, Number) {
-		this.SmallMove(RBX, Number)
+		Size := this.NumberSizeOf(Number)
 		
-		this.Add_R64_R64(Register, RBX)
+		if (Size = 8) {
+			this.Add_R64_I8(Register, I8(Number))
+		}
+		else if (Size = 64) {
+			this.SmallMove(RAX, Number)
+			this.Add_R64_R64(Register, RAX)
+		}
+		else {
+			this.Add_R64_I32(Register, I32(Number))
+		}
 	}
+	
 	SmallAddSIB(SIB, Number) {
 		this.SmallMove(RBX, Number)
 		
@@ -395,20 +423,24 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.W]})
 		this.SplitIntoBytes32(Integer.Value)
 	}
-	Add_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 0}, Register, {"REX": [REX.Prefix]})
-		this.PushByte(Integer.Value & 0x00FF)
-		this.PushByte(Integer.Value & 0xFF00)
-	}
 	Add_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"OpcodeExtension": 0}, Register, {"REX": [REX.Prefix]})
+		this.REXOpcodeMod([0x83], {"OpcodeExtension": 0}, Register, {"REX": [REX.W]})
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
 	SmallSub(Register, Number) {
-		this.SmallMove(RBX, Number)
+		Size := this.NumberSizeOf(Number)
 		
-		this.Sub_R64_R64(Register, RBX)
+		if (Size = 8) {
+			this.Sub_R64_I8(Register, I8(Number))
+		}
+		else if (Size = 64) {
+			this.SmallMove(RAX, Number)
+			this.Sub_R64_R64(Register, RAX)
+		}
+		else {
+			this.Sub_R64_I32(Register, I32(Number))
+		}
 	}
 	SmallSubSIB(SIB, Number) {
 		this.SmallMove(RBX, Number)
@@ -428,13 +460,8 @@ class X64CodeGen {
 		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.W]})
 		this.SplitIntoBytes32(Integer.Value)
 	}
-	Sub_R64_I16(Register, Integer) {
-		this.REXOpcodeMod([0x81], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
-		this.PushByte(Integer.Value & 0x00FF)
-		this.PushByte(Integer.Value & 0xFF00)
-	}
 	Sub_R64_I8(Register, Byte) {
-		this.REXOpcodeMod([0x80], {"OpcodeExtension": 5}, Register, {"REX": [REX.Prefix]})
+		this.REXOpcodeMod([0x83], {"OpcodeExtension": 5}, Register, {"REX": [REX.W]})
 		this.PushByte(Byte.Value & 0xFF)
 	}
 	
