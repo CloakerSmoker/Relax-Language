@@ -156,7 +156,7 @@
 				if (Keywords.HasKey(IdentifierText)) {
 					this.AddToken(Tokens.KEYWORD, Keywords[IdentifierText])
 				}
-				else if (Operators.IsOperator(IdentifierText)) {
+				else if (OperatorClasses.WordOperators.HasKey(IdentifierText)) {
 					this.AddToken(Tokens[IdentifierText], IdentifierText)
 				}
 				else {

@@ -165,6 +165,8 @@ class OperatorClasses {
 	static BinaryToPrefix := {Tokens.TIMES: Tokens.DEREF
 							 ,Tokens.BITWISE_AND: Tokens.ADDRESS
 							 ,Tokens.MINUS: Tokens.NEGATE}
+							 
+	static WordOperators := {"as": Tokens.AS}
 						
 	IsClass(OperatorToken, ClassNames*) {
 		for k, ClassName in ClassNames {
@@ -346,6 +348,7 @@ class Keywords extends Enum {
 		define
 		import
 		dllimport
+		export
 		
 		return
 		if
@@ -415,7 +418,7 @@ class ASTNodes {
 
 	class Statements {
 		class Program extends ASTNode {
-			static Parameters := ["Functions", "Globals", "Modules"]
+			static Parameters := ["Functions", "Globals", "Modules", "Exports"]
 			
 			Stringify() {
 				String := "/* " Relax.VERSION " */`n"

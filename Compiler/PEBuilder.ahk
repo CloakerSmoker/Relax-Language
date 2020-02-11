@@ -295,6 +295,24 @@ class ImportHeader extends Header {
 	}
 }
 
+class ExportDirectoryTable extends Header {
+	static Size := 40
+	
+	class Properties {
+		static ExportFlags := [0, "Int"] ; Must be 0
+		static TimeDateStamp := [4, "Int"] ; Time the export was created
+		static MajorVersion := [8, "Short"]
+		static MinorVersion := [10, "Short"]
+		static NameRVA := [12, "Int"] ; RVA of the DLL name
+		static OrdinalBase := [16, "Int"]
+		static AddressTableEntryCount := [20, "Int"]
+		static NumberOfNamePointers := [24, "Int"]
+		static ExportAddressTableRVA := [28, "Int"]
+		static NamePointerTableRVA := [32, "Int"]
+		static OrdinalTableRVA := [36, "Int"]
+	}
+}
+
 class RelocationBlock extends Header {
 	static Size := 8
 	
@@ -322,12 +340,6 @@ class PEBuilder {
 		COFF.TimeDateStamp(this.CurrentTimeToInt32())
 		
 		COFF.SizeOfOptionalHeader(PEHeader.Size)
-		
-		static COFF_C_RELOCS_STRIPPED := 0x0001
-		static COFF_C_EXECUTABLE_IMAGE := 0x0002
-		static COFF_C_LARGE_ADDRESS_AWARE := 0x0020
-		static COFF_C_DEBUG_STRIPPED := 0x0200
-		COFF.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE | COFF_C_DEBUG_STRIPPED)
 		
 		; PE header setup
 		this.PEHeader := PE := new PEHeader()
@@ -392,7 +404,7 @@ class PEBuilder {
 		this.ImportBase := 0
 	}
 	
-	Build(FilePath) {
+	Build(FilePath, ExportInfo := "") {
 		this.File := F := FileOpen(FilePath, "rw-rwd")
 		
 		if !(IsObject(F)) {
@@ -408,6 +420,62 @@ class PEBuilder {
 		}
 		
 		F.Write("PE"), F.WriteShort(0) ; PE\0\0 magic
+		
+		static COFF_C_RELOCS_STRIPPED := 0x0001
+		static COFF_C_EXECUTABLE_IMAGE := 0x0002
+		static COFF_C_LARGE_ADDRESS_AWARE := 0x0020
+		static COFF_C_DEBUG_STRIPPED := 0x0200
+		static COFF_C_IMAGE_FILE_DLL := 0x2000
+		
+		if (ExportInfo) {
+			this.ImageBase := 0x180000000
+			this.PEHeader.ImageBase(this.ImageBase)
+			
+			Log("Export info passed, building DLL file")
+			this.COFFHeader.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE | COFF_C_IMAGE_FILE_DLL)
+			
+			static IMAGE_SUBSYSTEM_WINDOWS_GUI := 2
+			this.PEHeader.Subsystem(IMAGE_SUBSYSTEM_WINDOWS_GUI)
+			
+			DllName := StrSplit(StrReplace(FilePath, "/", "\"), "\").Pop()
+			
+			ExportStringsSize := StrLen(DllName) + 1
+			ExportCount := ExportInfo.Count()
+			
+			for ExportName, ExportRVA in ExportInfo {
+				ExportStringsSize += StrLen(ExportName) + 1
+			}
+			
+			EDataSize := ExportStringsSize + ExportDirectoryTable.Size + (ExportCount * (4 + 4 + 2))
+			; Size of the export header, plus all of the names, plus the size of each entry in the 3 arrays
+			
+			Log(".edata section will be " EDataSize " bytes with " ExportCount " exported functions")
+			
+			EDataFilePointer := this.GetFilePointer(EDataSize)
+			
+			Log("Building .edata header and generating export info")
+			
+			EData := new SectionHeader()
+			EData.Name(this.StringToInt64(".edata"))
+			EData.VirtualSize(EDataSize)
+			EData.SizeOfRawData(this.RoundToAlignment(EDataSize, this.FileAlignment))
+			EData.VirtualAddress(this.NextSectionRVA)
+			EData.Characteristics(SectionCharacteristics.PackFlags("r initialized"))
+			EData.PointerToRawData(EDataFilePointer)
+			this.Sections.Push(EData)
+			
+			this.BuildEData(DllName, ExportInfo, EDataSize, EDataFilePointer)
+			
+			Log("Done building .edata")
+			
+			this.PEHeader.ExportTableRVA(this.NextSectionRVA)
+			this.PEHeader.ExportTableSize(EDataSize)
+			
+			this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + this.SectionAlignment, this.SectionAlignment)
+		}
+		else {
+			this.COFFHeader.Characteristics(COFF_C_EXECUTABLE_IMAGE | COFF_C_LARGE_ADDRESS_AWARE)
+		}
 		
 		IDataSize := ((this.Imports.Count() + 1) * (20 + 16)) + this.TotalImportNameLengths + (16 * this.ImportFunctionCount)
 		; Each Dll import header is 20 bytes, and each imported function has 2 8 byte feilds, and two more terminating 8 byte feilds
@@ -426,7 +494,6 @@ class PEBuilder {
 		this.BuildIData(IDataSize, IDataFilePointer)
 		this.IDataRVA := this.NextSectionRVA
 		this.NextSectionRVA := this.RoundToAlignment(this.NextSectionRVA + this.SectionAlignment, this.SectionAlignment)
-		this.Size += IDataSize
 		this.PEHeader.ImportTableSize(IDataSize)
 		
 		
@@ -510,7 +577,7 @@ class PEBuilder {
 						SkipBytes := 7
 					}
 					else if (Byte[1] = "SectionPointer") {
-						F.WriteUInt64(Byte[2])
+						F.WriteUInt64(this.ImageBase + Byte[2])
 						SkipBytes := 7
 					}
 					else {
@@ -534,6 +601,65 @@ class PEBuilder {
 		F.Close()
 		
 		Log("Done building exe file at '" FilePath "'")
+	}
+	
+	BuildEData(DllName, ExportInfo, EDataSize, EDataFilePointer) {
+		ExportCount := ExportInfo.Count()
+		
+		VarSetCapacity(EDataBuffer, EDataSize, 0)
+		pBuffer := &EDataBuffer
+		
+		ExportDirectoryTableOffset := 0
+		pExportDirectoryTable := pBuffer + ExportDirectoryTableOffset
+		
+		AddressTableOffset := ExportDirectoryTableOffset + ExportDirectoryTable.Size
+		pAddressTable := pBuffer + AddressTableOffset
+		
+		OrdinalTableOffset := AddressTableOffset + (ExportCount * 4)
+		pOrdinalTable := pBuffer + OrdinalTableOffset
+		
+		NamePointerTableOffset := OrdinalTableOffset + (ExportCount * 2)
+		pNamePointerTable := pBuffer + NamePointerTableOffset
+		
+		StringPoolOffset := NamePointerTableOffset + (ExportCount * 4)
+		pStringPool := pBuffer + StringPoolOffset
+		
+		CurrentIndex := 0
+		CurrentStringOffset := StrPut(DllName, pStringPool, StrLen(DllName), "UTF-8") + 1
+		
+		for ExportName, ExportRVA in ExportInfo {
+			NumPut(this.BaseOfCode + ExportRVA, pAddressTable + 0, CurrentIndex * 4, "Int")
+			NumPut(CurrentIndex, pOrdinalTable + 0, CurrentIndex * 2, "Short")
+			NumPut(this.NextSectionRVA + StringPoolOffset + CurrentStringOffset, pNamePointerTable + 0, CurrentIndex * 4, "Int")
+			
+			CurrentIndex++
+			
+			CurrentStringOffset += StrPut(ExportName, pStringPool + CurrentStringOffset, StrLen(ExportName), "UTF-8") + 1
+		}
+		
+		EDataHeader := new ExportDirectoryTable()
+		EDataHeader.TimeDateStamp(this.CurrentTimeToInt32())
+		EDataHeader.NameRVA(this.NextSectionRVA + StringPoolOffset)
+		EDataHeader.OrdinalBase(1)
+		EDataHeader.AddressTableEntryCount(ExportCount)
+		EDataHeader.NumberOfNamePointers(ExportCount)
+		EDataHeader.ExportAddressTableRVA(this.NextSectionRVA + AddressTableOffset)
+		EDataHeader.NamePointerTableRVA(this.NextSectionRVA + NamePointerTableOffset)
+		EDataHeader.OrdinalTableRVA(this.NextSectionRVA + OrdinalTableOffset)
+		
+		for k, Byte in EDataHeader.Build() {
+			NumPut(Byte, pBuffer + 0, A_Index - 1, "Char")
+		}
+		
+		Bytes := []
+		
+		loop, % EDataSize {
+			Bytes.Push(NumGet(pBuffer + 0, A_Index - 1, "Char"))
+		}
+		
+		VarSetCapacity(EDataBuffer, 0, 0)
+		
+		this.FileData[EDataFilePointer] := Bytes
 	}
 	
 	BuildIData(IDataSize, IDataFilePointer) {
@@ -762,7 +888,7 @@ class PEBuilder {
 						SectionOffset := Globals[GlobalName] * 8
 						SectionRVA := this.SectionRVAs[SectionName]
 						
-						LinkedBytes.Push(["SectionPointer", this.ImageBase + SectionRVA + SectionOffset])
+						LinkedBytes.Push(["SectionPointer", SectionRVA + SectionOffset])
 						
 						this.AddRelocation(this.NextSectionRVA, k - 1)
 					}

@@ -185,8 +185,6 @@
 					this.Compile(GlobalInfo.Initializer)
 				}
 			}
-			
-			this.CodeGen.Return()
 		}
 		else {
 			; If we're not compiling a standalone module, then actually gather the implementation for the modules used
@@ -201,6 +199,15 @@
 				}
 				
 				this.CodeGen.Bytes.Push(ModuleInfo.Bytes*)
+			}
+			
+			this.Exports := {}
+			
+			Log("Program has " Program.Exports.Count() " exported functions")
+			
+			for k, ExportName in Program.Exports {
+				Log("Registering exported function '" ExportName "' at offset " this.FunctionOffsets[ExportName])
+				this.Exports[ExportName] := this.FunctionOffsets[ExportName]
 			}
 		}
 		

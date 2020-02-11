@@ -35,7 +35,7 @@ HelpText =
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
-;A_Args := StrSplit("-i Examples\SimpleConsoleProgram.rlx -o Out.exe", " ")
+;A_Args := StrSplit("-i Examples\ExampleDll.rlx -o out.dll", " ")
 
 ArgCount := A_Args.Count()
 
@@ -118,6 +118,9 @@ Start := A_TickCount
 try {
 	if (OutputType = "ahk") {
 		Relax.CompileToAHK(Source, OutputFile)
+	}
+	else if (OutputType = "dll") {
+		Relax.CompileToEXE(Source, OutputFile, True)
 	}
 	else {
 		Relax.CompileToEXE(Source, OutputFile)

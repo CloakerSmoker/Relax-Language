@@ -59,18 +59,28 @@ class Relax {
 		FileOpen(FilePath, "w").Write(Build(CodeCompiler))
 	}
 	
-	CompileToEXE(CodeString, EXEPath := "") {
-		static Flags := {"Features": RelaxFlags.F1}
+	CompileToEXE(CodeString, EXEPath := "", AsDLL := False) {
+		static Flags := {"Features": RelaxFlags.F1} 
 		
 		if !(EXEPath) {
 			EXEPath := A_ScriptDir "\out.exe"
 		}
 		
-		CodeString .= "`n" Builtins.__Runtime__.Code
+		if (AsDLL) {
+			CodeString .= "`n" Builtins.__DllRuntime__.Code
+		}
+		else {
+			CodeString .= "`n" Builtins.__Runtime__.Code
+		}
 		
 		CodeCompiler := this.CompileCode(CodeString, Flags)
 		
-		MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain"]
+		if (AsDLL) {
+			MainOffset := CodeCompiler.FunctionOffsets["__RunTime__DllMain"]
+		}
+		else {
+			MainOffset := CodeCompiler.FunctionOffsets["__RunTime__CallMain"]
+		}
 		
 		GlobalBytes := []
 		
@@ -85,7 +95,17 @@ class Relax {
 		}
 		
 		CodeEXEBuilder.AddCodeSection(".text", CodeCompiler.CodeGen.Link(True), MainOffset)
-		CodeEXEBuilder.Build(EXEPath)
+		
+		if (CodeCompiler.Exports.Count() && !AsDLL) {
+			ShowError("Build error: Program was not compiled to a DLL file, but still has exported functions. Recompile with a '.dll' file as output.")
+		}
+		
+		if (AsDLL) {
+			CodeEXEBuilder.Build(EXEPath, CodeCompiler.Exports)
+		}
+		else {
+			CodeEXEBuilder.Build(EXEPath)
+		}
 		
 		return CodeCompiler
 	}
@@ -548,6 +568,30 @@ class Builtins {
 				return (Buffer As i16*)
 			}
 		)"
+	}
+	
+	class __DllRuntime__ {
+		static Code := "
+		(
+			i64 hThisDll := 0
+			
+			define void __RunTime__SetGlobals() {
+				
+			}
+			define i8 __RunTime__DllMain(i64 ThisHandle, i32 CallReason, void Reserved) {
+				i32 DLL_PROCESS_ATTACH := 1
+				
+				if (CallReason = DLL_PROCESS_ATTACH) {
+					hThisDll := ThisHandle
+					__RunTime__SetGlobals()
+					
+					return 1
+				}
+				
+				return 0
+			}
+		)"
+	
 	}
 	
 	class __Runtime__ {
