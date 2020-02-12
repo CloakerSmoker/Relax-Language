@@ -41,7 +41,6 @@
               {title: "How to do most of the work:", url: "#how-to-do-most-of-the-work" },
               {title: "How it works", url: "#how-it-works" },
               {title: "Why I did this", url: "#why-i-did-this" },
-              {title: "Credits", url: "#credits" },
           ]},
         ];
 
@@ -112,6 +111,8 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="dumb-errors/" class="wm-article-link wm-toc-text">Dumb errors</a>
 </li>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="feature-list/" class="wm-article-link wm-toc-text">List of Features</a>
+</li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="full-syntax/" class="wm-article-link wm-toc-text">Full syntax</a>
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="how-it-works/" class="wm-article-link wm-toc-text">How it works</a>
@@ -169,9 +170,11 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <h5 id="q-what-the-fuck-why-dear-god-why">Q: What the fuck, why, dear god, why?!</h5>
 <p>A: ¯\<em>(ツ)</em>/¯ (see "Why I Did This")</p>
 <h5 id="q-wait-so-this-is-an-actual-compiler">Q: Wait, so this is an actual compiler?</h5>
-<p>A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a <code>.exe</code> file holding the compiled code.</p>
+<p>A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a file holding the compiled code.</p>
 <p>All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)</p>
 <p>For more info, see <a href="how-it-works">how it all works</a></p>
+<h5 id="q-what-kind-of-files-can-it-make">Q: What kind of files can it make?</h5>
+<p>A: Code can be compiled into <code>.exe</code>, <code>.dll</code>, and <code>.ahk</code> files. All of which work as you'd expect, <code>.exe</code> files can be run directly, <code>.dll</code> files can be called with AHK's <code>DllCall</code> or with <code>LoadLibrary</code>/<code>GetProcAddress</code>, <code>.ahk</code> files can be <code>#Include</code>'d and called like any other function.</p>
 <h2 id="how-to-use-it">How to use it</h2>
 <p>See <a href="how-to-use-it">this page</a> for the different ways Relax can be used.</p>
 <h2 id="how-to-do-most-of-the-work">How to do most of the work:</h2>
@@ -195,10 +198,6 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <p>Also, embrace things like LLVM, and pre-made linkers. At some point in this project I decided I wanted to do it all on my own. Which was an <strong><em>absolutely terrible</em></strong> idea.</p>
 <p>Reinventing every part in the car instead of just a wheel will teach you a lot, but its not fun.</p>
 <p>Not to mention LLVM can generate much better code than you will manually.</p>
-<h2 id="credits">Credits</h2>
-<p><code>@SALZKARTOFFEEEL#9805</code> On Discord, for listening to all of my complaints while I worked on this.
-<code>@mordecai#2885</code> On Discord, for catching some of the numerous mistakes I made in these docs.
-<code>rommmcek</code> On the AHK forums, for finding some kind of bug which I haven't quite figured out yet.</p>
 
   <br>
     
@@ -233,5 +232,5 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </html>
 <!--
 MkDocs version : 1.0.4
-Build Date UTC : 2020-02-07 19:50:12
+Build Date UTC : 2020-02-12 19:12:18
 -->
