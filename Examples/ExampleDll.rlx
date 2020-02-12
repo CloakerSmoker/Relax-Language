@@ -1,0 +1,13 @@
+DllImport i8 MessageBox(i32, i8*, i8*, i32) {User32.dll, MessageBoxA}
+
+// Dll files can also import functions from other dlls
+// No need for main, since there's no time to run it
+
+define void SayHelloXTimes(i32 Times) export {
+	for (i32 Index := 0, Index < Times, Index++) {
+		SayHello()
+	}
+}
+define void SayHello() export {
+	MessageBox(0, "Hello", "Hi", 0)
+}

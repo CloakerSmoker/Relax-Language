@@ -1,0 +1,7 @@
+DllImport i32 HelloLoop(i32) {ExampleDll.dll, SayHelloXTimes}
+
+// Compile ExampleDll.rlx to ExampleDll.dll before running this
+
+define i32 Main(i64 ArgC, i16** ArgV) {
+	return HelloLoop(ArgC /* Number of times to say hello */)
+}

@@ -35,7 +35,7 @@ HelpText =
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
-;A_Args := StrSplit("-i Examples\ExampleDll.rlx -o out.dll", " ")
+;A_Args := StrSplit("-i Examples\ExampleDllCaller.rlx -o out.exe", " ")
 
 ArgCount := A_Args.Count()
 

@@ -40,7 +40,7 @@
 #Include Compiler\ToAHK.ahk
 
 class Relax {
-	static VERSION := "1.0.0-alpha.29"
+	static VERSION := "1.0.0-alpha.30"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you

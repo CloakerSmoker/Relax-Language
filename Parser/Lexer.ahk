@@ -74,10 +74,13 @@
 					Case "*": {
 						this.Index -= 1
 						this.AdvanceThrough("/*", "*/")
+						this.Index -= 1
 					}
 					Case "/": {
 						this.Index -= 1
 						this.AdvanceThrough("//", "`n")
+						this.Index -= 1
+						this.AddToken(Tokens.NEWLINE)
 					}
 					Default: {
 						this.AddToken(Tokens.DIVIDE)
