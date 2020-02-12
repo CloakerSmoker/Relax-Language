@@ -34,7 +34,7 @@ DllImport ReturnType FunctionName(ParameterTypeList) {DllFileName.dll, FunctionN
 ### Define
 Define statements follow the format:
 ```
-Define ReturnType FunctionName(ParameterList) {
+Define ReturnType FunctionName(ParameterList) export {
     Body
 }
 ```
@@ -43,6 +43,7 @@ Define ReturnType FunctionName(ParameterList) {
 * `FunctionName` is the [name](#names) that the function will have, and is the name you use to call it.
 * `ParameterList` is a list of comma-separated [type](#types) [name](#names) pairs.
 * `Body` is a list of [statements](#statements).
+* `Export` is optionally the word `export`, which will cause the function to be exported from the resulting file (if the file is a `.dll`)
 
 ### Global
 Global declarations follow the same format as regular [declarations](#declarations).

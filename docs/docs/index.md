@@ -16,11 +16,15 @@ A: ¯\\_(ツ)_/¯ (see "Why I Did This")
 
 ##### Q: Wait, so this is an actual compiler?
 
-A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a `.exe` file holding the compiled code.
+A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a file holding the compiled code.
 
 All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)
 
 For more info, see [how it all works](how-it-works)
+
+##### Q: What kind of files can it make?
+
+A: Code can be compiled into `.exe`, `.dll`, and `.ahk` files. All of which work as you'd expect, `.exe` files can be run directly, `.dll` files can be called with AHK's `DllCall` or with `LoadLibrary`/`GetProcAddress`, `.ahk` files can be `#Include`'d and called like any other function.
 
 ## How to use it
 See [this page](how-to-use-it) for the different ways Relax can be used.
@@ -65,9 +69,3 @@ Also, embrace things like LLVM, and pre-made linkers. At some point in this proj
 Reinventing every part in the car instead of just a wheel will teach you a lot, but its not fun.
 
 Not to mention LLVM can generate much better code than you will manually.
-
-## Credits
-
-`@SALZKARTOFFEEEL#9805` On Discord, for listening to all of my complaints while I worked on this.
-`@mordecai#2885` On Discord, for catching some of the numerous mistakes I made in these docs.
-`rommmcek` On the AHK forums, for finding some kind of bug which I haven't quite figured out yet.

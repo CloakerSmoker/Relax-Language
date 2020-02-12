@@ -2,6 +2,31 @@
 
 Top of page = most recent.
 
+## 1.0.0-alpha.30
+
+### Added
+
+* Support for compiling to `.dll` files.
+* Support for exporting functions through the `export` keyword (which is explained on [the syntax page](../full-syntax#define))
+
+### Changed
+
+* Lots of operations to use slightly bigger operands, which are incredibly easier to read.
+* All operations but function calls and register-stack dumps to not use the actual stack (which should increase speed).
+
+### Fixed
+
+* Having identifiers named with the same names as operators (like `i32 Times := 0`) being converted into a `Tokens.OPERATOR` token (and not parsing correctly).
+* Both types of comments not working, not `//` and `/* whatever */` should both work fine. 
+
+### Docs changes
+
+* Changed [how to use it](../how-to-use-it) to not mention `Main.exe`, which has been removed since I can never remember to update it.
+* Added `export` to the [full syntax page](../full-syntax)
+* Added a list of features on the new [feature list page](../feature-list)
+
+---
+
 ## 1.0.0-alpha.29
 
 ### Added
@@ -33,6 +58,8 @@ Top of page = most recent.
 * Added [the syntax for an array access](../full-syntax#expressions) on the full syntax page.
 * Added [an explanation of pointer-pointer types](../full-syntax#types) on the full syntax page.
 * Added [this page](../changelog) to act as a changelog
+
+---
 
 ## 1.0.0-alpha.28 (And lower)
 

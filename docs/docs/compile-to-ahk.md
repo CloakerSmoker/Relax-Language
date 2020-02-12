@@ -2,7 +2,7 @@
 
 Relax supports compiling to AHK through a boilerplate function which is used as a linker+loader for the compiled code.
 
-All you need to do to compile to `.ahk` instead of `.exe` is change the `[OutputFile]` path given to [`Main`](how-to-use-it) to have the `.ahk` extension.
+All you need to do to compile to `.ahk` instead of `.exe`  (or `.dll`) is change the `[OutputFile]` path given to [`Main`](how-to-use-it) to have the `.ahk` extension.
 
 ## The boilerplate
 
