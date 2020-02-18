@@ -44,7 +44,7 @@ class Error {
 		}
 	}
 	Throw() {
-		if (this.Phase && this.LongText && this.Token && this.Source) {
+		if (this.Phase && this.LongText && this.Token) {
 			PrettyError(this.Phase, this.LongText, this.ShortText, this.Token, this.Token.Source, this.Help)
 		}
 	}

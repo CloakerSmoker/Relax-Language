@@ -11,7 +11,14 @@
 			this.GetVariable(NameToken)
 			return this.GetVariableType(NameToken)
 		}
-	
+		else if (Expression.Operator.Type = Tokens.DOT) {
+			LeftType := this.GetVariableType(Expression)
+			
+			this.CodeGen.Move_R64_SIB(this.PushRegisterStack(), this.GetVariableSIB(Expression))
+			
+			return LeftType
+		}
+		
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
 		IsBitwise := OperatorClasses.IsClass(Expression.Operator, "Bitwise")
 		

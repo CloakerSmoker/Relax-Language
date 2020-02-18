@@ -67,39 +67,62 @@
 		this.StackDepth := 0
 		this.HasReturn := False
 		
-		ParamSizes := DefineAST.Params.Count()
+		ParameterStackSpace := DefineAST.Params.Count()
+		LocalStackSpace := DefineAST.Locals.Count()
+		MultiByteInitialValueSpace := 0
+		
+		StructStartingOffsets := {}
 		
 		for LocalName, LocalInfo in DefineAST.Locals {
-			this.AddVariable(ParamSizes++, LocalName)
-			this.Typing.AddVariable(LocalInfo.Type, LocalName)
-		}
-		
-		if (this.Features & this.UseStackStrings) {
-			StringStartingOffsets := {}
-
-			for k, String in DefineAST.Strings {
-				this.AddVariable(ParamSizes, "__String__" String.Value)
-				this.Typing.AddVariable("i8*", "__String__" String.Value)
+			Type := LocalInfo.Type
 			
-				ParamSizes += Ceil((StrLen(String.Value) + 2) / 8)
-				StringStartingOffsets[String.Value] := ParamSizes
+			this.AddVariable(ParameterStackSpace + (A_Index - 1), LocalName)
+			this.Typing.AddVariable(Type, LocalName)
+			
+			if (this.CustomTypes.HasKey(Type)) {
+				StructStartingOffsets[LocalName] := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
+				MultiByteInitialValueSpace += this.CustomTypes[Type].RoundedSize
 			}
 		}
 		
-		if (Mod(ParamSizes, 2) != 1) {
-			ParamSizes++
+		this.LocalStructs := StructStartingOffsets
+		
+		StringStartingOffsets := {}
+
+		for k, String in DefineAST.Strings {
+			this.AddVariable(ParameterStackSpace + LocalStackSpace + (A_Index - 1), "__String__" String.Value)
+			this.Typing.AddVariable("i8*", "__String__" String.Value)
+		
+			MultiByteInitialValueSpace += Ceil((StrLen(String.Value) + 2) / 8)
+			StringStartingOffsets[String.Value] := MultiByteInitialValueSpace
+		}
+		
+		RequiredStackSpace := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
+		
+		MsgBox, % RequiredStackSpace
+		
+		if (Mod(RequiredStackSpace, 2) != 1) {
+			RequiredStackSpace++
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		Log("Function '" Name "' uses " ParamSizes * 8 " bytes of stack, with " this.Locals.Count() " locals, " DefineAST.Params.Count() " parameters, and " DefineAST.Strings.Count() " strings")
+		Log("Function '" Name "' uses " RequiredStackSpace * 8 " bytes of stack, with " this.Locals.Count() " locals, " DefineAST.Params.Count() " parameters, and " DefineAST.Strings.Count() " strings")
 		
 		this.CodeGen.Label("__Define__" Name)
 		
 		this.PushA()
-			if (ParamSizes != 0) {
-				this.CodeGen.SmallSub(RSP, ParamSizes * 8), this.StackDepth += ParamSizes
+			if (RequiredStackSpace != 0) {
+				this.CodeGen.SmallSub(RSP, RequiredStackSpace * 8), this.StackDepth += RequiredStackSpace
 				
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
+				
+				for VariableName, Offset in StructStartingOffsets {
+					this.CodeGen.SmallMove(RAX, Offset)
+					this.CodeGen.Lea_R64_SIB(RAX, SIB(8, RAX, R15))
+					
+					this.CodeGen.SmallMove(RBX, this.Variables[VariableName])
+					this.CodeGen.Move_SIB_R64(SIB(8, RBX, R15), RAX)
+				}
 			}
 			
 			this.CodeGen.SmallMove(RSI, 0)
@@ -139,8 +162,8 @@
 			
 			this.CodeGen.Label("__Return" this.FunctionIndex)
 			
-			if (ParamSizes != 0) {
-				this.CodeGen.SmallAdd(RSP, ParamSizes * 8), this.StackDepth -= ParamSizes
+			if (RequiredStackSpace != 0) {
+				this.CodeGen.SmallAdd(RSP, RequiredStackSpace * 8), this.StackDepth -= RequiredStackSpace
 			}
 		this.PopA()
 		

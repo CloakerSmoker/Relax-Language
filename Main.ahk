@@ -24,7 +24,7 @@ HelpText =
 (
 	Options:
 		-i [InputFile]
-		-o [OutputFile]	(Should have the extension "exe" or "ahk")
+		-o [OutputFile]	(Should have the extension "exe" or "ahk" or "dll")
 		--no-confirm	(Does not ask if arguments are correct before running)
 		--no-overwrite-output-file (Exit when the output file already exists)
 		--fast-exit 	(Skips asking to press {Enter} before exiting)
@@ -35,7 +35,7 @@ HelpText =
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
-;A_Args := StrSplit("-i Examples\ExampleDllCaller.rlx -o out.exe", " ")
+A_Args := StrSplit("-i struct.rlx -o out.exe --no-confirm", " ")
 
 ArgCount := A_Args.Count()
 
@@ -196,9 +196,19 @@ ConsoleReadLine() {
 
 ShowError(Message) {
 	global HasHadError
+	static Hide := False
 	
-	HasHadError := True
-	ConsoleWrite(Colors.Red, Message)
+	if (Message = "Hide") {
+		return Hide := True
+	}
+	else if (Message = "Show") {
+		return Hide := False
+	}
+	
+	if !(Hide) {
+		HasHadError := True
+		ConsoleWrite(Colors.Red, Message)
+	}
 	
 	Throw, Exception(Message)
 }

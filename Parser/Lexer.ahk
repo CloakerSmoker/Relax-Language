@@ -75,11 +75,13 @@
 						this.Index -= 1
 						this.AdvanceThrough("/*", "*/")
 						this.Index -= 1
+						this.TokenStart := this.Index
 					}
 					Case "/": {
 						this.Index -= 1
 						this.AdvanceThrough("//", "`n")
 						this.Index -= 1
+						this.TokenStart := this.Index
 						this.AddToken(Tokens.NEWLINE)
 					}
 					Default: {

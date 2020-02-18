@@ -67,47 +67,57 @@
 		return this.ParseProgram()
 	}
 	
+	CheckTypes() {
+		for k, TypeToken in this.Types {
+			if !(this.Typing.IsValidType(TypeToken.Value) || this.CustomTypes.HasKey(TypeToken.Value)) {
+				new Error("Type")
+					.LongText("Invalid type.")
+					.ShortText("Not a valid type name.")
+					.Token(TypeToken)
+				.Throw()
+			}
+		}
+	}
+	
 	ParseTypeName() {
 		BaseTypeName := this.Next()
-		
-		if !(this.Typing.IsValidType(BaseTypeName.Value)) {
-			new Error("Type")
-				.LongText("Invalid type.")
-				.ShortText("Not a valid type name.")
-				.Token(BaseTypeName)
-				.Source(this.Source)
-			.Throw()
-		}
 		
 		while (this.NextMatches(Tokens.TIMES)) {
 			BaseTypeName.Value .= "*"
 			BaseTypeName.Context.End += 1
 		}
 		
+		this.Types.Push(BaseTypeName)
+		
 		return BaseTypeName
 	}
 	
 	ParseProgram() {
-		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}, "Modules": [], "Exports": []}
+		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}, "Modules": [], "Exports": [], "CustomTypes": {}}
 		
 		while !(this.AtEOF()) {
 			try {
 				this.AddFunction(this.ParseProgramStatement())
 			}
 			catch E {
+				ShowError(E.Message)
 				this.CriticalError := True
 			}
 		}
+		
+		this.CheckTypes() ; Defer checking if types are valid until after all user types have been parsed
 		
 		if (this.CriticalError) {
 			Throw, Exception("Critical error while parsing, aborting...")
 		}
 		
-		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals, Current.Modules, Current.Exports)
+		return new ASTNodes.Statements.Program(Current.Functions, Current.Globals, Current.Modules, Current.Exports, Current.CustomTypes)
 	}
 	ParseProgramStatement() {
+		static None := new ASTNodes.None()
+		
 		Next := this.Next() ; A program is a list of DllImports/Defines, so this will only handle those two, and error for anything else
-	
+		
 		if (Next.Type = Tokens.KEYWORD) {
 			if (Next.Value = Keywords.DEFINE) {
 				return this.ParseDefine(Next.Value)
@@ -117,7 +127,11 @@
 			}
 			else if (Next.Value = Keywords.IMPORT) {
 				this.CurrentProgram.Modules.Push(this.Next().Value)
-				return new ASTNodes.None()
+				return None
+			}
+			else if (Next.Value = Keywords.STRUCT) {
+				this.ParseAndAddStruct()
+				return None
 			}
 		}
 		else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
@@ -125,7 +139,7 @@
 			return this.ParseDeclaration(False)
 		}
 		else if (Next.Type = Tokens.NEWLINE) {
-			return new ASTNodes.None()
+			return None
 		}
 		
 		this.UnwindToNextLine()
@@ -137,6 +151,18 @@
 			.Token(Next)
 			.Source(this.Source)
 		.Throw()
+	}
+	ParseAndAddStruct() {
+		StructName := this.Consume(Tokens.IDENTIFIER, "Struct names must be identifiers.")
+		
+		this.Consume(Tokens.LEFT_BRACE, "Struct bodies must be contained within {}.")
+		
+		Fields := this.ParseParamGrouping(False, True) ; Require both a type name and variable name, and allow newlines
+		
+		this.Ignore(Tokens.NEWLINE)
+		this.Consume(Tokens.RIGHT_BRACE, "Struct bodies must be contained within {}.")
+		
+		this.CurrentProgram.CustomTypes[StructName.Value] := new ASTNodes.Struct(StructName, Fields)
 	}
 	ParseDefine(KeywordUsed) {
 		ReturnType := this.ParseTypeName()
@@ -218,21 +244,35 @@
 	}
 	ParseStatement() {
 		; Handles all statement types that are only valid inside of Define statements
-	
+		
 		Next := this.Peek()
 	
 		try {
 			if (Next.Type = Tokens.KEYWORD) {
 				return this.ParseKeywordStatement()
 			}
-			else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
-				return this.ParseDeclaration() ; The declaration format is TypeName VarName (ExpressionLine|\n)
-			}
 			else {
+				if (Next.Type = Tokens.IDENTIFIER) {
+					Index := this.Index
+					
+					try {
+						ShowError("Hide")
+						ReturnValue := this.ParseDeclaration()
+						ShowError("Show")
+						
+						return ReturnValue
+					}
+					catch {
+						ShowError("Show")
+						this.Index := Index
+					}
+				}
+				
 				return this.ParseExpressionStatement()
 			}
 		}
 		catch E {
+			ShowError(E.Message)
 			this.CriticalError := True
 		}
 	}
@@ -246,7 +286,7 @@
 			this.Index -= 2
 			Initializer := this.ParseExpressionStatement()
 		}
-		else {
+		else if !(this.NextMatches(Tokens.NEWLINE)) {
 			ErrorToken := this.Next()
 		
 			this.UnwindToNextLine()
@@ -310,15 +350,21 @@
 		}
 	}
 	
-	ParseParamGrouping(ImportStyle := False) {
+	ParseParamGrouping(ImportStyle := False, IgnoreNewLine := False) {
 		; Since DllImport statements just take a list of types without var names, we can reuse this function for both
 		;  Define and DllImport
-	
-		this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
+		
+		if !(IgnoreNewLine) {
+			this.Consume(Tokens.LEFT_PAREN, "Parameter groupings must start with '('.")
+		}
 		
 		Pairs := []
 		
 		if !(this.Check(Tokens.RIGHT_PAREN)) {
+			if (IgnoreNewLine) {
+				this.Ignore(Tokens.NEWLINE)
+			}
+			
 			Type := this.ParseTypeName()
 			
 			if !(ImportStyle) {
@@ -327,7 +373,15 @@
 				
 			Pairs.Push([Type, Name])
 			
+			if (IgnoreNewLine) {
+				this.Ignore(Tokens.NEWLINE)
+			}
+			
 			while (this.NextMatches(Tokens.COMMA)) {
+				if (IgnoreNewLine) {
+					this.Ignore(Tokens.NEWLINE)
+				}
+				
 				Pair := []
 				Pair.Push(this.ParseTypeName()) ; Type
 				
@@ -338,8 +392,10 @@
 				Pairs.Push(Pair)
 			}
 		}
-	
-		this.Consume(Tokens.RIGHT_PAREN, "Parameter groupings require closing ')'.")
+		
+		if !(IgnoreNewLine) {
+			this.Consume(Tokens.RIGHT_PAREN, "Parameter groupings require closing ')'.")
+		}
 		
 		return Pairs
 	}
@@ -671,19 +727,6 @@
 	}
 	
 	; Helper methods
-	
-	EnsureValidType(TypeToken) {
-		if !(this.Typing.IsValidType(TypeToken.Value)) {
-			new Error("Type")
-				.LongText("Invalid type.")
-				.ShortText("Not a valid type name.")
-				.Token(TypeToken)
-				.Source(this.Source)
-			.Throw()
-		}
-		
-		return TypeToken
-	}
 	
 	Next() {
 		return this.Tokens[++this.Index]

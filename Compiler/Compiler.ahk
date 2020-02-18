@@ -122,6 +122,38 @@
 	#Include %A_LineFile%\..\Components\CompileExpressions.ahk
 	; Compiles all expressions but function calls
 	
+	AddStructTypes(Program) {
+		this.CustomTypes := {}
+		
+		for StructName, StructNode in Program.CustomTypes {
+			Offsets := {}
+			Size := 0
+			Types := {}
+			
+			for k, TypePair in StructNode.Types {
+				Type := this.Typing.GetType(TypePair[1].Value)
+				TypeSize := Floor(Type.Precision / 8)
+				Name := TypePair[2].Value
+				
+				if (Mod(Size, TypeSize)) {
+					Size += (TypeSize - Mod(Size, TypeSize))
+				}
+				
+				Offsets[Name] := Size
+				Size += TypeSize
+				Types[Name] := Type
+			}
+			
+			RoundedSize := Ceil((Size + (8 - Mod(Size, 8))) / 8)
+			MsgBox, % Size "`n" RoundedSize
+			
+			Info := {"Size": Size, "Offsets": Offsets, "RoundedSize": RoundedSize, "Types": Types}
+			
+			this.CustomTypes[StructName] := Info
+			this.Typing.AddCustomType(StructName, Info)
+		}
+	}
+	
 	CompileProgram(Program, ModuleName := "") {
 		this.FunctionIndex := 0 ; A unique number to keep different functions from reusing label names
 		
@@ -129,16 +161,7 @@
 		this.Globals := Program.Globals
 		this.Name := ModuleName
 		
-		if (this.Features & this.DisableGlobals) {
-			if (this.Globals.Count()) {
-				K := ""
-				V := ""
-				
-				this.Globals._NewEnum().Next(K, V)
-				
-				StatementError("Global variables are disabled by the DisableGlobals flag.", "global " V " " K)
-			}
-		}
+		this.AddStructTypes(Program)
 		
 		this.Program := Program
 		this.CurrentForLoop := False
@@ -149,9 +172,11 @@
 		
 		this.FunctionOffsets := FunctionOffsets := {}
 		
-		Log({})
-		this.FlattenModuleList(Program)
-		Log({})
+		if !(this.Name) {
+			Log({})
+			this.FlattenModuleList(Program)
+			Log({})
+		}
 		
 		FunctionOffset := 0
 		

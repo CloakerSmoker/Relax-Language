@@ -142,21 +142,21 @@ class OperatorClasses {
 						, "Associative": "Right"
 						, "Tokens": [Tokens.LESS, Tokens.LESS_EQUAL, Tokens.GREATER, Tokens.GREATER_EQUAL]}
 						
-	static Concat	  := {"Precedence": 4
-						, "Associative": "Left"
-						, "Tokens": [Tokens.CONCAT]}
-						
-	static Addition	  := {"Precedence": 5
+	static Addition	  := {"Precedence": 4
 						, "Associative": "Left"
 						, "Tokens": [Tokens.PLUS, Tokens.MINUS]}
 						
-	static Division	  := {"Precedence": 6
+	static Division	  := {"Precedence": 5
 						, "Associative": "Left"
 						, "Tokens": [Tokens.DIVIDE, Tokens.TIMES, Tokens.MOD]}
 						
-	static Bitwise    := {"Precedence": 7
+	static Bitwise    := {"Precedence": 6
 						, "Associative": "Left"
 						, "Tokens": [Tokens.BITWISE_AND, Tokens.BITWISE_OR, Tokens.BITWISE_XOR]}
+	
+	static Access     := {"Precedence": 7
+						, "Associative": "Left"
+						, "Tokens": [Tokens.DOT]}
 						
 	static Module     := {"Precedence": 8
 						, "Associative": "Left"
@@ -358,6 +358,8 @@ class Keywords extends Enum {
 		break
 		
 		module
+		
+		struct
 	)"
 }
 
@@ -404,6 +406,8 @@ class ASTNodeTypes extends Enum {
 		UNARY
 		BINARY
 		ARRAYACCESS
+		
+		STRUCT
 	)"
 }
 
@@ -415,10 +419,14 @@ class ASTNodes {
 			return ""
 		}
 	}
-
+	
+	class Struct extends ASTNode {
+		static Parameters := ["NameToken", "Types"]
+	}
+	
 	class Statements {
 		class Program extends ASTNode {
-			static Parameters := ["Functions", "Globals", "Modules", "Exports"]
+			static Parameters := ["Functions", "Globals", "Modules", "Exports", "CustomTypes"]
 			
 			Stringify() {
 				String := "/* " Relax.VERSION " */`n"

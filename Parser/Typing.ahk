@@ -36,6 +36,9 @@
 		class Pointer {
 			static Weight := 2
 		}
+		class Custom {
+			static Weight := 3
+		}
 	}
 	
 	__New() {
@@ -76,7 +79,13 @@
 	}
 	
 	GetPointerType(Type) {
-		return {"Name": Type.Name "*", "Precision": (Type.Precision > 64 ? 64 : Type.Precision + 64), "Pointer": Type, "Family": "Pointer", "Weight": this.TypeSet.Pointer.Weight}
+		return {"Name": Type.Name "*", "Precision": 64, "Pointer": Type, "Family": "Pointer", "Weight": this.TypeSet.Pointer.Weight}
+	}
+	AddCustomType(Name, Info) {
+		Info.Family := "Custom"
+		Info.Name := Name
+		Info.Weight := 3
+		this.TypeSet.Custom[Name] := Info
 	}
 	
 	GetType(TypeName) {
@@ -103,7 +112,11 @@
 
 	ResultType(LeftType, RightType) {
 		UsePrecision := False
-	
+		
+		if (LeftType.Family = "Custom" || RightType.Family = "Custom") {
+			Throw, Exception("No result type")
+		}
+		
 		if (LeftType.Family = RightType.Family) {
 			if !(LeftType.Family = "Pointer" && LeftType.Name != RightType.Name) {
 				; If both types are pointers, but not pointers to the same thing, then there is no cast
@@ -171,6 +184,13 @@
 	CastPath(FromType, ToType, PathArray := False) {		
 		FromFamily := this.TypeSet[FromType.Family]
 		ToFamily := this.TypeSet[ToType.Family]
+		
+		if (FromType.Family = "Pointer" && ToType.Family = "Custom") {
+			return []
+		}
+		else if (FromType.Family = "Custom" || ToType.Family = "Custom") {
+			Throw, Exception("No cast possible")
+		}
 		
 		if (PathArray) {
 			Path := PathArray
