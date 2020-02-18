@@ -12,11 +12,14 @@
 			return this.GetVariableType(NameToken)
 		}
 		else if (Expression.Operator.Type = Tokens.DOT) {
-			LeftType := this.GetVariableType(Expression)
+			TargetType := this.GetVariableType(Expression)
 			
-			this.CodeGen.Move_R64_SIB(this.PushRegisterStack(), this.GetVariableSIB(Expression))
+			Name := "Move_R" TargetType.Precision "_SIB"
 			
-			return LeftType
+			this.CodeGen.Move(this.PushRegisterStack(), RSI)
+			this.CodeGen[Name].Call(this.CodeGen, this.TopOfRegisterStack(), this.GetVariableSIB(Expression))
+			
+			return TargetType
 		}
 		
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")

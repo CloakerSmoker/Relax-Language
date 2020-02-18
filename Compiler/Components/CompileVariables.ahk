@@ -52,20 +52,24 @@
 				.LongText("Undeclared variable.")
 				.ShortText("Is not a local, global, or parameter")
 				.Token(NameToken)
-				.Source(this.Source)
 			.Throw()
 		}
 	}
 	SetVariable(NameToken) {
-		Name := NameToken.Value
-		
+		VariableType := this.GetVariableType(NameToken)
 		VariableSIB := this.GetVariableSIB(NameToken)
-		this.CodeGen.Move_SIB_R64(VariableSIB, this.TopOfRegisterStack())
+		
+		Name := "Move_SIB_R" VariableType.Precision
+		
+		this.CodeGen[Name].Call(this.CodeGen, VariableSIB, this.TopOfRegisterStack())
 	}
 	GetVariable(NameToken) {
+		VariableType := this.GetVariableType(NameToken)
 		VariableSIB := this.GetVariableSIB(NameToken)
 		
-		this.CodeGen.Move_R64_SIB(this.PushRegisterStack(), VariableSIB)
+		Name := "Move_R" VariableType.Precision "_SIB"
+		
+		this.CodeGen[Name].Call(this.CodeGen, this.PushRegisterStack(), VariableSIB)
 		
 		return this.GetVariableType(NameToken)
 	}

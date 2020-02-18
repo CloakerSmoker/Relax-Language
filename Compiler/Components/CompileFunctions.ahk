@@ -73,6 +73,17 @@
 		
 		StructStartingOffsets := {}
 		
+		for k, ParamPair in DefineAST.Params {
+			Type := ParamPair[1].Value
+			ParamName := ParamPair[2].Value
+			
+			if (this.CustomTypes.HasKey(Type)) {
+				StructStartingOffsets["__Param__" ParamName] := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
+				MultiByteInitialValueSpace += this.CustomTypes[Type].RoundedSize
+			}
+		
+		}
+		
 		for LocalName, LocalInfo in DefineAST.Locals {
 			Type := LocalInfo.Type
 			
@@ -117,6 +128,11 @@
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
 				
 				for VariableName, Offset in StructStartingOffsets {
+					if (InStr(VariableName, "__Param__")) {
+						Continue
+						; Parameter structs are setup in .FunctionParameters, so we don't do anything here
+					}
+					
 					this.CodeGen.SmallMove(RAX, Offset)
 					this.CodeGen.Lea_R64_SIB(RAX, SIB(8, RAX, R15))
 					
@@ -190,16 +206,18 @@
 		IndexSIB := SIB(8, RAX, R15)
 		
 		for k, Pair in Pairs {
-			Type := Pair[1].Value
-			Name := Pair[2].Value
+			TypeName := Pair[1].Value
+			Type := this.Typing.GetType(TypeName)
+			NameToken := Pair[2]
+			Name := NameToken.Value
 
 			TrueIndex := k - 1
 			
 			this.AddVariable(TrueIndex, Name)
-			this.Typing.AddVariable(Type, Name)
-
+			this.Typing.AddVariable(TypeName, Name)
+			
 			if (A_Index <= 4) {
-				if (Type = "f64" || Type = "f32") {
+				if (TypeName = "f64" || TypeName = "f32") {
 					this.CodeGen.Move_SIB_XMM(IndexSIB, XMMFirstFour[TrueIndex + 1])
 				}
 				else {
@@ -223,6 +241,28 @@
 				if (Pairs.Count() > A_Index) {
 					this.CodeGen.Inc_R64(RDX)
 				}
+			}
+		
+			if (Type.Family = "Custom") {
+				if (Type.RoundedSize > 8) {
+					new Error("Compile")
+						.LongText("Parameter type size is larger than 8 bytes, and must be passed by pointer.")
+						.ShortText("Can't be passed by value")
+						.Token(Pair[2])
+					.Throw()
+				}
+				
+				; Replace the current parameter with a pointer to it's own value (since the parma is a packed struct)
+				
+				VariableSIB := SIB(8, RAX, R15)
+				StructLocationSIB := SIB(8, RCX, R15)
+				
+				this.CodeGen.Move_R64_SIB(RBX, VariableSIB) ; RBX := ValueOf(ThisParam)
+				this.CodeGen.SmallMove(RCX, this.LocalStructs["__Param__" Name]) ; RCX := OffsetOf(__Struct__ThisParam)
+				this.CodeGen.Move_SIB_R64(StructLocationSIB, RBX) ; *(R15 + (RCX * 8)) := RBX
+				
+				this.CodeGen.Lea_R64_SIB(RBX, StructLocationSIB) ; RBX := (R15 + (RCX * 8))
+				this.CodeGen.Move_SIB_R64(VariableSIB, RBX) ; ThisParam := (R15 + (RCX * 8))
 			}
 			
 			if (A_Index != Pairs.Count()) {
@@ -328,6 +368,20 @@
 				
 				ParamType := this.Compile(ParamValue)
 				RequiredType := this.Typing.GetType(FunctionNode.Params[ReversedIndex][1].Value)
+				
+				if (RequiredType.Family = "Custom") {
+					if (RequiredType.Size > 8) {
+						new Error("Compile")
+							.LongText("Parameter type size is larger than 8 bytes, and must be passed by pointer.")
+							.ShortText("Can't be passed by value")
+							.Token(ParamValue)
+						.Throw()
+					}
+					
+					;Name := "Move_R64_RI" (RequiredType.RoundedSize * 8)
+					
+					;this.CodeGen[Name].Call(this.CodeGen, this.TopOfRegisterStack(), this.TopOfRegisterStack())
+				}
 				
 				try {
 					this.Cast(ParamType, RequiredType) ; Ensure the passed parameter is of the correct type

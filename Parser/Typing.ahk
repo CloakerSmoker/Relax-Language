@@ -78,6 +78,10 @@
 		}
 	}
 	
+	SizeOf(Type) {
+		return Round(Type.Precision / 8)
+	}
+	
 	GetPointerType(Type) {
 		return {"Name": Type.Name "*", "Precision": 64, "Pointer": Type, "Family": "Pointer", "Weight": this.TypeSet.Pointer.Weight}
 	}
@@ -85,6 +89,7 @@
 		Info.Family := "Custom"
 		Info.Name := Name
 		Info.Weight := 3
+		Info.Precision := 64
 		this.TypeSet.Custom[Name] := Info
 	}
 	

@@ -339,7 +339,12 @@
 	
 	Cast(TypeOne, TypeTwo) {		
 		Base := ObjGetBase(this)
-		Path := this.Typing.CastPath(TypeOne, TypeTwo)
+		
+		try {
+			; Try since with custom types, this might throw (even if T1.Name and T2.Name are equal)
+			Path := this.Typing.CastPath(TypeOne, TypeTwo)
+			; The other throw will still be reached for real bad casts though
+		}
 		
 		if (TypeOne.Name = TypeTwo.Name || Path.Count() = 0) {
 			return

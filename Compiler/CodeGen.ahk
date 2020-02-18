@@ -300,6 +300,8 @@ class X64CodeGen {
 	; Imm moves END
 	;============================
 	; SIB-Based moves START
+	
+	
 
 	Move_SIB_R64(SIB, Register) {
 		; MOV r/m64,r64
@@ -307,17 +309,32 @@ class X64CodeGen {
 		
 		this.REXOpcodeModSIB([0x89], Register, SIB, {"REX": [REX.W]})
 	}
+	Move_SIB_R32(SIB, Register) {
+		this.REXOpcodeModSIB([0x89], Register, SIB)
+	}
+	Move_SIB_R16(SIB, Register) {
+		this.PushByte(this.LEGACY_SIZE_PREFIX)
+		this.REXOpcodeModSIB([0x89], Register, SIB)
+	}
+	Move_SIB_R8(SIB, Register) {
+		this.REXOpcodeModSIB([0x88], Register, SIB, {"REX": [REX.Prefix]})	
+	}
+	
 	Move_R64_SIB(Register, SIB) {
 		; MOV r64,r/m64
 		; REX.W + 8B /r
 		
 		this.REXOpcodeModSIB([0x8B], Register, SIB, {"REX": [REX.W]})
 	}
+	Move_R32_SIB(Register, SIB) {
+		this.REXOpcodeModSIB([0x8B], Register, SIB)
+	}
+	Move_R16_SIB(Register, SIB) {
+		this.PushByte(this.LEGACY_SIZE_PREFIX)
+		this.REXOpcodeModSIB([0x8B], Register, SIB)
+	}
 	Move_R8_SIB(Register, SIB) {
-		; REX.W + 0F B6 /r
-		; MOVZX r64, r/m8
-		
-		this.REXOpcodeModSIB([0x0F, 0xB6], Register, SIB, {"REX": [REX.W]})
+		this.REXOpcodeModSIB([0x8A], Register, SIB, {"REX": [REX.Prefix]})
 	}
 	Lea_R64_SIB(Register, SIB) {
 		; Lea r64,r/m64
