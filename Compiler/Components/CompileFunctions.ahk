@@ -352,6 +352,9 @@
 						.Throw()
 					}
 					
+					TargetRegister := this.TopOfRegisterStack()
+					this.CodeGen.Move_R64_RI64(TargetRegister, TargetRegister)
+					
 					;Name := "Move_R64_RI" (RequiredType.RoundedSize * 8)
 					
 					;this.CodeGen[Name].Call(this.CodeGen, this.TopOfRegisterStack(), this.TopOfRegisterStack())

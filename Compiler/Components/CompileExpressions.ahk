@@ -23,9 +23,43 @@
 			
 			if (Expression.Left.Type = Tokens.IDENTIFIER) {
 				LeftType := this.GetVariableType(Expression.Left)
+				
+				if (LeftType.Name = RightType.Name && LeftType.Family = "Custom") {
+					; MemCpy(RightSize, &LeftSide, SizeOf(LeftSide))
+					
+					StructI64Chunks := Floor(RightType.Size / 8)
+					StructI8Chunks := Mod(RightType.Size, 8)
+					
+					SourcePointerRegister := this.TopOfRegisterStack()
+					
+					this.GetVariableAddress(Expression.Left)
+					DestinationPointerRegister := this.TopOfRegisterStack()
+					
+					WorkRegister := this.PushRegisterStack()
+					
+					loop, % StructI64Chunks {
+						this.CodeGen.Move_R64_RI64(WorkRegister, SourcePointerRegister)
+						this.CodeGen.Move_RI64_R64(DestinationPointerRegister, WorkRegister)
+						this.CodeGen.SmallAdd(SourcePointerRegister, 8)
+						this.CodeGen.SmallAdd(DestinationPointerRegister, 8)
+					}
+					
+					loop, % StructI8Chunks {
+						this.CodeGen.Move_R64_RI8(WorkRegister, SourcePointerRegister)
+						this.CodeGen.Move_RI8_R64(DestinationPointerRegister, WorkRegister)
+						this.CodeGen.Inc_R64(SourcePointerRegister)
+						this.CodeGen.Inc_R64(DestinationPointerRegister)
+					}
+					
+					this.PopRegisterStack()
+					this.PopRegisterStack()
+					
+					return LeftType
+				}
 			}
-			
-			LeftType := RightType
+			else {
+				LeftType := RightType
+			}
 		}
 		else {
 			LeftType := this.Compile(Expression.Left)
@@ -375,6 +409,10 @@
 					.Token(Expression.Operator)
 					.Source(this.Source)
 				.Throw()
+			}
+			
+			if (OperandType.Pointer.Family = "Custom") {
+				return OperandType.Pointer
 			}
 			
 			OperandResultRegister := this.TopOfRegisterStack()
