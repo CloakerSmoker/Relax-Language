@@ -173,7 +173,7 @@
 	}
 	
 	AddVariable(Type, Name) {
-		this.Variables[Name] := this.GetType(Type)
+		return this.Variables[Name] := this.GetType(Type)
 	}
 	
 	IsValidType(Name) {

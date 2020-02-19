@@ -100,6 +100,8 @@
 		ResultType := this.Compile(Statement.Expression)
 		ReturnType := this.Typing.GetType(this.Function.ReturnType.Value)
 		
+		MsgBox, % ResultType.Name "`n" ReturnType.Name
+		
 		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
 			new Error("Type")
 				.LongText("Wrong return type, should be " ReturnType.Name " or smaller.")

@@ -144,8 +144,14 @@
 				Types[Name] := Type
 			}
 			
-			RoundedSize := Ceil((Size + (8 - Mod(Size, 8))) / 8)
-			MsgBox, % Size "`n" RoundedSize
+			if (Mod(Size, 8) != 0) {
+				RoundedSize := Size + (8 - Mod(Size, 8))
+			}
+			else {
+				RoundedSize := Size
+			}
+			
+			MsgBox, % StructName ": " Size "`n" RoundedSize
 			
 			Info := {"Size": Size, "Offsets": Offsets, "RoundedSize": RoundedSize, "Types": Types}
 			

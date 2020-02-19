@@ -1,24 +1,4 @@
 ﻿	GetVariableSIB(NameToken) {
-		Switch (NameToken.Type) {
-			Case ASTNodeTypes.BINARY: {
-				LeftType := this.GetVariableType(NameToken.Left)
-				
-				this.CodeGen.Lea_R64_SIB(RBX, this.GetVariableSIB(NameToken.Left))
-				this.CodeGen.SmallMove(RAX, LeftType.Offsets[NameToken.Right.Value])
-				
-				return SIB(1, RAX, RBX)
-			}
-			Case ASTNodeTypes.ARRAYACCESS: {
-				TargetType := this.GetVariableType(NameToken.Target)
-				
-				this.Compile(NameToken.Index)
-				this.CodeGen.Lea_R64_SIB(RBX, this.GetVariableSIB(NameToken.Left))
-				this.CodeGen.Move(RAX, this.PopRegisterStack())
-				
-				return SIB(1, RAX, RBX)
-			}
-		}
-	
 		Name := NameToken.Value
 		
 		if (this.Variables.HasKey(Name)) {
@@ -35,17 +15,11 @@
 				IndexRegister := RAX
 			}
 			
-			if (this.GetVariableType(NameToken).Family = "Custom") {
-				this.CodeGen.Move_R64_SIB(RAX, SIB(8, IndexRegister, R15))
-				return SIB(1, RSI, RAX)
-			}
-			else {
-				return SIB(8, IndexRegister, R15)
-			}
+			return SIB(1, IndexRegister, R15)
 		}
 		else if (this.Globals.HasKey(Name)) {
 			this.CodeGen.Move_R64_Global_Pointer(RAX, Name)
-			return SIB(8, RSI, RAX)
+			return SIB(1, RSI, RAX)
 		}
 		else {
 			new Error("Compile")
@@ -67,24 +41,18 @@
 		VariableType := this.GetVariableType(NameToken)
 		VariableSIB := this.GetVariableSIB(NameToken)
 		
-		Name := "Move_R" VariableType.Precision "_SIB"
-		
-		this.CodeGen[Name].Call(this.CodeGen, this.PushRegisterStack(), VariableSIB)
-		
-		return this.GetVariableType(NameToken)
-	}
-	GetVariableType(NameToken) {
-		Switch (NameToken.Type) {
-			Case ASTNodeTypes.BINARY: {
-				LeftType := this.GetVariableType(NameToken.Left)
-				
-				return LeftType.Types[NameToken.Right.Value]
-			}
-			Case ASTNodeTypes.ARRAYACCESS: {
-				return this.GetVariableType(NameToken.Target).Pointer
-			}
+		if (VariableType.Family = "Custom") {
+			this.CodeGen.Lea_R64_SIB(this.PushRegisterStack(), VariableSIB)
+		}
+		else {
+			Name := "Move_R" VariableType.Precision "_SIB"
+			
+			this.CodeGen[Name].Call(this.CodeGen, this.PushRegisterStack(), VariableSIB)	
 		}
 		
+		return VariableType
+	}
+	GetVariableType(NameToken) {
 		Name := NameToken.Value
 		
 		if (this.Globals.HasKey(Name)) {
@@ -107,8 +75,66 @@
 	GetVariableAddress(NameToken) {
 		VariableSIB := this.GetVariableSIB(NameToken)
 		
-		this.CodeGen.Lea(this.PushRegisterStack(), VariableSIB)
+		this.CodeGen.Lea_R64_SIB(this.PushRegisterStack(), VariableSIB)
 	}
 	AddVariable(RSPIndex, Name) {
 		this.Variables[Name] := RSPIndex
+	}
+	
+	
+	GetStructField(Expression) {
+		StructType := this.GetStructFieldPointer(Expression)
+		FieldName := Expression.Right.Value
+		
+		TargetRegister := this.TopOfRegisterStack()
+		
+		Name := "Move_R64_RI" StructType.Types[FieldName].Precision
+		
+		this.CodeGen[Name].Call(this.CodeGen, TargetRegister, TargetRegister)
+		
+		return StructType.Types[FieldName]
+	}
+	SetSturctField(Expression) {
+		StructType := this.GetStructFieldPointer(Expression)
+		FieldName := Expression.Right.Value
+		
+		TargetRegister := this.PopRegisterStack()
+		
+		Name := "Move_RI" StructType.Types[FieldName].Precision "_R64"
+		
+		this.CodeGen[Name].Call(this.CodeGen, TargetRegister, this.TopOfRegisterStack())
+		
+		return StructType.Types[FieldName]
+	}
+	
+	GetStructFieldSIB(Expression) {
+		this.GetStructFieldPointer()
+		this.CodeGen.Move(RAX, this.TopOfRegisterStack())
+		this.PopRegisterStack()
+		
+		return SIB(1, RSI, RAX)
+	}
+	GetStructFieldPointer(Expression) {
+		StructType := this.Compile(Expression.Left)
+		FieldName := Expression.Right.Value
+		
+		if (StructType.Family != "Custom") {
+			new Error("Compile")
+				.LongText("Left side operands of '.' must be struct types")
+				.ShortText("Not a struct")
+				.Token(Expression.Left)
+			.Throw()
+		}
+		
+		if !(StructType.Offsets.HasKey(FieldName)) {
+			new Error("Compile")
+				.LongText("Unknown struct member.")
+				.Token(Expression.Right)
+			.Throw()
+		}
+		
+		TargetRegister := this.TopOfRegisterStack()
+		this.CodeGen.SmallAdd(TargetRegister, StructType.Offsets[FieldName])
+		
+		return StructType
 	}

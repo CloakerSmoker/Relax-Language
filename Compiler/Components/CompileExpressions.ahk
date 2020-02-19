@@ -12,14 +12,7 @@
 			return this.GetVariableType(NameToken)
 		}
 		else if (Expression.Operator.Type = Tokens.DOT) {
-			TargetType := this.GetVariableType(Expression)
-			
-			Name := "Move_R" TargetType.Precision "_SIB"
-			
-			this.CodeGen.Move(this.PushRegisterStack(), RSI)
-			this.CodeGen[Name].Call(this.CodeGen, this.TopOfRegisterStack(), this.GetVariableSIB(Expression))
-			
-			return TargetType
+			return this.GetStructField(Expression)
 		}
 		
 		IsAssignment := OperatorClasses.IsClass(Expression.Operator, "Assignment")
@@ -27,7 +20,12 @@
 		
 		if (IsAssignment) {
 			RightType := this.Compile(Expression.Right)
-			LeftType := this.GetVariableType(Expression.Left)
+			
+			if (Expression.Left.Type = Tokens.IDENTIFIER) {
+				LeftType := this.GetVariableType(Expression.Left)
+			}
+			
+			LeftType := RightType
 		}
 		else {
 			LeftType := this.Compile(Expression.Left)
@@ -49,7 +47,7 @@
 			.Throw()
 		}
 		
-		if (IsAssignment) {
+		if (IsAssignment) {		
 			if (ResultType.Family = "Decimal" && Expression.Operator.Type = Tokens.COLON_EQUAL) {
 				this.SetVariable(Expression.Left)
 				return RightType
@@ -80,10 +78,21 @@
 	CompileIntegerAssignment(Expression, VariableType, RightType) {
 		Switch (Expression.Operator.Type) {
 			Case Tokens.COLON_EQUAL: {
-				this.SetVariable(Expression.Left)
+				if (Expression.Left.Type = ASTNodeTypes.BINARY) {
+					return this.SetSturctField(Expression.Left)
+				}
+				else {
+					this.SetVariable(Expression.Left)
+				}
 			}
 			Case Tokens.PLUS_EQUAL, Tokens.MINUS_EQUAL: {
-				this.GetVariable(Expression.Left) ; Get the current value of the variable
+				if (Expression.Left.Type = ASTNodeTypes.BINARY) {
+					this.GetStructField(Expression.Left)
+				}
+				else {
+					this.GetVariable(Expression.Left) ; Get the current value of the variable
+				}
+				
 				VariableValueRegister := this.PopRegisterStack() ; And the register holding it
 				ValueRegister := this.PopRegisterStack() ; Then the value of the right side expression
 				
@@ -95,7 +104,13 @@
 				}
 				
 				this.CodeGen.Move(this.PushRegisterStack(), VariableValueRegister) ; Store the result back onto the stack
-				this.SetVariable(Expression.Left) ; And set the variable using the top of stack
+				
+				if (Expression.Left.Type = ASTNodeTypes.BINARY) {
+					return this.SetSturctField(Expression.Left)
+				}
+				else {
+					this.SetVariable(Expression.Left) ; And set the variable using the top of stack
+				}
 			}
 		}
 		

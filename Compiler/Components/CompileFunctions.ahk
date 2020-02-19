@@ -51,6 +51,18 @@
 		this.CodeGen.Move(RSP, RBX)
 	}
 	
+	AddLocalAndCalculateSize(VariableIndex, TypeName, Name) {
+		this.AddVariable(VariableIndex, Name)
+		Type := this.Typing.AddVariable(TypeName, Name)
+		
+		if (Type.Family = "Custom") {
+			return VariableIndex + Type.RoundedSize
+		}
+		else {
+			return VariableIndex + 8
+		}
+	}
+	
 	CompileDefine(Name, DefineAST) {
 		if (DefineAST.Type != ASTNodeTypes.Define) {
 			return
@@ -67,78 +79,52 @@
 		this.StackDepth := 0
 		this.HasReturn := False
 		
-		ParameterStackSpace := DefineAST.Params.Count()
-		LocalStackSpace := DefineAST.Locals.Count()
+		VariableIndex := 0
 		MultiByteInitialValueSpace := 0
 		
-		StructStartingOffsets := {}
-		
 		for k, ParamPair in DefineAST.Params {
-			Type := ParamPair[1].Value
-			ParamName := ParamPair[2].Value
-			
-			if (this.CustomTypes.HasKey(Type)) {
-				StructStartingOffsets["__Param__" ParamName] := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
-				MultiByteInitialValueSpace += this.CustomTypes[Type].RoundedSize
-			}
-		
+			VariableIndex := this.AddLocalAndCalculateSize(VariableIndex, ParamPair[1].Value, ParamPair[2].Value)
 		}
-		
 		for LocalName, LocalInfo in DefineAST.Locals {
-			Type := LocalInfo.Type
-			
-			this.AddVariable(ParameterStackSpace + (A_Index - 1), LocalName)
-			this.Typing.AddVariable(Type, LocalName)
-			
-			if (this.CustomTypes.HasKey(Type)) {
-				StructStartingOffsets[LocalName] := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
-				MultiByteInitialValueSpace += this.CustomTypes[Type].RoundedSize
-			}
+			VariableIndex := this.AddLocalAndCalculateSize(VariableIndex, LocalInfo.Type, LocalName)
 		}
-		
-		this.LocalStructs := StructStartingOffsets
 		
 		StringStartingOffsets := {}
 
 		for k, String in DefineAST.Strings {
-			this.AddVariable(ParameterStackSpace + LocalStackSpace + (A_Index - 1), "__String__" String.Value)
-			this.Typing.AddVariable("i8*", "__String__" String.Value)
-		
-			MultiByteInitialValueSpace += Ceil((StrLen(String.Value) + 2) / 8)
+			VariableIndex := this.AddLocalAndCalculateSize(VariableIndex, "i8*", "__String__" String.Value)
+			
+			MultiByteInitialValueSpace += (StrLen(String.Value) + 2)
 			StringStartingOffsets[String.Value] := MultiByteInitialValueSpace
 		}
 		
-		RequiredStackSpace := ParameterStackSpace + LocalStackSpace + MultiByteInitialValueSpace
+		RequiredStackSpace := VariableIndex + MultiByteInitialValueSpace
 		
-		MsgBox, % RequiredStackSpace
+		if (Mod(RequiredStackSpace, 16) != 0) {
+			RoundedStackSpace := RequiredStackSpace + (16 - Mod(RequiredStackSpace, 16))
+		}
+		else {
+			RoundedStackSpace := RequiredStackSpace
+		}
+		
+		RoundedStackSpace := Floor(RoundedStackSpace / 8)
+		
+		MsgBox, % Name " Flat:" RequiredStackSpace ", Round" RoundedStackSpace
 		
 		if (Mod(RequiredStackSpace, 2) != 1) {
 			RequiredStackSpace++
 			; Store a single extra fake local to align the stack (Saved RBP breaks alignment, so any odd number of locals will align the stack again, this just forces an odd number)
 		}
 		
-		Log("Function '" Name "' uses " RequiredStackSpace * 8 " bytes of stack, with " this.Locals.Count() " locals, " DefineAST.Params.Count() " parameters, and " DefineAST.Strings.Count() " strings")
+		Log("Function '" Name "' uses " RequiredStackSpace " bytes of stack, with " this.Locals.Count() " locals, " DefineAST.Params.Count() " parameters, and " DefineAST.Strings.Count() " strings")
 		
 		this.CodeGen.Label("__Define__" Name)
 		
 		this.PushA()
 			if (RequiredStackSpace != 0) {
-				this.CodeGen.SmallSub(RSP, RequiredStackSpace * 8), this.StackDepth += RequiredStackSpace
+				this.CodeGen.SmallSub(RSP, RoundedStackSpace * 8), this.StackDepth += RoundedStackSpace
 				
 				this.CodeGen.Move(R15, RSP) ; Store a dedicated offset into the stack for variables to reference
-				
-				for VariableName, Offset in StructStartingOffsets {
-					if (InStr(VariableName, "__Param__")) {
-						Continue
-						; Parameter structs are setup in .FunctionParameters, so we don't do anything here
-					}
-					
-					this.CodeGen.SmallMove(RAX, Offset)
-					this.CodeGen.Lea_R64_SIB(RAX, SIB(8, RAX, R15))
-					
-					this.CodeGen.SmallMove(RBX, this.Variables[VariableName])
-					this.CodeGen.Move_SIB_R64(SIB(8, RBX, R15), RAX)
-				}
 			}
 			
 			this.CodeGen.SmallMove(RSI, 0)
@@ -179,7 +165,7 @@
 			this.CodeGen.Label("__Return" this.FunctionIndex)
 			
 			if (RequiredStackSpace != 0) {
-				this.CodeGen.SmallAdd(RSP, RequiredStackSpace * 8), this.StackDepth -= RequiredStackSpace
+				this.CodeGen.SmallAdd(RSP, RoundedStackSpace * 8), this.StackDepth -= RoundedStackSpace
 			}
 		this.PopA()
 		
@@ -251,18 +237,6 @@
 						.Token(Pair[2])
 					.Throw()
 				}
-				
-				; Replace the current parameter with a pointer to it's own value (since the parma is a packed struct)
-				
-				VariableSIB := SIB(8, RAX, R15)
-				StructLocationSIB := SIB(8, RCX, R15)
-				
-				this.CodeGen.Move_R64_SIB(RBX, VariableSIB) ; RBX := ValueOf(ThisParam)
-				this.CodeGen.SmallMove(RCX, this.LocalStructs["__Param__" Name]) ; RCX := OffsetOf(__Struct__ThisParam)
-				this.CodeGen.Move_SIB_R64(StructLocationSIB, RBX) ; *(R15 + (RCX * 8)) := RBX
-				
-				this.CodeGen.Lea_R64_SIB(RBX, StructLocationSIB) ; RBX := (R15 + (RCX * 8))
-				this.CodeGen.Move_SIB_R64(VariableSIB, RBX) ; ThisParam := (R15 + (RCX * 8))
 			}
 			
 			if (A_Index != Pairs.Count()) {
