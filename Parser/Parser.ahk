@@ -335,6 +335,9 @@
 			Case Keywords.FOR: {
 				return this.ParseFor()
 			}
+			Case Keywords.WHILE: {
+				return this.ParseWhile()
+			}
 			Case Keywords.CONTINUE, Keywords.BREAK: {
 				return new ASTNodes.Statements.ContinueBreak(this.Current())
 			}
@@ -419,6 +422,9 @@
 		Body := this.ParseBlock()
 		
 		return new ASTNodes.Statements.ForLoop(Init, Condition, Step, Body)
+	}
+	ParseWhile() {
+		return new ASTNodes.Statements.WhileLoop(this.ParseExpression(), this.ParseBlock())
 	}
 	
 	ParseExpressionStatement() {

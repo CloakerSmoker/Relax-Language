@@ -69,9 +69,37 @@
 		this.Compile(Statement.Step) ; After the body runs, run the step
 		this.PopRegisterStack() ; And discard the result
 		
-		this.CodeGen.Jmp("__For__" ThisIndex) ; Then jump back to the top (where the condition is checked)
+		this.CodeGen.JMP("__For__" ThisIndex) ; Then jump back to the top (where the condition is checked)
 		
 		this.CodeGen.Label("__For__" ThisIndex "__End")
+		
+		this.CurrentForLoop := PreviousForLoop
+	}
+	
+	CompileWhileLoop(Statement) {
+		static Index := 0
+		
+		ThisIndex := Index++
+		PreviousForLoop := this.CurrentForLoop
+		
+		this.CurrentForLoop := "__While__" ThisIndex
+		
+		this.CodeGen.Label("__While__" ThisIndex)
+		this.CodeGen.Label("__While__" ThisIndex "__EarlyExit") ; Include an __EarlyExit label so continue knows where to jump
+		
+		this.Compile(Statement.Condition)
+		ConditionRegister := this.PopRegisterStack()
+		
+		this.CodeGen.Cmp(ConditionRegister, RSI)
+		this.CodeGen.JE("__While__" ThisIndex "__End")
+		
+		for k, Line in Statement.Body {
+			this.Compile(Line)
+		}
+		
+		this.CodeGen.JMP("__While__" ThisIndex)
+		
+		this.CodeGen.Label("__While__" ThisIndex "__End") ; Break and the `if Condition = 0 {jmp exit}` code will jump here
 		
 		this.CurrentForLoop := PreviousForLoop
 	}
@@ -99,8 +127,6 @@
 		
 		ResultType := this.Compile(Statement.Expression)
 		ReturnType := this.Typing.GetType(this.Function.ReturnType.Value)
-		
-		MsgBox, % ResultType.Name "`n" ReturnType.Name
 		
 		if (ResultType.Family != ReturnType.Family || ResultType.Precision > ReturnType.Precision) {
 			new Error("Type")
