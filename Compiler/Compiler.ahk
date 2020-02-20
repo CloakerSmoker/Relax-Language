@@ -306,6 +306,14 @@
 	
 	CompileToken(TargetToken) {
 		if (TargetToken.Type = Tokens.IDENTIFIER) {
+			static PredefinedNames := {"false": RSI, "true": RDI}
+			
+			if (PredefinedNames.HasKey(TargetToken.Value)) {
+				this.CodeGen.Move(this.PushRegisterStack(), PredefinedNames[TargetToken.Value])
+				return this.Typing.GetType("i8")
+			}
+		
+			
 			return this.GetVariable(TargetToken)
 		}
 		

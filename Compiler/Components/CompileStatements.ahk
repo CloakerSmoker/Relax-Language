@@ -104,6 +104,46 @@
 		this.CurrentForLoop := PreviousForLoop
 	}
 	
+	CompileLoopLoop(Statement) {
+		static Index := 0
+		
+		ThisIndex := Index++
+		PreviousForLoop := this.CurrentForLoop
+		
+		this.CurrentForLoop := "__Loop__" ThisIndex
+		
+		if (Statement.Count.Type != ASTNodeTypes.None) {
+			this.Compile(Statement.Count) ; Get the number of times to loop
+			CountRegister := this.TopOfRegisterStack() ; And the register holding that number (note: this isn't .PopRegisterStack since we need to save the value)
+		}
+		
+		this.CodeGen.Label("__Loop__" ThisIndex) ; See while above for label name reasons
+		this.CodeGen.Label("__Loop__" ThisIndex "__EarlyExit")
+		
+		if (Statement.Count.Type != ASTNodeTypes.None) {
+			this.CodeGen.Cmp(CountRegister, RSI) ; If the number of times to loop has reached 0, jump out of the loop
+			this.CodeGen.JE("__Loop__" ThisIndex "__End")
+		}
+		
+		for k, Line in Statement.Body {
+			this.Compile(Line)
+		}
+		
+		if (Statement.Count.Type != ASTNodeTypes.None) {
+			this.CodeGen.Dec_R64(CountRegister) ; Otherwise, run the loop body, and decrement the count of times to loop
+		}
+		
+		this.CodeGen.JMP("__Loop__" ThisIndex) ; Then jump back up to where we check the counter
+		
+		this.CodeGen.Label("__Loop__" ThisIndex "__End") ; Here we've jumped out of the loop, and can just return
+		
+		if (Statement.Count.Type != ASTNodeTypes.None) {
+			this.PopRegisterStack()
+		}
+		
+		this.CurrentForLoop := PreviousForLoop
+	}
+	
 	CompileContinueBreak(Statement) {
 		if !(this.CurrentForLoop) {
 			new Error("Type")

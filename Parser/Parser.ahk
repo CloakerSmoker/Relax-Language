@@ -338,6 +338,9 @@
 			Case Keywords.WHILE: {
 				return this.ParseWhile()
 			}
+			Case Keywords.LOOP: {
+				return this.ParseLoop()
+			}
 			Case Keywords.CONTINUE, Keywords.BREAK: {
 				return new ASTNodes.Statements.ContinueBreak(this.Current())
 			}
@@ -426,27 +429,18 @@
 	ParseWhile() {
 		return new ASTNodes.Statements.WhileLoop(this.ParseExpression(), this.ParseBlock())
 	}
+	ParseLoop() {
+		CountExpression := this.ParseExpression()
+		
+		if !(IsObject(CountExpression)) {
+			CountExpression := new ASTNodes.None()
+		}
+		
+		return new ASTNodes.Statements.LoopLoop(CountExpression, this.ParseBlock())
+	}
 	
 	ParseExpressionStatement() {
 		return new ASTNodes.Statements.ExpressionLine(this.ParseExpression())
-		
-		;Expression := this.ParseExpression()
-		
-		if (this.NextMatches(Tokens.NEWLINE) || this.NextMatches(Tokens.EOF)) {
-			return new ASTNodes.Statements.ExpressionLine(Expression)
-		}
-		else {
-			Next := this.Next()
-		
-			this.UnwindToNextLine()
-			
-			new Error("Parse")
-				.LongText("Unexpected expression terminator.")
-				.ShortText("Should be \n or EOF")
-				.Token(Next)
-				.Source(this.Source)
-			.Throw()
-		}
 	}
 	
 	ParseIf() {

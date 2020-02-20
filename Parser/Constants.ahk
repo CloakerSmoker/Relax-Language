@@ -362,6 +362,7 @@ class Keywords extends Enum {
 		else
 		for
 		while
+		loop
 		continue
 		break
 		
@@ -408,6 +409,7 @@ class ASTNodeTypes extends Enum {
 		IF
 		FORLOOP
 		WHILELOOP
+		LOOPLOOP
 		CONTINUEBREAK
 		
 		GROUPING
@@ -533,6 +535,21 @@ class ASTNodes {
 				return String
 			}
 		
+		}
+		
+		class LoopLoop extends ASTNode {
+			static Parameters := ["Count", "Body"]
+			
+			Stringify(Indent := "") {
+				String := Indent "Loop " this.Count.Stringify() " {`n"
+			
+				for k, Line in this.Body {
+					String .= Line.Stringify(Indent "`t")
+				}
+				
+				String .= "`n" Indent "};`n"
+				return String
+			}
 		}
 		
 		class ExpressionLine extends ASTNode {

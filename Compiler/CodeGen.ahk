@@ -403,6 +403,9 @@ class X64CodeGen {
 	Inc_SIB(SIB) {
 		this.REXOpcodeModSIB([0xFF], {"OpcodeExtension": 0}, SIB)
 	}
+	Dec_R64(Register) {
+		this.REXOpcodeMod([0xFF], {"OpcodeExtension": 1}, Register)
+	}
 	Dec_SIB(SIB) {
 		this.REXOpcodeModSIB([0xFF], {"OpcodeExtension": 1}, SIB)
 	}
