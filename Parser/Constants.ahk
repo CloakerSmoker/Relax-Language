@@ -68,6 +68,7 @@
 		
 		MINUS
 		MINUS_EQUAL
+		MINUS_GREATER
 		
 		DOT
 		DOT_EQUAL
@@ -101,7 +102,7 @@ class CharacterTokens {
 						,">": {"NONE": Tokens.GREATER, "=": Tokens.GREATER_EQUAL, "<": Tokens.CONCAT}
 						,":": {"NONE": Tokens.COLON, "=": Tokens.COLON_EQUAL}
 						,"+": {"NONE": Tokens.PLUS, "+": Tokens.PLUS_PLUS, "=": Tokens.PLUS_EQUAL}
-						,"-": {"NONE": Tokens.MINUS, "-": Tokens.MINUS_MINUS, "=": Tokens.MINUS_EQUAL}
+						,"-": {"NONE": Tokens.MINUS, "-": Tokens.MINUS_MINUS, "=": Tokens.MINUS_EQUAL, ">": Tokens.MINUS_GREATER}
 						,".": {"NONE": Tokens.DOT, "=": Tokens.DOT_EQUAL}
 						,"*": {"NONE": Tokens.TIMES, "=": Tokens.TIMES_EQUAL}
 						,"|": {"NONE": Tokens.BITWISE_OR, "|": Tokens.LOGICAL_OR}
@@ -156,7 +157,7 @@ class OperatorClasses {
 	
 	static Access     := {"Precedence": 7
 						, "Associative": "Left"
-						, "Tokens": [Tokens.DOT]}
+						, "Tokens": [Tokens.DOT, Tokens.MINUS_GREATER]}
 						
 	static Module     := {"Precedence": 8
 						, "Associative": "Left"
@@ -165,6 +166,8 @@ class OperatorClasses {
 	static BinaryToPrefix := {Tokens.TIMES: Tokens.DEREF
 							 ,Tokens.BITWISE_AND: Tokens.ADDRESS
 							 ,Tokens.MINUS: Tokens.NEGATE}
+							 
+	static PrefixPrecedenceOverrides := {Tokens.ADDRESS: 9}
 							 
 	static WordOperators := {"as": Tokens.AS}
 						
@@ -194,6 +197,10 @@ class Operators {
 	GetPrecedence(Operator) {
 		try {
 			return this.Precedence(Operator).Precedence
+		}
+		
+		if (OperatorClasses.PrefixPrecedenceOverrides.HasKey(Operator.Type)) {
+			return OperatorClasses.PrefixPrecedenceOverrides[Operator.Type]
 		}
 		
 		return 0

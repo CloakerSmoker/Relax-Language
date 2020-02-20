@@ -583,15 +583,20 @@
 					else if (Operators.IsPostfix(Operator) && this.Previous().IsData()) {
 						this.AddNode(OperandStack, 1, Operators.EnsurePostfix(Operator))
 					}
-					else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsNotData()) {
-						OperatorStack.Push(Operators.BinaryToPrefix(Operator))
-					}
+					;else if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsNotData()) {
+					;	OperatorStack.Push(Operators.BinaryToPrefix(Operator))
+					;}
 					else {
 						while (OperatorStack.Count() != 0) {
 							NextOperator := OperatorStack.Pop()
 							
 							if (Operators.IsPrefix(NextOperator)) {
-								this.AddNode(OperandStack, Operators.OperandCount(NextOperator), Operators.EnsurePrefix(NextOperator))
+								a := 1
+								
+								if (Operators.GetPrecedence(NextOperator) < Operators.GetPrecedence(Operator)) {
+									this.AddNode(OperandStack, 1, Operators.EnsurePrefix(NextOperator))
+								}
+								
 								Break
 							}
 							
@@ -604,7 +609,12 @@
 							}
 						}
 						
-						OperatorStack.Push(Operator)
+						if ((Operators.IsPrefix(Operator) || Operators.IsBinaryOrPrefix(Operator)) && this.Previous().IsNotData()) {
+							OperatorStack.Push(Operators.BinaryToPrefix(Operator))
+						}
+						else {
+							OperatorStack.Push(Operator)
+						}
 					}
 				}
 				Default: {

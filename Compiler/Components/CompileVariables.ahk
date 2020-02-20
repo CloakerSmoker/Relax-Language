@@ -114,14 +114,33 @@
 		
 		return SIB(1, RSI, RAX)
 	}
-	GetStructFieldPointer(Expression) {
+	GetStructFieldPointer(Expression, ReturnFieldType := False) {
 		StructType := this.Compile(Expression.Left)
 		FieldName := Expression.Right.Value
 		
-		if (StructType.Family != "Custom") {
+		if (Expression.Operator.Type = Tokens.MINUS_GREATER) {
+			if (StructType.Family != "Pointer") {
+				new Error("Compile")
+					.LongText("Left side operands of '->' must be struct pointer types")
+					.ShortText("Not a struct pointer")
+					.Token(Expression.Left)
+				.Throw()
+			}
+			
+			StructType := StructType.Pointer
+		}
+		else if (Expression.Operator.Type = Tokens.DOT) {
+			if (StructType.Family != "Custom") {
+				new Error("Compile")
+					.LongText("Left side operands of '.' must be struct types")
+					.ShortText("Not a struct")
+					.Token(Expression.Left)
+				.Throw()
+			}
+		}
+		else {
 			new Error("Compile")
-				.LongText("Left side operands of '.' must be struct types")
-				.ShortText("Not a struct")
+				.LongText("Struct access expected")
 				.Token(Expression.Left)
 			.Throw()
 		}
@@ -136,5 +155,10 @@
 		TargetRegister := this.TopOfRegisterStack()
 		this.CodeGen.SmallAdd(TargetRegister, StructType.Offsets[FieldName])
 		
-		return StructType
+		if (ReturnFieldType) {
+			return StructType.Types[FieldName]
+		}
+		else {
+			return StructType
+		}
 	}

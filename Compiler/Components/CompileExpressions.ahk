@@ -11,7 +11,7 @@
 			this.GetVariable(NameToken)
 			return this.GetVariableType(NameToken)
 		}
-		else if (Expression.Operator.Type = Tokens.DOT) {
+		else if (Expression.Operator.Type = Tokens.DOT || Expression.Operator.Type = Tokens.MINUS_GREATER) {
 			return this.GetStructField(Expression)
 		}
 		
@@ -450,8 +450,14 @@
 				return this.Typing.GetType("void*")
 			}
 			else {
-				this.GetVariableAddress(Expression.Operand)
-				return this.Typing.GetPointerType(this.GetVariableType(Expression.Operand))
+				if (Expression.Operand.Type = ASTNodeTypes.BINARY && Expression.Operand.Operator.Type = Tokens.DOT) {
+					; If we have &SomeThing.SomeOtherThing, get a pointer to SomeThing.SomeOtherThing and return PointerTypeTo(TypeOf(SomeThing.SomeOtherThing))
+					return this.Typing.GetPointerType(this.GetStructFieldPointer(Expression.Operator, True))
+				}
+				else {
+					this.GetVariableAddress(Expression.Operand)
+					return this.Typing.GetPointerType(this.GetVariableType(Expression.Operand))
+				}
 			}
 		}
 		else if (Operator.Type = Tokens.NEGATE) {

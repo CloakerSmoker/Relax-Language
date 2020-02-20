@@ -151,7 +151,7 @@
 				RoundedSize := Size
 			}
 			
-			MsgBox, % StructName ": " Size "`n" RoundedSize
+			;MsgBox, % StructName ": " Size "`n" RoundedSize
 			
 			Info := {"Size": Size, "Offsets": Offsets, "RoundedSize": RoundedSize, "Types": Types}
 			

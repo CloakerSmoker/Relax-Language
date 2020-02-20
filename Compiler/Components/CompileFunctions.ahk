@@ -109,7 +109,7 @@
 		
 		RoundedStackSpace := Floor(RoundedStackSpace / 8)
 		
-		MsgBox, % Name " Flat:" RequiredStackSpace ", Round" RoundedStackSpace
+		;MsgBox, % Name " Flat:" RequiredStackSpace ", Round" RoundedStackSpace
 		
 		if (Mod(RequiredStackSpace, 2) != 1) {
 			RequiredStackSpace++
