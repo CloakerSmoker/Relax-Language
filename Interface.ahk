@@ -40,7 +40,7 @@
 #Include Compiler\ToAHK.ahk
 
 class Relax {
-	static VERSION := "1.0.0-alpha.30"
+	static VERSION := "1.0.0-alpha.33"
 	
 	; Simple class that handles creating a lexer/parser/compiler for some given code, and just returns a CompiledProgram
 	;  object for you
@@ -600,8 +600,6 @@ class Builtins {
 			DllImport i16* __GetCommandLineW() {Kernel32.dll, GetCommandLineW}
 			DllImport i16** __CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
 			
-			
-			
 			DllImport void __LocalFree(void*) {Kernel32.dll, LocalFree}
 			DllImport void __ExitProcess(i32) {Kernel32.dll, ExitProcess}
 			
@@ -619,6 +617,24 @@ class Builtins {
 				__LocalFree(__ArgV As void*)
 				
 				__ExitProcess(__ExitCode)
+			}
+			
+			DllImport i64 __GetProcessHeap() {Kernel32.dll, GetProcessHeap}
+			DllImport void* __HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
+			DllImport void* __HeapReAlloc(i64, i32, void*, i64) {Kernel32.dll, HeapReAlloc}
+			DllImport i8 __HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
+			
+			i64 __ProcessHeap := __GetProcessHeap()
+			i32 __HEAP_ZERO_MEMORY := 0x00000008
+			
+			define void* Alloc(i64 Size) {
+				return __HeapAlloc(__ProcessHeap, __HEAP_ZERO_MEMORY, Size)
+			}
+			define void* ReAlloc(void* Memory, i64 NewSize) {
+				return __HeapReAlloc(__ProcessHeap, __HEAP_ZERO_MEMORY, Memory, NewSize)
+			}
+			define i8 Free(void* Memory) {
+				return __HeapFree(__ProcessHeap, 0, Memory)
 			}
 		)"
 	}

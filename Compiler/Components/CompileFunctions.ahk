@@ -9,7 +9,7 @@
 			HighAddressOffset := StringStartingOffsets[String.Value]
 			
 			this.CodeGen.SmallMove(RAX, HighAddressOffset)
-			HighAddressSIB := SIB(8, RAX, R15)
+			HighAddressSIB := SIB(1, RAX, R15)
 			
 			this.CodeGen.Lea_R64_SIB(RSP, HighAddressSIB)
 			
@@ -92,13 +92,15 @@
 		StringStartingOffsets := {}
 
 		for k, String in DefineAST.Strings {
-			VariableIndex := this.AddLocalAndCalculateSize(VariableIndex, "i8*", "__String__" String.Value)
+			this.AddVariable(VariableIndex + (MultiByteInitialValueSpace * 8), "__String__" String.Value)
+			this.Typing.AddVariable("i8*", "__String__" String.Value)
 			
-			MultiByteInitialValueSpace += (StrLen(String.Value) + 2)
-			StringStartingOffsets[String.Value] := MultiByteInitialValueSpace
+			MultiByteInitialValueSpace += Ceil((StrLen(String.Value) + 2) / 8)
+			
+			StringStartingOffsets[String.Value] := VariableIndex + (MultiByteInitialValueSpace * 8)
 		}
 		
-		RequiredStackSpace := VariableIndex + MultiByteInitialValueSpace
+		RequiredStackSpace := VariableIndex + (MultiByteInitialValueSpace * 8)
 		
 		if (Mod(RequiredStackSpace, 16) != 0) {
 			RoundedStackSpace := RequiredStackSpace + (16 - Mod(RequiredStackSpace, 16))
@@ -148,7 +150,9 @@
 							Expression.Left.Value := GlobalName
 						}
 						
-						this.Compile(GlobalInfo.Initializer)
+						if !(this.ModuleGlobals.HasKey(GlobalName)) {
+							this.Compile(GlobalInfo.Initializer)
+						}
 					}
 				}
 				
@@ -271,10 +275,18 @@
 			if (ModuleExpression.Operator.Type = Tokens.COLON) {
 				ModuleName := ModuleExpression.Left.Value
 				ModuleFunctionName := ModuleExpression.Right.Value
+				
 				TrueName := this.EncodeModuleName(ModuleName, ModuleFunctionName)
 				
-				FunctionNode := this.Program.Functions[TrueName]
-					
+				if (this.Name) {
+					; If compiling a stand alone module, use a less intensive module finding method which avoids circular requirements
+					TargetModule := Module.Find(ModuleName, True)
+					FunctionNode := TargetModule.AST.Functions[ModuleFunctionName]
+				}
+				else {
+					FunctionNode := this.Program.Functions[TrueName]
+				}
+				
 				if !(IsObject(FunctionNode)) {
 					new Error("Module")
 						.LongText("Module or member not found.")

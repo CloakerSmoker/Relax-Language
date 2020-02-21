@@ -1,0 +1,23 @@
+struct SafeWideString {
+    i32 Length,
+    i16* Buffer
+}
+
+// Todo: Add SizeOf so I can finish this, and maybe add New so the alloc's don't look so dumb
+
+define i32 Main(i64 ArgC, i16** ArgV) {
+	SafeWideString** SafeArgV := Alloc(8 * ArgV) As SafeWideString**
+	i64 Index := 0
+	
+	loop ArgC {
+		SafeWideString* SafeThisArg := Alloc(16) As SafeWideString*
+		
+		SafeThisArg->Buffer := ArgV[Index]
+		SafeThisArg->Length := WideStringLength(ArgV[Index])
+		
+		SafeArgV[Index] := SafeThisArg
+		
+		Index++
+	}
+
+}

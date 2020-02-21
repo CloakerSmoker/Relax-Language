@@ -216,6 +216,8 @@
 					this.Compile(GlobalInfo.Initializer)
 				}
 			}
+			
+			this.CodeGen.Return()
 		}
 		else {
 			; If we're not compiling a standalone module, then actually gather the implementation for the modules used

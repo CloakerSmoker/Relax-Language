@@ -3,6 +3,7 @@
 		
 		if (this.Variables.HasKey(Name)) {
 			Index := this.Variables[Name]
+			Multiplier := 8
 			
 			if (Index = 0) {
 				IndexRegister := RSI
@@ -13,9 +14,10 @@
 			else {
 				this.CodeGen.SmallMove(RAX, Index)
 				IndexRegister := RAX
+				Multiplier := 1
 			}
 			
-			return SIB(1, IndexRegister, R15)
+			return SIB(Multiplier, IndexRegister, R15)
 		}
 		else if (this.Globals.HasKey(Name)) {
 			this.CodeGen.Move_R64_Global_Pointer(RAX, Name)
