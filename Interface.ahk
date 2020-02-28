@@ -140,7 +140,7 @@ class Module {
 	Add(Name, ModuleClass) {
 		this.Modules[Name] := {"Class": ModuleClass, "AST": False}
 	}
-	Find(Name, SkipCompile := False) {
+	Find(Name) {
 		FoundModule := this.Modules[Name]
 		
 		if !(FoundModule) {
@@ -149,10 +149,6 @@ class Module {
 		
 		if !(IsObject(FoundModule.AST)) {
 			FoundModule.AST := this.Parse(Name)
-		}
-		
-		if (!FoundModule.Bytes.Count() && !SkipCompile) {
-			Module.LoadPrecompiledModule(Name)
 		}
 		
 		return FoundModule
@@ -170,90 +166,6 @@ class Module {
 		CodeOptimizer.OptimizeProgram(CodeAST)
 		
 		return CodeAST
-	}
-	
-	LoadPrecompiledModule(Name) {
-		File := FileOpen(A_ScriptDir "\__Precompiled__" Name ".bin", "rw")
-		
-		SourceHash := Hash(Builtins[Name].Code)
-		FileHash := SubStr(File.ReadLine(), 1, StrLen(SourceHash))
-		
-		if (SourceHash != FileHash) {
-			return this.PrecompileModule(Name)
-		}
-		
-		RequiredModules := StrReplace(File.ReadLine(), "`n")
-		
-		Offsets := StrSplit(StrReplace(File.ReadLine(), "`n"), ",")
-		FunctionOffsets := {}
-		
-		for k, Offset in Offsets {
-			SplitOffset := StrSplit(Offset, ":")
-			FunctionOffsets[SplitOffset[1]] := SplitOffset[2]
-		}
-		
-		Bytes := StrReplace(File.ReadLine(), "`n")
-		
-		Bytes := StrSplit(Bytes, ",")
-		
-		for k, Byte in Bytes {
-			if (InStr(Byte, ":")) {
-				Bytes[k] := StrSplit(Byte, ":")
-			}
-		}
-		
-		this.Modules[Name].Modules := RequiredModules
-		this.Modules[Name].Offsets := FunctionOffsets
-		this.Modules[Name].Bytes := Bytes
-	}
-	
-	PrecompileModule(Name) {
-		CompiledModule := Relax.CompileCode(Builtins[Name].Code,, Name)
-		Bytes := CompiledModule.CodeGen.Link(True, True)
-		
-		this.Modules[Name].Bytes := Bytes
-		this.Modules[Name].Offsets := {}
-		
-		FileContents := Hash(Builtins[Name].Code) "`n"
-		
-		for ModuleName, ModuleInfo in CompiledModule.Modules {
-			FileContents .= ModuleName ","
-		}
-		
-		if !(CompiledModule.Modules.Count()) {
-			FileContents .= "`n"
-		}
-		
-		FileContents := SubStr(FileContents, 1, -1) "`n"
-		
-		for FunctionName, FunctionOffset in CompiledModule.FunctionOffsets {
-			LabelName := "__Define____" Name "__" FunctionName
-			
-			this.Modules[Name].Offsets[LabelName] := FunctionOffset
-			FileContents .= LabelName ":" FunctionOffset ","
-		}
-		
-		FileContents := SubStr(FileContents, 1, -1) "`n"
-		
-		for k, Byte in Bytes {
-			if (IsObject(Byte)) {
-				for k, v in Byte {
-					FileContents .= v ":"
-				}
-				
-				FileContents := SubStr(FileContents, 1, -1) ","
-			}
-			else {
-				FileContents .= Byte ","
-			}
-		}
-		
-		FileContents := SubStr(FileContents, 1, -1)
-		
-		File := FileOpen(A_ScriptDir "\__Precompiled__" Name ".bin", "w")
-		File.Length := 0
-		File.Write(FileContents)
-		File.Close()
 	}
 }
 
@@ -274,13 +186,13 @@ class Builtins {
 			i64 ProcessHeap := Memory:GetProcessHeap()
 			i32 HEAP_ZERO_MEMORY := 0x00000008
 			
-			define void* Alloc(i64 Size) {
+			define void* _Alloc(i64 Size) {
 				return Memory:HeapAlloc(Memory:ProcessHeap, Memory:HEAP_ZERO_MEMORY, Size)
 			}
-			define void* ReAlloc(void* Memory, i64 NewSize) {
+			define void* _ReAlloc(void* Memory, i64 NewSize) {
 				return Memory:HeapReAlloc(Memory:ProcessHeap, Memory:HEAP_ZERO_MEMORY, Memory, NewSize)
 			}
-			define i8 Free(void* Memory) {
+			define i8 _Free(void* Memory) {
 				return Memory:HeapFree(Memory:ProcessHeap, 0, Memory)
 			}
 		)"
@@ -307,7 +219,7 @@ class Builtins {
 				
 				i8 Result := String:WEquals(WString, WAString)
 				
-				Memory:Free(WAString As void*)
+				Free(WAString As void*)
 				
 				return Result
 			}
@@ -350,8 +262,6 @@ class Builtins {
 				
 				return WString
 			}
-			
-			Import Memory
 			
 			define void AReverse(i8* Buffer) {
 				i8 Temp := 0
@@ -410,7 +320,7 @@ class Builtins {
 			}
 			
 			define i8* IToA(i64 Number) {
-				i8* Buffer := (Memory:Alloc(100) As i8*)
+				i8* Buffer := (Alloc(100) As i8*)
 				i8 Sign := 0
 				
 				if (Number = 0) {
@@ -442,14 +352,14 @@ class Builtins {
 				i8* AString := String:IToA(Number)
 				i16* WString := String:AToW(AString)
 				
-				Memory:Free(AString As void*)
+				Free(AString As void*)
 				
 				return WString
 			}
 			
 			define i16* AToW(i8* AString) {
 				i32 Length := String:ALen(AString)
-				i16* NewBuffer := (Memory:Alloc((Length * 2) + 2) As i16*)
+				i16* NewBuffer := (Alloc((Length * 2) + 2) As i16*)
 				
 				for (i32 Index := 0, Index < Length, Index++) {
 					(NewBuffer + (Index * 2)) *= *(AString + Index)
@@ -469,7 +379,6 @@ class Builtins {
 			DllImport i8 ReadConsole(i64, void*, i32, i32*, void) {Kernel32.dll, ReadConsoleW}
 			
 			Import String
-			Import Memory
 			
 			i64 STDIN := Console:GetStdHandle(-10)
 			i64 STDOUT := Console:GetStdHandle(-11)
@@ -480,7 +389,7 @@ class Builtins {
 				
 				i32 Result := Console:Write(WString)
 				
-				Memory:Free(WString As void*)
+				Free(WString As void*)
 				
 				return Result
 			}
@@ -490,7 +399,7 @@ class Builtins {
 				
 				i32 Result := Console:WriteLine(WString)
 				
-				Memory:Free(WString As void*)
+				Free(WString As void*)
 				
 				return Result
 			}
@@ -517,7 +426,7 @@ class Builtins {
 				
 				i32 Result := Console:Write(WString)
 			
-				Memory:Free(WString As void*)
+				Free(WString As void*)
 				
 				return Result
 			}
@@ -526,7 +435,7 @@ class Builtins {
 				
 				i32 Result := Console:WriteLine(WString)
 			
-				Memory:Free(WString As void*)
+				Free(WString As void*)
 				
 				return Result
 			}
@@ -553,7 +462,7 @@ class Builtins {
 			}
 			
 			define i16* ReadLine() {
-				void* Buffer := Memory:Alloc(64)
+				void* Buffer := Alloc(64)
 				i32 ChunkCount := 1
 				
 				for (i32 CharactersRead := 32, CharactersRead = 32, ChunkCount++) {
@@ -562,7 +471,7 @@ class Builtins {
 					
 					Console:ReadConsole(Console:STDIN, Buffer + BufferOffset, 32, &CharactersRead, 0)
 					
-					Buffer := Memory:ReAlloc(Buffer, BufferOffset + 128)
+					Buffer := ReAlloc(Buffer, BufferOffset + 128)
 				}
 				
 				return (Buffer As i16*)

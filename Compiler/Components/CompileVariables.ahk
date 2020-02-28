@@ -85,6 +85,12 @@
 	
 	
 	GetStructField(Expression) {
+		if (this.CustomTypes.HasKey(Expression.Left.Value) && Expression.Right.Value = "Size") {
+			this.CodeGen.Move(this.PushRegisterStack(), this.CustomTypes[Expression.Left.Value].Size)
+			return this.Typing.GetType("i16")
+		}
+		
+		
 		StructType := this.GetStructFieldPointer(Expression)
 		FieldName := Expression.Right.Value
 		

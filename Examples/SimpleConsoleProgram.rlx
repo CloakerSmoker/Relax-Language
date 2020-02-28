@@ -41,7 +41,7 @@ define i64 Main(i64 ArgC, i16** ArgV) {
 	Console:AWrite("You entered: ")
 	
 	Console:Write(Input)
-	Memory:Free(Input As void*)
+	Free(Input As void*)
 	
 	Console:ResetColors()
 }

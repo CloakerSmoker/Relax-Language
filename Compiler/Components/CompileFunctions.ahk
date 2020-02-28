@@ -150,14 +150,8 @@
 							Expression.Left.Value := GlobalName
 						}
 						
-						if !(this.ModuleGlobals.HasKey(GlobalName)) {
-							this.Compile(GlobalInfo.Initializer)
-						}
+						this.Compile(GlobalInfo.Initializer)
 					}
-				}
-				
-				for ModuleName, ModuleInfo in this.Modules {
-					this.CodeGen.Call_Label("__Define____" ModuleName "__SetGlobals")
 				}
 			}
 			

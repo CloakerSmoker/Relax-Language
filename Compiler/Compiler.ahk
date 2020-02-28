@@ -178,21 +178,15 @@
 		
 		this.FunctionOffsets := FunctionOffsets := {}
 		
-		if !(this.Name) {
-			Log({})
-			this.FlattenModuleList(Program)
-			Log({})
-		}
+		this.FlattenModuleList(Program)
 		
 		FunctionOffset := 0
 		
 		for FunctionName, FunctionDefine in Program.Functions {
 			FunctionOffsets[FunctionName] := FunctionOffset
 			
-			if !(this.ModuleFunctions.HasKey(FunctionName)) {
-				Log("Compiling function '" FunctionName "' into index " FunctionOffset " inside assembled code")
-				this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
-			}
+			Log("Compiling function '" FunctionName "' into index " FunctionOffset " inside assembled code")
+			this.CompileDefine(FunctionName, FunctionDefine) ; Compile a function starting from FunctionOffset
 			
 			FunctionOffset := this.CodeGen.Index() ; And store the new offset for the next function
 			
@@ -201,47 +195,13 @@
 			}
 		}
 		
-		if (this.Name) {
-			FunctionOffsets["SetGlobals"] := this.CodeGen.Index()
-			
-			for GlobalName, GlobalInfo in this.Globals {
-				Initializer := GlobalInfo.Initializer
-				Expression := Initializer.Expression
-				
-				if (Initializer.Type != ASTNodeTypes.None) {
-					if (Expression.Type = ASTNodeTypes.Binary && Expression.Operator.Type = Tokens.COLON_EQUAL) {
-						Expression.Left.Value := GlobalName
-					}
-					
-					this.Compile(GlobalInfo.Initializer)
-				}
-			}
-			
-			this.CodeGen.Return()
-		}
-		else {
-			; If we're not compiling a standalone module, then actually gather the implementation for the modules used
-			
-			for ModuleName, ModuleInfo in this.Modules {
-				ModuleOffset := this.CodeGen.Index()
-				
-				Log("Copying pre-compiled module " ModuleName " into offset " ModuleOffset " of compiled code")
-				
-				for LabelName, LabelOffset in ModuleInfo.Offsets {
-					this.CodeGen.Labels[LabelName] := ModuleOffset + LabelOffset
-				}
-				
-				this.CodeGen.Bytes.Push(ModuleInfo.Bytes*)
-			}
-			
-			this.Exports := {}
-			
-			Log("Program has " Program.Exports.Count() " exported functions")
-			
-			for k, ExportName in Program.Exports {
-				Log("Registering exported function '" ExportName "' at offset " this.FunctionOffsets[ExportName])
-				this.Exports[ExportName] := this.FunctionOffsets[ExportName]
-			}
+		this.Exports := {}
+		
+		Log("Program has " Program.Exports.Count() " exported functions")
+		
+		for k, ExportName in Program.Exports {
+			Log("Registering exported function '" ExportName "' at offset " this.FunctionOffsets[ExportName])
+			this.Exports[ExportName] := this.FunctionOffsets[ExportName]
 		}
 		
 		return this
@@ -262,7 +222,7 @@
 				Continue
 			}
 			
-			ModuleInfo := Module.Find(ModuleName, this.Name != "")
+			ModuleInfo := Module.Find(ModuleName)
 			this.Modules[ModuleName] := ModuleInfo ; Add the module to the list of already found modules
 			ModuleAST := ModuleInfo.AST
 			
@@ -280,10 +240,8 @@
 				this.ModuleGlobals[GlobalName] := GlobalInfo
 			}
 			
-			if !(this.Name) {
-				; If we're not compiling a standalone module, then recursively get the list of modules
-				this.FlattenModuleList(ModuleAST)
-			}
+			; Recursively get the list of modules
+			this.FlattenModuleList(ModuleAST)
 		}
 	}
 

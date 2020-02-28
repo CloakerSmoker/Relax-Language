@@ -17,13 +17,30 @@ struct TokenizerState {
     i32 Index
 }
 
+Import Console
+
+define i32 Main(i64 ArgC, i16** ArgV) {
+	i16* Source := ArgV[1]
+	
+	TokenizerState T
+	T.Source := Source
+	T.SourceLength := 30
+	
+	Token* F := GetNextToken(&T)
+	
+	Console:AWrite("T:")
+	Console:IWrite(F->Value)
+
+}
+
+
 i8 TOKEN_OPERATOR := 0
 i8 TOKEN_IDENTIFER := 1
 
 i8 TOKEN_COLON_EQUAL := 2
 
 define i16 PeekNextCharacter(TokenizerState* pState) {
-    return pState->Source[pState->Index + 1]
+    return (pState->Source)[pState->Index + 1]
 }
 define i16 GetNextCharacter(TokenizerState* pState) {
     i16 NextCharacter := PeekNextCharacter(pState)
@@ -37,16 +54,18 @@ define Token* GetNextToken(TokenizerState* pState) {
     while (pState->Index <= pState->SourceLength) {
         i32 StartingIndex := pState->Index
         i16 NextCharacter := GetNextCharacter(pState)
+		
+		Console:IWrite(NextCharacter)
 
         if (NextCharacter = ':' && PeekNextCharacter(pState) = '=') {
             GetNextCharacter(pState)
             return MakeToken(StartingIndex, pState->Index, TOKEN_OPERATOR, TOKEN_COLON_EQUAL)
         }
         else if (IsAlpha(NextCharacter)) {
-            i16 Next := PeekNextCharacter()
+            i16 Next := PeekNextCharacter(pState)
 
             while (IsAlpha(NextCharacter)) {
-                Next := GetNextCharacter()
+                Next := GetNextCharacter(pState)
             }
 
             return MakeToken(StartingIndex, pState->Index, TOKEN_IDENTIFER, MakeSafeString(pState, StartingIndex))
@@ -55,12 +74,17 @@ define Token* GetNextToken(TokenizerState* pState) {
 }
 
 define void* MakeSafeString(TokenizerState* pState, i32 StartingIndex) {
-    SafeWideString* NewSafeString := AllocateNewSafeString()
+	return 0 As void*
+    //SafeWideString* NewSafeString := AllocateNewSafeString()
 
-    NewSafeString->Length := pState->Index - StartingIndex
-    NewSafeString->Buffer := pState->Source + (StartingIndex * 2)
+    //NewSafeString->Length := pState->Index - StartingIndex
+    //NewSafeString->Buffer := pState->Source + (StartingIndex * 2)
 
-    return NewSafeString As void*
+    //return NewSafeString As void*
+}
+
+define Token* AllocateNewToken() {
+	return Alloc(Token.Size) As Token*
 }
 
 define Token* MakeToken(i16 PositionInSource, i16 EndPositionInSource, i8 Type, void* Value) {
