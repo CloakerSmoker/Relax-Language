@@ -237,12 +237,10 @@ class X64CodeGen {
 	}
 	Move_RI16_R64(RegisterOne, RegisterTwo) {
 		this.PushByte(0x66) ; Legacy opcode size prefix, now using 16 bit instead of 32
-		this.PushByte(0x89) ; Opcode
-		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
+		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr})
 	}
 	Move_RI32_R64(RegisterOne, RegisterTwo) {
-		this.PushByte(0x89) ; Opcode
-		this.Mod(Mode.RToPtr, RegisterTwo.Number, RegisterOne.Number) ; Rm = Dest, R = Source, so the params are backwards in ModRM
+		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr})
 	}
 	Move_RI64_R64(RegisterOne, RegisterTwo) {
 		this.REXOpcodeMod([0x89], RegisterTwo, RegisterOne, {"Mode": Mode.RToPtr, "REX": [REX.W]})
@@ -256,8 +254,7 @@ class X64CodeGen {
 	}
 	Move_R64_RI16(DestRegister, SourceRegister) {
 		this.PushByte(0x66)
-		this.PushByte(0x8B)
-		this.Mod(Mode.RToPtr, DestRegister.Number, SourceRegister.Number)
+		this.REXOpcodeMod([0x8B], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})
 	}
 	Move_R64_RI8(DestRegister, SourceRegister) {
 		this.REXOpcodeMod([0x8A], DestRegister, SourceRegister, {"Mode": Mode.RToPtr})

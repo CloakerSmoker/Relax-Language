@@ -77,6 +77,9 @@ for k, Arg in A_Args {
 		Case "--verbose": {
 			IsVerbose := True
 		}
+		Case "--print-ast": {
+			PrintAST := True
+		}
 		Default: {
 			ConsoleWrite(Colors.Red, "Unknown arg: '" Arg "'")
 			Exit()
@@ -120,13 +123,13 @@ Start := A_TickCount
 
 try {
 	if (OutputType = "ahk") {
-		Relax.CompileToAHK(Source, OutputFile)
+		CodeCompiler := Relax.CompileToAHK(Source, OutputFile)
 	}
 	else if (OutputType = "dll") {
-		Relax.CompileToEXE(Source, OutputFile, True)
+		CodeCompiler := Relax.CompileToEXE(Source, OutputFile, True)
 	}
 	else {
-		Relax.CompileToEXE(Source, OutputFile)
+		CodeCompiler := Relax.CompileToEXE(Source, OutputFile)
 	}
 	
 	if (HasHadError) {
@@ -139,6 +142,12 @@ catch E {
 }
 
 End := A_TickCount
+
+if (PrintAST) {
+	for k, v in StrSplit(CodeCompiler.Program.Stringify(), "`n", "`r") {
+		ConsoleWrite(Colors.White, v)
+	}
+}
 
 ConsoleWrite(Colors.Green, "Done, took " ((End - Start) / 1000) " seconds to compile.")
 

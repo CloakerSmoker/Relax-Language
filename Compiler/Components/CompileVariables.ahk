@@ -12,6 +12,11 @@
 				IndexRegister := RDI
 			}
 			else {
+				if (NameToken.Value ~= "^t.*?") {
+					MsgBox, % NameToken.Value "`n" Index
+				}
+				
+				
 				this.CodeGen.SmallMove(RAX, Index)
 				IndexRegister := RAX
 				Multiplier := 1
@@ -47,9 +52,15 @@
 			this.CodeGen.Lea_R64_SIB(this.PushRegisterStack(), VariableSIB)
 		}
 		else {
+			TargetRegister := this.PushRegisterStack()
+			
+			if (VariableType.Precision <= 16) {
+				this.CodeGen.SmallMove(TargetRegister, 0)
+			}
+			
 			Name := "Move_R" VariableType.Precision "_SIB"
 			
-			this.CodeGen[Name].Call(this.CodeGen, this.PushRegisterStack(), VariableSIB)	
+			this.CodeGen[Name].Call(this.CodeGen, TargetRegister, VariableSIB)	
 		}
 		
 		return VariableType
@@ -95,10 +106,17 @@
 		FieldName := Expression.Right.Value
 		
 		TargetRegister := this.TopOfRegisterStack()
+		TargetSize := StructType.Types[FieldName].Precision
 		
-		Name := "Move_R64_RI" StructType.Types[FieldName].Precision
+		Name := "Move_R64_RI" TargetSize
 		
-		this.CodeGen[Name].Call(this.CodeGen, TargetRegister, TargetRegister)
+		if (TargetSize < 32) {
+			this.CodeGen.SmallMove(RAX, 0)
+		}
+		
+		this.CodeGen[Name].Call(this.CodeGen, RAX, TargetRegister)
+		
+		this.CodeGen.Move(TargetRegister, RAX)
 		
 		return StructType.Types[FieldName]
 	}

@@ -311,7 +311,7 @@
 	;========================
 	; Cast methods
 	
-	Cast(TypeOne, TypeTwo) {		
+	Cast(TypeOne, TypeTwo) {
 		Base := ObjGetBase(this)
 		
 		try {

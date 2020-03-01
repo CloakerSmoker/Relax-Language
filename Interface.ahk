@@ -57,6 +57,8 @@ class Relax {
 		CodeCompiler := this.CompileCode(CodeString)
 		
 		FileOpen(FilePath, "w").Write(Build(CodeCompiler))
+		
+		return CodeCompiler
 	}
 	
 	CompileToEXE(CodeString, EXEPath := "", AsDLL := False) {
@@ -410,6 +412,17 @@ class Builtins {
 				Console:WriteConsole(Console:STDOUT, WString, String:WLen(WString), &CharactersWritten, 0)
 				
 				return CharactersWritten
+			}
+			
+			define void WriteCharacter(i16 Character) {
+				i32 CharactersWritten := 0
+				
+				Console:WriteConsole(Console:STDOUT, &Character, 1, &CharactersWritten, 0)
+			}
+			
+			define void WriteNewLine() {
+				i64 NewLine := 0x00000000000D000A
+				Console:Write((&NewLine) As i16*)
 			}
 			
 			define i32 WriteLine(i16* WString) {

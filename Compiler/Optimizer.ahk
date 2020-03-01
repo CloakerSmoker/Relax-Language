@@ -87,7 +87,6 @@
 					else {
 						; Non-constant condition, which we can't really do much about, except for optimizing what we can
 						;                      (^ or dead code elimination is off)
-						IfStatement.Condition := this.OptimizeExpression(IfStatement.Condition)
 						
 						for k, Line in IfStatement.Body {
 							IfStatement.Body[k] := this.OptimizeLine(Line)

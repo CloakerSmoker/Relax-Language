@@ -8,38 +8,28 @@
 		
 		IfCount := Statement.Options.Count()
 		
-		if (IfCount = 1 && Statement.Options[1].Value >= 1) {
-			; If the if group only has one expression, and the one expression has a constant truthy result
-			;  We can just compile the body, and skip the branching
-			
-			for k, Line in Statement.Options[1] {
-				this.Compile(Line)
-			}
-			
-			return
-		}
-		
 		ThisIndex := Index++
+		BranchNumber := 0
 		
 		for k, ElseIf in Statement.Options {
-			this.CodeGen.Label("__If__" Index)
+			this.CodeGen.Label("__If__" ThisIndex "__Branch__" BranchNumber)
 			
 			this.Compile(ElseIf.Condition)
 			
 			ResultRegister := this.PopRegisterStack()
 			
 			this.CodeGen.Cmp(ResultRegister, RSI)
-			this.CodeGen.JE("__If__" Index + 1)
+			this.CodeGen.JE("__If__" ThisIndex "__Branch__" BranchNumber + 1)
 			
 			for k, Line in ElseIf.Body {
 				this.Compile(Line)
 			}
 			
 			this.CodeGen.Jmp("__If__" ThisIndex "__End")
-			Index++
+			BranchNumber++
 		}
 	
-		this.CodeGen.Label("__If__" Index)
+		this.CodeGen.Label("__If__" ThisIndex "__Branch__" BranchNumber)
 		this.CodeGen.Label("__If__" ThisIndex "__End")
 	}
 	

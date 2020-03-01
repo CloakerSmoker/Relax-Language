@@ -55,12 +55,7 @@
 		this.AddVariable(VariableIndex, Name)
 		Type := this.Typing.AddVariable(TypeName, Name)
 		
-		if (Type.Family = "Custom") {
-			return VariableIndex + Type.RoundedSize
-		}
-		else {
-			return VariableIndex + 8
-		}
+		return VariableIndex + 8
 	}
 	
 	CompileDefine(Name, DefineAST) {
@@ -95,7 +90,7 @@
 			this.AddVariable(VariableIndex + (MultiByteInitialValueSpace * 8), "__String__" String.Value)
 			this.Typing.AddVariable("i8*", "__String__" String.Value)
 			
-			MultiByteInitialValueSpace += Ceil((StrLen(String.Value) + 2) / 8)
+			MultiByteInitialValueSpace += Ceil((StrLen(String.Value) + 1) / 8)
 			
 			StringStartingOffsets[String.Value] := VariableIndex + (MultiByteInitialValueSpace * 8)
 		}
@@ -109,7 +104,7 @@
 			RoundedStackSpace := RequiredStackSpace
 		}
 		
-		RoundedStackSpace := Floor(RoundedStackSpace / 8)
+		RoundedStackSpace := Floor(RoundedStackSpace / 8) + 1
 		
 		;MsgBox, % Name " Flat:" RequiredStackSpace ", Round" RoundedStackSpace
 		
@@ -197,8 +192,8 @@
 
 			TrueIndex := k - 1
 			
-			this.AddVariable(TrueIndex, Name)
-			this.Typing.AddVariable(TypeName, Name)
+			;this.AddVariable(TrueIndex, Name)
+			;this.Typing.AddVariable(TypeName, Name)
 			
 			if (A_Index <= 4) {
 				if (TypeName = "f64" || TypeName = "f32") {
@@ -244,6 +239,12 @@
 	}
 	
 	CompileCall(Expression) {
+		if (Expression.Target.Value = "__HCF") {
+			this.CodeGen.Move_R64_RI64(this.PushRegisterStack(), RSI)
+			return this.Typing.GetType("i8")
+		}
+		
+		
 		if (this.Typing.IsValidType(Expression.Target.Value) && Expression.Params.Expressions.Count() = 1) {
 			OperandType := this.Compile(Expression.Params.Expressions[1])
 			ResultType := this.Typing.GetType(Expression.Target.Value)
@@ -306,6 +307,12 @@
 				; Store whatever part of the register stack we're using, just in case the function we call doesn't 
 				;  save all registers
 				this.CodeGen.Push(this.RegisterStack[A_Index]), this.StackDepth++
+			}
+			
+			this.RegisterStackIndex := 0
+			
+			loop, 4 {
+				this.PushRegisterStack() ; Reserve RCX, RDX, R8, R9 on the register stack
 			}
 			
 			Params := Expression.Params.Expressions
@@ -407,6 +414,8 @@
 			
 			this.CodeGen.SmallAdd(RSP, (StackParamCount * 8) + (ShadowSpaceSize * 8))
 			this.StackDepth -= StackParamCount, this.StackDepth -= ShadowSpaceSize ; Free shadow space + any stack params/dummy space
+			
+			this.RegisterStackIndex := OldIndex
 			
 			if (Straddling) {
 				this.PopRegisterStack()
