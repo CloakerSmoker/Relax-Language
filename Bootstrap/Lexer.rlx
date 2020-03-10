@@ -27,9 +27,21 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 	T.SourceLength := WideStringLength(Source)
 	T.Index := 0
 	
-	loop 2 {
+	
+	loop {
 		Token* F := GetNextToken(&T)
 		PrintToken(F)
+		
+		loop 20 {
+			Console:WriteCharacter('-')
+		}
+		
+		Console:WriteNewLine()
+		
+		if (F->Type = TOKEN_TYPE_EOF) {
+			Console:AWriteLine("EOF")
+			break
+		}
 	}
 }
 
@@ -45,13 +57,56 @@ define i32 WideStringLength(i16* WideString) {
 }
 
 i8 TOKEN_TYPE_EOF := 0
+i8 TOKEN_TYPE_NONE := 0
 i8 TOKEN_TYPE_OPERATOR := 1
 i8 TOKEN_TYPE_IDENTIFER := 2
 i8 TOKEN_TYPE_INTEGER := 3
+i8 TOKEN_TYPE_STRING := 4
+i8 TOKEN_TYPE_PUNCTUATION := 5
+
 
 i8 OPERATOR_COLON_EQUAL := 0
 i8 OPERATOR_PLUS_EQUAL := 1
 i8 OPERATOR_MINUS_EQUAL := 2
+i8 OPERATOR_STAR_EQUAL := 3
+
+i8 OPERATOR_PLUS := 4
+i8 OPERATOR_MINUS := 5
+i8 OPERATOR_STAR := 6
+i8 OPERATOR_SLASH := 7
+i8 OPERATOR_EQUAL := 8
+i8 OPERATOR_DOT := 9
+
+i8 OPERATOR_MINUS_GREATER := 10
+i8 OPERATOR_BANG := 11
+
+i8 OPERATOR_LOGICAL_AND := 12
+i8 OPERATOR_LOGICAL_OR := 13
+
+i8 OPERATOR_LESS := 14
+i8 OPERATOR_LESS_EQAUL := 15
+i8 OPERATOR_GREATER := 16
+i8 OPERATOR_GREATER_EQAUL := 17
+
+i8 OPERATOR_AND := 18
+
+
+
+i8 PUNCTUATION_OPEN_PAREN := 0
+i8 PUNCTUATION_CLOSE_PAREN := 1
+
+i8 PUNCTUATION_OPEN_BRACE := 2
+i8 PUNCTUATION_CLOSE_BRACE := 3
+
+i8 PUNCTUATION_OPEN_BRACKET := 4
+i8 PUNCTUATION_CLOSE_BRACKET := 5
+
+i8 PUNCTUATION_COMMA := 6
+
+
+define void Backtrack(TokenizerState* pState) {
+	pState->Index -= 1
+}
 
 define i16 PeekNextCharacter(TokenizerState* pState) {
 	return (pState->Source)[pState->Index]
@@ -62,8 +117,26 @@ define i16 GetNextCharacter(TokenizerState* pState) {
 	pState->Index += 1
 	return NextCharacter
 }
+define i8 NextCharacterMatches(TokenizerState* pState, i8 CharacterToCheck) {
+	if (PeekNextCharacter(pState) = CharacterToCheck) {
+		GetNextCharacter(pState)
+		return 1
+	}
+	
+	return 0
+}
+
 define i8 TokenizerAtEnd(TokenizerState* pState) {
-	return (pState->Index) >= (pState->SourceLength)
+	return (pState->Index) > (pState->SourceLength)
+}
+
+define void TokenizerError(TokenizerState* pState, i8* Message) {
+	Console:AWriteLine(Message)
+	Console:AWrite("At: ")
+	
+	Backtrack(pState)
+	Console:IWriteLine(pState->Index)
+	Exit(1)
 }
 
 
@@ -75,26 +148,130 @@ define Token* GetNextToken(TokenizerState* pState) {
 		Console:WriteCharacter(NextCharacter)
 		Console:WriteNewLine()
 
-		if (NextCharacter = ':' && PeekNextCharacter(pState) = '=') {
+		if (PeekNextCharacter(pState) = '=') {
 			GetNextCharacter(pState)
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)
-		}
-		else if (NextCharacter = "+" && PeekNextCharacter(pState) = "=") {
-			GetNextCharacter(pState)
+			i8 NewType := TOKEN_TYPE_NONE
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS_EQUAL)
+			if (NextCharacter = ':') {
+				NewType := OPERATOR_COLON_EQUAL
+			}
+			if (NextCharacter = '+') {
+				NewType := OPERATOR_PLUS_EQUAL
+			}
+			else if (NextCharacter = '-') {
+				NewType := OPERATOR_MINUS_EQUAL
+			}
+			else if (NextCharacter = '*') {
+				NewType := OPERATOR_STAR_EQUAL
+			}
+			else if (NextCharacter = '<') {
+				NewType := OPERATOR_LESS_EQAUL
+			}
+			else if (NextCharacter = '>') {
+				NewType := OPERATOR_GREATER_EQAUL
+			}
+			else {
+				Backtrack(pState)
+			}
+			
+			if (NewType != TOKEN_TYPE_NONE) {
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, NewType)
+			}
 		}
-		else if (NextCharacter = ''') {
+		
+		if (NextCharacter = ''') {
+			NextCharacter := GetNextCharacter(pState)
+			
+			if (GetNextCharacter(pState) != ''') {
+				TokenizerError(pState, "Expected close single quote for character constant")
+			}
+			
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_INTEGER, NextCharacter)
+		}
+		else if (NextCharacter = '=') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
+		}
+		else if (NextCharacter = '+') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+		}
+		else if (NextCharacter = '-') {
+			if (NextCharacterMatches(pState, '>')) {
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
+			}
+			
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+		}
+		else if (NextCharacter = '*') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
+		}
+		else if (NextCharacter = '/') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
+		}
+		else if (NextCharacter = '.') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
+		}
+		else if (NextCharacter = '<') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
+		}
+		else if (NextCharacter = '>') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
+		}
+		else if (NextCharacter = '&') {
+			if (NextCharacterMatches(pState, '&')) {
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
+			}
+			
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
+		}
+		else if (NextCharacter = '|') {
+			if (NextCharacterMatches(pState, '|')) {
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
+			}
+		}
+		else if (NextCharacter = '!') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
+		}
+		else if (NextCharacter = '(') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+		}
+		else if (NextCharacter = ')') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
+		}
+		else if (NextCharacter = '{') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+		}
+		else if (NextCharacter = '}') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
+		}
+		else if (NextCharacter = '[') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACKET)
+		}
+		else if (NextCharacter = ']') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
+		}
+		else if (NextCharacter = '"') {
+			NextCharacter := 0
+			
+			while ((NextCharacter != '"') && (!TokenizerAtEnd(pState))) {
+				NextCharacter := GetNextCharacter(pState)
+			}
+			
+			SafeWideString* FoundString := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
+			FoundString->Length -= 1
+			
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {
 			while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
 				NextCharacter := GetNextCharacter(pState)
 			}
 			
-			if !(TokenizerAtEnd(pState)) {
-				pState->Index -= 1
+			if (TokenizerAtEnd(pState)) {
+				TokenizerError(pState, "Expected close quote before EOF")
+			}
+			else {
+				Backtrack(pState)
 			}
 			
 			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex) As SafeWideString*)
@@ -112,10 +289,14 @@ define Token* GetNextToken(TokenizerState* pState) {
 			}
 			
 			if !(TokenizerAtEnd(pState)) {
-				pState->Index -= 1
+				Backtrack(pState)
 			}
 			
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, MakeSafeStringToken(pState, StartingIndex))
+		}
+		
+		if (NextCharacter != ' ' && NextCharacter != '	') {
+			TokenizerError(pState, "Unexpected character")
 		}
 	}
 	
@@ -169,7 +350,18 @@ define void PrintToken(Token* TokenToPrint) {
 	
 	if (TokenToPrint->Type = TOKEN_TYPE_IDENTIFER) {
 		Console:AWrite(" (S): ")
+		
 		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
+		
+		Console:WriteNewLine()
+	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_STRING) {
+		Console:AWrite(" (S): ")
+		
+		Console:WriteCharacter('"')
+		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
+		Console:WriteCharacter('"')
+		
 		Console:WriteNewLine()
 	}
 	else {

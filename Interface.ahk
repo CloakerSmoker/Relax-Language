@@ -525,6 +525,8 @@ class Builtins {
 			DllImport void __LocalFree(void*) {Kernel32.dll, LocalFree}
 			DllImport void __ExitProcess(i32) {Kernel32.dll, ExitProcess}
 			
+			i16** __Saved__ArgV := 0
+			
 			define void __RunTime__SetGlobals() {
 				
 			}
@@ -533,11 +535,17 @@ class Builtins {
 				
 				i64 __ArgC := 0
 				i16** __ArgV := __CommandLineToArgvW(__GetCommandLineW(), &__ArgC)
+				__Saved__ArgV := __ArgV
 				
 				i32 __ExitCode := (Main(__ArgC, __ArgV) as i32)
 				
 				__LocalFree(__ArgV As void*)
 				
+				__ExitProcess(__ExitCode)
+			}
+			
+			define void Exit(i32 __ExitCode) {
+				__LocalFree(__Saved__ArgV As void*)
 				__ExitProcess(__ExitCode)
 			}
 			
