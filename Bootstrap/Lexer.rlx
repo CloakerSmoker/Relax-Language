@@ -19,8 +19,56 @@ struct TokenizerState {
 
 Import Console
 
-define i32 Main(i64 ArgC, i16** ArgV) {
-	i16* Source := ArgV[1]
+DllImport i64 CreateFile(i16*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileW}
+DllImport i32 GetFileSize(i64, void) {Kernel32.dll, GetFileSize}
+DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
+DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
+
+DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
+
+define i32 Main(i64 ArgC, i16** ArgV) {	
+	if (ArgC != 2) {
+		Console:AWriteLine("No input file, aborting")
+		Exit(1)
+	}
+	
+	i16* InputFilePath := ArgV[1]
+	
+	i64 GENERIC_READ := 0x80000000
+	i8 FILE_SHARE_READ := 1
+	i8 FILE_SHARE_WRITE := 2
+	i8 OPEN_EXISTING := 3
+	i16 FILE_ATTRIBUTE_NORMAL := 128
+	
+	i64 InputFileHandle := CreateFile(InputFilePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
+	
+	if (InputFileHandle = -1) {
+		Console:AWrite("Could not open input file: error code ")
+		Console:IWriteLine(GetLastError())
+		Console:AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	Console:AWrite("Input File: ")
+	Console:WriteLine(InputFilePath)
+	
+	i32 InputFileSize := GetFileSize(InputFileHandle, 0)
+	void* FileBuffer := Alloc(InputFileSize)
+	
+	i32 ReadFileBytesRead := 0
+	i8 ReadFileSuccess := ReadFile(InputFileHandle, FileBuffer, InputFileSize, &ReadFileBytesRead, 0)
+	
+	if (!(ReadFileSuccess) || ReadFileBytesRead != InputFileSize) {
+		Console:AWrite("Could not open read file: error code ")
+		Console:IWriteLine(GetLastError())
+		Console:AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	i16* Source := AToW(FileBuffer As i8*, InputFileSize)
+	
+	Free(FileBuffer)
+	CloseHandle(InputFileHandle)
 	
 	TokenizerState T
 	T.Source := Source
@@ -45,6 +93,16 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 	}
 }
 
+define i16* AToW(i8* AString, i32 Length) {
+	i16* NewBuffer := (Alloc((Length * 2) + 2) As i16*)
+	
+	for (i32 Index := 0, Index < Length, Index++) {
+		NewBuffer[Index] := AString[Index]
+	}
+	
+	return NewBuffer
+}
+
 define i32 WideStringLength(i16* WideString) {
 	i16 NextCharacter := WideString[0]
 	i32 Index := 0
@@ -57,7 +115,7 @@ define i32 WideStringLength(i16* WideString) {
 }
 
 i8 TOKEN_TYPE_EOF := 0
-i8 TOKEN_TYPE_NONE := 0
+i8 TOKEN_TYPE_NONE := 100
 i8 TOKEN_TYPE_OPERATOR := 1
 i8 TOKEN_TYPE_IDENTIFER := 2
 i8 TOKEN_TYPE_INTEGER := 3
@@ -89,6 +147,9 @@ i8 OPERATOR_GREATER := 16
 i8 OPERATOR_GREATER_EQAUL := 17
 
 i8 OPERATOR_AND := 18
+i8 OPERATOR_OR := 19
+
+i8 OPERATOR_COLON := 20
 
 
 
@@ -144,9 +205,6 @@ define Token* GetNextToken(TokenizerState* pState) {
 	while (!TokenizerAtEnd(pState)) {
 		i32 StartingIndex := pState->Index
 		i16 NextCharacter := GetNextCharacter(pState)
-		
-		Console:WriteCharacter(NextCharacter)
-		Console:WriteNewLine()
 
 		if (PeekNextCharacter(pState) = '=') {
 			GetNextCharacter(pState)
@@ -156,7 +214,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 			if (NextCharacter = ':') {
 				NewType := OPERATOR_COLON_EQUAL
 			}
-			if (NextCharacter = '+') {
+			else if (NextCharacter = '+') {
 				NewType := OPERATOR_PLUS_EQUAL
 			}
 			else if (NextCharacter = '-') {
@@ -228,9 +286,14 @@ define Token* GetNextToken(TokenizerState* pState) {
 			if (NextCharacterMatches(pState, '|')) {
 				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
 			}
+			
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
 		}
 		else if (NextCharacter = '!') {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
+		}
+		else if (NextCharacter = ':') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		}
 		else if (NextCharacter = '(') {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
@@ -250,11 +313,18 @@ define Token* GetNextToken(TokenizerState* pState) {
 		else if (NextCharacter = ']') {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
 		}
+		else if (NextCharacter = ',') {
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+		}
 		else if (NextCharacter = '"') {
 			NextCharacter := 0
 			
 			while ((NextCharacter != '"') && (!TokenizerAtEnd(pState))) {
 				NextCharacter := GetNextCharacter(pState)
+			}
+			
+			if (TokenizerAtEnd(pState)) {
+				TokenizerError(pState, "Expected close quote before EOF")
 			}
 			
 			SafeWideString* FoundString := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
@@ -263,27 +333,43 @@ define Token* GetNextToken(TokenizerState* pState) {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {
-			while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
-				NextCharacter := GetNextCharacter(pState)
-			}
+			i8 NumberIsHex := false
 			
-			if (TokenizerAtEnd(pState)) {
-				TokenizerError(pState, "Expected close quote before EOF")
+			if (NextCharacterMatches(pState, 'x')) {
+				NumberIsHex := true
+				
+				NextCharacter := PeekNextCharacter(pState)
+				
+				while (IsHex(NextCharacter) && (!TokenizerAtEnd(pState))) {
+					NextCharacter := GetNextCharacter(pState)
+				}
 			}
 			else {
+				while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
+					NextCharacter := GetNextCharacter(pState)
+				}
+			}
+			
+			if !(TokenizerAtEnd(pState)) {
 				Backtrack(pState)
 			}
 			
-			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex) As SafeWideString*)
+			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
 			i8 NumberWasConverted := 0
+			Token* ResultToken := MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_INTEGER, 0)
 			
-			Token* ResultToken := MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_INTEGER, SafeStringToI64(AsString, &NumberWasConverted))
+			if (NumberIsHex) {
+				ResultToken->Value := SafeStringHexToI64(AsString, &NumberWasConverted)
+			}
+			else {
+				ResultToken->Value := SafeStringToI64(AsString, &NumberWasConverted)
+			}
 			
 			FreeSafeString(AsString)
 			
 			return ResultToken
 		}
-		else if (IsAlpha(NextCharacter)) {
+		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
 				NextCharacter := GetNextCharacter(pState)
 			}
@@ -295,9 +381,17 @@ define Token* GetNextToken(TokenizerState* pState) {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, MakeSafeStringToken(pState, StartingIndex))
 		}
 		
-		if (NextCharacter != ' ' && NextCharacter != '	') {
-			TokenizerError(pState, "Unexpected character")
+		if (NextCharacter = ' ' || NextCharacter = '	') {
+			continue
 		}
+		else if (NextCharacter = 10 || NextCharacter = 13) {
+			continue
+		}
+		else if (NextCharacter = 0) {
+			continue
+		}
+		
+		TokenizerError(pState, "Unexpected character")
 	}
 	
 	return MakeToken(pState->SourceLength, pState->SourceLength, TOKEN_TYPE_EOF, 0)
@@ -364,6 +458,18 @@ define void PrintToken(Token* TokenToPrint) {
 		
 		Console:WriteNewLine()
 	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_OPERATOR) {
+		Console:AWrite(" (O): ")
+		
+		PrintOperator(TokenToPrint->Value)
+		Console:WriteNewLine()
+	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_PUNCTUATION) {
+		Console:AWrite(" (P): ")
+		
+		PrintPunctuation(TokenToPrint->Value)
+		Console:WriteNewLine()
+	}
 	else {
 		Console:AWrite(": ")
 		Console:IWriteLine(TokenToPrint->Value)
@@ -376,8 +482,123 @@ define void PrintToken(Token* TokenToPrint) {
 	Console:IWriteLine(TokenToPrint->LengthInSource)
 }
 
+define void PrintOperator(i8 Operator) {
+	i8 FirstCharacter := 0
+	i8 SecondCharacter := 0
+	
+	if (Operator = OPERATOR_COLON_EQUAL) {
+		FirstCharacter := ':'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_PLUS_EQUAL) {
+		FirstCharacter := '+'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_MINUS_EQUAL) {
+		FirstCharacter := '-'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_STAR_EQUAL) {
+		FirstCharacter := '*'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_LESS_EQAUL) {
+		FirstCharacter := '<'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_GREATER_EQAUL) {
+		FirstCharacter := '>'
+		SecondCharacter := '='
+	}
+	else if (Operator = OPERATOR_MINUS_GREATER) {
+		FirstCharacter := '-'
+		SecondCharacter := '>'
+	}
+	else if (Operator = OPERATOR_LOGICAL_AND) {
+		FirstCharacter := '&'
+		SecondCharacter := '&'
+	}
+	else if (Operator = OPERATOR_LOGICAL_OR) {
+		FirstCharacter := '|'
+		SecondCharacter := '|'
+	}
+	else if (Operator = OPERATOR_PLUS) {
+		FirstCharacter := '+'
+	}
+	else if (Operator = OPERATOR_MINUS) {
+		FirstCharacter := '-'
+	}
+	else if (Operator = OPERATOR_STAR) {
+		FirstCharacter := '*'
+	}
+	else if (Operator = OPERATOR_SLASH) {
+		FirstCharacter := '/'
+	}
+	else if (Operator = OPERATOR_EQUAL) {
+		FirstCharacter := '='
+	}
+	else if (Operator = OPERATOR_DOT) {
+		FirstCharacter := '.'
+	}
+	else if (Operator = OPERATOR_BANG) {
+		FirstCharacter := '!'
+	}
+	else if (Operator = OPERATOR_LESS) {
+		FirstCharacter := '<'
+	}
+	else if (Operator = OPERATOR_GREATER) {
+		FirstCharacter := '>'
+	}
+	else if (Operator = OPERATOR_AND) {
+		FirstCharacter := '&'
+	}
+	else if (Operator = OPERATOR_OR) {
+		FirstCharacter := '|'
+	}
+	else if (Operator = OPERATOR_COLON) {
+		FirstCharacter := ':'
+	}
+	
+	if (FirstCharacter) {
+		Console:WriteCharacter(FirstCharacter)
+	}
+	if (SecondCharacter) {
+		Console:WriteCharacter(SecondCharacter)
+	}
+}
+
+define void PrintPunctuation(i8 Punctuation) {
+	i8 Character := 0
+	
+	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
+		Character := '('
+	}
+	else if (Punctuation = PUNCTUATION_CLOSE_PAREN) {
+		Character := ')'
+	}
+	else if (Punctuation = PUNCTUATION_OPEN_BRACE) {
+		Character := '{'
+	}
+	else if (Punctuation = PUNCTUATION_CLOSE_BRACE) {
+		Character := '}'
+	}
+	else if (Punctuation = PUNCTUATION_OPEN_BRACKET) {
+		Character := '['
+	}
+	else if (Punctuation = PUNCTUATION_CLOSE_BRACKET) {
+		Character := ']'
+	}
+	else if (Punctuation = PUNCTUATION_COMMA) {
+		Character := ','
+	}
+	
+	Console:WriteCharacter(Character)
+}
+
+
+
 define i8 IsAlphaNumeric(i16 Character) {
-	return IsAlpha(Character) || IsNumeric(Character)
+	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
 }
 
 define i8 IsAlpha(i16 Character) {
@@ -390,9 +611,78 @@ define i8 IsAlpha(i16 Character) {
 
 	return 0
 }
+
+define i8 IsHex(i16 Character) {
+	return IsNumeric(Character) || _IsHex(Character)
+}
+define i8 _IsHex(i16 Character) {
+	if ((Character >= 'a') && (Character <= 'f')) {
+		return true
+	}
+	else if ((Character >= 'A') && (Character <= 'F')) {
+		return true
+	}
+	
+	return false
+}
+
 define i8 IsNumeric(i16 Character) {
 	return (Character >= '0') && (Character <= '9')
 }
+
+define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
+	i64 Result := 0
+	
+	i16* WString := StringToReadFrom->Buffer
+	
+	i16 FirstCharacter := WString[0]
+	
+	if !(IsHex(FirstCharacter)) {
+		Success *= 0
+		return 0
+	}
+	
+	i32 Length := StringToReadFrom->Length
+	
+	for (i32 Index := 0, Index < Length, Index++) {
+		i16 NextCharacter := WString[Index]
+		
+		if !(IsHex(NextCharacter)) {
+			Break
+		}
+		
+		if (IsNumeric(NextCharacter)) {
+			NextCharacter -= '0'
+		}
+		else {
+			if (NextCharacter = 'a' || NextCharacter = 'A') {
+				NextCharacter := 10
+			}
+			else if (NextCharacter = 'b' || NextCharacter = 'B') {
+				NextCharacter := 11
+			}
+			else if (NextCharacter = 'c' || NextCharacter = 'C') {
+				NextCharacter := 12
+			}
+			else if (NextCharacter = 'd' || NextCharacter = 'D') {
+				NextCharacter := 13
+			}
+			else if (NextCharacter = 'e' || NextCharacter = 'E') {
+				NextCharacter := 14
+			}
+			else if (NextCharacter = 'f' || NextCharacter = 'F') {
+				NextCharacter := 15
+			}
+		}
+		
+		Result := (Result * 16) + (NextCharacter)
+	}
+	
+	Success *= 1
+	
+	return Result
+}
+
 
 define i64 SafeStringToI64(SafeWideString* StringToReadFrom, i8* Success) {
 	i64 Result := 0

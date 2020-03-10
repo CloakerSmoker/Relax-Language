@@ -115,6 +115,10 @@
 				if (Expression.Left.Type = ASTNodeTypes.BINARY) {
 					return this.SetSturctField(Expression.Left)
 				}
+				else if (Expression.Left.Type = ASTNodeTypes.ARRAYACCESS) {
+					this.CompileArrayAccess(Expression.Left, True)
+					return RightType
+				}
 				else {
 					this.SetVariable(Expression.Left)
 				}
@@ -530,7 +534,7 @@
 		return RightType
 	}
 	
-	CompileArrayAccess(Expression) {
+	CompileArrayAccess(Expression, Set := False) {
 		TargetType := this.Compile(Expression.Target)
 		IndexType := this.Compile(Expression.Index)
 		
@@ -553,7 +557,6 @@
 		
 		IndexRegister := this.PopRegisterStack()
 		TargetRegister := this.PopRegisterStack()
-		ResultRegister := this.PushRegisterStack()
 		
 		IndexMultiplier := 8 ; By default, multiply Index by 8 to get the element needed
 		
@@ -563,8 +566,16 @@
 		}
 		
 		this.CodeGen.Lea_R64_SIB(RAX, SIB(IndexMultiplier, IndexRegister, TargetRegister))
-		this.CodeGen.Move(ResultRegister, RSI)
-		this.CodeGen["Move_R64_RI" (IndexMultiplier * 8)].Call(this.CodeGen, ResultRegister, RAX)
 		
-		return TargetType.Pointer
+		if (Set) {
+			this.CodeGen["Move_RI" (IndexMultiplier * 8) "_R64"].Call(this.CodeGen, RAX, this.TopOfRegisterStack())
+		}
+		else {
+			ResultRegister := this.PushRegisterStack()
+			this.CodeGen.Move(ResultRegister, RSI)
+			
+			this.CodeGen["Move_R64_RI" (IndexMultiplier * 8)].Call(this.CodeGen, ResultRegister, RAX)
+			
+			return TargetType.Pointer
+		}
 	}
