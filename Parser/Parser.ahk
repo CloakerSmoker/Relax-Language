@@ -69,7 +69,13 @@
 	
 	CheckTypes() {
 		for k, TypeToken in this.Types {
-			if !(this.Typing.IsValidType(TypeToken.Value) || this.CustomTypes.HasKey(TypeToken.Value)) {
+			if !(this.Typing.IsValidType(TypeToken.Value)) {
+				for k, v in this.CustomTypes {
+					if (TypeToken.Value = v.NameToken.Value) {
+						continue, 2
+					}
+				}
+				
 				new Error("Type")
 					.LongText("Invalid type.")
 					.ShortText("Not a valid type name.")
@@ -93,7 +99,7 @@
 	}
 	
 	ParseProgram() {
-		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}, "Modules": [], "Exports": [], "CustomTypes": {}}
+		Current := this.CurrentProgram := {"Functions": {}, "Globals": {}, "Modules": [], "Exports": [], "CustomTypes": []}
 		
 		while !(this.AtEOF()) {
 			try {
@@ -162,7 +168,7 @@
 		this.Ignore(Tokens.NEWLINE)
 		this.Consume(Tokens.RIGHT_BRACE, "Struct bodies must be contained within {}.")
 		
-		this.CurrentProgram.CustomTypes[StructName.Value] := new ASTNodes.Struct(StructName, Fields)
+		this.CurrentProgram.CustomTypes.Push(new ASTNodes.Struct(StructName, Fields))
 	}
 	ParseDefine(KeywordUsed) {
 		ReturnType := this.ParseTypeName()

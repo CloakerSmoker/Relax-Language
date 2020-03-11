@@ -105,7 +105,7 @@
 		}
 		
 		if !(FoundType) {
-			Throw, Exception("Invalid Type: '" TypeName "'")
+			Throw, Exception("Invalid Type: '" TypeName "'`nCallstack: " StringifyCallstack(8))
 		}
 		
 		loop, % PointerDepth {

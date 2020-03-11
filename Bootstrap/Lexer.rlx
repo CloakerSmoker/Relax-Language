@@ -1,6 +1,6 @@
 struct Token {
 	void* Value,
-	i16 PositionInSource,
+	i32 PositionInSource,
 	i16 LengthInSource,
 	i8 Type
 }
@@ -75,22 +75,7 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 	T.SourceLength := WideStringLength(Source)
 	T.Index := 0
 	
-	
-	loop {
-		Token* F := GetNextToken(&T)
-		PrintToken(F)
-		
-		loop 20 {
-			Console:WriteCharacter('-')
-		}
-		
-		Console:WriteNewLine()
-		
-		if (F->Type = TOKEN_TYPE_EOF) {
-			Console:AWriteLine("EOF")
-			break
-		}
-	}
+	ParserStart(&T)
 }
 
 define i16* AToW(i8* AString, i32 Length) {
@@ -121,6 +106,7 @@ i8 TOKEN_TYPE_IDENTIFER := 2
 i8 TOKEN_TYPE_INTEGER := 3
 i8 TOKEN_TYPE_STRING := 4
 i8 TOKEN_TYPE_PUNCTUATION := 5
+i8 TOKEN_TYPE_KEYWORD := 6
 
 
 i8 OPERATOR_COLON_EQUAL := 0
@@ -150,7 +136,7 @@ i8 OPERATOR_AND := 18
 i8 OPERATOR_OR := 19
 
 i8 OPERATOR_COLON := 20
-
+i8 OPERATOR_AS := 21
 
 
 i8 PUNCTUATION_OPEN_PAREN := 0
@@ -165,12 +151,28 @@ i8 PUNCTUATION_CLOSE_BRACKET := 5
 i8 PUNCTUATION_COMMA := 6
 
 
+i8 KEYWORD_DEFINE := 0
+i8 KEYWORD_DLLIMPORT := 1
+
+i8 KEYWORD_IF := 2
+i8 KEYWORD_ELSE := 3
+
+i8 KEYWORD_FOR := 4
+i8 KEYWORD_WHILE := 5
+i8 KEYWORD_LOOP := 6
+
+i8 KEYWORD_CONTINUE := 7
+i8 KEYWORD_BREAK := 8
+
+i8 KEYWORD_STRUCT := 9
+i8 KEYWORD_RETURN := 10
+
 define void Backtrack(TokenizerState* pState) {
 	pState->Index -= 1
 }
 
 define i16 PeekNextCharacter(TokenizerState* pState) {
-	return (pState->Source)[pState->Index]
+	return Lower((pState->Source)[pState->Index])
 }
 define i16 GetNextCharacter(TokenizerState* pState) {
 	i16 NextCharacter := PeekNextCharacter(pState)
@@ -295,6 +297,10 @@ define Token* GetNextToken(TokenizerState* pState) {
 		else if (NextCharacter = ':') {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		}
+		else if (NextCharacter = 'a' && PeekNextCharacter(pState) = 's') {
+			GetNextCharacter(pState)
+			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
+		}
 		else if (NextCharacter = '(') {
 			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 		}
@@ -378,7 +384,17 @@ define Token* GetNextToken(TokenizerState* pState) {
 				Backtrack(pState)
 			}
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, MakeSafeStringToken(pState, StartingIndex))
+			SafeWideString* TokenText := MakeSafeStringToken(pState, StartingIndex) As SafeWideString*
+			
+			i8 TokenAsKeyword := LookupKeyword(TokenText)
+			
+			if (TokenAsKeyword != TOKEN_TYPE_NONE) {
+				FreeSafeString(TokenText)
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
+			}
+			else {
+				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, TokenText As void*)
+			}
 		}
 		
 		if (NextCharacter = ' ' || NextCharacter = '	') {
@@ -395,6 +411,82 @@ define Token* GetNextToken(TokenizerState* pState) {
 	}
 	
 	return MakeToken(pState->SourceLength, pState->SourceLength, TOKEN_TYPE_EOF, 0)
+}
+
+define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
+	if (SafeStringEqualsAString(PotentialKeyword, "define")) {
+		return KEYWORD_DEFINE
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "dllimport")) {
+		return KEYWORD_DLLIMPORT
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "if")) {
+		return KEYWORD_IF
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "else")) {
+		return KEYWORD_ELSE
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "for")) {
+		return KEYWORD_FOR
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "while")) {
+		return KEYWORD_WHILE
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "loop")) {
+		return KEYWORD_LOOP
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "continue")) {
+		return KEYWORD_CONTINUE
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "break")) {
+		return KEYWORD_BREAK
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "struct")) {
+		return KEYWORD_STRUCT
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "return")) {
+		return KEYWORD_RETURN
+	}
+	
+	return TOKEN_TYPE_NONE
+}
+
+define i16 Lower(i16 Character) {
+	if ('A' <= Character && Character <= 'Z') {
+		Character += 32
+	}
+	
+	return Character
+}
+
+define i8 CharacterEqualsNoCase(i16 CharacterOne, i16 CharacterTwo) {
+	return Lower(CharacterOne) = Lower(CharacterTwo)
+}
+
+define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
+	i32 Index := 0
+	
+	loop {
+		if (Index >= StringOne->Length) {
+			if (StringTwo[Index] = 0) {
+				return true
+			}
+			else {
+				return false
+			}
+		}
+		else if (StringTwo[Index] = 0) {
+			return false
+		}
+		
+		if !(CharacterEqualsNoCase((StringOne->Buffer)[Index], StringTwo[Index])) {
+			return false
+		}
+		
+		Index++
+	}
+
+	return true
 }
 
 define SafeWideString* AllocateNewSafeString() {
@@ -423,6 +515,16 @@ define void PrintSafeString(SafeWideString* StringToPrint) {
 
 define Token* AllocateNewToken() {
 	return Alloc(Token.Size) As Token*
+}
+define void FreeToken(Token* TokenToFree) {
+	if (TokenToFree->Type = TOKEN_TYPE_IDENTIFER || TokenToFree->Type = TOKEN_TYPE_STRING) {
+		FreeSafeString((TokenToFree->Value) As SafeWideString*)
+	}
+	
+	Free(TokenToFree As void*)
+}
+define void FreeTokenOnly(Token* TokenToFree) {
+	Free(TokenToFree As void*)
 }
 
 define Token* MakeToken(i16 PositionInSource, i16 EndPositionInSource, i8 Type, void* Value) {
@@ -468,6 +570,12 @@ define void PrintToken(Token* TokenToPrint) {
 		Console:AWrite(" (P): ")
 		
 		PrintPunctuation(TokenToPrint->Value)
+		Console:WriteNewLine()
+	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_KEYWORD) {
+		Console:AWrite(" (K): ")
+		
+		PrintKeyword(TokenToPrint->Value)
 		Console:WriteNewLine()
 	}
 	else {
@@ -521,6 +629,10 @@ define void PrintOperator(i8 Operator) {
 	else if (Operator = OPERATOR_LOGICAL_OR) {
 		FirstCharacter := '|'
 		SecondCharacter := '|'
+	}
+	else if (Operator = OPERATOR_AS) {
+		FirstCharacter := 'a'
+		SecondCharacter := 's'
 	}
 	else if (Operator = OPERATOR_PLUS) {
 		FirstCharacter := '+'
@@ -595,6 +707,41 @@ define void PrintPunctuation(i8 Punctuation) {
 	Console:WriteCharacter(Character)
 }
 
+define void PrintKeyword(i8 Keyword) {
+	if (Keyword = KEYWORD_DEFINE) {
+		Console:AWrite("define")
+	}
+	else if (Keyword = KEYWORD_DLLIMPORT) {
+		Console:AWrite("DllImport")
+	}
+	else if (Keyword = KEYWORD_IF) {
+		Console:AWrite("if")
+	}
+	else if (Keyword = KEYWORD_ELSE) {
+		Console:AWrite("else")
+	}
+	else if (Keyword = KEYWORD_FOR) {
+		Console:AWrite("for")
+	}
+	else if (Keyword = KEYWORD_WHILE) {
+		Console:AWrite("while")
+	}
+	else if (Keyword = KEYWORD_LOOP) {
+		Console:AWrite("loop")
+	}
+	else if (Keyword = KEYWORD_CONTINUE) {
+		Console:AWrite("continue")
+	}
+	else if (Keyword = KEYWORD_BREAK) {
+		Console:AWrite("break")
+	}
+	else if (Keyword = KEYWORD_STRUCT) {
+		Console:AWrite("struct")
+	}
+	else if (Keyword = KEYWORD_RETURN) {
+		Console:AWrite("return")
+	}
+}
 
 
 define i8 IsAlphaNumeric(i16 Character) {
@@ -722,4 +869,391 @@ define i64 SafeStringToI64(SafeWideString* StringToReadFrom, i8* Success) {
 	}
 	
 	return Result
+}
+
+i8 TYPE_I8 := 0
+i8 TYPE_I16 := 1
+i8 TYPE_I32 := 2
+i8 TYPE_I64 := 3
+i8 TYPE_VOID := 4
+
+define i16 LookupTypeID(ParserState* pState, SafeWideString* TypeName) {
+	if (SafeStringEqualsAString(TypeName, "i8")) {
+		return TYPE_I8
+	}
+	else if (SafeStringEqualsAString(TypeName, "i16")) {
+		return TYPE_I16
+	}
+	else if (SafeStringEqualsAString(TypeName, "i32")) {
+		return TYPE_I32
+	}
+	else if (SafeStringEqualsAString(TypeName, "i64")) {
+		return TYPE_I64
+	}
+	else if (SafeStringEqualsAString(TypeName, "void")) {
+		return TYPE_VOID
+	}
+}
+
+i8 NONE_ASSOCIATIVE := 0
+i8 LEFT_ASSOCIATIVE := 1
+i8 RIGHT_ASSOCIATIVE := 2
+
+struct OperatorInfo {
+	i16 Value,
+	i8 Precedence,
+	i8 Association,
+	i8 IsUnary
+}
+
+define i8 GetAssociation(Token* ForOperator) {
+	if (ForOperator->Value = OPERATOR_PLUS) {
+		return LEFT_ASSOCIATIVE
+	}
+}
+
+define i8 GetPrecedence(Token* ForOperator) {
+	if (ForOperator->Value = OPERATOR_PLUS) {
+		return 5
+	}
+}
+
+struct VariableInfo {
+	SafeWideString* Name,
+	i16 TypeID,
+	i8 IsGlobal,
+	i8 IsParameter
+}
+
+define VariableInfo* AllocateNewVariableInfo() {
+	return Alloc(VariableInfo.Size) As VariableInfo*
+}
+
+struct ASTNode {
+	void* TrueNode,
+	i8 NodeType
+}
+
+struct UnaryExpression {
+	Token* Operator,
+	ASTNode* Operand
+}
+
+struct BinaryExpression {
+	ASTNode* Left,
+	Token* Operator,
+	ASTNode* Right
+}
+
+struct Block {
+	ASTNode** Statements,
+	i16 StatementCount
+}
+
+struct FunctionDefine {
+	SafeWideString* Name,
+	Block* Body,
+	VariableInfo** Parameters,
+	VariableInfo** Locals,
+	i16 ParameterCount,
+	i16 LocalCount,
+	i16 ReturnTypeID
+}
+
+struct TypeInfo {
+	i64 Dummy
+}
+
+struct ParserState {
+	TokenizerState* pState,
+	ASTNode* Functions,
+	i16 FunctionBufferSize,
+	i16 FunctionCount,
+	
+	VariableInfo* Globals,
+	i16 GlobalBufferSize,
+	i16 GlobalCount,
+	
+	TypeInfo* CustomTypes,
+	i16 CustomTypeCount
+}
+
+define ASTNode* MakeBinary(ASTNode* Left, Token* Operator, ASTNode* Right) {
+	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
+	
+	Result->Left := Left
+	Result->Operator := Operator
+	Result->Right := Right
+	
+	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*)
+}
+
+define i32 FreezeParser(ParserState* pState) {
+	return pState->pState->Index
+}
+define void UnfreezeParser(ParserState* pState, i32 Index) {
+	pState->pState->Index := Index
+}
+
+i8 NODE_TYPE_NONE := 0
+i8 NODE_TYPE_TOKEN := 1
+
+i8 NODE_TYPE_UNARY := 2
+i8 NODE_TYPE_BINARY := 3
+i8 NODE_TYPE_GROUPING := 4
+i8 NODE_TYPE_ARRAYACCESS := 5
+
+i8 NODE_TYPE_DEFINE := 6
+i8 NODE_TYPE_DLLIMPORT := 7
+
+i8 NODE_TYPE_IF := 8
+
+i8 NODE_TYPE_FOR := 9
+i8 NODE_TYPE_WHILE := 10
+i8 NODE_TYPE_LOOP := 11
+i8 NODE_TYPE_CONTINUEBREAK := 12
+
+i8 NODE_TYPE_RETURN := 13
+
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode) {
+	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
+	
+	NewNode->NodeType := NewNodeType
+	NewNode->TrueNode := NewNodeTrueNode
+	
+	return NewNode
+}
+define void FreeASTNode(ASTNode* NodeToFree) {
+	Free(NodeToFree As void*)
+}
+
+define Token* ParserNextToken(ParserState* pState) {
+	Token* NextToken := GetNextToken(pState->pState)
+	
+	/*PrintToken(NextToken)*/
+	
+	return NextToken
+}
+define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
+	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING) {
+		if (TokenToTest->Type = TokenType) {
+			return true
+		}
+	}
+	
+	if (TokenToTest->Type = TokenType && TokenToTest->Value = TokenValue) {
+		return true
+	}
+	
+	return false
+}
+define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
+	Token* NextToken := ParserNextToken(pState)
+	
+	if (NextToken->Type = TOKEN_TYPE_EOF) {
+		TokenizerError(pState->pState, "Unexpected EOF")
+	}
+	
+	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
+		TokenizerError(pState->pState, Reason)
+	}
+	
+	return NextToken
+}
+
+define void ParserStart(TokenizerState* pState) {
+	ParserState P
+	P.pState := pState
+	
+	P.GlobalBufferSize := VariableInfo.Size * 10
+	P.Globals := Alloc(P.GlobalBufferSize)
+	P.GlobalCount := 0
+	
+	P.FunctionBufferSize := 8 * 10
+	P.Functions := Alloc(P.FunctionBufferSize)
+	P.FunctionCount := 0
+	
+	PrintAST(ParseExpression(&P, 0))
+
+
+}
+define void ParseProgram(ParserState* pState) {
+	loop {
+		Token* NextToken := ParserNextToken(pState)
+		
+		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
+			Console:AWriteLine("Found define")
+			
+			FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+			
+			FreeToken(NextToken)
+			NextToken := ParserNextToken(pState)
+			
+			if (NextToken->Type != TOKEN_TYPE_IDENTIFER) {
+				TokenizerError(pState->pState, "Invalid function return type")
+			}
+			
+			NewDefine->ReturnTypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
+			
+			FreeToken(NextToken)
+			NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+			
+			NewDefine->Name := (NextToken->Value) As SafeWideString*
+			
+			FreeTokenOnly(NextToken)
+			NextToken := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+		
+			i8 ParameterCount := 0
+			VariableInfo** ParameterList := Alloc(VariableInfo.Size * 8) As VariableInfo**
+			
+			loop {
+				VariableInfo* NextParameter := AllocateNewVariableInfo()
+				
+				if (ParameterCount >= 7) {
+					ParameterList := ReAlloc(ParameterList As void*, VariableInfo.Size * ParameterCount) As VariableInfo**
+				}
+				
+				ParameterList[ParameterCount] := NextParameter
+				
+				FreeTokenOnly(NextToken)
+				NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
+				
+				NextParameter->TypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
+				
+				FreeToken(NextToken)
+				NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+				
+				NextParameter->Name := (NextToken->Value) As SafeWideString*
+				NextParameter->IsGlobal := false
+				NextParameter->IsParameter := true
+				
+				FreeTokenOnly(NextToken)
+				
+				ParameterCount++
+				NextToken := ParserNextToken(pState)
+				
+				if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					break
+				}
+			}
+			
+			if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+				TokenizerError(pState->pState, "Expected closing paren for parameter list")
+			}
+			
+			FreeToken(NextToken)
+			
+			Console:AWrite("Parameter Count: ")
+			Console:IWriteLine(ParameterCount)
+			
+			NewDefine->Parameters := ParameterList
+			NewDefine->ParameterCount := ParameterCount
+		
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
+		
+		}
+	
+		break
+	}
+}
+
+define ASTNode* ParseStatement(ParserState* pState) {
+	i32 Index := FreezeParser(pState)
+	
+	Token* NextToken := ParserNextToken(pState)
+	
+	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
+		if (NextToken->Value = KEYWORD_CONTINUE) {
+			return AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true)
+		}
+		else if (NextToken->Value = KEYWORD_BREAK) {
+			return AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false)
+		}
+		else if (NextToken->Value = KEYWORD_RETURN) {
+			return AllocateNewASTNode(NODE_TYPE_RETURN, ParseExpression(pState, 0) As void*)
+		}
+	}
+}
+
+define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
+	return AllocateNewASTNode(NODE_TYPE_TOKEN, TokenToTranslate As void*)
+}
+
+define ASTNode* ParseExpressionOperand(ParserState* pState) {
+	Token* NextToken := ParserNextToken(pState)
+	ASTNode* Result := 0
+	
+	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
+		Result := ParseExpression(pState, 0)
+		
+		FreeToken(NextToken)
+		NextToken := ParserNextToken(pState)
+		
+		if (NextToken->Type != TOKEN_TYPE_PUNCTUATION || NextToken->Type != PUNCTUATION_CLOSE_PAREN) {
+			TokenizerError(pState->pState, "Expected closing paren")
+		}
+		
+		FreeToken(NextToken)
+	}
+	else if (NextToken->Type = TOKEN_TYPE_INTEGER || NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+		Result := TranslateTokenToNode(NextToken)
+	}
+	else {
+		TokenizerError(pState->pState, "Expected token in expression")
+	}
+	
+	return Result
+}
+
+define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
+	ASTNode* Result := ParseExpressionOperand(pState)
+	
+	i32 FrozenState := FreezeParser(pState)
+	Token* OperatorToken := ParserNextToken(pState)
+	
+	while (OperatorToken->Type = TOKEN_TYPE_OPERATOR && GetPrecedence(OperatorToken) > Precedence) {
+		i8 NewPrecedence := GetPrecedence(OperatorToken)
+		
+		if (GetAssociation(OperatorToken) = LEFT_ASSOCIATIVE) {
+			NewPrecedence += 1
+		}
+		
+		ASTNode* Operand := ParseExpression(pState, NewPrecedence)
+		Result := MakeBinary(Result, OperatorToken, Operand)
+		
+		FrozenState := FreezeParser(pState)
+		OperatorToken := ParserNextToken(pState)
+	}
+	
+	UnfreezeParser(pState, FrozenState)
+	
+	return Result
+}
+
+define void PrintAST(ASTNode* NodeToPrint) {
+	i8 NodeType := NodeToPrint->NodeType
+	
+	if (NodeType = NODE_TYPE_BINARY) {
+		BinaryExpression* BinaryNode := (NodeToPrint->TrueNode) As BinaryExpression*
+		
+		Console:WriteCharacter('(')
+		PrintAST(BinaryNode->Left)
+		Console:WriteCharacter(' ')
+		PrintOperator(BinaryNode->Operator->Value)
+		Console:WriteCharacter(' ')
+		PrintAST(BinaryNode->Right)
+		Console:WriteCharacter(')')
+	}
+	else if (NodeType = NODE_TYPE_TOKEN) {
+		Token* TokenNode := (NodeToPrint->TrueNode) As Token*
+		
+		if (TokenNode->Type = TOKEN_TYPE_IDENTIFER) {
+			PrintSafeString((TokenNode->Value) As SafeWideString*)
+		}
+		else if (TokenNode->Type = TOKEN_TYPE_INTEGER) {
+			Console:IWrite(TokenNode->Value)
+		}
+	}
+
 }

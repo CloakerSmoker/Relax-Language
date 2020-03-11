@@ -36,7 +36,7 @@ ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
 ;A_Args := StrSplit("-i Examples\Struct.rlx -o out.exe --no-confirm", " ")
-;A_Args := StrSplit("-i Examples\SimpleConsoleProgram.rlx -o a.exe --no-confirm", " ")
+A_Args := StrSplit("-i Bootstrap\Lexer.rlx -o out.exe", " ")
 
 ;todo memory module is fucked
 
@@ -220,6 +220,7 @@ ShowError(Message) {
 	if !(Hide) {
 		HasHadError := True
 		ConsoleWrite(Colors.Red, Message)
+		ConsoleWrite(Colors.Red, StringifyCallstack(4))
 	}
 	
 	Throw, Exception(Message)

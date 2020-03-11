@@ -125,13 +125,22 @@
 	AddStructTypes(Program) {
 		this.CustomTypes := {}
 		
-		for StructName, StructNode in Program.CustomTypes {
+		for k, StructNode in Program.CustomTypes {
 			Offsets := {}
 			Size := 0
 			Types := {}
 			
 			for k, TypePair in StructNode.Types {
-				Type := this.Typing.GetType(TypePair[1].Value)
+				try {
+					Type := this.Typing.GetType(TypePair[1].Value)
+				}
+				catch {
+					new Error("Type")
+						.LongText("Unknown type")
+						.Token(TypePair[1])
+					.Throw()
+				}
+				
 				TypeSize := Floor(Type.Precision / 8)
 				Name := TypePair[2].Value
 				
@@ -155,6 +164,7 @@
 			
 			Info := {"Size": Size, "Offsets": Offsets, "RoundedSize": RoundedSize, "Types": Types}
 			
+			StructName := StructNode.NameToken.Value
 			this.CustomTypes[StructName] := Info
 			this.Typing.AddCustomType(StructName, Info)
 		}
