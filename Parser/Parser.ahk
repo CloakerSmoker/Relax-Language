@@ -597,8 +597,6 @@
 							NextOperator := OperatorStack.Pop()
 							
 							if (Operators.IsPrefix(NextOperator)) {
-								a := 1
-								
 								if (Operators.GetPrecedence(NextOperator) < Operators.GetPrecedence(Operator)) {
 									this.AddNode(OperandStack, 1, Operators.EnsurePrefix(NextOperator))
 								}

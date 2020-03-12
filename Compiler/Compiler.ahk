@@ -255,8 +255,8 @@
 		}
 	}
 
-	static PushSavedRegisters := [RCX, RDX, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15]
-	static PopSavedRegisters := [R15, R14, R13, R12, R11, R10, R9, R8, RDI, RSI, RDX, RCX]
+	static PushSavedRegisters := [RSI, RDI, R12, R13, R14, R15]
+	static PopSavedRegisters := [R15, R14, R13, R12, RDI, RSI]
 	
 	PushA() {
 		this.CodeGen.Push(RBP), this.StackDepth++
