@@ -149,9 +149,9 @@ i8 PUNCTUATION_CLOSE_PAREN := 1
 i8 PUNCTUATION_OPEN_BRACE := 2
 i8 PUNCTUATION_CLOSE_BRACE := 3
 
-i8 PUNCTUATION_CLOSE_BRACKET := 6
+i8 PUNCTUATION_CLOSE_BRACKET := 4
 
-i8 PUNCTUATION_COMMA := 6
+i8 PUNCTUATION_COMMA := 5
 
 
 i8 KEYWORD_DEFINE := 0
@@ -905,6 +905,28 @@ define i16 LookupTypeID(ParserState* pState, SafeWideString* TypeName) {
 		return TYPE_VOID
 	}
 }
+define i16 PrintTypeID(i8 TypeID) {
+	if (TypeID <= 3) {
+		Console:WriteCharacter('i')
+		
+		if (TypeID = TYPE_I8) {
+			Console:IWrite(8)
+		}
+		else if (TypeID = TYPE_I16) {
+			Console:IWrite(16)
+		}
+		else if (TypeID = TYPE_I32) {
+			Console:IWrite(32)
+		}
+		else if (TypeID = TYPE_I64) {
+			Console:IWrite(64)
+		}
+	}
+	else if (TypeID = 4) {
+		Console:AWrite("void")
+	}
+
+}
 
 i8 NONE_ASSOCIATIVE := 0
 i8 LEFT_ASSOCIATIVE := 1
@@ -923,6 +945,12 @@ define i8 GetPrecedence(Token* ForOperator) {
 		return 2
 	}
 	else if (Operator = OPERATOR_BANG_EQUAL || Operator = OPERATOR_EQUAL) {
+		return 3
+	}
+	else if (Operator = OPERATOR_GREATER_EQAUL || Operator = OPERATOR_LESS_EQAUL) {
+		return 3
+	}
+	else if (Operator = OPERATOR_GREATER || Operator = OPERATOR_LESS) {
 		return 3
 	}
 	else if (Operator = OPERATOR_AS) {
@@ -1021,11 +1049,13 @@ struct FunctionDefine {
 	VariableInfo** Locals,
 	i16 ParameterCount,
 	i16 LocalCount,
+	i16 LocalBufferSize,
 	i16 ReturnTypeID
 }
 
 struct TypeInfo {
-	i64 Dummy
+	SafeWideString* Name,
+	
 }
 
 struct ParserState {
@@ -1039,7 +1069,9 @@ struct ParserState {
 	i16 GlobalCount,
 	
 	TypeInfo* CustomTypes,
-	i16 CustomTypeCount
+	i16 CustomTypeCount,
+	
+	FunctionDefine* CurrentFunction
 }
 
 define ASTNode* MakeBinary(ASTNode* Left, Token* Operator, ASTNode* Right) {
@@ -1111,8 +1143,6 @@ define void FreeASTNode(ASTNode* NodeToFree) {
 define Token* ParserNextToken(ParserState* pState) {
 	Token* NextToken := GetNextToken(pState->pState)
 	
-	/*PrintToken(NextToken)*/
-	
 	return NextToken
 }
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
@@ -1127,6 +1157,19 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	}
 	
 	return false
+}
+define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+	i32 FrozenState := FreezeParser(pState)
+	
+	Token* NextToken := ParserNextToken(pState)
+	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
+	FreeToken(NextToken)
+	
+	if !(Matches) {
+		UnfreezeParser(pState, FrozenState)
+	}
+	
+	return Matches
 }
 define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
 	Token* NextToken := ParserNextToken(pState)
@@ -1154,6 +1197,10 @@ define void ParserStart(TokenizerState* pState) {
 	P.Functions := Alloc(P.FunctionBufferSize)
 	P.FunctionCount := 0
 	
+	ParseProgram(&P)
+	
+	return 0
+	
 	PrintAST(ParseExpression(&P, 0))
 
 
@@ -1165,96 +1212,172 @@ define void ParseProgram(ParserState* pState) {
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
 			Console:AWriteLine("Found define")
 			
-			FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
-			
-			FreeToken(NextToken)
-			NextToken := ParserNextToken(pState)
-			
-			if (NextToken->Type != TOKEN_TYPE_IDENTIFER) {
-				TokenizerError(pState->pState, "Invalid function return type")
-			}
-			
-			NewDefine->ReturnTypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
-			
-			FreeToken(NextToken)
-			NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
-			
-			NewDefine->Name := (NextToken->Value) As SafeWideString*
-			
-			FreeTokenOnly(NextToken)
-			NextToken := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
-		
-			i8 ParameterCount := 0
-			VariableInfo** ParameterList := Alloc(VariableInfo.Size * 8) As VariableInfo**
-			
-			loop {
-				VariableInfo* NextParameter := AllocateNewVariableInfo()
-				
-				if (ParameterCount >= 7) {
-					ParameterList := ReAlloc(ParameterList As void*, VariableInfo.Size * ParameterCount) As VariableInfo**
-				}
-				
-				ParameterList[ParameterCount] := NextParameter
-				
-				FreeTokenOnly(NextToken)
-				NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
-				
-				NextParameter->TypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
-				
-				FreeToken(NextToken)
-				NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
-				
-				NextParameter->Name := (NextToken->Value) As SafeWideString*
-				NextParameter->IsGlobal := false
-				NextParameter->IsParameter := true
-				
-				FreeTokenOnly(NextToken)
-				
-				ParameterCount += 1
-				NextToken := ParserNextToken(pState)
-				
-				if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-					break
-				}
-			}
-			
-			if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-				TokenizerError(pState->pState, "Expected closing paren for parameter list")
-			}
-			
-			FreeToken(NextToken)
-			
-			Console:AWrite("Parameter Count: ")
-			Console:IWriteLine(ParameterCount)
-			
-			NewDefine->Parameters := ParameterList
-			NewDefine->ParameterCount := ParameterCount
-		
+			ParseAndAddDefine(pState)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
 		
 		}
-	
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
+			Console:AWriteLine("Found struct")
+			
+			ParseAndAddStruct(pState)
+		}
+		
+		FreeToken(NextToken)
 		break
 	}
+}
+
+define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
+	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	
+	if !(CurrentFunction) {
+		TokenizerError(pState->pState, "Unexpected local variable")
+	}
+	
+	if (CurrentFunction->LocalBufferSize <= (CurrentFunction->LocalCount + 1) * 8) {
+		CurrentFunction->Locals := ReAlloc((CurrentFunction->Locals) As void*, (CurrentFunction->LocalCount + 10) * 8) As VariableInfo**
+		CurrentFunction->LocalBufferSize := (CurrentFunction->LocalCount + 10) * 8
+	}
+	
+	(CurrentFunction->Locals)[CurrentFunction->LocalCount] := NewLocal
+	
+	CurrentFunction->LocalCount += 1
+}
+
+define ASTNode* ParseAndAddDefine(ParserState* pState) {
+	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+	
+	Token* NextToken := ParserNextToken(pState)
+	
+	if (NextToken->Type != TOKEN_TYPE_IDENTIFER) {
+		TokenizerError(pState->pState, "Invalid function return type")
+	}
+	
+	NewDefine->ReturnTypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
+	
+	FreeToken(NextToken)
+	NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	
+	NewDefine->Name := (NextToken->Value) As SafeWideString*
+	
+	FreeTokenOnly(NextToken)
+	NextToken := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	
+	i8 ParameterCount := 0
+	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 8) As VariableInfo**
+	
+	loop {
+		VariableInfo* NextParameter := AllocateNewVariableInfo()
+		
+		if (ParameterCount >= 7) {
+			ParameterList := ReAlloc(ParameterList As void*, VariableInfo.Size * ParameterCount) As VariableInfo**
+		}
+		
+		ParameterList[ParameterCount] := NextParameter
+		
+		FreeTokenOnly(NextToken)
+		NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
+		
+		NextParameter->TypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
+		
+		FreeToken(NextToken)
+		NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+		
+		NextParameter->Name := (NextToken->Value) As SafeWideString*
+		NextParameter->IsGlobal := false
+		NextParameter->IsParameter := true
+		
+		FreeTokenOnly(NextToken)
+		
+		ParameterCount += 1
+		NextToken := ParserNextToken(pState)
+		
+		if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			break
+		}
+	}
+	
+	if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		TokenizerError(pState->pState, "Expected closing paren for parameter list")
+	}
+	
+	FreeToken(NextToken)
+	
+	Console:AWrite("Parameter Count: ")
+	Console:IWriteLine(ParameterCount)
+	
+	NewDefine->Parameters := ParameterList
+	NewDefine->ParameterCount := ParameterCount
+	
+	NewDefine->LocalBufferSize := 8 * 10
+	NewDefine->Locals := Alloc(8 * 10) As VariableInfo**
+	NewDefine->LocalCount := 0
+	
+	pState->CurrentFunction := NewDefine
+	NewDefine->Body := ParseBlock(pState)
+	
+	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*))
+}
+
+define Block* ParseBlock(ParserState* pState) {
+	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block"))
+	
+	i16 StatementBufferSize := 8
+	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
+	i16 StatementCount := 0
+	
+	loop {
+		if (StatementCount * 8 <= StatementBufferSize) {
+			Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
+			StatementBufferSize += (10 * 8)
+		}
+		
+		Statements[StatementCount] := ParseStatement(pState)
+		StatementCount += 1
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			break
+		}
+		else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
+			TokenizerError(pState->pState, "Expected close brace in block")
+		}
+	}
+	
+	Block* NewBlock := Alloc(Block.Size) As Block*
+	NewBlock->Statements := Statements
+	NewBlock->StatementCount := StatementCount
+	
+	Console:AWrite("Made new block with ")
+	Console:IWrite(StatementCount)
+	Console:AWriteLine(" statements")
+	
+	return NewBlock
 }
 
 define ASTNode* ParseStatement(ParserState* pState) {
 	i32 Index := FreezeParser(pState)
 	
 	Token* NextToken := ParserNextToken(pState)
+	ASTNode* Result := 0
+	
+	PrintToken(NextToken)
 	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
 		if (NextToken->Value = KEYWORD_CONTINUE) {
-			return AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true)
+			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true)
 		}
 		else if (NextToken->Value = KEYWORD_BREAK) {
-			return AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false)
+			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false)
 		}
 		else if (NextToken->Value = KEYWORD_RETURN) {
-			return AllocateNewASTNode(NODE_TYPE_RETURN, ParseExpression(pState, 0) As void*)
+			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ParseExpression(pState, 0) As void*)
 		}
 	}
+	
+	FreeToken(NextToken)
+	
+	return Result
 }
 
 define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
@@ -1408,9 +1531,9 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		i32 ParameterIndex := 0
 		
 		loop (CallNode->ParameterCount) {
-			ASTNode* NextParameter := (CallNode->Parameters)[ParameterIndex]
+			ASTNode* NextCallParameter := (CallNode->Parameters)[ParameterIndex]
 			
-			PrintAST(NextParameter)
+			PrintAST(NextCallParameter)
 			
 			ParameterIndex += 1
 			
@@ -1432,5 +1555,52 @@ define void PrintAST(ASTNode* NodeToPrint) {
 			Console:IWrite(TokenNode->Value)
 		}
 	}
-
+	else if (NodeType = NODE_TYPE_DEFINE) {
+		FunctionDefine* DefineNode := (NodeToPrint->TrueNode) As FunctionDefine*
+		
+		Console:AWrite("define ")
+		PrintTypeID(DefineNode->ReturnTypeID)
+		Console:WriteCharacter(' ')
+		PrintSafeString(DefineNode->Name)
+		Console:WriteCharacter('(')
+		
+		i32 ParameterIndex := 0
+		
+		loop (DefineNode->ParameterCount) {
+			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
+			
+			PrintTypeID(NextDefineParameter->TypeID)
+			Console:WriteCharacter(' ')
+			PrintSafeString(NextDefineParameter->Name)
+			
+			ParameterIndex += 1
+			
+			if (ParameterIndex != DefineNode->ParameterCount) {
+				Console:WriteCharacter(',')
+				Console:WriteCharacter(' ')
+			}
+		}
+		
+		Console:AWriteLine(") {")
+		
+		i32 StatementIndex := 0
+		
+		loop (DefineNode->Body->StatementCount) {
+			ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
+			
+			PrintAST(BodyStatement)
+			
+			StatementIndex += 1
+		}
+		
+		Console:WriteCharacter('}')
+		Console:WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_RETURN) {
+		ASTNode* ReturnExpression := (NodeToPrint->TrueNode) As ASTNode*
+		
+		Console:AWrite("return ")
+		PrintAST(ReturnExpression)
+		Console:WriteNewLine()
+	}
 }

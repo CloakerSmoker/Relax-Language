@@ -126,6 +126,8 @@ class Relax {
 		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser, Flags)
 		CodeOptimizer.OptimizeProgram(CodeAST)
 		
+		Log("Finished optimizing")
+		
 		CodeCompiler := new Compiler(CodeLexer, CodeParser, Flags)
 		CodeCompiler.CompileProgram(CodeAST, Name)
 		

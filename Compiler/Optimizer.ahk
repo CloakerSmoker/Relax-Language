@@ -296,7 +296,7 @@
 					return True
 				}
 				Case Tokens.IDENTIFIER: {
-					return this.VariableIsConstant[Something.Value]
+					return false
 				}
 			}
 		
