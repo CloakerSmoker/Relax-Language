@@ -1,3 +1,115 @@
+struct HashMapElement {
+	i64 Hash,
+	void Value,
+	void* NextElement
+}
+
+struct HashMap {
+	i32 BufferMaxCount,
+	void *Elements
+}
+
+define HashMap* NewHashMap() {
+	HashMap* NewMap := Alloc(HashMap.Size) As HashMap*
+	
+	NewMap->BufferMaxCount := 50
+	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
+	
+	return NewMap
+}
+define i64 HashString(SafeWideString* StringToHash) {
+	i64 Hash := 5281
+	i32 Index := 0
+	
+	loop (StringToHash->Length) {
+		Hash := ((Hash * 32) + Hash) ^ ((StringToHash->Buffer)[Index])
+		Index += 1
+	}
+	
+	return Hash
+}
+define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
+	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	
+	HashMapElement* Node := (TargetMap->Elements)[Index]
+	
+	if !(Node) {
+		return false As HashMapElement*
+	}
+
+	while (Node->Hash != Hash) {
+		if !(Node->NextElement) {
+			return Node
+		}
+		
+		Node := (Node->NextElement) As HashMapElement*
+		/* The cast is since types can't contain themselves yet */
+	}
+	
+	return Node
+}
+define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) {
+	i64 Hash := HashString(Key)
+	
+	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
+	
+	if (Result != 0) {
+		if (Result->Hash = Hash) {
+			return Result
+		}
+	}
+	
+	return false As HashMapElement*
+}
+define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
+	i64 Hash := HashString(Key)
+	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	
+	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
+	HashMapElement* NewElement := 0
+	
+	if (TailElement = 0) {
+		/* If TailElement = 0 then:
+			No linked list exists for this index
+			Create one, and insert the head into the element list
+		*/
+		
+		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement->NextElement := 0
+		
+		(TargetMap->Elements)[Index] := NewElement
+	}
+	else if (TailElement->Hash != Hash) {
+		/* else if TailElement->Hash != Hash:
+			Linked list exists, but doesn't contain the key yet
+			Create new element, and insert it into to the list
+		*/
+		
+		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement->NextElement := TailElement->NextElement
+	
+		TailElement->NextElement := NewElement
+	}
+	else {
+		/* Else, the tail node exists, and the hash matches
+			Aka this key already has an element
+			So just overwrite the values in it
+		*/
+		
+		NewElement := TailElement
+		TailElement->NextElement := 0
+	}
+	
+	NewElement->Hash := Hash
+	NewElement->Value := Value
+}
+
+
+
+
+
+
+
 struct Token {
 	void* Value,
 	i32 PositionInSource,
@@ -398,7 +510,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 				FreeSafeString(TokenText)
 				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
 			}
-			else {
+			else {		
 				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, TokenText As void*)
 			}
 		}
@@ -1007,12 +1119,25 @@ define i8 IsPrefixOperator(Token* ForOperator) {
 struct VariableInfo {
 	SafeWideString* Name,
 	i16 TypeID,
+	i16 ScopedID,
 	i8 IsGlobal,
 	i8 IsParameter
 }
 
 define VariableInfo* AllocateNewVariableInfo() {
 	return Alloc(VariableInfo.Size) As VariableInfo*
+}
+define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
+	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
+}
+define i32 HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
+	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
+	
+	if (Result) {
+		return (Result->Value) As VariableInfo*
+	}
+	
+	return 0 As VariableInfo*
 }
 
 struct ASTNode {
@@ -1046,30 +1171,35 @@ struct FunctionDefine {
 	SafeWideString* Name,
 	Block* Body,
 	VariableInfo** Parameters,
-	VariableInfo** Locals,
+	HashMap* Locals,
 	i16 ParameterCount,
 	i16 LocalCount,
-	i16 LocalBufferSize,
 	i16 ReturnTypeID
 }
 
-struct TypeInfo {
+struct StructField {
 	SafeWideString* Name,
-	
+	i16 Offset,
+	i16 TypeID
+}
+
+struct StructTypeInfo {
+	SafeWideString* Name,
+	StructField** Fields,
+	i16 FieldCount
 }
 
 struct ParserState {
 	TokenizerState* pState,
-	ASTNode* Functions,
-	i16 FunctionBufferSize,
+	
+	HashMap* Functions,
 	i16 FunctionCount,
 	
-	VariableInfo* Globals,
-	i16 GlobalBufferSize,
+	HashMap* Globals,
 	i16 GlobalCount,
 	
-	TypeInfo* CustomTypes,
-	i16 CustomTypeCount,
+	HashMap* StructTypes,
+	i16 StructTypeCount,
 	
 	FunctionDefine* CurrentFunction
 }
@@ -1127,6 +1257,7 @@ i8 NODE_TYPE_LOOP := 11
 i8 NODE_TYPE_CONTINUEBREAK := 12
 
 i8 NODE_TYPE_RETURN := 13
+i8 NODE_TYPE_EXPRESSION := 14
 
 define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode) {
 	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
@@ -1189,13 +1320,14 @@ define void ParserStart(TokenizerState* pState) {
 	ParserState P
 	P.pState := pState
 	
-	P.GlobalBufferSize := VariableInfo.Size * 10
-	P.Globals := Alloc(P.GlobalBufferSize)
+	P.Globals := NewHashMap()
 	P.GlobalCount := 0
 	
-	P.FunctionBufferSize := 8 * 10
-	P.Functions := Alloc(P.FunctionBufferSize)
+	P.Functions := NewHashMap()
 	P.FunctionCount := 0
+	
+	P.StructTypes := NewHashMap()
+	P.StructTypeCount := 0
 	
 	ParseProgram(&P)
 	
@@ -1228,6 +1360,60 @@ define void ParseProgram(ParserState* pState) {
 	}
 }
 
+define void ParseAndAddStruct(ParserState* pState) {
+	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected open brace for struct body"))
+	
+	StructField** Fields := Alloc(8 * 10) As StructField**
+	i16 FieldBufferSize := 8 * 10
+	i16 FieldCount := 0
+	
+	loop {
+		StructField* NextField := Alloc(StructField.Size) As StructField*
+		
+		Token* TypeName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field type")
+		NextField->TypeID := LookupTypeID(pState, (TypeName->Value) As SafeWideString*)
+		FreeToken(TypeName)
+		
+		Token* Name := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
+		NextField->Name := (Name->Value) As SafeWideString*
+		FreeTokenOnly(Name)
+		
+		Fields[FieldCount] := NextField
+		FieldCount += 1
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			break
+		}
+	
+	}
+
+
+
+
+
+
+
+}
+
+define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableName) {
+	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	VariableInfo* FoundVariable := 0
+	
+	if (CurrentFunction) {
+		FoundVariable := HashMapGetVariable(CurrentFunction->Locals, VariableName)
+	}
+	
+	if !(FoundVariable) {
+		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
+	}
+	
+	if !(FoundVariable) {
+		TokenizerError(pState->pState, "Undefined variable")
+	}
+	
+	return FoundVariable
+}
+
 define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	
@@ -1235,18 +1421,21 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 		TokenizerError(pState->pState, "Unexpected local variable")
 	}
 	
-	if (CurrentFunction->LocalBufferSize <= (CurrentFunction->LocalCount + 1) * 8) {
-		CurrentFunction->Locals := ReAlloc((CurrentFunction->Locals) As void*, (CurrentFunction->LocalCount + 10) * 8) As VariableInfo**
-		CurrentFunction->LocalBufferSize := (CurrentFunction->LocalCount + 10) * 8
+	if (HashMapGetVariable(CurrentFunction->Locals, NewLocal->Name)) {
+		TokenizerError(pState->pState, "Duplicate definition")
 	}
 	
-	(CurrentFunction->Locals)[CurrentFunction->LocalCount] := NewLocal
-	
+	NewLocal->ScopedID := CurrentFunction->LocalCount
 	CurrentFunction->LocalCount += 1
+	
+	HashMapAddVariable(CurrentFunction->Locals, NewLocal)
 }
 
 define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+	
+	NewDefine->Locals := NewHashMap()
+	pState->CurrentFunction := NewDefine
 	
 	Token* NextToken := ParserNextToken(pState)
 	
@@ -1265,13 +1454,13 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	NextToken := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
 	i8 ParameterCount := 0
-	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 8) As VariableInfo**
+	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
 	
 	loop {
 		VariableInfo* NextParameter := AllocateNewVariableInfo()
 		
-		if (ParameterCount >= 7) {
-			ParameterList := ReAlloc(ParameterList As void*, VariableInfo.Size * ParameterCount) As VariableInfo**
+		if (ParameterCount >= 16) {
+			TokenizerError(pState->pState, "Max parameter limit reached")
 		}
 		
 		ParameterList[ParameterCount] := NextParameter
@@ -1287,6 +1476,8 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		NextParameter->Name := (NextToken->Value) As SafeWideString*
 		NextParameter->IsGlobal := false
 		NextParameter->IsParameter := true
+		
+		ParserAddLocal(pState, NextParameter)
 		
 		FreeTokenOnly(NextToken)
 		
@@ -1314,7 +1505,6 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	NewDefine->Locals := Alloc(8 * 10) As VariableInfo**
 	NewDefine->LocalCount := 0
 	
-	pState->CurrentFunction := NewDefine
 	NewDefine->Body := ParseBlock(pState)
 	
 	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*))
@@ -1356,7 +1546,7 @@ define Block* ParseBlock(ParserState* pState) {
 }
 
 define ASTNode* ParseStatement(ParserState* pState) {
-	i32 Index := FreezeParser(pState)
+	i32 FrozenState := FreezeParser(pState)
 	
 	Token* NextToken := ParserNextToken(pState)
 	ASTNode* Result := 0
@@ -1376,6 +1566,11 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	}
 	
 	FreeToken(NextToken)
+	
+	if (Result = 0) {
+		UnfreezeParser(pState, FrozenState)
+		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*)
+	}
 	
 	return Result
 }
@@ -1601,6 +1796,12 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		Console:AWrite("return ")
 		PrintAST(ReturnExpression)
+		Console:WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_EXPRESSION) {
+		ASTNode* ExpressionStatement := (NodeToPrint->TrueNode) As ASTNode*
+		
+		PrintAST(ExpressionStatement)
 		Console:WriteNewLine()
 	}
 }

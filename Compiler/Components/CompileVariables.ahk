@@ -12,11 +12,6 @@
 				IndexRegister := RDI
 			}
 			else {
-				if (NameToken.Value ~= "^t.*?") {
-					MsgBox, % NameToken.Value "`n" Index
-				}
-				
-				
 				this.CodeGen.SmallMove(RAX, Index)
 				IndexRegister := RAX
 				Multiplier := 1
