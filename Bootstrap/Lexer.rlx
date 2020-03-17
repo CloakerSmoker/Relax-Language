@@ -108,8 +108,6 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 
 
 
-
-
 struct Token {
 	void* Value,
 	i32 PositionInSource,
@@ -120,6 +118,27 @@ struct Token {
 struct SafeWideString {
 	i32 Length,
 	i16* Buffer
+}
+
+define SafeWideString* AToS(i8* SourceString) {
+	SafeWideString* NewString := Alloc(SafeWideString.Size) As SafeWideString*
+	
+	i32 Length := 0
+	
+	loop {
+		i8 NextCharacter := SourceString[Length]
+		
+		if (NextCharacter = 0) {
+			Break
+		}
+		
+		Length += 1
+	}
+	
+	NewString->Buffer := AToW(SourceString, Length)
+	NewString->Length := Length
+	
+	return NewString
 }
 
 struct TokenizerState {
@@ -994,51 +1013,11 @@ define i64 SafeStringToI64(SafeWideString* StringToReadFrom, i8* Success) {
 	return Result
 }
 
-i8 TYPE_I8 := 0
-i8 TYPE_I16 := 1
-i8 TYPE_I32 := 2
-i8 TYPE_I64 := 3
-i8 TYPE_VOID := 4
-
-define i16 LookupTypeID(ParserState* pState, SafeWideString* TypeName) {
-	if (SafeStringEqualsAString(TypeName, "i8")) {
-		return TYPE_I8
-	}
-	else if (SafeStringEqualsAString(TypeName, "i16")) {
-		return TYPE_I16
-	}
-	else if (SafeStringEqualsAString(TypeName, "i32")) {
-		return TYPE_I32
-	}
-	else if (SafeStringEqualsAString(TypeName, "i64")) {
-		return TYPE_I64
-	}
-	else if (SafeStringEqualsAString(TypeName, "void")) {
-		return TYPE_VOID
-	}
-}
-define i16 PrintTypeID(i8 TypeID) {
-	if (TypeID <= 3) {
-		Console:WriteCharacter('i')
-		
-		if (TypeID = TYPE_I8) {
-			Console:IWrite(8)
-		}
-		else if (TypeID = TYPE_I16) {
-			Console:IWrite(16)
-		}
-		else if (TypeID = TYPE_I32) {
-			Console:IWrite(32)
-		}
-		else if (TypeID = TYPE_I64) {
-			Console:IWrite(64)
-		}
-	}
-	else if (TypeID = 4) {
-		Console:AWrite("void")
-	}
-
-}
+/*
+==========================================
+	Expression parser constant lookup functions
+==========================================
+*/
 
 i8 NONE_ASSOCIATIVE := 0
 i8 LEFT_ASSOCIATIVE := 1
@@ -1116,9 +1095,133 @@ define i8 IsPrefixOperator(Token* ForOperator) {
 	return GetPrefixPrecedence(ForOperator) != 0
 }
 
+/*
+==========================================
+	Typing helper structs
+==========================================
+*/
+
+struct TypeInfo {
+	SafeWideString* Name,
+	StructTypeInfo* StructType,
+	i16 Size,
+	i8 IsStructType,
+	i8 IsIncomplete
+}
+
+struct Type {
+	TypeInfo* TrueType,
+	i16 Size,
+	i8 PointerDepth
+}
+
+struct StructField {
+	SafeWideString* Name,
+	i16 Offset,
+	Type* ValueType
+}
+
+struct StructTypeInfo {
+	SafeWideString* Name,
+	StructField** Fields,
+	i16 FieldCount,
+	i16 Size
+}
+
+/*
+==========================================
+	Typing functions
+==========================================
+*/
+
+define void UpdateType(TypeInfo* TargetType, SafeWideString* Name, StructTypeInfo* StructInfo, i16 Size, i8 IsStruct, i8 IsIncomplete) {
+	TargetType->Name := Name
+	TargetType->StructType := StructInfo
+	TargetType->Size := Size
+	TargetType->IsStructType := IsStruct
+	TargetType->IsIncomplete := IsIncomplete
+}
+
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, StructTypeInfo* StructInfo, i16 Size, i8 IsStruct, i8 IsIncomplete) {
+	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
+	
+	UpdateType(NewType, Name, StructInfo, Size, IsStruct, IsIncomplete)
+	
+	Console:AWrite("Adding ")
+	PrintSafeString(Name)
+	Console:AWrite(" at ")
+	Console:IWriteLine(NewType As i64)
+	
+	HashMapAddValue(pState->Types, Name, NewType As void)
+	Console:IWriteLine(HashMapGetValue(pState->Types, Name)->Value)
+	
+	return NewType
+}
+
+define void CreateDefaultTypes(ParserState* pState) {
+	/* Creates all the default types, only called once */
+	AddType(pState, AToS("i8"), 0, 1, 0, 0)
+	AddType(pState, AToS("i16"), 0, 2, 0, 0)
+	AddType(pState, AToS("i32"), 0, 4, 0, 0)
+	AddType(pState, AToS("i64"), 0, 8, 0, 0)
+	AddType(pState, AToS("void"), 0, 8, 0, 0)
+}
+
+define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
+	TypeInfo* FoundTypeInfo := 0
+	
+	Console:AWrite("Found ")
+	PrintSafeString(TypeName)
+	Console:AWrite(" at ")
+	
+	if (FoundElement) {
+		Console:IWriteLine((FoundElement->Value) As i64)
+		FoundTypeInfo := (FoundElement->Value) As TypeInfo*
+	}
+	else {
+		Console:IWriteLine(0)
+		/*
+			If we did not find a typeinfo, then this type has to be an undefined user type, which is defined somewhere else
+			So, we will call AddType and add it as incomplete
+		*/
+		
+		if (PointerDepth = 0) {
+			TokenizerError(pState->pState, "Incomplete types can only be used with pointers")
+		}
+		
+		FoundTypeInfo := AddType(pState, TypeName, 0, 0, 1, 1)
+	}
+	
+	Type* Result := Alloc(Type.Size) As Type*
+	
+	Result->PointerDepth := PointerDepth
+	Result->TrueType := FoundTypeInfo
+	
+	if (PointerDepth) {
+		Result->Size := 8
+	}
+	else {
+		Result->Size := FoundTypeInfo->Size
+	}
+	
+	return Result
+}
+
+define void PrintType(Type* TypeToPrint) {
+	PrintSafeString(TypeToPrint->TrueType->Name)
+}
+
+
+/*
+==========================================
+	Variable struct + alloc helper + hashmap helpers
+==========================================
+*/
+
 struct VariableInfo {
 	SafeWideString* Name,
-	i16 TypeID,
+	Type* Type,
 	i16 ScopedID,
 	i8 IsGlobal,
 	i8 IsParameter
@@ -1130,7 +1233,7 @@ define VariableInfo* AllocateNewVariableInfo() {
 define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
 	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
 }
-define i32 HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
+define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
 	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
 	
 	if (Result) {
@@ -1140,10 +1243,65 @@ define i32 HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) 
 	return 0 As VariableInfo*
 }
 
+/*
+==========================================
+	AST Node type constants
+==========================================
+*/
+
+i8 NODE_TYPE_NONE := 0
+i8 NODE_TYPE_TOKEN := 1
+
+i8 NODE_TYPE_UNARY := 2
+i8 NODE_TYPE_BINARY := 3
+i8 NODE_TYPE_CALL := 4
+i8 NODE_TYPE_ARRAYACCESS := 5
+
+i8 NODE_TYPE_DEFINE := 6
+i8 NODE_TYPE_DLLIMPORT := 7
+
+i8 NODE_TYPE_IF := 8
+
+i8 NODE_TYPE_FOR := 9
+i8 NODE_TYPE_WHILE := 10
+i8 NODE_TYPE_LOOP := 11
+i8 NODE_TYPE_CONTINUEBREAK := 12
+
+i8 NODE_TYPE_RETURN := 13
+i8 NODE_TYPE_EXPRESSION := 14
+
+i8 NODE_TYPE_VARIABLE := 15
+i8 NODE_TYPE_INTEGER := 16
+i8 NODE_TYPE_STRING := 17
+
+/*
+==========================================
+	AST Node definition + alloc/free helpers
+==========================================
+*/
+
 struct ASTNode {
 	void* TrueNode,
 	i8 NodeType
 }
+
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode) {
+	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
+	
+	NewNode->NodeType := NewNodeType
+	NewNode->TrueNode := NewNodeTrueNode
+	
+	return NewNode
+}
+define void FreeASTNode(ASTNode* NodeToFree) {
+	Free(NodeToFree As void*)
+}
+
+/*
+==========================================
+	True AST node types
+==========================================
+*/
 
 struct UnaryExpression {
 	Token* Operator,
@@ -1172,37 +1330,16 @@ struct FunctionDefine {
 	Block* Body,
 	VariableInfo** Parameters,
 	HashMap* Locals,
+	Type* ReturnType,
 	i16 ParameterCount,
-	i16 LocalCount,
-	i16 ReturnTypeID
+	i16 LocalCount
 }
 
-struct StructField {
-	SafeWideString* Name,
-	i16 Offset,
-	i16 TypeID
-}
-
-struct StructTypeInfo {
-	SafeWideString* Name,
-	StructField** Fields,
-	i16 FieldCount
-}
-
-struct ParserState {
-	TokenizerState* pState,
-	
-	HashMap* Functions,
-	i16 FunctionCount,
-	
-	HashMap* Globals,
-	i16 GlobalCount,
-	
-	HashMap* StructTypes,
-	i16 StructTypeCount,
-	
-	FunctionDefine* CurrentFunction
-}
+/*
+==========================================
+	AST Node construction helpers
+==========================================
+*/
 
 define ASTNode* MakeBinary(ASTNode* Left, Token* Operator, ASTNode* Right) {
 	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
@@ -1231,44 +1368,32 @@ define ASTNode* MakeCall(SafeWideString* Name, ASTNode** Parameters, i32 Paramet
 	return AllocateNewASTNode(NODE_TYPE_CALL, Result As void*)
 }
 
+/*
+==========================================
+	Backing parser type + helpers
+==========================================
+*/
+
+struct ParserState {
+	TokenizerState* pState,
+	
+	HashMap* Functions,
+	i16 FunctionCount,
+	
+	HashMap* Globals,
+	i16 GlobalCount,
+	
+	HashMap* Types,
+	i16 TypeCount,
+	
+	FunctionDefine* CurrentFunction
+}
+
 define i32 FreezeParser(ParserState* pState) {
 	return pState->pState->Index
 }
 define void UnfreezeParser(ParserState* pState, i32 Index) {
 	pState->pState->Index := Index
-}
-
-i8 NODE_TYPE_NONE := 0
-i8 NODE_TYPE_TOKEN := 1
-
-i8 NODE_TYPE_UNARY := 2
-i8 NODE_TYPE_BINARY := 3
-i8 NODE_TYPE_CALL := 4
-i8 NODE_TYPE_ARRAYACCESS := 5
-
-i8 NODE_TYPE_DEFINE := 6
-i8 NODE_TYPE_DLLIMPORT := 7
-
-i8 NODE_TYPE_IF := 8
-
-i8 NODE_TYPE_FOR := 9
-i8 NODE_TYPE_WHILE := 10
-i8 NODE_TYPE_LOOP := 11
-i8 NODE_TYPE_CONTINUEBREAK := 12
-
-i8 NODE_TYPE_RETURN := 13
-i8 NODE_TYPE_EXPRESSION := 14
-
-define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode) {
-	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
-	
-	NewNode->NodeType := NewNodeType
-	NewNode->TrueNode := NewNodeTrueNode
-	
-	return NewNode
-}
-define void FreeASTNode(ASTNode* NodeToFree) {
-	Free(NodeToFree As void*)
 }
 
 define Token* ParserNextToken(ParserState* pState) {
@@ -1326,8 +1451,10 @@ define void ParserStart(TokenizerState* pState) {
 	P.Functions := NewHashMap()
 	P.FunctionCount := 0
 	
-	P.StructTypes := NewHashMap()
-	P.StructTypeCount := 0
+	P.Types	:= NewHashMap()
+	P.TypeCount := 0
+	
+	CreateDefaultTypes(&P)
 	
 	ParseProgram(&P)
 	
@@ -1337,6 +1464,13 @@ define void ParserStart(TokenizerState* pState) {
 
 
 }
+
+/*
+==========================================
+	Actual parsing functions
+==========================================
+*/
+
 define void ParseProgram(ParserState* pState) {
 	loop {
 		Token* NextToken := ParserNextToken(pState)
@@ -1360,25 +1494,45 @@ define void ParseProgram(ParserState* pState) {
 	}
 }
 
+define Type* ParseTypeName(ParserState* pState) {
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
+	i8 PointerDepth := 0
+	
+	while (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+		PointerDepth += 1
+	}
+	
+	Type* ResultType := GetType(pState, (NameToken->Value) As SafeWideString*, PointerDepth)
+	
+	FreeTokenOnly(NameToken)
+	
+	return ResultType
+}
+
 define void ParseAndAddStruct(ParserState* pState) {
 	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected open brace for struct body"))
 	
-	StructField** Fields := Alloc(8 * 10) As StructField**
-	i16 FieldBufferSize := 8 * 10
+	HashMap* Fields := NewHashMap()
 	i16 FieldCount := 0
+	i16 NextFieldOffset := 0
 	
 	loop {
 		StructField* NextField := Alloc(StructField.Size) As StructField*
 		
-		Token* TypeName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field type")
-		NextField->TypeID := LookupTypeID(pState, (TypeName->Value) As SafeWideString*)
-		FreeToken(TypeName)
+		NextField->ValueType := ParseTypeName(pState)
+
+		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		
-		Token* Name := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
-		NextField->Name := (Name->Value) As SafeWideString*
-		FreeTokenOnly(Name)
+		SafeWideString* FieldName := (NameToken->Value) As SafeWideString*
 		
-		Fields[FieldCount] := NextField
+		NextField->Name := FieldName
+		HashMapAddValue(Fields, FieldName, NextField As void)
+		
+		FreeTokenOnly(NameToken)
+		
+		NextField->Offset := NextFieldOffset
+		NextFieldOffset += NextField->ValueType->Size
+		
 		FieldCount += 1
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
@@ -1417,6 +1571,10 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	
+	Console:AWrite("Adding local ")
+	PrintSafeString(NewLocal->Name)
+	Console:WriteNewLine()
+	
 	if !(CurrentFunction) {
 		TokenizerError(pState->pState, "Unexpected local variable")
 	}
@@ -1435,18 +1593,13 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
 	
 	NewDefine->Locals := NewHashMap()
+	NewDefine->LocalCount := 0
+	
 	pState->CurrentFunction := NewDefine
 	
-	Token* NextToken := ParserNextToken(pState)
-	
-	if (NextToken->Type != TOKEN_TYPE_IDENTIFER) {
-		TokenizerError(pState->pState, "Invalid function return type")
-	}
-	
-	NewDefine->ReturnTypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
-	
-	FreeToken(NextToken)
-	NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	NewDefine->ReturnType := ParseTypeName(pState)
+
+	Token* NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	
 	NewDefine->Name := (NextToken->Value) As SafeWideString*
 	
@@ -1466,11 +1619,9 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		ParameterList[ParameterCount] := NextParameter
 		
 		FreeTokenOnly(NextToken)
-		NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
 		
-		NextParameter->TypeID := LookupTypeID(pState, (NextToken->Value) As SafeWideString*)
+		NextParameter->Type := ParseTypeName(pState)
 		
-		FreeToken(NextToken)
 		NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 		
 		NextParameter->Name := (NextToken->Value) As SafeWideString*
@@ -1500,10 +1651,6 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
-	
-	NewDefine->LocalBufferSize := 8 * 10
-	NewDefine->Locals := Alloc(8 * 10) As VariableInfo**
-	NewDefine->LocalCount := 0
 	
 	NewDefine->Body := ParseBlock(pState)
 	
@@ -1551,8 +1698,6 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	Token* NextToken := ParserNextToken(pState)
 	ASTNode* Result := 0
 	
-	PrintToken(NextToken)
-	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
 		if (NextToken->Value = KEYWORD_CONTINUE) {
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true)
@@ -1575,7 +1720,15 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	return Result
 }
 
-define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
+define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
+	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
+		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value)
+	}
+	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
+		VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
+		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*)
+	}
+	
 	return AllocateNewASTNode(NODE_TYPE_TOKEN, TokenToTranslate As void*)
 }
 
@@ -1632,13 +1785,13 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		}
 		else {
 			UnfreezeParser(pState, FrozenState)
-			Result := TranslateTokenToNode(NextToken)
+			Result := TranslateTokenToNode(pState, NextToken)
 		}
 		
 		FreeToken(NextNextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {	
-		Result := TranslateTokenToNode(NextToken)
+		Result := TranslateTokenToNode(pState, NextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
 		Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
@@ -1754,7 +1907,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		FunctionDefine* DefineNode := (NodeToPrint->TrueNode) As FunctionDefine*
 		
 		Console:AWrite("define ")
-		PrintTypeID(DefineNode->ReturnTypeID)
+		PrintType(DefineNode->ReturnType)
 		Console:WriteCharacter(' ')
 		PrintSafeString(DefineNode->Name)
 		Console:WriteCharacter('(')
@@ -1764,7 +1917,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		loop (DefineNode->ParameterCount) {
 			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
 			
-			PrintTypeID(NextDefineParameter->TypeID)
+			PrintType(NextDefineParameter->Type)
 			Console:WriteCharacter(' ')
 			PrintSafeString(NextDefineParameter->Name)
 			
@@ -1803,5 +1956,13 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		PrintAST(ExpressionStatement)
 		Console:WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_VARIABLE) {
+		VariableInfo* TargetVariable := (NodeToPrint->TrueNode) As VariableInfo*
+		
+		PrintSafeString(TargetVariable->Name)
+	}
+	else if (NodeType = NODE_TYPE_INTEGER) {
+		Console:IWrite(NodeToPrint->TrueNode)
 	}
 }

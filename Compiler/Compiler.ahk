@@ -135,10 +135,16 @@
 					Type := this.Typing.GetType(TypePair[1].Value)
 				}
 				catch {
-					new Error("Type")
-						.LongText("Unknown type")
-						.Token(TypePair[1])
-					.Throw()
+					; We know the type is valid, so fuck it
+					
+					if !(InStr(TypePair[1].Value, "*")) {
+						new Error("Type")
+							.LongText("Unknown type")
+							.Token(TypePair[1])
+						.Throw()
+					}
+					
+					Type := this.Typing.GetType("void*")
 				}
 				
 				TypeSize := Floor(Type.Precision / 8)
