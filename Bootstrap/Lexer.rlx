@@ -1103,7 +1103,7 @@ define i8 IsPrefixOperator(Token* ForOperator) {
 
 struct TypeInfo {
 	SafeWideString* Name,
-	StructTypeInfo* StructType,
+	HashMap* StructTypeFields,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete
@@ -1121,31 +1121,20 @@ struct StructField {
 	Type* ValueType
 }
 
-struct StructTypeInfo {
-	SafeWideString* Name,
-	StructField** Fields,
-	i16 FieldCount,
-	i16 Size
-}
-
 /*
 ==========================================
 	Typing functions
 ==========================================
 */
 
-define void UpdateType(TypeInfo* TargetType, SafeWideString* Name, StructTypeInfo* StructInfo, i16 Size, i8 IsStruct, i8 IsIncomplete) {
-	TargetType->Name := Name
-	TargetType->StructType := StructInfo
-	TargetType->Size := Size
-	TargetType->IsStructType := IsStruct
-	TargetType->IsIncomplete := IsIncomplete
-}
-
-define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, StructTypeInfo* StructInfo, i16 Size, i8 IsStruct, i8 IsIncomplete) {
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStruct, i8 IsIncomplete) {
 	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
 	
-	UpdateType(NewType, Name, StructInfo, Size, IsStruct, IsIncomplete)
+	NewType->Name := Name
+	NewType->StructTypeFields := Fields
+	NewType->Size := Size
+	NewType->IsStructType := IsStruct
+	NewType->IsIncomplete := IsIncomplete
 	
 	Console:AWrite("Adding ")
 	PrintSafeString(Name)
@@ -1153,18 +1142,17 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, StructTypeIn
 	Console:IWriteLine(NewType As i64)
 	
 	HashMapAddValue(pState->Types, Name, NewType As void)
-	Console:IWriteLine(HashMapGetValue(pState->Types, Name)->Value)
 	
 	return NewType
 }
 
 define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the default types, only called once */
-	AddType(pState, AToS("i8"), 0, 1, 0, 0)
-	AddType(pState, AToS("i16"), 0, 2, 0, 0)
-	AddType(pState, AToS("i32"), 0, 4, 0, 0)
-	AddType(pState, AToS("i64"), 0, 8, 0, 0)
-	AddType(pState, AToS("void"), 0, 8, 0, 0)
+	AddType(pState, AToS("i8"), 0, 1, false, false)
+	AddType(pState, AToS("i16"), 0, 2, false, false)
+	AddType(pState, AToS("i32"), 0, 4, false, false)
+	AddType(pState, AToS("i64"), 0, 8, false, false)
+	AddType(pState, AToS("void"), 0, 8, false, false)
 }
 
 define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
@@ -1190,7 +1178,7 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 			TokenizerError(pState->pState, "Incomplete types can only be used with pointers")
 		}
 		
-		FoundTypeInfo := AddType(pState, TypeName, 0, 0, 1, 1)
+		FoundTypeInfo := AddType(pState, TypeName, 0, 0, true, true)
 	}
 	
 	Type* Result := Alloc(Type.Size) As Type*
@@ -1210,6 +1198,10 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 
 define void PrintType(Type* TypeToPrint) {
 	PrintSafeString(TypeToPrint->TrueType->Name)
+	
+	loop (TypeToPrint->PointerDepth) {
+		Console:WriteCharacter('*')
+	}
 }
 
 
@@ -1489,8 +1481,11 @@ define void ParseProgram(ParserState* pState) {
 			ParseAndAddStruct(pState)
 		}
 		
+		if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
+			break
+		}
+		
 		FreeToken(NextToken)
-		break
 	}
 }
 
@@ -1510,11 +1505,16 @@ define Type* ParseTypeName(ParserState* pState) {
 }
 
 define void ParseAndAddStruct(ParserState* pState) {
-	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected open brace for struct body"))
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
+	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	FreeTokenOnly(NameToken)
+	
+	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body"))
 	
 	HashMap* Fields := NewHashMap()
 	i16 FieldCount := 0
 	i16 NextFieldOffset := 0
+	i16 TotalSize := 0
 	
 	loop {
 		StructField* NextField := Alloc(StructField.Size) As StructField*
@@ -1534,19 +1534,39 @@ define void ParseAndAddStruct(ParserState* pState) {
 		NextFieldOffset += NextField->ValueType->Size
 		
 		FieldCount += 1
+		TotalSize := NextFieldOffset
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 			break
 		}
 	
 	}
-
-
-
-
-
-
-
+	
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
+	TypeInfo* FoundType := 0
+	
+	if (FoundElement) {
+		/*
+			If an element for this type already exists in the type list then:
+				A) It has been used as an incomplete type or,
+				B) It has a duplicate definition
+			We can check ->IsIncomplete to find out which is true
+		*/
+		
+		FoundType := (FoundElement->Value) As TypeInfo*
+		
+		if !(FoundType->IsIncomplete) {
+			TokenizerError(pState->pState, "Duplicate type definition")
+		}
+		
+		FoundType->StructTypeFields := Fields
+		FoundType->Size := TotalSize
+		FoundType->IsStructType := true
+		FoundType->IsIncomplete := false
+	}
+	else {
+		AddType(pState, Name, Fields, TotalSize, true, false)
+	}
 }
 
 define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableName) {
@@ -1609,39 +1629,41 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	i8 ParameterCount := 0
 	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
 	
-	loop {
-		VariableInfo* NextParameter := AllocateNewVariableInfo()
-		
-		if (ParameterCount >= 16) {
-			TokenizerError(pState->pState, "Max parameter limit reached")
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		loop {
+			VariableInfo* NextParameter := AllocateNewVariableInfo()
+			
+			if (ParameterCount >= 16) {
+				TokenizerError(pState->pState, "Max parameter limit reached")
+			}
+			
+			ParameterList[ParameterCount] := NextParameter
+			
+			FreeTokenOnly(NextToken)
+			
+			NextParameter->Type := ParseTypeName(pState)
+			
+			NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+			
+			NextParameter->Name := (NextToken->Value) As SafeWideString*
+			NextParameter->IsGlobal := false
+			NextParameter->IsParameter := true
+			
+			ParserAddLocal(pState, NextParameter)
+			
+			FreeTokenOnly(NextToken)
+			
+			ParameterCount += 1
+			NextToken := ParserNextToken(pState)
+			
+			if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				break
+			}
 		}
 		
-		ParameterList[ParameterCount] := NextParameter
-		
-		FreeTokenOnly(NextToken)
-		
-		NextParameter->Type := ParseTypeName(pState)
-		
-		NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
-		
-		NextParameter->Name := (NextToken->Value) As SafeWideString*
-		NextParameter->IsGlobal := false
-		NextParameter->IsParameter := true
-		
-		ParserAddLocal(pState, NextParameter)
-		
-		FreeTokenOnly(NextToken)
-		
-		ParameterCount += 1
-		NextToken := ParserNextToken(pState)
-		
-		if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-			break
+		if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			TokenizerError(pState->pState, "Expected closing paren for parameter list")
 		}
-	}
-	
-	if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-		TokenizerError(pState->pState, "Expected closing paren for parameter list")
 	}
 	
 	FreeToken(NextToken)
