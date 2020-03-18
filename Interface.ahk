@@ -90,7 +90,7 @@ class Relax {
 			GlobalBytes.Push(0)
 		}
 		
-		CodeEXEBuilder := new PEBuilder()
+		CodeEXEBuilder := CodeCompiler.PEBuilder := new PEBuilder()
 		
 		if (GlobalBytes.Count()) {
 			CodeEXEBuilder.AddSection(".data", GlobalBytes, SectionCharacteristics.PackFlags("rw initialized"))

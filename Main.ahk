@@ -30,6 +30,7 @@ HelpText =
 		--fast-exit 	(Skips asking to press {Enter} before exiting)
 		--silent 	(Skips asking for user input)
 		--verbose	(Includes detailed logs of what the compiler is doing)
+		--dump      (Lists function offsets)
 )
 
 ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
@@ -79,6 +80,9 @@ for k, Arg in A_Args {
 		}
 		Case "--print-ast": {
 			PrintAST := True
+		}
+		Case "--dump": {
+			DumpOffsets := True
 		}
 		Default: {
 			ConsoleWrite(Colors.Red, "Unknown arg: '" Arg "'")
@@ -146,6 +150,14 @@ End := A_TickCount
 if (PrintAST) {
 	for k, v in StrSplit(CodeCompiler.Program.Stringify(), "`n", "`r") {
 		ConsoleWrite(Colors.White, v)
+	}
+}
+
+if (DumpOffsets) {
+	Base := CodeCompiler.PEBuilder.BaseOfCode
+	
+	for k, v in CodeCompiler.FunctionOffsets {
+		ConsoleWrite(Colors.White, k ": " Conversions.IntToHex(Base + v))
 	}
 }
 

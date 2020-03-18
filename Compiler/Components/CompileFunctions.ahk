@@ -55,6 +55,10 @@
 		this.AddVariable(VariableIndex, Name)
 		Type := this.Typing.AddVariable(TypeName, Name)
 		
+		if (Type.Family = "Custom") {
+			return VariableIndex + Type.RoundedSize
+		}
+		
 		return VariableIndex + 8
 	}
 	

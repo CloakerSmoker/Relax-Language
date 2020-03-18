@@ -92,8 +92,8 @@
 	
 	GetStructField(Expression) {
 		if (this.CustomTypes.HasKey(Expression.Left.Value) && Expression.Right.Value = "Size") {
-			this.CodeGen.Move(this.PushRegisterStack(), this.CustomTypes[Expression.Left.Value].Size)
-			return this.Typing.GetType("i16")
+			this.CodeGen.Move_R64_I32(this.PushRegisterStack(), I32(this.CustomTypes[Expression.Left.Value].Size))
+			return this.Typing.GetType("i32")
 		}
 		
 		

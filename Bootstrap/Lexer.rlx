@@ -143,7 +143,7 @@ define SafeWideString* AToS(i8* SourceString) {
 
 struct TokenizerState {
 	i16* Source,
-	Token** Tokens,
+	Token* CurrentToken,
 	i32 SourceLength,
 	i32 Index
 }
@@ -202,6 +202,7 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 	CloseHandle(InputFileHandle)
 	
 	TokenizerState T
+	T.CurrentToken := Alloc(Token.Size) As Token*
 	T.Source := Source
 	T.SourceLength := WideStringLength(Source) - 1
 	T.Index := 0
@@ -373,7 +374,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 			}
 			
 			if (NewType != TOKEN_TYPE_NONE) {
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, NewType)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, NewType)
 			}
 		}
 		
@@ -384,80 +385,80 @@ define Token* GetNextToken(TokenizerState* pState) {
 				TokenizerError(pState, "Expected close single quote for character constant")
 			}
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_INTEGER, NextCharacter)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, NextCharacter)
 		}
 		else if (NextCharacter = '=') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
 		}
 		else if (NextCharacter = '+') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
 		}
 		else if (NextCharacter = '-') {
 			if (NextCharacterMatches(pState, '>')) {
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
 			}
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
 		}
 		else if (NextCharacter = '*') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
 		}
 		else if (NextCharacter = '/') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
 		}
 		else if (NextCharacter = '.') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
 		}
 		else if (NextCharacter = '<') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
 		}
 		else if (NextCharacter = '>') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
 		}
 		else if (NextCharacter = '&') {
 			if (NextCharacterMatches(pState, '&')) {
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
 			}
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
 		}
 		else if (NextCharacter = '|') {
 			if (NextCharacterMatches(pState, '|')) {
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
 			}
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
 		}
 		else if (NextCharacter = '!') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
 		}
 		else if (NextCharacter = ':') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		}
 		else if (NextCharacter = 'a' && PeekNextCharacter(pState) = 's') {
 			GetNextCharacter(pState)
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
 		}
 		else if (NextCharacter = '(') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 		}
 		else if (NextCharacter = ')') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
 		}
 		else if (NextCharacter = '{') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
 		}
 		else if (NextCharacter = '}') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
 		}
 		else if (NextCharacter = '[') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
 		}
 		else if (NextCharacter = ']') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
 		}
 		else if (NextCharacter = ',') {
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 		}
 		else if (NextCharacter = '"') {
 			NextCharacter := 0
@@ -473,7 +474,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 			SafeWideString* FoundString := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
 			FoundString->Length -= 1
 			
-			return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_STRING, FoundString As void*)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {
 			i8 NumberIsHex := false
@@ -499,7 +500,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 			
 			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
 			i8 NumberWasConverted := 0
-			Token* ResultToken := MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_INTEGER, 0)
+			Token* ResultToken := MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, 0)
 			
 			if (NumberIsHex) {
 				ResultToken->Value := SafeStringHexToI64(AsString, &NumberWasConverted)
@@ -527,10 +528,10 @@ define Token* GetNextToken(TokenizerState* pState) {
 			
 			if (TokenAsKeyword != TOKEN_TYPE_NONE) {
 				FreeSafeString(TokenText)
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
 			}
 			else {		
-				return MakeToken(StartingIndex, pState->Index, TOKEN_TYPE_IDENTIFER, TokenText As void*)
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_IDENTIFER, TokenText As void*)
 			}
 		}
 		
@@ -548,7 +549,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 		TokenizerError(pState, " - Unexpected character")
 	}
 	
-	return MakeToken(pState->SourceLength, pState->SourceLength, TOKEN_TYPE_EOF, 0)
+	return MakeToken(pState, pState->SourceLength, TOKEN_TYPE_EOF, 0)
 }
 
 define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
@@ -655,21 +656,35 @@ define Token* AllocateNewToken() {
 	return Alloc(Token.Size) As Token*
 }
 define void FreeToken(Token* TokenToFree) {
+	return 0
+	/*
 	if (TokenToFree->Type = TOKEN_TYPE_IDENTIFER || TokenToFree->Type = TOKEN_TYPE_STRING) {
 		FreeSafeString((TokenToFree->Value) As SafeWideString*)
 	}
 	
-	Free(TokenToFree As void*)
+	Free(TokenToFree As void*)*/
 }
 define void FreeTokenOnly(Token* TokenToFree) {
-	Free(TokenToFree As void*)
+	return 0
+	/*Free(TokenToFree As void*)*/
 }
 
-define Token* MakeToken(i16 PositionInSource, i16 EndPositionInSource, i8 Type, void* Value) {
-	Token* OutputToken := AllocateNewToken()
+define Token* CopyToken(Token* TokenToCopy) {
+	Token* TokenCopy := AllocateNewToken()
+	
+	TokenCopy->PositionInSource := TokenToCopy->PositionInSource
+	TokenCopy->LengthInSource := TokenToCopy->LengthInSource
+	TokenCopy->Type := TokenToCopy->Type
+	TokenCopy->Value := TokenToCopy->Value
+	
+	return TokenCopy
+}
+
+define Token* MakeToken(TokenizerState* tState, i16 PositionInSource, i8 Type, void* Value) {
+	Token* OutputToken := tState->CurrentToken
 
 	OutputToken->PositionInSource := PositionInSource
-	OutputToken->LengthInSource := EndPositionInSource - PositionInSource
+	OutputToken->LengthInSource := (tState->Index) - PositionInSource
 	OutputToken->Type := Type
 	OutputToken->Value := Value
 	
@@ -1146,13 +1161,22 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	return NewType
 }
 
+define Type* MakeType(TypeInfo* BackingType, i8 PointerDepth) {
+	Type* NewType := Alloc(Type.Size) As Type*
+	
+	NewType->TrueType := BackingType
+	NewType->PointerDepth := PointerDepth
+
+	return NewType
+}
+
 define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the default types, only called once */
-	AddType(pState, AToS("i8"), 0, 1, false, false)
-	AddType(pState, AToS("i16"), 0, 2, false, false)
-	AddType(pState, AToS("i32"), 0, 4, false, false)
-	AddType(pState, AToS("i64"), 0, 8, false, false)
-	AddType(pState, AToS("void"), 0, 8, false, false)
+	pState->i8 := AddType(pState, AToS("i8"), 0, 1, false, false)
+	pState->i16 := AddType(pState, AToS("i16"), 0, 2, false, false)
+	pState->i32 := AddType(pState, AToS("i32"), 0, 4, false, false)
+	pState->i64 := AddType(pState, AToS("i64"), 0, 8, false, false)
+	pState->void := AddType(pState, AToS("void"), 0, 8, false, false)
 }
 
 define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
@@ -1274,6 +1298,7 @@ i8 NODE_TYPE_STRING := 17
 
 struct ASTNode {
 	void* TrueNode,
+	Type* ValueType,
 	i8 NodeType
 }
 
@@ -1306,6 +1331,12 @@ struct BinaryExpression {
 	ASTNode* Right
 }
 
+struct StructAccessExpression {
+	ASTNode* Left,
+	Token* Operator,
+	StructField* TargetField
+}
+
 struct CallExpression {
 	SafeWideString* Name,
 	ASTNode** Parameters,
@@ -1333,7 +1364,7 @@ struct FunctionDefine {
 ==========================================
 */
 
-define ASTNode* MakeBinary(ASTNode* Left, Token* Operator, ASTNode* Right) {
+define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* Operator, ASTNode* Right) {
 	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
 	
 	Result->Left := Left
@@ -1370,15 +1401,20 @@ struct ParserState {
 	TokenizerState* pState,
 	
 	HashMap* Functions,
-	i16 FunctionCount,
-	
 	HashMap* Globals,
-	i16 GlobalCount,
-	
 	HashMap* Types,
-	i16 TypeCount,
 	
-	FunctionDefine* CurrentFunction
+	TypeInfo* i8,
+	TypeInfo* i16,
+	TypeInfo* i32,
+	TypeInfo* i64,
+	TypeInfo* void,
+	
+	FunctionDefine* CurrentFunction,
+	
+	i16 FunctionCount,
+	i16 GlobalCount,
+	i16 TypeCount
 }
 
 define i32 FreezeParser(ParserState* pState) {
@@ -1451,10 +1487,6 @@ define void ParserStart(TokenizerState* pState) {
 	ParseProgram(&P)
 	
 	return 0
-	
-	PrintAST(ParseExpression(&P, 0))
-
-
 }
 
 /*
@@ -1491,13 +1523,15 @@ define void ParseProgram(ParserState* pState) {
 
 define Type* ParseTypeName(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
+	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	
 	i8 PointerDepth := 0
 	
 	while (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 		PointerDepth += 1
 	}
 	
-	Type* ResultType := GetType(pState, (NameToken->Value) As SafeWideString*, PointerDepth)
+	Type* ResultType := GetType(pState, Name, PointerDepth)
 	
 	FreeTokenOnly(NameToken)
 	
@@ -1751,66 +1785,45 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*)
 	}
 	
-	return AllocateNewASTNode(NODE_TYPE_TOKEN, TokenToTranslate As void*)
+	Console:AWrite("Unknown fuck ")
+	PrintToken(TokenToTranslate)
+	Exit(1)
 }
 
 define ASTNode* ParseExpressionOperand(ParserState* pState) {
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := CopyToken(ParserNextToken(pState))
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
 		Result := ParseExpression(pState, 0)
 		
-		FreeToken(NextToken)
 		NextToken := ParserNextToken(pState)
 		
 		if (NextToken->Type != TOKEN_TYPE_PUNCTUATION || NextToken->Value != PUNCTUATION_CLOSE_PAREN) {
 			TokenizerError(pState->pState, "Expected closing paren")
 		}
-		
-		FreeToken(NextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
-		i32 FrozenState := FreezeParser(pState)
-		
-		Token* NextNextToken := ParserNextToken(pState)
-		
-		if (TokenMatches(NextNextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			i8 ParameterIndex := 0
 			ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
 			
-			i32 AnotherFrozenState := FreezeParser(pState)
-			Token* ClosingParen := ParserNextToken(pState)
-			
-			if (TokenMatches(ClosingParen, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-				FreeToken(NextNextToken)
-				NextNextToken := ClosingParen
-			}
-			else {
-				FreeToken(ClosingParen)
-				UnfreezeParser(pState, AnotherFrozenState)
-				
-				while (TokenMatches(NextNextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA) || ParameterIndex = 0) {
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+				while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA) || ParameterIndex = 0) {
 					Parameters[ParameterIndex] := ParseExpression(pState, 0)
 					ParameterIndex += 1
-					
-					FreeToken(NextNextToken)
-					NextNextToken := ParserNextToken(pState)
 				}
 			}
 			
-			if !(TokenMatches(NextNextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 				TokenizerError(pState->pState, "Expected closing paren for function call")
 			}
 			
 			Result := MakeCall((NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
 		}
 		else {
-			UnfreezeParser(pState, FrozenState)
 			Result := TranslateTokenToNode(pState, NextToken)
 		}
-		
-		FreeToken(NextNextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {	
 		Result := TranslateTokenToNode(pState, NextToken)
@@ -1824,6 +1837,8 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		PrintToken(NextToken)
 		TokenizerError(pState->pState, "Unexpected token in expression")
 	}
+	
+	FreeToken(NextToken)
 	
 	return Result
 }
@@ -1850,7 +1865,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			ASTNode* Operand := ParseExpression(pState, NewPrecedence)
 		}
 		
-		Result := MakeBinary(Result, OperatorToken, Operand)
+		Result := MakeBinary(pState, Result, OperatorToken, Operand)
 		
 		FrozenState := FreezeParser(pState)
 		OperatorToken := ParserNextToken(pState)
