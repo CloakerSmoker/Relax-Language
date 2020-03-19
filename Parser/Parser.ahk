@@ -140,7 +140,7 @@
 				return None
 			}
 		}
-		else if (Next.Type = Tokens.IDENTIFIER && this.Typing.IsValidType(Next.Value)) {
+		else if (Next.Type = Tokens.IDENTIFIER) {
 			this.Index-- ; Backtrack to capture the type name again
 			return this.ParseDeclaration(False)
 		}

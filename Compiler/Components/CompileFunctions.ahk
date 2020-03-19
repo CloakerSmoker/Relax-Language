@@ -352,6 +352,12 @@
 				this.CodeGen.Move(ParamRegisters[A_Index - 1 + 4])
 			}
 			
+			if (Mod(this.StackDepth + StackParamCount, 2) != 1) {
+				; Break stack alignment if needed, since 0x20 is even, and the push return addr will align the stack
+				this.CodeGen.Push(0)
+				PopExtra := true
+			}
+			
 			loop, % Params.Count() {
 				ReversedIndex := Params.Count() - (A_Index - 1)
 				ParamValue := Params[ReversedIndex]
@@ -402,11 +408,6 @@
 			
 			ShadowSpaceSize := 4
 			
-			if (Mod(this.StackDepth, 2) != 1) {
-				; Break stack alignment if needed, since 0x20 is even, and the push return addr will align the stack
-				ShadowSpaceSize += 1
-			}
-			
 			this.CodeGen.SmallSub(RSP, ShadowSpaceSize * 8), this.StackDepth += ShadowSpaceSize ; Allocate shadow space (below the stack parameters)
 			
 			if (FunctionNode.Type = ASTNodeTypes.DllImport) {
@@ -418,6 +419,10 @@
 			
 			this.CodeGen.SmallAdd(RSP, (StackParamCount * 8) + (ShadowSpaceSize * 8))
 			this.StackDepth -= StackParamCount, this.StackDepth -= ShadowSpaceSize ; Free shadow space + any stack params/dummy space
+			
+			if (PopExtra) {
+				this.CodeGen.Pop(RBX)
+			}
 			
 			this.RegisterStackIndex := OldIndex
 			

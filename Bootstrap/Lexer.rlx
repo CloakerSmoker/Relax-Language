@@ -1142,6 +1142,8 @@ struct StructField {
 ==========================================
 */
 
+Type* TYPE_NONE := 0
+
 define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStruct, i8 IsIncomplete) {
 	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
 	
@@ -1149,6 +1151,7 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	NewType->StructTypeFields := Fields
 	NewType->Size := Size
 	NewType->IsStructType := IsStruct
+	Console:IWriteLine(IsStruct)
 	NewType->IsIncomplete := IsIncomplete
 	
 	Console:AWrite("Adding ")
@@ -1218,6 +1221,19 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 	}
 	
 	return Result
+}
+
+define Type* DecrementPointerType(ParserState* pState, Type* TypeToDecrement) {
+	Type* NewType := Alloc(Type.Size) As Type*
+	
+	if (TypeToDecrement->PointerDepth = 0) {
+		TokenizerError(pState->pState, "Pointer type expected")
+	}
+	
+	NewType->TrueType := TypeToDecrement->TrueType
+	NewType->PointerDepth := (TypeToDecrement->PointerDepth) - 1
+	
+	return NewType
 }
 
 define void PrintType(Type* TypeToPrint) {
@@ -1290,6 +1306,9 @@ i8 NODE_TYPE_VARIABLE := 15
 i8 NODE_TYPE_INTEGER := 16
 i8 NODE_TYPE_STRING := 17
 
+i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
+i8 NODE_TYPE_STRUCT_ACCESS := 19
+
 /*
 ==========================================
 	AST Node definition + alloc/free helpers
@@ -1302,11 +1321,12 @@ struct ASTNode {
 	i8 NodeType
 }
 
-define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode) {
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type* NewNodeValueType) {
 	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
 	
 	NewNode->NodeType := NewNodeType
 	NewNode->TrueNode := NewNodeTrueNode
+	NewNode->ValueType := NewNodeValueType
 	
 	return NewNode
 }
@@ -1337,12 +1357,6 @@ struct StructAccessExpression {
 	StructField* TargetField
 }
 
-struct CallExpression {
-	SafeWideString* Name,
-	ASTNode** Parameters,
-	i32 ParameterCount
-}
-
 struct Block {
 	ASTNode** Statements,
 	i16 StatementCount
@@ -1358,37 +1372,167 @@ struct FunctionDefine {
 	i16 LocalCount
 }
 
+struct CallExpression {
+	FunctionDefine* TargetFunction,
+	ASTNode** Parameters,
+	i32 ParameterCount
+}
+
 /*
 ==========================================
 	AST Node construction helpers
 ==========================================
 */
 
-define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* Operator, ASTNode* Right) {
+define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* RightType) {
+	TypeInfo* LeftBaseType := LeftType->TrueType
+	TypeInfo* RightBaseType := RightType->TrueType
+	
+	if (LeftType->PointerDepth && RightType->PointerDepth) {
+		TokenizerError(pState->pState, "Operations involving two pointers are disallowed.")
+	}
+	else if (LeftType->PointerDepth) {
+		if (RightBaseType->IsStructType) {
+			Console:IWriteLine(RightBaseType->IsStructType)
+			PrintType(RightType)
+			TokenizerError(pState->pState, "Invalid operation types1.")
+		}
+		
+		return LeftType
+	}
+	else if (RightType->PointerDepth) {
+		if (LeftBaseType->IsStructType) {
+			TokenizerError(pState->pState, "Invalid operation types2.")
+		}
+		
+		return RightType
+	}
+	else {
+		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
+			TokenizerError(pState->pState, "Invalid operation types3.")
+		}
+		
+		if (LeftBaseType->Size >= RightBaseType->Size) {
+			return LeftType
+		}
+		else {
+			return RightType
+		}
+	}
+}
+
+define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
+	i8 Operator := (OperatorToken->Value) As i8
+	Type* ResultType := 0
+	
+	Type* LeftType := Left->ValueType
+	Type* RightType := Right->ValueType
+	TypeInfo* LeftBaseType := LeftType->TrueType
+	TypeInfo* RightBaseType := RightType->TrueType
+	
+	if (Operator = OPERATOR_AS) {
+		if (Right->NodeType != NODE_TYPE_TYPE) {
+			TokenizerError(pState->pState, "Right side operand of 'as' must be a type name")
+		}
+		
+		ResultType := RightType
+	}
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+		if !(LeftType->TrueType->IsStructType) {
+			TokenizerError(pState->pState, "Left side operand of '.' and '->' must be of a struct type")
+		}
+		
+		if (LeftType->TrueType->IsIncomplete) {
+			TokenizerError(pState->pState, "Fields of incomplete structs cannot be accessed.")
+		}
+		
+		if (Right->NodeType != NODE_TYPE_VARIABLE) {
+			TokenizerError(pState->pState, "Right side operand of of '.' and '->' must be a string")
+		}
+		
+		SafeWideString* RightText := ((Right->TrueNode) As VariableInfo*)->Name
+		
+		HashMapElement* FoundStructField := HashMapGetValue(LeftType->TrueType->StructTypeFields, RightText)
+		
+		if !(FoundStructField) {
+			PrintSafeString(RightText)
+			Console:WriteNewLine()
+			TokenizerError(pState->pState, "Unknown struct field")
+		}
+		
+		StructField* TargetField := (FoundStructField->Value) As StructField*
+		
+		StructAccessExpression* NewAccess := Alloc(StructAccessExpression.Size) As StructAccessExpression*
+		
+		NewAccess->Left := Left
+		NewAccess->Operator := OperatorToken
+		NewAccess->TargetField := TargetField
+		
+		return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, TargetField->ValueType)
+	}
+	else if (Operator = OPERATOR_COLON_EQUAL) {
+		if (LeftType->PointerDepth && LeftBaseType->IsStructType && RightType->PointerDepth && RightBaseType->Size = 8) {
+			ResultType := LeftType
+		}
+		else if (LeftType->PointerDepth != 0 && LeftBaseType->IsStructType) {
+			TokenizerError(pState->pState, "Local structs cannot be assigned")
+		}
+		else if (LeftType->Size < RightType->Size) {
+			TokenizerError(pState->pState, "Right side operand of ':=' cannot be a bigger type than left side operand")
+		}
+		else {
+			ResultType := RightType
+		}
+	}
+	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		if (RightType->PointerDepth || RightType->TrueType->IsStructType) {
+			TokenizerError(pState->pState, "Right side operand of '[' must not be a pointer or struct.")
+		}
+		
+		ResultType := DecrementPointerType(pState, LeftType)
+	}
+	else {
+		ResultType := GetBinaryResultType(pState, LeftType, RightType)
+	}
+	
 	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
 	
 	Result->Left := Left
-	Result->Operator := Operator
+	Result->Operator := OperatorToken
 	Result->Right := Right
 	
-	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*)
+	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
 }
-define ASTNode* MakeUnary(Token* Operator, ASTNode* Operand) {
+define ASTNode* MakeUnary(ParserState* pState, Token* Operator, ASTNode* Operand) {
 	UnaryExpression* Result := Alloc(UnaryExpression.Size) As UnaryExpression*
 	
 	Result->Operator := Operator
 	Result->Operand := Operand
 	
-	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*)
+	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, Operand->ValueType)
 }
-define ASTNode* MakeCall(SafeWideString* Name, ASTNode** Parameters, i32 ParameterCount) {
+define ASTNode* MakeCall(ParserState* pState, SafeWideString* Name, ASTNode** Parameters, i32 ParameterCount) {
 	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
 	
-	Result->Name := Name
+	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+	
+	if !(FoundFunction) {
+		PrintSafeString(Name)
+		Console:WriteNewLine()
+		TokenizerError(pState->pState, "Function definition not found.")
+	}
+	
+	FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+	
+	if (FoundDefine->ParameterCount != ParameterCount) {
+		TokenizerError(pState->pState, "Invalid number of parameters passed to function.")
+	}
+	
+	Result->TargetFunction := FoundDefine
 	Result->Parameters := Parameters
 	Result->ParameterCount := ParameterCount
 	
-	return AllocateNewASTNode(NODE_TYPE_CALL, Result As void*)
+	return AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, FoundDefine->ReturnType)
 }
 
 /*
@@ -1447,7 +1591,6 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	
 	Token* NextToken := ParserNextToken(pState)
 	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
-	FreeToken(NextToken)
 	
 	if !(Matches) {
 		UnfreezeParser(pState, FrozenState)
@@ -1516,8 +1659,6 @@ define void ParseProgram(ParserState* pState) {
 		if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
 		}
-		
-		FreeToken(NextToken)
 	}
 }
 
@@ -1533,17 +1674,14 @@ define Type* ParseTypeName(ParserState* pState) {
 	
 	Type* ResultType := GetType(pState, Name, PointerDepth)
 	
-	FreeTokenOnly(NameToken)
-	
 	return ResultType
 }
 
 define void ParseAndAddStruct(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
-	FreeTokenOnly(NameToken)
 	
-	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body"))
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
 	HashMap* Fields := NewHashMap()
 	i16 FieldCount := 0
@@ -1561,8 +1699,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 		
 		NextField->Name := FieldName
 		HashMapAddValue(Fields, FieldName, NextField As void)
-		
-		FreeTokenOnly(NameToken)
 		
 		NextField->Offset := NextFieldOffset
 		NextFieldOffset += NextField->ValueType->Size
@@ -1653,12 +1789,14 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	NewDefine->ReturnType := ParseTypeName(pState)
 
-	Token* NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	NewDefine->Name := (NameToken->Value) As SafeWideString*
 	
-	NewDefine->Name := (NextToken->Value) As SafeWideString*
+	ASTNode* NewDefineNode := AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE)
 	
-	FreeTokenOnly(NextToken)
-	NextToken := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
 	i8 ParameterCount := 0
 	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
@@ -1673,34 +1811,27 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			
 			ParameterList[ParameterCount] := NextParameter
 			
-			FreeTokenOnly(NextToken)
-			
 			NextParameter->Type := ParseTypeName(pState)
 			
-			NextToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 			
-			NextParameter->Name := (NextToken->Value) As SafeWideString*
+			NextParameter->Name := (NextParameterNameToken->Value) As SafeWideString*
 			NextParameter->IsGlobal := false
 			NextParameter->IsParameter := true
 			
 			ParserAddLocal(pState, NextParameter)
 			
-			FreeTokenOnly(NextToken)
-			
 			ParameterCount += 1
-			NextToken := ParserNextToken(pState)
 			
-			if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				break
 			}
 		}
 		
-		if !(TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 			TokenizerError(pState->pState, "Expected closing paren for parameter list")
 		}
 	}
-	
-	FreeToken(NextToken)
 	
 	Console:AWrite("Parameter Count: ")
 	Console:IWriteLine(ParameterCount)
@@ -1710,11 +1841,11 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	NewDefine->Body := ParseBlock(pState)
 	
-	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*))
+	PrintAST(NewDefineNode)
 }
 
 define Block* ParseBlock(ParserState* pState) {
-	FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block"))
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
 	
 	i16 StatementBufferSize := 8
 	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
@@ -1756,33 +1887,43 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
 		if (NextToken->Value = KEYWORD_CONTINUE) {
-			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true)
+			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true, TYPE_NONE)
 		}
 		else if (NextToken->Value = KEYWORD_BREAK) {
-			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false)
+			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false, TYPE_NONE)
 		}
 		else if (NextToken->Value = KEYWORD_RETURN) {
-			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ParseExpression(pState, 0) As void*)
+			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
+			
+			if (ExpressionToReturn->ValueType->Size > pState->CurrentFunction->ReturnType->Size) {
+				TokenizerError(pState->pState, "Return type too large")
+			}
+			
+			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 		}
 	}
 	
-	FreeToken(NextToken)
-	
 	if (Result = 0) {
 		UnfreezeParser(pState, FrozenState)
-		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*)
+		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
 	}
 	
 	return Result
 }
 
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
+	Type* ResultType := 0
+	
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
-		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value)
+		ResultType := MakeType(pState->i64, 0)
+		
+		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
 		VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
-		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*)
+		ResultType := FoundVariable->Type
+		
+		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, ResultType)
 	}
 	
 	Console:AWrite("Unknown fuck ")
@@ -1797,9 +1938,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
 		Result := ParseExpression(pState, 0)
 		
-		NextToken := ParserNextToken(pState)
-		
-		if (NextToken->Type != TOKEN_TYPE_PUNCTUATION || NextToken->Value != PUNCTUATION_CLOSE_PAREN) {
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 			TokenizerError(pState->pState, "Expected closing paren")
 		}
 	}
@@ -1813,13 +1952,13 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 					Parameters[ParameterIndex] := ParseExpression(pState, 0)
 					ParameterIndex += 1
 				}
+				
+				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+					TokenizerError(pState->pState, "Expected closing paren for function call")
+				}
 			}
 			
-			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-				TokenizerError(pState->pState, "Expected closing paren for function call")
-			}
-			
-			Result := MakeCall((NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
+			Result := MakeCall(pState, (NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
 		}
 		else {
 			Result := TranslateTokenToNode(pState, NextToken)
@@ -1831,7 +1970,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
 		Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
 		
-		Result := MakeUnary(NextToken, Result)
+		Result := MakeUnary(pState, NextToken, Result)
 	}
 	else {
 		PrintToken(NextToken)
@@ -1847,7 +1986,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	ASTNode* Result := ParseExpressionOperand(pState)
 	
 	i32 FrozenState := FreezeParser(pState)
-	Token* OperatorToken := ParserNextToken(pState)
+	Token* OperatorToken := CopyToken(ParserNextToken(pState))
 	
 	while (OperatorToken->Type = TOKEN_TYPE_OPERATOR && GetPrecedence(OperatorToken) >= Precedence) {
 		i8 NewPrecedence := GetPrecedence(OperatorToken)
@@ -1856,19 +1995,24 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			NewPrecedence += 1
 		}
 		
+		ASTNode* Operand := 0
+		
 		if (OperatorToken->Value = OPERATOR_OPEN_BRACKET) {
-			ASTNode* Operand := ParseExpression(pState, 0)
+			Operand := ParseExpression(pState, 0)
 			
-			FreeToken(Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access"))
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
+		}
+		else if (OperatorToken->Value = OPERATOR_AS) {
+			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, ParseTypeName(pState) As void*, TYPE_NONE)
 		}
 		else {
-			ASTNode* Operand := ParseExpression(pState, NewPrecedence)
+			Operand := ParseExpression(pState, NewPrecedence)
 		}
 		
 		Result := MakeBinary(pState, Result, OperatorToken, Operand)
 		
 		FrozenState := FreezeParser(pState)
-		OperatorToken := ParserNextToken(pState)
+		OperatorToken := CopyToken(ParserNextToken(pState))
 	}
 	
 	UnfreezeParser(pState, FrozenState)
@@ -1909,7 +2053,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 	else if (NodeType = NODE_TYPE_CALL) {
 		CallExpression* CallNode := (NodeToPrint->TrueNode) As CallExpression*
 		
-		PrintSafeString(CallNode->Name)
+		PrintSafeString(CallNode->TargetFunction->Name)
 		
 		Console:WriteCharacter('(')
 		
@@ -2001,5 +2145,8 @@ define void PrintAST(ASTNode* NodeToPrint) {
 	}
 	else if (NodeType = NODE_TYPE_INTEGER) {
 		Console:IWrite(NodeToPrint->TrueNode)
+	}
+	else if (NodeType = NODE_TYPE_TYPE) {
+		PrintType((NodeToPrint->TrueNode) As Type*)
 	}
 }
