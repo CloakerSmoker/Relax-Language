@@ -1096,6 +1096,9 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 	if (Operator = OPERATOR_STAR) {
 		return 4
 	}
+	else if (Operator = OPERATOR_AND) {
+		return 4
+	}
 	else if (Operator = OPERATOR_BANG) {
 		return 11
 	}
@@ -1144,14 +1147,13 @@ struct StructField {
 
 Type* TYPE_NONE := 0
 
-define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStruct, i8 IsIncomplete) {
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStructType, i8 IsIncomplete) {
 	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
 	
 	NewType->Name := Name
 	NewType->StructTypeFields := Fields
 	NewType->Size := Size
-	NewType->IsStructType := IsStruct
-	Console:IWriteLine(IsStruct)
+	NewType->IsStructType := IsStructType
 	NewType->IsIncomplete := IsIncomplete
 	
 	Console:AWrite("Adding ")
@@ -1174,7 +1176,7 @@ define Type* MakeType(TypeInfo* BackingType, i8 PointerDepth) {
 }
 
 define void CreateDefaultTypes(ParserState* pState) {
-	/* Creates all the default types, only called once */
+	/* Creates all the standard types, only called once */
 	pState->i8 := AddType(pState, AToS("i8"), 0, 1, false, false)
 	pState->i16 := AddType(pState, AToS("i16"), 0, 2, false, false)
 	pState->i32 := AddType(pState, AToS("i32"), 0, 4, false, false)
@@ -1233,6 +1235,14 @@ define Type* DecrementPointerType(ParserState* pState, Type* TypeToDecrement) {
 	NewType->TrueType := TypeToDecrement->TrueType
 	NewType->PointerDepth := (TypeToDecrement->PointerDepth) - 1
 	
+	return NewType
+}
+define Type* IncrementPointerType(ParserState* pState, Type* TypeToIncrement) {
+	Type* NewType := Alloc(Type.Size) As Type*
+	
+	NewType->TrueType := TypeToIncrement->TrueType
+	NewType->PointerDepth := (TypeToIncrement->PointerDepth) + 1
+
 	return NewType
 }
 
@@ -1393,8 +1403,6 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 	}
 	else if (LeftType->PointerDepth) {
 		if (RightBaseType->IsStructType) {
-			Console:IWriteLine(RightBaseType->IsStructType)
-			PrintType(RightType)
 			TokenizerError(pState->pState, "Invalid operation types1.")
 		}
 		
@@ -1503,13 +1511,30 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
 }
-define ASTNode* MakeUnary(ParserState* pState, Token* Operator, ASTNode* Operand) {
+define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
 	UnaryExpression* Result := Alloc(UnaryExpression.Size) As UnaryExpression*
 	
-	Result->Operator := Operator
+	Type* ResultType := Operand->ValueType
+	i8 Operator := (OperatorToken->Value) As i8
+	
+	Result->Operator := OperatorToken
 	Result->Operand := Operand
 	
-	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, Operand->ValueType)
+	if (Operator = OPERATOR_BANG) {
+		ResultType := MakeType(pState->i8, 0)
+	}
+	else if (Operator = OPERATOR_AND) {
+		if (Operand->NodeType != NODE_TYPE_VARIABLE) {
+			TokenizerError(pState->pState, "Operand of the '&' operator must be a variable.")
+		}
+		
+		ResultType := IncrementPointerType(pState, ResultType)
+	}
+	else if (Operator = OPERATOR_STAR) {
+		ResultType := DecrementPointerType(pState, ResultType)
+	}
+	
+	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
 }
 define ASTNode* MakeCall(ParserState* pState, SafeWideString* Name, ASTNode** Parameters, i32 ParameterCount) {
 	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
@@ -1895,8 +1920,17 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		else if (NextToken->Value = KEYWORD_RETURN) {
 			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
 			
-			if (ExpressionToReturn->ValueType->Size > pState->CurrentFunction->ReturnType->Size) {
+			Type* ActualReturnType := ExpressionToReturn->ValueType
+			Type* ExpectedReturnType := pState->CurrentFunction->ReturnType
+			
+			if (ActualReturnType->Size > ExpectedReturnType->Size) {
 				TokenizerError(pState->pState, "Return type too large")
+			}
+			else if (ActualReturnType->PointerDepth != ExpectedReturnType->PointerDepth) {
+				TokenizerError(pState->pState, "Return type has wrong pointer depth")
+			}
+			else if (ExpectedReturnType->TrueType->IsStructType != ActualReturnType->TrueType->IsStructType) {
+				TokenizerError(pState->pState, "Return type should be a struct type")
 			}
 			
 			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
@@ -1911,19 +1945,34 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	return Result
 }
 
+define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
+	if (NumberToCheck & 0x7FFF8000) {
+		return MakeType(pState->i32, 0)
+	}
+	else if (NumberToCheck & 0x7F80) {
+		return MakeType(pState->i16, 0)
+	}
+	else if (NumberToCheck & 0x7F || NumberToCheck = 0) {
+		return MakeType(pState->i8, 0)
+	}
+	else {
+		return MakeType(pState->i64, 0)
+	}
+}
+
+
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
 	Type* ResultType := 0
 	
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
-		ResultType := MakeType(pState->i64, 0)
+		ResultType := GetNumberType(pState, TokenToTranslate->Value)
 		
 		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
 		VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
-		ResultType := FoundVariable->Type
 		
-		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, ResultType)
+		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)
 	}
 	
 	Console:AWrite("Unknown fuck ")
@@ -2014,6 +2063,11 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		FrozenState := FreezeParser(pState)
 		OperatorToken := CopyToken(ParserNextToken(pState))
 	}
+	
+	PrintType(Result->ValueType)
+	Console:WriteCharacter(' ')
+	PrintAST(Result)
+	Console:WriteNewLine()
 	
 	UnfreezeParser(pState, FrozenState)
 	
