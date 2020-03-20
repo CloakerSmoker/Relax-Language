@@ -158,6 +158,26 @@ DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
 DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
 
 define i32 Main(i64 ArgC, i16** ArgV) {	
+	CompilerState C
+	C.CodeBuffer := Alloc(100) As i8*
+	C.CodeBufferSize := 100
+	C.Index := 0
+	
+	C.Labels := Alloc(80) As LabelPlaceholder**
+	C.LabelCount := 0
+	C.LabelBufferCapacity := 10
+	
+	EmitEnter(&C, 16)
+	EmitSubR8R8(&C, RAX, R10)
+	EmitSubR16R16(&C, RAX, R10)
+	EmitSubR32R32(&C, RAX, R10)
+	EmitSubR64R64(&C, RAX, R10)
+	EmitLeave(&C)
+	
+	PrintCodeBytes(&C)
+	
+	Exit(2)
+	
 	if (ArgC != 2) {
 		Console:AWriteLine("No input file, aborting")
 		Exit(1)
@@ -333,7 +353,15 @@ define void TokenizerError(TokenizerState* pState, i8* Message) {
 	Console:AWrite("At: ")
 	
 	Backtrack(pState)
-	Console:IWriteLine(pState->Index)
+	
+	SafeWideString SourcePrintoutHelper
+	
+	SourcePrintoutHelper.Buffer := (pState->Source) + ((pState->Index) * 2)
+	
+	SourcePrintoutHelper.Length := WideStringLength(SourcePrintoutHelper.Buffer)
+	
+	PrintSafeString(&SourcePrintoutHelper)
+	
 	Exit(1)
 }
 
@@ -1586,6 +1614,10 @@ struct ParserState {
 	i16 TypeCount
 }
 
+define void ParserError(ParserState* pState, i8* ErrorMessage) {
+	TokenizerError(pState->pState, ErrorMessage)
+}
+
 define i32 FreezeParser(ParserState* pState) {
 	return pState->pState->Index
 }
@@ -1946,7 +1978,10 @@ define ASTNode* ParseStatement(ParserState* pState) {
 }
 
 define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
-	if (NumberToCheck & 0x7FFF8000) {
+	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		return MakeType(pState->i64, 0)
+	}
+	else if (NumberToCheck & 0x7FFF8000) {
 		return MakeType(pState->i32, 0)
 	}
 	else if (NumberToCheck & 0x7F80) {
@@ -1954,9 +1989,6 @@ define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
 	}
 	else if (NumberToCheck & 0x7F || NumberToCheck = 0) {
 		return MakeType(pState->i8, 0)
-	}
-	else {
-		return MakeType(pState->i64, 0)
 	}
 }
 
@@ -2203,4 +2235,327 @@ define void PrintAST(ASTNode* NodeToPrint) {
 	else if (NodeType = NODE_TYPE_TYPE) {
 		PrintType((NodeToPrint->TrueNode) As Type*)
 	}
+}
+
+struct Label {
+	i64 NameHash,
+	i32 Offset
+}
+
+struct LabelPlaceholder {
+	i32 LabelNumber,
+	i32 OffsetToReplace
+}
+
+struct CompilerState {
+	i8* CodeBuffer,
+	i32 CodeBufferSize,
+	i32 Index,
+	
+	LabelPlaceholder** Labels,
+	i32 LabelCount,
+	i32 LabelBufferCapacity
+}
+
+define i8 NumberToHex(i8 Number) {
+	if (Number <= 9) {
+		Number := Number + '0'
+	}
+	else {
+		Number := (Number - 10) + 'A'
+	}
+	
+	return Number
+}
+
+define void PrintByteHex(i8 NumberToPrint) {
+	i8 SecondCharacter := NumberToHex(NumberToPrint & 0x0F)
+	
+	i8 FirstCharacter := NumberToHex((NumberToPrint / 0x10) & 0x0F)
+	
+	Console:WriteCharacter(FirstCharacter)
+	Console:WriteCharacter(SecondCharacter)
+}
+
+define void PrintCodeBytes(CompilerState* cState) {
+	for (i32 Index := 0, Index < (cState->Index), Index += 1) {
+		PrintByteHex((cState->CodeBuffer)[Index])
+		Console:WriteCharacter(' ')
+	}
+}
+
+/*
+==========================================
+	Label helpers
+==========================================
+*/
+
+define void UseLabel(CompilerState* cState, i32 LabelNumber) {
+	i32 Index := cState->Index
+	
+	cState->Index += 4
+	
+	if (cState->LabelBufferCapacity <= (cState->LabelCount + 1)) {
+		cState->Labels := ReAlloc((cState->Labels) As void*, (cState->LabelBufferCapacity + 10) * 8) As LabelPlaceholder**
+		cState->LabelBufferCapacity += 10
+	}
+	
+	LabelPlaceholder* NewLabel := Alloc(LabelPlaceholder.Size) As LabelPlaceholder*
+	
+	NewLabel->LabelNumber := LabelNumber
+	NewLabel->OffsetToReplace := Index
+	
+	(cState->Labels)[cState->LabelCount] := NewLabel
+	
+	cState->LabelCount += 1
+}
+
+define void ResolveLabel(CompilerState* cState, i32 LabelNumber, i32 Value) {
+	for (i32 Index := 0, Index < cState->LabelCount, Index += 1) {
+		LabelPlaceholder* NextLabel := (cState->Labels)[Index]
+		
+		if (NextLabel->LabelNumber = LabelNumber) {
+			i32* ActualPlaceholder := ((cState->CodeBuffer) + (NextLabel->OffsetToReplace)) As i32*
+			ActualPlaceholder[0] := Value - ((NextLabel->OffsetToReplace) + 4)
+		}
+	}
+}
+
+/*
+==========================================
+	Number writing helpers
+==========================================
+*/
+
+define void* GetIndexAsPointer(CompilerState* cState) {
+	return ((cState->CodeBuffer) + (cState->Index)) As void*
+}
+
+define void PushI8(CompilerState* cState, i8 NumberToPush) {
+	(cState->CodeBuffer)[cState->Index] := NumberToPush
+	cState->Index += 1
+}
+define void PushByte(CompilerState* cState, i8 NumberToPush) {
+	PushI8(cState, NumberToPush)
+}
+
+define void PushI16(CompilerState* cState, i16 NumberToPush) {
+	i16* PushLocation := GetIndexAsPointer(cState) As i16*
+	PushLocation[0] := NumberToPush
+	
+	cState->Index += 2
+}
+define void PushI32(CompilerState* cState, i32 NumberToPush) {
+	i32* PushLocation := GetIndexAsPointer(cState) As i32*
+	PushLocation[0] := NumberToPush
+	
+	cState->Index += 4
+}
+define void PushI64(CompilerState* cState, i64 NumberToPush) {
+	i64* PushLocation := GetIndexAsPointer(cState) As i64*
+	PushLocation[0] := NumberToPush
+	
+	cState->Index += 8
+}
+
+/*
+==========================================
+	Register numbers/register helpers
+==========================================
+*/
+
+define i8 RegisterRequiresREX(i8 RegisterNumber) {
+	return RegisterNumber >= 8
+}
+define i8 ClampRegisterNumber(i8 RegisterNumber) {
+	if (RegisterRequiresREX(RegisterNumber)) {
+		return RegisterNumber - 8
+	}
+	
+	return RegisterNumber
+}
+
+i8 REX_BASE := 0x40
+
+i8 REX_W := 8
+i8 REX_R := 4
+i8 REX_X := 2
+i8 REX_B := 1
+
+i8 NO_REGISTER := 0
+i8 RAX := 0
+i8 RBX := 3
+i8 RCX := 1
+i8 RDX := 2
+i8 RSP := 4
+i8 RBP := 5
+i8 RSI := 6
+i8 RDI := 7
+i8 R8 := 8
+i8 R9 := 9
+i8 R10 := 10
+i8 R11 := 11
+i8 R12 := 12
+i8 R13 := 13
+i8 R14 := 14
+i8 R15 := 15
+
+i8 MODE_RTOR := 3
+
+/*
+==========================================
+	REX/ModRM/SIB helpers
+==========================================
+*/
+
+define void EmitREX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 ExtraREX) {
+	i8 Prefix := REX_BASE | ExtraREX
+	
+	if (RegisterRequiresREX(SourceRegister)) {
+		Prefix := Prefix | REX_B
+	}
+	
+	if (RegisterRequiresREX(DestinationRegister)) {
+		Prefix := Prefix | REX_R
+	}
+	
+	PushByte(cState, Prefix)
+}
+
+define void EmitModRM(CompilerState* cState, i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
+	PushByte(cState, (Mode * 64) | (ClampRegisterNumber(DestinationRegister) * 8) | (ClampRegisterNumber(SourceRegister)))
+}
+
+define void EmitLegacySizePrefix(CompilerState* cState) {
+	PushByte(cState, 0x66)
+}
+
+/*
+==========================================
+	Jumps
+==========================================
+*/
+
+define void EmitJumpLabel(CompilerState* cState, i32 LabelNumber) {
+	PushByte(cState, 0xE9)
+	UseLabel(cState, LabelNumber)
+}
+
+/*
+==========================================
+	Moves
+==========================================
+*/
+
+define void EmitMoveRXIX(CompilerState* cState, i8 RegisterNumber, i64 NumberToMove) {
+	if (NumberToMove & 0x7FFFFFFF80000000) {
+		EmitMoveR64I64(cState, RegisterNumber, NumberToMove)
+	}
+	else if (NumberToMove & 0x7FFF8000) {
+		EmitMoveR32I32(cState, RegisterNumber, NumberToMove As i32)
+	}
+	else if (NumberToMove & 0x7F80) {
+		EmitMoveR16I16(cState, RegisterNumber, NumberToMove As i16)
+	}
+	else if (NumberToMove & 0x7F || NumberToMove = 0) {
+		EmitMoveR8I8(cState, RegisterNumber, NumberToMove As i8)
+	}
+}
+
+define void EmitMoveR64I64(CompilerState* cState, i8 RegisterNumber, i64 NumberToMove) {
+	EmitREX(cState, NO_REGISTER, RegisterNumber, REX_W)
+	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushI64(cState, NumberToMove)
+}
+define void EmitMoveR32I32(CompilerState* cState, i8 RegisterNumber, i32 NumberToMove) {
+	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
+	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushI32(cState, NumberToMove)
+}
+define void EmitMoveR16I16(CompilerState* cState, i8 RegisterNumber, i16 NumberToMove) {
+	EmitLegacySizePrefix(cState)
+	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
+	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushI16(cState, NumberToMove)
+}
+define void EmitMoveR8I8(CompilerState* cState, i8 RegisterNumber, i8 NumberToMove) {
+	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
+	PushByte(cState, 0xB0 + ClampRegisterNumber(RegisterNumber))
+	PushI8(cState, NumberToMove)
+}
+
+/*
+==========================================
+	Adds
+==========================================
+*/
+
+define void EmitAddR64R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, REX_W)
+	PushByte(cState, 0x03)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitAddR32R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState, 0x03)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitAddR16R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState, 0x03)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitAddR8R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState, 0x02)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+
+/*
+==========================================
+	Subs
+==========================================
+*/
+
+define void EmitSubR64R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, REX_W)
+	PushByte(cState, 0x2B)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitSubR32R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState,  0x2B)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitSubR16R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState, 0x2B)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+define void EmitSubR8R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREX(cState, DestinationRegister, SourceRegister, 0)
+	PushByte(cState, 0x2A)
+	EmitModRM(cState, MODE_RTOR, DestinationRegister, SourceRegister)
+}
+
+/*
+==========================================
+	Functions
+==========================================
+*/
+
+define void EmitEnter(CompilerState* cState, i16 ReserveBytes) {
+	PushByte(cState, 0xC8)
+	PushI16(cState, ReserveBytes)
+	PushByte(cState, 0)
+}
+
+define void EmitLeave(CompilerState* cState) {
+	PushByte(cState, 0xC9)
+}
+
+define void EmitReturn(CompilerState* cState) {
+	PushByte(cState, 0xC3)
 }
