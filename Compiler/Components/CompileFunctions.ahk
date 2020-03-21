@@ -247,6 +247,11 @@
 			this.CodeGen.Move_R64_RI64(this.PushRegisterStack(), RSI)
 			return this.Typing.GetType("i8")
 		}
+		else if (Expression.Target.Value = "__PrintOffset") {
+			ConsoleWrite(Colors.Red, this.CodeGen.Index() + 0x2000)
+			this.PushRegisterStack()
+			return this.Typing.GetType("i8")
+		}
 		
 		
 		if (this.Typing.IsValidType(Expression.Target.Value) && Expression.Params.Expressions.Count() = 1) {

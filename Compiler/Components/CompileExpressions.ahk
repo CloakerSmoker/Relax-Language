@@ -288,10 +288,10 @@
 	
 		Switch (Expression.Operator.Type) {
 			Case Tokens.PLUS: {
-				this.CodeGen.Add(LeftRegister, RightRegister)
+				this.CodeGen.Add_R64_R64(LeftRegister, RightRegister)
 			}
 			Case Tokens.MINUS: {
-				this.CodeGen.Sub(LeftRegister, RightRegister)
+				this.CodeGen.Sub_R64_R64(LeftRegister, RightRegister)
 			}
 			Case Tokens.TIMES: {
 				this.CodeGen.IMul_R64_R64(LeftRegister, RightRegister)

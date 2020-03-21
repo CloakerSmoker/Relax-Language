@@ -483,7 +483,7 @@ class X64CodeGen {
 	}
 	
 	IMul_R64_R64(RegisterOne, RegisterTwo) {
-		this.REXOpcodeMod([0x0F, 0xAF], RegisterOne, RegisterTwo)
+		this.REXOpcodeMod([0x0F, 0xAF], RegisterOne, RegisterTwo, {"REX": [REX.W]})
 	}
 	
 	CDQ() {
@@ -492,7 +492,7 @@ class X64CodeGen {
 	}
 	IDiv_RAX_R64(Register) {
 		this.CDQ()
-		this.REXOpcodeMod([0xF7], {"OpcodeExtension": 7}, Register)
+		this.REXOpcodeMod([0xF7], {"OpcodeExtension": 7}, Register, {"REX": [REX.W]})
 	}
 	
 	Neg_SIB(SIB) {
