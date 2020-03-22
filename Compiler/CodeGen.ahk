@@ -133,7 +133,7 @@ class X64CodeGen {
 	;  ex: changing jumps to use 8bit offsets instead of 32 shouln't clobber other jumps
 	
 	SmallMove(Register, Integer) {
-		if (Integer < 0x7FFFFFFF) {
+		if (this.NumberSizeOf(Integer) <= 32) {
 			this.Move_R64_I32(Register, I32(Integer))
 		}
 		else {
@@ -882,19 +882,21 @@ class X64CodeGen {
 	NumberSizeOf(Number, ReturnNumber := true) {
 		static Sizes := {8: "I8", 16: "I16", 32: "I32", 64: "I64"}
 		
-		loop 64 {
-			NextBit := Number & (1 << (64 - A_Index))
-		
-			if (NextBit) {
-				Length := A_Index - 1
-				break
-			}
+		if (Number < 0) {
+			Number := Abs(Number)
 		}
 		
-		NewLength := 65 - Length
-		
-		while !(Sizes.HasKey(NewLength)) {
-			NewLength++
+		if (Number >= 0x7FFFFFFF) {
+			NewLength := 64
+		}
+		else if (Number >= 0x7FFF) {
+			NewLength := 32
+		}
+		else if (Number >= 0x7F) {
+			NewLength := 16
+		}
+		else {
+			NewLength := 8
 		}
 		
 		return (ReturnNumber ? NewLength : Sizes[NewLength])

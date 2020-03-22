@@ -157,7 +157,12 @@ DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
 
 DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
 
-define i32 Main(i64 ArgC, i16** ArgV) {	
+define i32 Main(i64 ArgC, i16** ArgV) {
+	PEBuilder* P := BuildBuilder()
+	PrintBuilder(P)
+
+	Exit(2)
+	
 	if (ArgC != 2) {
 		Console:AWriteLine("No input file, aborting")
 		Exit(1)
@@ -2975,4 +2980,347 @@ define void EmitLeave(CompilerState* cState) {
 
 define void EmitReturn(CompilerState* cState) {
 	PushByte(cState, 0xC3)
+}
+
+
+
+/*
+==========================================
+	PE building structs
+==========================================
+*/
+
+struct PEBuilder {
+	void* Buffer,
+	MZHeader* MZ,
+	COFFHeader* COFF,
+	PEHeader* PE,
+	
+	SectionHeader* RelocHeader,
+	SectionHeader* IDataHeader,
+	SectionHeader* DataHeader,
+	SectionHeader* TextHeader,
+	
+	i32 NextRVA,
+	i32 BufferSize
+}
+
+define PEBuilder* BuildBuilder() {
+	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
+	
+	NewBuilder->Buffer := AllocatePEBuffer()
+	
+	WriteDOSHeader(NewBuilder->Buffer)
+	WritePEHeader(NewBuilder->Buffer)
+	
+	NewBuilder->MZ := (NewBuilder->Buffer)
+	NewBuilder->COFF := (NewBuilder->Buffer) + COFF_HEADER_OFFSET
+	NewBuilder->PE := (NewBuilder->Buffer) + PE_HEADER_OFFSET
+	
+	void* Sections := NewBuilder->Buffer
+	
+	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
+	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_INITIALIZED_DATA)
+	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
+	
+	NewBuilder->BufferSize := MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4)
+	
+	return NewBuilder
+}
+
+define void PrintBuilder(PEBuilder* Builder) {
+	i8* BufferAsBytes := (Builder->Buffer) As i8*
+	
+	for (i32 Index := 0, Index < Builder->BufferSize, Index += 1) {
+		PrintByteHex(BufferAsBytes[Index])
+		Console:WriteCharacter(' ')
+	}
+}
+
+define void* AllocatePEBuffer() {
+	/* MZHeader + PEHeader + (SectionHeader * 4) */
+	
+	return Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
+}
+
+struct MZHeader {
+	i8 MagicM,
+	i8 MagicZ,
+	i16 BytesInLastPage,
+	i16 PageCount,
+	i16 RelocationCount,
+	
+	i16 HeaderParagraphCount,
+	i16 MinimumExtraParagraphCount,
+	i16 MaximumExtraParagraphCount,
+	i16 StartingSS,
+	
+	i16 StartingSP,
+	i16 Checksum,
+	i16 StartingIP,
+	i16 StartingCS,
+	
+	i16 RelocationTableOffset,
+	i16 OverlayNumber,
+	i16 Padding1,
+	i16 Padding2,
+	
+	i16 OEMID,
+	i16 OEMInfo,
+	i16 Padding3,
+	i16 Padding4,
+	
+	i64 Padding5,
+	
+	i64 Padding6,
+	
+	i32 Padding7,
+	i32 PEHeaderOffset
+}
+
+i16 MZ_HEADER_OFFSET := 0x00
+i16 MZ_HEADER_SIZE := 0x40
+i16 MZ_PADDING_SIZE := 0xB0
+
+i16 PE_MAGIC_OFFSET := 0xF0
+i16 PE_MAGIC_SIZE := 0x04
+
+i16 COFF_HEADER_OFFSET := 0xF4
+i16 COFF_HEADER_SIZE := 0x14
+
+i16 PE_HEADER_OFFSET := 0x108
+i16 PE_HEADER_SIZE := 0xF0
+
+i16 SECTION_HEADER_SIZE := 0x28
+
+define void WriteDOSHeader(void* IntoBuffer) {
+	MZHeader* NewHeader := IntoBuffer As MZHeader*
+	
+	NewHeader->MagicM := 'M'
+	NewHeader->MagicZ := 'Z'
+	NewHeader->BytesInLastPage := 0x90
+	NewHeader->PageCount := 3
+	NewHeader->RelocationCount := 0
+	NewHeader->HeaderParagraphCount := 4
+	NewHeader->MinimumExtraParagraphCount := 0
+	NewHeader->MaximumExtraParagraphCount := 0xFFFF As i16
+	NewHeader->StartingSS := 0
+	NewHeader->StartingSP := 0xB8
+	NewHeader->Checksum := 0
+	NewHeader->StartingIP := 0
+	NewHeader->StartingCS := 0
+	NewHeader->RelocationTableOffset := 0x40
+	NewHeader->OverlayNumber := 0
+	NewHeader->PEHeaderOffset := PE_MAGIC_OFFSET
+	
+	WriteDOSStub(IntoBuffer + MZ_HEADER_SIZE)
+	
+}
+
+define void WriteDOSStub(void* IntoBuffer) {
+	IntoBuffer[0] := 0xCD09B4000EBA1F0E
+	IntoBuffer[1] := 0x685421CD4C01B821
+	IntoBuffer[2] := 0x72676F7270207369
+	IntoBuffer[3] := 0x6F6E6E6163206D61
+	IntoBuffer[4] := 0x6E75722065622074
+	IntoBuffer[5] := 0x20534F44206E6920
+	IntoBuffer[6] := 0x0000242E65646F6D
+}
+
+struct COFFHeader {
+	i16 MachineType,
+	i16 NumberOfSections,
+	i32 TimeDateStamp,
+	
+	i32 PointerToSymbolTable,
+	i32 NumberOfSymbols,
+	
+	i16 SizeOfOptionalHeader,
+	i16 Characteristics
+}
+
+struct PEHeader {
+	i16 Magic,
+	i8 MajorLinkerVersion,
+	i8 MinorLinkerVersion,
+	i32 SizeOfCode,
+	
+	i32 SizeOfInitializedData,
+	i32 SizeOfUninitializedData,
+	
+	i32 AddressOfEntryPoint,
+	i32 BaseOfCode,
+	
+	i64 ImageBase,
+	
+	i32 SectionAlignment,
+	i32 FileAlignment,
+	
+	i16 MajorOSVersion,
+	i16 MinorOSVersion,
+	i16 MajorImageVersion,
+	i16 MinorImageVersion,
+	
+	i16 MajorSubsystemVersion,
+	i16 MinorSubsystemVersion,
+	i32 Win32Version,
+	
+	i32 SizeOfImage,
+	i32 SizeOfHeaders,
+	
+	i32 Checksum,
+	i16 Subsystem,
+	i16 DllCharacteristics,
+	
+	i64 SizeOfStackReserve,
+	
+	i64 SizeOfStackCommit,
+
+	i64 SizeOfHeapReserve,
+
+	i64 SizeOfHeapCommit,
+	
+	i32 LoaderFlags,
+	i32 NumberOfDataDirectories,
+	
+	i32 ExportTableRVA,
+	i32 ExportTableSize,
+	
+	i32 ImportTableRVA,
+	i32 ImportTableSize,
+	
+	i32 ResourceTableRVA,
+	i32 ResourceTableSize,
+	
+	i32 ExceptionTableRVA,
+	i32 ExceptionTableSize,
+	
+	i32 CertificateTableRVA,
+	i32 CertificateTableSize,
+	
+	i32 BaseRelocationTableRVA,
+	i32 BaseRelocationTableSize,
+	
+	i32 DebugTableRVA,
+	i32 DebugTableSize,
+	
+	i64 Architecture,
+	
+	i32 GlobalPointerRVA,
+	i32 GlobalPointerSize,
+	
+	i32 TLSTableRVA,
+	i32 TLSTableSize,
+	
+	i32 LoadConfigTableRVA,
+	i32 LoadConfigTableSize,
+	
+	i32 BoundImportTableRVA,
+	i32 BoundImportTableSize,
+	
+	i32 ImportAddressTableRVA,
+	i32 ImportAddressTableSize,
+	
+	i32 DelayImportTableRVA,
+	i32 DelayImportTableSize,
+	
+	i32 CLRRuntimeHeaderRVA,
+	i32 CLRRuntimeHeaderSize,
+	
+	i64 Reserved
+}
+
+i32 MACHINE_AMD64 := 0x8664
+
+i16 COFF_EXECUTABLE_IMAGE := 0x0002
+i16 COFF_LARGE_ADDRESS_AWARE := 0x0020
+i16 COFF_IMAGE_FILE_DLL := 0x2000
+
+i16 PE32_PLUS_MAGIC := 0x020B
+
+i64 DEFAULT_IMAGE_BASE := 0x40000000
+i32 DEFAULT_SECTION_ALIGNMENT := 0x1000
+i32 DEFAULT_FILE_ALIGNMENT := 0x0200
+
+i16 DEFAULT_MAJOR_OS_VERSION := 6
+i16 DEFAULT_MINOR_OS_VERSION := 0
+
+i16 IMAGE_SUBSYSTEM_WINDOWS_CUI := 3
+
+i32 DEFAULT_RESERVE := 0x00100000
+i32 DEFAULT_COMMIT := 0x8000
+
+define void WritePEHeader(void* IntoBuffer) {
+	i8* MagicString := (IntoBuffer + PE_MAGIC_OFFSET) As i8*
+	
+	MagicString[0] := 'P'
+	MagicString[1] := 'E'
+	
+	COFFHeader* NewCOFF := (IntoBuffer + COFF_HEADER_OFFSET) As COFFHeader*
+	
+	NewCOFF->MachineType := MACHINE_AMD64 As i16
+	NewCOFF->NumberOfSections := 4
+	
+	NewCOFF->SizeOfOptionalHeader := PE_HEADER_SIZE
+	NewCOFF->Characteristics := (COFF_EXECUTABLE_IMAGE | COFF_LARGE_ADDRESS_AWARE)
+	
+	PEHeader* NewPE := (IntoBuffer + PE_HEADER_OFFSET) As PEHeader*
+	
+	NewPE->Magic := PE32_PLUS_MAGIC
+	NewPE->ImageBase := DEFAULT_IMAGE_BASE
+	NewPE->SectionAlignment := DEFAULT_SECTION_ALIGNMENT
+	NewPE->FileAlignment := DEFAULT_FILE_ALIGNMENT
+	
+	NewPE->MajorOSVersion := DEFAULT_MAJOR_OS_VERSION
+	NewPE->MajorOSVersion := DEFAULT_MINOR_OS_VERSION
+	NewPE->MajorSubsystemVersion := DEFAULT_MAJOR_OS_VERSION
+	NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
+	
+	NewPE->Subsystem := IMAGE_SUBSYSTEM_WINDOWS_CUI
+	
+	NewPE->SizeOfStackReserve := DEFAULT_RESERVE
+	NewPE->SizeOfStackCommit := DEFAULT_COMMIT
+	NewPE->SizeOfHeapReserve := DEFAULT_RESERVE
+	NewPE->SizeOfHeapCommit := DEFAULT_COMMIT
+	
+	NewPE->NumberOfDataDirectories := 16
+}
+
+i16 RELOC_OFFSET := 0x1F8
+i16 IDATA_OFFSET := 0x220
+i16 DATA_OFFSET := 0x248
+i16 TEXT_OFFSET := 0x270
+
+struct SectionHeader {
+	i64 PackedName,
+	
+	i32 Size,
+	i32 RVA,
+	
+	i32 RoundedSize,
+	i32 DataOffset,
+	
+	i32 RelocationRVA,
+	i32 LineNumbersRVA,
+	
+	i16 NumberOfRelocations,
+	i16 NumberOfLineNumbers,
+	i32 Characteristics
+}
+
+i64 SECTION_CODE := 0x00000020
+i64 SECTION_INITIALIZED_DATA := 0x00000040
+i64 SECTION_DISCARDABLE := 0x02000000
+i64 SECTION_EXECUTE := 0x20000000
+i64 SECTION_READ := 0x40000000
+i64 SECTION_WRITE := 0x80000000
+
+define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Characteristics) {
+	SectionHeader* NewSection := IntoBuffer As SectionHeader*
+	
+	NewSection->PackedName := Name
+	NewSection->Characteristics := Characteristics
+	
+	return NewSection
 }
