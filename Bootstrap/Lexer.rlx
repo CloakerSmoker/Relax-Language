@@ -158,11 +158,6 @@ DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
 DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
 
 define i32 Main(i64 ArgC, i16** ArgV) {
-	PEBuilder* P := BuildBuilder()
-	PrintBuilder(P)
-
-	Exit(2)
-	
 	if (ArgC != 2) {
 		Console:AWriteLine("No input file, aborting")
 		Exit(1)
@@ -2356,8 +2351,21 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	EmitLeave(cState)
 	EmitReturn(cState)
-
-	PrintCodeBytes(cState)
+	
+	PEBuilder* B := BuildBuilder()
+	
+	AddImport(B, AToS("Kernel32"), AToS("ExitProcess"))
+	AddImport(B, AToS("Kernel32"), AToS("AndYouTooBill"))
+	AddImport(B, AToS("User32"), AToS("FuckyouMicrosoft"))
+	
+	
+	AddCode(B, cState->CodeBuffer, 40)
+	
+	FinalizeBuilder(B)
+	
+	PrintBuilder(B)
+	
+	/*PrintCodeBytes(cState)*/
 }
 define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 	for (i32 Index := 0, Index < BlockToCompile->StatementCount, Index += 1) {
@@ -2990,60 +2998,6 @@ define void EmitReturn(CompilerState* cState) {
 ==========================================
 */
 
-struct PEBuilder {
-	void* Buffer,
-	MZHeader* MZ,
-	COFFHeader* COFF,
-	PEHeader* PE,
-	
-	SectionHeader* RelocHeader,
-	SectionHeader* IDataHeader,
-	SectionHeader* DataHeader,
-	SectionHeader* TextHeader,
-	
-	i32 NextRVA,
-	i32 BufferSize
-}
-
-define PEBuilder* BuildBuilder() {
-	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
-	
-	NewBuilder->Buffer := AllocatePEBuffer()
-	
-	WriteDOSHeader(NewBuilder->Buffer)
-	WritePEHeader(NewBuilder->Buffer)
-	
-	NewBuilder->MZ := (NewBuilder->Buffer)
-	NewBuilder->COFF := (NewBuilder->Buffer) + COFF_HEADER_OFFSET
-	NewBuilder->PE := (NewBuilder->Buffer) + PE_HEADER_OFFSET
-	
-	void* Sections := NewBuilder->Buffer
-	
-	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
-	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
-	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_INITIALIZED_DATA)
-	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
-	
-	NewBuilder->BufferSize := MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4)
-	
-	return NewBuilder
-}
-
-define void PrintBuilder(PEBuilder* Builder) {
-	i8* BufferAsBytes := (Builder->Buffer) As i8*
-	
-	for (i32 Index := 0, Index < Builder->BufferSize, Index += 1) {
-		PrintByteHex(BufferAsBytes[Index])
-		Console:WriteCharacter(' ')
-	}
-}
-
-define void* AllocatePEBuffer() {
-	/* MZHeader + PEHeader + (SectionHeader * 4) */
-	
-	return Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
-}
-
 struct MZHeader {
 	i8 MagicM,
 	i8 MagicZ,
@@ -3120,6 +3074,10 @@ define void WriteDOSHeader(void* IntoBuffer) {
 
 define void WriteDOSStub(void* IntoBuffer) {
 	IntoBuffer[0] := 0xCD09B4000EBA1F0E
+	
+	/* Rewrite the first byte since the sign bit gets dropped at some point */
+	(IntoBuffer As i8*)[0] := 0xCD
+	
 	IntoBuffer[1] := 0x685421CD4C01B821
 	IntoBuffer[2] := 0x72676F7270207369
 	IntoBuffer[3] := 0x6F6E6E6163206D61
@@ -3248,6 +3206,9 @@ i16 DEFAULT_MINOR_OS_VERSION := 0
 
 i16 IMAGE_SUBSYSTEM_WINDOWS_CUI := 3
 
+i16 DLL_DYNAMIC_BASE := 0x0040
+i16 DLL_HIGH_ENTROPY_VA := 0x0020
+
 i32 DEFAULT_RESERVE := 0x00100000
 i32 DEFAULT_COMMIT := 0x8000
 
@@ -3273,11 +3234,12 @@ define void WritePEHeader(void* IntoBuffer) {
 	NewPE->FileAlignment := DEFAULT_FILE_ALIGNMENT
 	
 	NewPE->MajorOSVersion := DEFAULT_MAJOR_OS_VERSION
-	NewPE->MajorOSVersion := DEFAULT_MINOR_OS_VERSION
+	NewPE->MinorOSVersion := DEFAULT_MINOR_OS_VERSION
 	NewPE->MajorSubsystemVersion := DEFAULT_MAJOR_OS_VERSION
 	NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
 	
 	NewPE->Subsystem := IMAGE_SUBSYSTEM_WINDOWS_CUI
+	NewPE->DllCharacteristics := (DLL_DYNAMIC_BASE | DLL_HIGH_ENTROPY_VA)
 	
 	NewPE->SizeOfStackReserve := DEFAULT_RESERVE
 	NewPE->SizeOfStackCommit := DEFAULT_COMMIT
@@ -3286,6 +3248,12 @@ define void WritePEHeader(void* IntoBuffer) {
 	
 	NewPE->NumberOfDataDirectories := 16
 }
+
+/*
+==========================================
+	Section building
+==========================================
+*/
 
 i16 RELOC_OFFSET := 0x1F8
 i16 IDATA_OFFSET := 0x220
@@ -3323,4 +3291,327 @@ define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Charact
 	NewSection->Characteristics := Characteristics
 	
 	return NewSection
+}
+
+/*
+==========================================
+	Data directory building
+==========================================
+*/
+
+struct ImportHelper {
+	i16 ImportCount,
+	i32* RVABuffer
+}
+
+struct ImportTableEntry {
+	i32 LookupTableRVA,
+	i32 TimeDateStamp,
+	i32 ForwarderChain,
+	i32 DllNameRVA,
+	i32 ThunkTableRVA
+}
+
+struct RelocationBlockHeader {
+	i32 PageRVA,
+	i32 BlockSize
+}
+
+
+/*
+==========================================
+	Actual building helpers/functions
+==========================================
+*/
+
+struct PEBuilder {
+	void* Buffer,
+	MZHeader* MZ,
+	COFFHeader* COFF,
+	PEHeader* PE,
+	
+	SectionHeader* RelocHeader,
+	SectionHeader* IDataHeader,
+	SectionHeader* DataHeader,
+	SectionHeader* TextHeader,
+	
+	i32 ImportFunctionCount,
+	
+	i32* ImportSourceNameRVAs,
+	i32 ImportSourceCount,
+	
+	ImportHelper** ImportHelpers,
+	
+	i8* HintNameTable,
+	i32 HintNameTableSize,
+	
+	i32 NextRVA,
+	i32 BufferSize
+}
+
+define i32 RoundTo(i32 Value, i32 BaseValue) {
+	i32 Remainder := Value % BaseValue
+	
+	if (Remainder = 0) {
+		return Value
+	}
+	
+	return (Value - Remainder) + BaseValue
+}
+
+define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
+	BuilderToReAlloc->Buffer := ReAlloc(BuilderToReAlloc->Buffer, NewSize)
+	
+	void* Buffer := (BuilderToReAlloc->Buffer)
+	
+	BuilderToReAlloc->MZ := (Buffer) As MZHeader*
+	BuilderToReAlloc->COFF := (Buffer + COFF_HEADER_OFFSET) As COFFHeader*
+	BuilderToReAlloc->PE := (Buffer + PE_HEADER_OFFSET) As PEHeader*
+	
+	BuilderToReAlloc->RelocHeader := (Buffer + RELOC_OFFSET) As SectionHeader*
+	BuilderToReAlloc->IDataHeader := (Buffer + IDATA_OFFSET) As SectionHeader*
+	BuilderToReAlloc->DataHeader := (Buffer + DATA_OFFSET) As SectionHeader*
+	BuilderToReAlloc->TextHeader := (Buffer + TEXT_OFFSET) As SectionHeader*
+	
+	BuilderToReAlloc->BufferSize := NewSize
+}
+
+define void* AllocatePEBuffer() {
+	return Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
+}
+
+define PEBuilder* BuildBuilder() {
+	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
+	
+	NewBuilder->Buffer := AllocatePEBuffer()
+	
+	WriteDOSHeader(NewBuilder->Buffer)
+	WritePEHeader(NewBuilder->Buffer)
+	
+	NewBuilder->MZ := (NewBuilder->Buffer) As MZHeader*
+	NewBuilder->COFF := ((NewBuilder->Buffer) + COFF_HEADER_OFFSET) As COFFHeader*
+	NewBuilder->PE := ((NewBuilder->Buffer) + PE_HEADER_OFFSET) As PEHeader*
+	
+	void* Sections := NewBuilder->Buffer
+	
+	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
+	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_INITIALIZED_DATA)
+	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
+	
+	NewBuilder->BufferSize := MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4)
+	NewBuilder->PE->SizeOfHeaders := RoundTo(NewBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
+	
+	NewBuilder->NextRVA := 0
+	
+	NewBuilder->ImportSourceNameRVAs := Alloc(4) As i32*
+	NewBuilder->ImportHelpers := Alloc(8) As ImportHelper**
+	NewBuilder->HintNameTable := Alloc(8) As i8*
+	NewBuilder->HintNameTableSize := 2
+	
+	return NewBuilder
+}
+
+define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, i8* Data, i32 DataLength) {
+	i32 FileOffset := RoundTo(ToBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
+	i32 NewSize := FileOffset + DataLength
+	
+	i32 RVA := ToBuilder->NextRVA
+	
+	TargetSection->Size := DataLength
+	TargetSection->RVA := RVA
+	TargetSection->RoundedSize := RoundTo(DataLength, DEFAULT_FILE_ALIGNMENT)
+	TargetSection->DataOffset := FileOffset
+	
+	ExtendBuilder(ToBuilder, NewSize)
+	
+	i8* SectionBuffer := ((ToBuilder->Buffer) + FileOffset) As i8*
+	
+	for (i32 Index := 0, Index < DataLength, Index += 1) {
+		SectionBuffer[Index] := Data[Index]
+	}
+	
+	ToBuilder->NextRVA += (DataLength / DEFAULT_SECTION_ALIGNMENT) * DEFAULT_SECTION_ALIGNMENT
+	
+	if (DataLength % DEFAULT_SECTION_ALIGNMENT) {
+		ToBuilder->NextRVA += DEFAULT_SECTION_ALIGNMENT
+	}
+}
+
+define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
+	i32 RVA := ToBuilder->NextRVA
+	
+	PopulateSection(ToBuilder, ToBuilder->TextHeader, CodeBytes, CodeLength)
+	
+	ToBuilder->PE->SizeOfCode := CodeLength
+	ToBuilder->PE->AddressOfEntryPoint := RVA
+	ToBuilder->PE->BaseOfCode := RVA
+}
+
+define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeWideString* EntryText) {
+	i32 Offset := ToBuilder->HintNameTableSize
+	i32 NewSize := (ToBuilder->HintNameTableSize) + (EntryText->Length) + 2
+	
+	if (NewSize % 2) {
+		NewSize += 1
+	}
+	
+	ToBuilder->HintNameTable := ReAlloc((ToBuilder->HintNameTable) As void*, NewSize) As i8*
+	ToBuilder->HintNameTableSize := NewSize
+	
+	for (i32 Index := 0, Index < (EntryText->Length), Index += 1) {
+		(ToBuilder->HintNameTable)[Offset + Index] := (EntryText->Buffer)[Index] As i8
+	}
+	
+	return Offset
+}
+
+i32 HINT_NAME_ENTRY_NOT_FOUND := 0x0FFFFFFF
+
+define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToFind) {
+	i32 Run := 0
+	
+	for (i32 Index := 0, Index < (InBuilder->HintNameTableSize), Index += 1) {
+		if ((InBuilder->HintNameTable)[Index] = (EntryToFind->Buffer)[Run]) {
+			Run += 1
+		}
+		else {
+			Run := 0
+		}
+		
+		if (Run = (EntryToFind->Length)) {
+			return (Index - Run) + 1
+		}
+	}
+	
+	return HINT_NAME_ENTRY_NOT_FOUND
+}
+
+define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
+	i32 FoundIndex := 0
+	
+	i32 TargetRVA := FindHintNameTableEntry(ToBuilder, DllName)
+	
+	if (TargetRVA = HINT_NAME_ENTRY_NOT_FOUND) {
+		FoundIndex := ToBuilder->ImportSourceCount
+		
+		(ToBuilder->ImportSourceNameRVAs)[FoundIndex] := AddHintNameTableEntry(ToBuilder, DllName)
+		
+		ImportHelper* ThisDllHelper := Alloc(ImportHelper.Size) As ImportHelper*
+		
+		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, (FoundIndex + 1) * 8) As ImportHelper**
+		(ToBuilder->ImportHelpers)[FoundIndex] := ThisDllHelper
+		
+		ThisDllHelper->ImportCount := 0
+		ThisDllHelper->RVABuffer := Alloc(4) As i32*
+		
+		ToBuilder->ImportFunctionCount += 1
+		ToBuilder->ImportSourceCount += 1
+		
+		return FoundIndex
+	}
+	else {
+		for (i32 Index := 0, Index < (ToBuilder->ImportSourceCount), Index += 1) {
+			i32 FoundNameRVA := (ToBuilder->ImportSourceNameRVAs)[Index]
+			
+			if (FoundNameRVA = TargetRVA) {
+				return Index
+			}
+		}
+	}
+}
+
+define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName) {
+	i32 EntryIndex := FindOrAddImportDll(ToBuilder, ToDll)
+	
+	ImportHelper* EntryHelper := (ToBuilder->ImportHelpers)[EntryIndex]
+	
+	EntryHelper->RVABuffer := ReAlloc((EntryHelper->RVABuffer) As void*, ((EntryHelper->ImportCount) + 1) * 4)
+	
+	(EntryHelper->RVABuffer)[EntryHelper->ImportCount] := AddHintNameTableEntry(ToBuilder, FunctionName)
+	EntryHelper->ImportCount += 1
+	
+	ToBuilder->ImportFunctionCount += 1
+}
+
+define void FinalizeImports(PEBuilder* TargetBuilder) {
+	i32 ImportSectionRVA := TargetBuilder->NextRVA
+	
+	i32 ImportLookupBase := ImportSectionRVA
+	i32 ImportLookupSize := RoundTo(TargetBuilder->ImportFunctionCount, 2) * 16
+	
+	i32 ImportTableBase := ImportLookupBase + ImportLookupSize
+	i32 ImportTableSize := RoundTo(((TargetBuilder->ImportSourceCount) + 1) * ImportTableEntry.Size, 16)
+	
+	i32 HintNameBase := ImportTableBase + ImportTableSize
+	i32 HintNameSize := TargetBuilder->HintNameTableSize
+	
+	Console:IWrite(ImportTableSize)
+	Console:WriteCharacter(':')
+	Console:IWrite(ImportLookupSize)
+	Console:WriteCharacter(':')
+	Console:IWriteLine(HintNameSize)
+	
+	
+	i32 ImportSectionSize := ImportTableSize + ImportLookupSize + HintNameSize
+	
+	TargetBuilder->PE->ImportTableRVA := ImportTableBase
+	TargetBuilder->PE->ImportTableSize := ImportSectionSize
+	
+	TargetBuilder->PE->ImportAddressTableRVA := ImportLookupBase
+	TargetBuilder->PE->ImportAddressTableSize := ((TargetBuilder->ImportFunctionCount) - (TargetBuilder->ImportSourceCount)) * 8
+	
+	
+	void* ImportSectionBuffer := Alloc(ImportSectionSize)
+	
+	i64* ImportLookups := ImportSectionBuffer As i64*
+	ImportTableEntry* ImportEntries := (ImportSectionBuffer + ImportLookupSize) As ImportTableEntry*
+	i8* HintName := (ImportSectionBuffer + ImportLookupSize + ImportTableSize) As i8*
+	
+	i32 LookupIndex := 0
+	i32 LookupMaxIndex := RoundTo(TargetBuilder->ImportFunctionCount, 2)
+	
+	for (i32 Index := 0, Index < (TargetBuilder->ImportSourceCount), Index += 1) {
+		i32 NextEntryNameRVA := (TargetBuilder->ImportSourceNameRVAs)[Index]
+		ImportHelper* NextHelper := (TargetBuilder->ImportHelpers)[Index]
+		
+		ImportTableEntry* NextEntry := (ImportEntries + (Index * ImportTableEntry.Size)) As ImportTableEntry*
+		
+		NextEntry->DllNameRVA := HintNameBase + NextEntryNameRVA
+		NextEntry->LookupTableRVA := ImportLookupBase + (LookupIndex * 8)
+		NextEntry->ThunkTableRVA := ImportLookupBase + (LookupIndex * 8) + LookupMaxIndex
+		
+		for (i32 ImportIndex := 0, ImportIndex < (NextHelper->ImportCount), ImportIndex += 1) {
+			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
+			
+			ImportLookups[LookupIndex] := (HintNameBase + NextImportNameRVA) - 2
+			ImportLookups[LookupIndex + LookupMaxIndex] := (HintNameBase + NextImportNameRVA) - 2
+			LookupIndex += 1
+		}
+		
+		LookupIndex += 1
+	}
+	
+	for (i32 CopyIndex := 0, CopyIndex < (TargetBuilder->HintNameTableSize), CopyIndex += 1) {
+		Console:WriteCharacter((TargetBuilder->HintNameTable)[CopyIndex])
+		HintName[CopyIndex] := (TargetBuilder->HintNameTable)[CopyIndex]
+	}
+	
+	Console:WriteNewLine()
+	
+	PopulateSection(TargetBuilder, TargetBuilder->IDataHeader, ImportSectionBuffer As i8*, ImportSectionSize)
+}
+
+define void FinalizeBuilder(PEBuilder* Builder) {
+	FinalizeImports(Builder)
+	Builder->PE->SizeOfImage := RoundTo(Builder->BufferSize, DEFAULT_SECTION_ALIGNMENT)
+}
+
+define void PrintBuilder(PEBuilder* Builder) {
+	i8* BufferAsBytes := (Builder->Buffer) As i8*
+	
+	for (i32 Index := 0, Index < Builder->BufferSize, Index += 1) {
+		PrintByteHex(BufferAsBytes[Index])
+		Console:WriteCharacter(' ')
+	}
 }
