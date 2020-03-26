@@ -2355,9 +2355,11 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	PEBuilder* B := BuildBuilder()
 	
 	AddImport(B, AToS("Kernel32"), AToS("ExitProcess"))
-	AddImport(B, AToS("Kernel32"), AToS("AndYouTooBill"))
-	AddImport(B, AToS("User32"), AToS("FuckyouMicrosoft"))
+	AddImport(B, AToS("Kernel32"), AToS("LocalFree"))
 	
+	AddData(B, 0x149)
+	
+	AddRelocation(B, 0x1000, 40, 1)
 	
 	AddCode(B, cState->CodeBuffer, 40)
 	
@@ -3255,9 +3257,9 @@ define void WritePEHeader(void* IntoBuffer) {
 ==========================================
 */
 
-i16 RELOC_OFFSET := 0x1F8
-i16 IDATA_OFFSET := 0x220
-i16 DATA_OFFSET := 0x248
+i16 IDATA_OFFSET := 0x1F8
+i16 DATA_OFFSET := 0x220
+i16 RELOC_OFFSET := 0x248
 i16 TEXT_OFFSET := 0x270
 
 struct SectionHeader {
@@ -3279,6 +3281,7 @@ struct SectionHeader {
 
 i64 SECTION_CODE := 0x00000020
 i64 SECTION_INITIALIZED_DATA := 0x00000040
+i64 SECTION_UNINITIALIZED_DATA := 0x00000080
 i64 SECTION_DISCARDABLE := 0x02000000
 i64 SECTION_EXECUTE := 0x20000000
 i64 SECTION_READ := 0x40000000
@@ -3310,6 +3313,12 @@ struct ImportTableEntry {
 	i32 ForwarderChain,
 	i32 DllNameRVA,
 	i32 ThunkTableRVA
+}
+
+struct RelocationHelper {
+	i32 PageRVA,
+	i32 EntryCount,
+	i16* Entries
 }
 
 struct RelocationBlockHeader {
@@ -3344,6 +3353,10 @@ struct PEBuilder {
 	
 	i8* HintNameTable,
 	i32 HintNameTableSize,
+	
+	RelocationHelper** RelocationPages,
+	i32 RelocationPageCount,
+	i32 RelocationCount,
 	
 	i32 NextRVA,
 	i32 BufferSize
@@ -3396,18 +3409,21 @@ define PEBuilder* BuildBuilder() {
 	
 	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
 	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
-	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_INITIALIZED_DATA)
+	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
 	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
 	
 	NewBuilder->BufferSize := MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4)
 	NewBuilder->PE->SizeOfHeaders := RoundTo(NewBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
 	
-	NewBuilder->NextRVA := 0
+	NewBuilder->NextRVA := DEFAULT_SECTION_ALIGNMENT
 	
 	NewBuilder->ImportSourceNameRVAs := Alloc(4) As i32*
 	NewBuilder->ImportHelpers := Alloc(8) As ImportHelper**
 	NewBuilder->HintNameTable := Alloc(8) As i8*
 	NewBuilder->HintNameTableSize := 2
+	
+	NewBuilder->RelocationPages := Alloc(8) As RelocationHelper**
+	NewBuilder->RelocationCount := 0
 	
 	return NewBuilder
 }
@@ -3415,7 +3431,6 @@ define PEBuilder* BuildBuilder() {
 define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, i8* Data, i32 DataLength) {
 	i32 FileOffset := RoundTo(ToBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
 	i32 NewSize := FileOffset + DataLength
-	
 	i32 RVA := ToBuilder->NextRVA
 	
 	TargetSection->Size := DataLength
@@ -3438,7 +3453,32 @@ define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, 
 	}
 }
 
-define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
+/*
+==========================================
+	Section Building
+==========================================
+*/
+
+define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
+	FinalizeImports(ToBuilder)
+	
+	i32 DataRVA := (ToBuilder->NextRVA)
+	
+	ToBuilder->DataHeader->Size := DataSize
+	ToBuilder->DataHeader->RVA := DataRVA
+	ToBuilder->DataHeader->RoundedSize := 0
+	ToBuilder->DataHeader->DataOffset := 0
+	
+	ToBuilder->NextRVA += (DataSize / DEFAULT_SECTION_ALIGNMENT) * DEFAULT_SECTION_ALIGNMENT
+	
+	if (DataSize % DEFAULT_SECTION_ALIGNMENT) {
+		ToBuilder->NextRVA += DEFAULT_SECTION_ALIGNMENT
+	}
+}
+
+define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {	
+	FinalizeRelocations(ToBuilder)
+	
 	i32 RVA := ToBuilder->NextRVA
 	
 	PopulateSection(ToBuilder, ToBuilder->TextHeader, CodeBytes, CodeLength)
@@ -3447,6 +3487,88 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
 	ToBuilder->PE->AddressOfEntryPoint := RVA
 	ToBuilder->PE->BaseOfCode := RVA
 }
+
+define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
+	ToBuilder->RelocationCount += 1
+	
+	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
+		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
+		
+		if (NextPage->PageRVA = PageRVA) {
+			return AddRelocationToHelper(NextPage, OffsetInPage, Is64Bit)
+		}
+	}
+	
+	RelocationHelper* NewHelper := Alloc(RelocationHelper.Size) As RelocationHelper*
+	NewHelper->PageRVA := PageRVA
+	NewHelper->Entries := Alloc(2) As i16*
+	NewHelper->EntryCount
+	
+	ToBuilder->RelocationPages := ReAlloc((ToBuilder->RelocationPages) As void*, ((ToBuilder->RelocationPageCount) + 1) * 8) As RelocationHelper**
+	(ToBuilder->RelocationPages)[ToBuilder->RelocationPageCount] := NewHelper
+	ToBuilder->RelocationPageCount += 1
+	
+	AddRelocationToHelper(NewHelper, OffsetInPage, Is64Bit)
+}
+
+/*
+==========================================
+	Relocation helpers
+==========================================
+*/
+
+i16 RELOCATION_HIGHLOW := 3 * 0x1000
+i16 RELOCATION_DIR64 := 10 * 0x1000
+
+define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
+	i32 Type := RELOCATION_HIGHLOW
+	
+	if (Is64Bit) {
+		Type := RELOCATION_DIR64
+	}
+	
+	Helper->Entries := ReAlloc((Helper->Entries) as void*, ((Helper->EntryCount) + 1) * 2) As i16*
+	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
+	Helper->EntryCount += 1
+}
+
+define void FinalizeRelocations(PEBuilder* TargetBuilder) {
+	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * RelocationBlockHeader.Size
+	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
+	
+	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
+	
+	void* Buffer := Alloc(RelocationSectionSize)
+	i32 BufferIndex := 0
+	
+	for (i32 PageIndex := 0, PageIndex < (TargetBuilder->RelocationPageCount), PageIndex += 1) {
+		RelocationBlockHeader* NextBlock := (Buffer + BufferIndex) As RelocationBlockHeader*
+		BufferIndex += 8
+		
+		RelocationHelper* NextHelper := (TargetBuilder->RelocationPages)[PageIndex]
+		
+		NextBlock->PageRVA := NextHelper->PageRVA
+		NextBlock->BlockSize := 8 + ((NextHelper->EntryCount) * 2)
+		
+		for (i32 EntryIndex := 0, EntryIndex < (NextHelper->EntryCount), EntryIndex += 1) {
+			i16 NextEntry := (NextHelper->Entries)[EntryIndex]
+			
+			((Buffer + BufferIndex) As i16*)[0] := NextEntry
+			BufferIndex += 2
+		}
+	}
+	
+	TargetBuilder->PE->BaseRelocationTableRVA := TargetBuilder->NextRVA
+	TargetBuilder->PE->BaseRelocationTableSize := RelocationSectionSize
+	
+	PopulateSection(TargetBuilder, TargetBuilder->RelocHeader, Buffer As i8*, RelocationSectionSize)
+}
+
+/*
+==========================================
+	Import hint/name table helpers
+==========================================
+*/
 
 define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeWideString* EntryText) {
 	i32 Offset := ToBuilder->HintNameTableSize
@@ -3486,6 +3608,12 @@ define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToF
 	
 	return HINT_NAME_ENTRY_NOT_FOUND
 }
+
+/*
+==========================================
+	Higher-level import helpers 
+==========================================
+*/
 
 define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 	i32 FoundIndex := 0
@@ -3533,6 +3661,12 @@ define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideStrin
 	
 	ToBuilder->ImportFunctionCount += 1
 }
+
+/*
+==========================================
+	Actual idata section builder
+==========================================
+*/
 
 define void FinalizeImports(PEBuilder* TargetBuilder) {
 	i32 ImportSectionRVA := TargetBuilder->NextRVA
@@ -3602,9 +3736,20 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	PopulateSection(TargetBuilder, TargetBuilder->IDataHeader, ImportSectionBuffer As i8*, ImportSectionSize)
 }
 
+/*
+==========================================
+	Misc utility functions
+==========================================
+*/
+
 define void FinalizeBuilder(PEBuilder* Builder) {
-	FinalizeImports(Builder)
-	Builder->PE->SizeOfImage := RoundTo(Builder->BufferSize, DEFAULT_SECTION_ALIGNMENT)
+	i32 FileSize := RoundTo(Builder->BufferSize, DEFAULT_FILE_ALIGNMENT)
+	
+	ExtendBuilder(Builder, FileSize)
+	
+	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT)
+	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size)
+	Builder->PE->SizeOfUnInitializedData := (Builder->DataHeader->Size)
 }
 
 define void PrintBuilder(PEBuilder* Builder) {
