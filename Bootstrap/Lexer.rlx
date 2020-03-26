@@ -2354,10 +2354,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	PEBuilder* B := BuildBuilder()
 	
+	AddData(B, 0x149)
+	
 	AddImport(B, AToS("Kernel32"), AToS("ExitProcess"))
 	AddImport(B, AToS("Kernel32"), AToS("LocalFree"))
-	
-	AddData(B, 0x149)
 	
 	AddRelocation(B, 0x1000, 40, 1)
 	
@@ -3257,8 +3257,8 @@ define void WritePEHeader(void* IntoBuffer) {
 ==========================================
 */
 
-i16 IDATA_OFFSET := 0x1F8
-i16 DATA_OFFSET := 0x220
+i16 DATA_OFFSET := 0x1F8
+i16 IDATA_OFFSET := 0x220
 i16 RELOC_OFFSET := 0x248
 i16 TEXT_OFFSET := 0x270
 
@@ -3460,8 +3460,6 @@ define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, 
 */
 
 define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
-	FinalizeImports(ToBuilder)
-	
 	i32 DataRVA := (ToBuilder->NextRVA)
 	
 	ToBuilder->DataHeader->Size := DataSize
@@ -3476,7 +3474,8 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 	}
 }
 
-define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {	
+define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
+	FinalizeImports(ToBuilder)
 	FinalizeRelocations(ToBuilder)
 	
 	i32 RVA := ToBuilder->NextRVA
@@ -3713,7 +3712,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 		
 		NextEntry->DllNameRVA := HintNameBase + NextEntryNameRVA
 		NextEntry->LookupTableRVA := ImportLookupBase + (LookupIndex * 8)
-		NextEntry->ThunkTableRVA := ImportLookupBase + (LookupIndex * 8) + LookupMaxIndex
+		NextEntry->ThunkTableRVA := ImportLookupBase + (LookupIndex * 8) + (LookupMaxIndex * 8)
 		
 		for (i32 ImportIndex := 0, ImportIndex < (NextHelper->ImportCount), ImportIndex += 1) {
 			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
