@@ -121,6 +121,8 @@ struct SafeWideString {
 }
 
 define SafeWideString* AToS(i8* SourceString) {
+	/* Converts an ASCII string to a SafeWideString (without freeing anything ever) */
+	
 	SafeWideString* NewString := Alloc(SafeWideString.Size) As SafeWideString*
 	
 	i32 Length := 0
@@ -213,6 +215,8 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 }
 
 define i16* AToW(i8* AString, i32 Length) {
+	/* Converts an ASCII string to a wide string */
+	
 	i16* NewBuffer := (Alloc((Length * 2) + 2) As i16*)
 	
 	for (i32 Index := 0, Index < Length, Index += 1) {
@@ -349,11 +353,15 @@ define void TokenizerError(TokenizerState* pState, i8* Message) {
 
 
 define Token* GetNextToken(TokenizerState* pState) {
+	/* Gathers a single token, and sets/returns CurrentToken */
+	
 	while (!TokenizerAtEnd(pState)) {
 		i32 StartingIndex := pState->Index
 		i16 NextCharacter := GetNextCharacter(pState)
 
 		if (PeekNextCharacter(pState) = '=') {
+			/* If the next character is '=', check for the X= operators first */
+			
 			GetNextCharacter(pState)
 			
 			i8 NewType := TOKEN_TYPE_NONE
@@ -380,24 +388,31 @@ define Token* GetNextToken(TokenizerState* pState) {
 				NewType := OPERATOR_BANG_EQUAL
 			}
 			else {
+				/* If we didn't match and X= operator, backtrack and continue like normal */
 				Backtrack(pState)
 			}
 			
 			if (NewType != TOKEN_TYPE_NONE) {
+				/* But if we did match an X=, return the matched operator */
 				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, NewType)
 			}
 		}
 		
 		if (NextCharacter = ''') {
+			/* If the next character is an open single quote, then consume a single character as an integer */
+			
 			NextCharacter := GetNextCharacter(pState)
 			
 			if (GetNextCharacter(pState) != ''') {
+				/* And make sure there's a close single quote */
 				TokenizerError(pState, "Expected close single quote for character constant")
 			}
 			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, NextCharacter)
 		}
 		else if (NextCharacter = '=') {
+			/* Manually compare for all of the operators */
+			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
 		}
 		else if (NextCharacter = '+') {
@@ -462,6 +477,7 @@ define Token* GetNextToken(TokenizerState* pState) {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
 		}
 		else if (NextCharacter = '[') {
+			/* [ Is an operator in order for Array->A.B[Something] to parse correctly */
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
 		}
 		else if (NextCharacter = ']') {
@@ -472,6 +488,8 @@ define Token* GetNextToken(TokenizerState* pState) {
 		}
 		else if (NextCharacter = '"') {
 			NextCharacter := 0
+			
+			/* Consume all characters in the string */
 			
 			while ((NextCharacter != '"') && (!TokenizerAtEnd(pState))) {
 				NextCharacter := GetNextCharacter(pState)
@@ -484,21 +502,26 @@ define Token* GetNextToken(TokenizerState* pState) {
 			SafeWideString* FoundString := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
 			FoundString->Length -= 1
 			
+			/* And return the string as a TOKEN_TYPE_STRING */
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {
 			i8 NumberIsHex := false
 			
 			if (NextCharacterMatches(pState, 'x')) {
+				/* If NextCharacter = 0 and Next-NextCharacter = 'x' */
 				NumberIsHex := true
 				
 				NextCharacter := PeekNextCharacter(pState)
 				
+				/* Gather all hex characters */
 				while (IsHex(NextCharacter) && (!TokenizerAtEnd(pState))) {
 					NextCharacter := GetNextCharacter(pState)
 				}
 			}
 			else {
+				/* Number is not hex, gather all decimal characters */
+				
 				while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
 					NextCharacter := GetNextCharacter(pState)
 				}
@@ -508,10 +531,14 @@ define Token* GetNextToken(TokenizerState* pState) {
 				Backtrack(pState)
 			}
 			
+			/* Convert the number to string which we can then parse into a number */
 			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
 			i8 NumberWasConverted := 0
+			
+			/* Set up a result token */
 			Token* ResultToken := MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, 0)
 			
+			/* Convert the hex/decimal number, and store the result in the token */
 			if (NumberIsHex) {
 				ResultToken->Value := SafeStringHexToI64(AsString, &NumberWasConverted)
 			}
@@ -532,26 +559,33 @@ define Token* GetNextToken(TokenizerState* pState) {
 				Backtrack(pState)
 			}
 			
+			/* Gather all alphanumeric characters in a row */
+			
 			SafeWideString* TokenText := MakeSafeStringToken(pState, StartingIndex) As SafeWideString*
 			
 			i8 TokenAsKeyword := LookupKeyword(TokenText)
 			
 			if (TokenAsKeyword != TOKEN_TYPE_NONE) {
+				/* If the characters make up a keyword, then free the string and make the keyword token */
 				FreeSafeString(TokenText)
 				return MakeToken(pState, StartingIndex, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
 			}
-			else {		
+			else {
+				/* Otherwise, make an identifier token */
 				return MakeToken(pState, StartingIndex, TOKEN_TYPE_IDENTIFER, TokenText As void*)
 			}
 		}
 		
 		if (NextCharacter = ' ' || NextCharacter = '	') {
+			/* Ignore space+tab */
 			continue
 		}
 		else if (NextCharacter = 10 || NextCharacter = 13) {
+			/* Ignore linefeeds */
 			continue
 		}
 		else if (NextCharacter = 0) {
+			/* Ignore null characters */
 			continue
 		}
 		
@@ -563,6 +597,8 @@ define Token* GetNextToken(TokenizerState* pState) {
 }
 
 define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
+	/* Converts PotentialKeyword into a KEYWORD_ constant */
+	
 	if (SafeStringEqualsAString(PotentialKeyword, "define")) {
 		return KEYWORD_DEFINE
 	}
@@ -601,6 +637,8 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 }
 
 define i16 Lower(i16 Character) {
+	/* Gets a character as lowercase */
+	
 	if ('A' <= Character && Character <= 'Z') {
 		Character += 32
 	}
@@ -609,10 +647,13 @@ define i16 Lower(i16 Character) {
 }
 
 define i8 CharacterEqualsNoCase(i16 CharacterOne, i16 CharacterTwo) {
+	/* Checks if two characters are equal, ignoring case */
 	return Lower(CharacterOne) = Lower(CharacterTwo)
 }
 
 define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
+	/* Compares a SafeWideString and i8* ASCII string */
+	
 	i32 Index := 0
 	
 	loop {
@@ -645,16 +686,20 @@ define void FreeSafeString(SafeWideString* StringToFree) {
 	Free(StringToFree As void*)
 }
 
-define void* MakeSafeStringToken(TokenizerState* pState, i32 StartingIndex) {
+define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
+	/* Makes a SafeWideString from tState and returns it as a void* to fit into Token->Value */
+	
 	SafeWideString* NewSafeString := AllocateNewSafeString()
 
-	NewSafeString->Length := pState->Index - StartingIndex
-	NewSafeString->Buffer := pState->Source + (StartingIndex * 2)
+	NewSafeString->Length := tState->Index - StartingIndex
+	NewSafeString->Buffer := tState->Source + (StartingIndex * 2)
 
 	return NewSafeString As void*
 }
 
 define void PrintSafeString(SafeWideString* StringToPrint) {
+	/* Prints a safe string (safely) by using the string's length */
+	
 	i32 CharactersWritten := 0
 	
 	Console:WriteConsole(Console:STDOUT, StringToPrint->Buffer, StringToPrint->Length, &CharactersWritten, 0)
@@ -680,6 +725,8 @@ define void FreeTokenOnly(Token* TokenToFree) {
 }
 
 define Token* CopyToken(Token* TokenToCopy) {
+	/* Copies a token (just in case it can be overwritten like tState->CurrentToken */
+	
 	Token* TokenCopy := AllocateNewToken()
 	
 	TokenCopy->PositionInSource := TokenToCopy->PositionInSource
@@ -691,6 +738,8 @@ define Token* CopyToken(Token* TokenToCopy) {
 }
 
 define Token* MakeToken(TokenizerState* tState, i16 PositionInSource, i8 Type, void* Value) {
+	/* Writes the passed token info into tState->CurrentToken */
+	
 	Token* OutputToken := tState->CurrentToken
 
 	OutputToken->PositionInSource := PositionInSource
@@ -702,6 +751,8 @@ define Token* MakeToken(TokenizerState* tState, i16 PositionInSource, i8 Type, v
 }
 
 define void PrintToken(Token* TokenToPrint) {
+	/* Debug prints a token */
+	
 	Console:AWrite("Type: ")
 	Console:IWriteLine(TokenToPrint->Type)
 	
@@ -754,6 +805,8 @@ define void PrintToken(Token* TokenToPrint) {
 }
 
 define void PrintOperator(i8 Operator) {
+	/* Prints an operator in the worst way possible */
+	
 	i8 FirstCharacter := 0
 	i8 SecondCharacter := 0
 	
@@ -850,6 +903,8 @@ define void PrintOperator(i8 Operator) {
 }
 
 define void PrintPunctuation(i8 Punctuation) {
+	/* Prints a punctuation token in the worst way possible */
+	
 	i8 Character := 0
 	
 	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
@@ -875,6 +930,8 @@ define void PrintPunctuation(i8 Punctuation) {
 }
 
 define void PrintKeyword(i8 Keyword) {
+	/* ugh, prints a keyword in the worst way possible */
+	
 	if (Keyword = KEYWORD_DEFINE) {
 		Console:AWrite("define")
 	}
@@ -912,10 +969,13 @@ define void PrintKeyword(i8 Keyword) {
 
 
 define i8 IsAlphaNumeric(i16 Character) {
+	/* Checks if a character is alphanumeric(/can be part of an identifier) */
 	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
 }
 
 define i8 IsAlpha(i16 Character) {
+	/* Checks if a character is alpha */
+	
 	if ('a' <= Character && Character <= 'z') {
 		return 1
 	}
@@ -927,9 +987,12 @@ define i8 IsAlpha(i16 Character) {
 }
 
 define i8 IsHex(i16 Character) {
+	/* Checks if a character is numeric or hex */
 	return IsNumeric(Character) || _IsHex(Character)
 }
 define i8 _IsHex(i16 Character) {
+	/* Checks if a character is a hex character (a-fA-F) */
+	
 	if ((Character >= 'a') && (Character <= 'f')) {
 		return true
 	}
@@ -941,10 +1004,13 @@ define i8 _IsHex(i16 Character) {
 }
 
 define i8 IsNumeric(i16 Character) {
+	/* Checks if a character is a number of not */
 	return (Character >= '0') && (Character <= '9')
 }
 
 define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
+	/* Reads a hex number out of StringToReadFrom and returns it as an integer */
+	
 	i64 Result := 0
 	
 	i16* WString := StringToReadFrom->Buffer
@@ -999,6 +1065,8 @@ define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
 
 
 define i64 SafeStringToI64(SafeWideString* StringToReadFrom, i8* Success) {
+	/* Reads an (signed) integer out of StringToReadFrom and returns it */
+	
 	i64 Result := 0
 	i64 Negative := 0
 	
@@ -1049,6 +1117,8 @@ i8 LEFT_ASSOCIATIVE := 1
 i8 RIGHT_ASSOCIATIVE := 2
 
 define i8 GetPrecedence(Token* ForOperator) {
+	/* Gets the precedence for a given operator */
+	
 	i8 Operator := (ForOperator->Value) As i8
 	
 	if (Operator = OPERATOR_COLON_EQUAL || Operator = OPERATOR_STAR_EQUAL) {
@@ -1090,6 +1160,8 @@ define i8 GetPrecedence(Token* ForOperator) {
 }
 
 define i8 GetAssociation(Token* ForOperator) {
+	/* Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE depending on the operator passed */
+	
 	i8 Precedence := GetPrecedence(ForOperator)
 	
 	if (Precedence = 1 || Precedence = 3) {
@@ -1101,6 +1173,8 @@ define i8 GetAssociation(Token* ForOperator) {
 }
 
 define i8 GetPrefixPrecedence(Token* ForOperator) {
+	/* Returns the precedence of an operator when it is used as a prefix operator */
+	
 	i8 Operator := (ForOperator->Value) As i8
 	
 	if (Operator = OPERATOR_STAR) {
@@ -1116,10 +1190,12 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 		return 11
 	}
 	
-	return 0
+	return 0 /* Returns 0 when the operator is not a prefix operator */
 }
 
 define i8 IsPrefixOperator(Token* ForOperator) {
+	/* Used to determine if an operator can be a prefix operator in the parser */
+	
 	return GetPrefixPrecedence(ForOperator) != 0
 }
 
@@ -1158,6 +1234,9 @@ struct StructField {
 Type* TYPE_NONE := 0
 
 define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStructType, i8 IsIncomplete) {
+	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
+	
+	/* Should only be called once per type name */
 	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
 	
 	NewType->Name := Name
@@ -1177,6 +1256,8 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 }
 
 define Type* MakeType(TypeInfo* BackingType, i8 PointerDepth) {
+	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
+	
 	Type* NewType := Alloc(Type.Size) As Type*
 	
 	NewType->TrueType := BackingType
@@ -1194,6 +1275,8 @@ define Type* MakeType(TypeInfo* BackingType, i8 PointerDepth) {
 
 define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the standard types, only called once */
+	
+	/* All standard types are not structs, and are not incomplete */
 	pState->i8 := AddType(pState, AToS("i8"), 0, 1, false, false)
 	pState->i16 := AddType(pState, AToS("i16"), 0, 2, false, false)
 	pState->i32 := AddType(pState, AToS("i32"), 0, 4, false, false)
@@ -1202,6 +1285,8 @@ define void CreateDefaultTypes(ParserState* pState) {
 }
 
 define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
+	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
+	
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
 	TypeInfo* FoundTypeInfo := 0
 	
@@ -1210,6 +1295,7 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 	Console:AWrite(" at ")
 	
 	if (FoundElement) {
+		/* We found the type with the given name, so we can now set FoundTypeInfo */
 		Console:IWriteLine((FoundElement->Value) As i64)
 		FoundTypeInfo := (FoundElement->Value) As TypeInfo*
 	}
@@ -1224,18 +1310,22 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 			TokenizerError(pState->pState, "Incomplete types can only be used with pointers")
 		}
 		
+		/* We didn't find a type with the name, build an incomplete type for it */
 		FoundTypeInfo := AddType(pState, TypeName, 0, 0, true, true)
 	}
 	
+	/* Allocate and populate a Type for the given TypeInfo and PointerDepth */
 	Type* Result := Alloc(Type.Size) As Type*
 	
 	Result->PointerDepth := PointerDepth
 	Result->TrueType := FoundTypeInfo
 	
 	if (PointerDepth) {
+		/* If the Type has any PointerDepth, then it is size 8 (8 byte pointers) */
 		Result->Size := 8
 	}
 	else {
+		/* Otherwise, it is just the size of the base type */
 		Result->Size := FoundTypeInfo->Size
 	}
 	
@@ -1243,9 +1333,12 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 }
 
 define Type* DecrementPointerType(ParserState* pState, Type* TypeToDecrement) {
+	/* Returns the type you would get from dereferencing TypeToDecrement */
+	
 	Type* NewType := Alloc(Type.Size) As Type*
 	
 	if (TypeToDecrement->PointerDepth = 0) {
+		/* If you're dereferencing a non-pointer type, something's wrong */
 		TokenizerError(pState->pState, "Pointer type expected")
 	}
 	
@@ -1255,6 +1348,8 @@ define Type* DecrementPointerType(ParserState* pState, Type* TypeToDecrement) {
 	return NewType
 }
 define Type* IncrementPointerType(ParserState* pState, Type* TypeToIncrement) {
+	/* Returns a type which is a pointer to the passed type */
+	
 	Type* NewType := Alloc(Type.Size) As Type*
 	
 	NewType->TrueType := TypeToIncrement->TrueType
@@ -1264,6 +1359,8 @@ define Type* IncrementPointerType(ParserState* pState, Type* TypeToIncrement) {
 }
 
 define void PrintType(Type* TypeToPrint) {
+	/* Prints a type, including its pointer depth */
+	
 	PrintSafeString(TypeToPrint->TrueType->Name)
 	
 	loop (TypeToPrint->PointerDepth) {
@@ -1412,20 +1509,31 @@ struct CallExpression {
 */
 
 define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* RightType) {
+	/* Decides the result of a binary expression with the given operand types */
+	
 	TypeInfo* LeftBaseType := LeftType->TrueType
 	TypeInfo* RightBaseType := RightType->TrueType
 	
 	if (LeftType->PointerDepth && RightType->PointerDepth) {
+		/* If we are dealing with two pointer types, something's wrong */
+		
 		TokenizerError(pState->pState, "Operations involving two pointers are disallowed.")
 	}
 	else if (LeftType->PointerDepth) {
+		/* Eles if the left side is a pointer */
+		
 		if (RightBaseType->IsStructType) {
+			/* And the right type is a.. struct? Then something's real funky */
+			
 			TokenizerError(pState->pState, "Invalid operation types1.")
 		}
 		
+		/* Otherwise, right type is a normal type, so return the pointer type */
 		return LeftType
 	}
 	else if (RightType->PointerDepth) {
+		/* Same as above, just in the opposite direction */
+		
 		if (LeftBaseType->IsStructType) {
 			TokenizerError(pState->pState, "Invalid operation types2.")
 		}
@@ -1434,9 +1542,11 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 	}
 	else {
 		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
+			/* If both types are structs, then something even more funky is going on */
 			TokenizerError(pState->pState, "Invalid operation types3.")
 		}
 		
+		/* Otherwise, two normal types, just pick the bigger of the two */
 		if (LeftBaseType->Size >= RightBaseType->Size) {
 			return LeftType
 		}
@@ -1447,6 +1557,8 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 }
 
 define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
+	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_ARRAYACCESS or NODE_TYPE_STRUCT_ACCESS */
+	
 	i8 Operator := (OperatorToken->Value) As i8
 	Type* ResultType := 0
 	
@@ -1456,6 +1568,8 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	TypeInfo* RightBaseType := RightType->TrueType
 	
 	if (Operator = OPERATOR_AS) {
+		/* OPERATOR_AS does nothing, just switches the result type of the expression */
+		
 		if (Right->NodeType != NODE_TYPE_TYPE) {
 			TokenizerError(pState->pState, "Right side operand of 'as' must be a type name")
 		}
@@ -1463,82 +1577,121 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		ResultType := RightType
 	}
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
+		
 		if !(LeftType->TrueType->IsStructType) {
+			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
 			TokenizerError(pState->pState, "Left side operand of '.' and '->' must be of a struct type")
 		}
 		
 		if (LeftType->TrueType->IsIncomplete) {
+			/* Ensure the left type is not incomplete (otherwise we don't know what the result type would be) */
 			TokenizerError(pState->pState, "Fields of incomplete structs cannot be accessed.")
 		}
 		
 		if (Right->NodeType != NODE_TYPE_VARIABLE) {
+			/* If the right operand isn't an identifier(/NODE_TYPE_VARIABLE) then it is not what we need */
 			TokenizerError(pState->pState, "Right side operand of of '.' and '->' must be a string")
 		}
 		
+		/* Get the right side text */
 		SafeWideString* RightText := ((Right->TrueNode) As VariableInfo*)->Name
 		
+		/* And look up the struct field with that name */
 		HashMapElement* FoundStructField := HashMapGetValue(LeftType->TrueType->StructTypeFields, RightText)
 		
 		if !(FoundStructField) {
+			/* If we didn't find a field with that name, then error out */
+			
 			PrintSafeString(RightText)
 			Console:WriteNewLine()
 			TokenizerError(pState->pState, "Unknown struct field")
 		}
 		
+		/* Convert the HashMapElement* into a StructField* */
 		StructField* TargetField := (FoundStructField->Value) As StructField*
 		
+		/* Build a StructAccessExpression node */
 		StructAccessExpression* NewAccess := Alloc(StructAccessExpression.Size) As StructAccessExpression*
 		
+		/* Populate the StructAccessExpression node */
 		NewAccess->Left := Left
 		NewAccess->Operator := OperatorToken
 		NewAccess->TargetField := TargetField
 		
+		/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
 		return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, TargetField->ValueType)
 	}
 	else if (Operator = OPERATOR_COLON_EQUAL) {
+		/* If this is an assignment do some extra type checking */
+		
 		if (LeftType->PointerDepth && LeftBaseType->IsStructType && RightType->PointerDepth && RightBaseType->Size = 8) {
+			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
+			
+			/* This allows for stuff like `MyStruct* Test := Alloc(MyStruct.Size)` without ugly casting */
+			
 			ResultType := LeftType
 		}
 		else if (LeftType->PointerDepth != 0 && LeftBaseType->IsStructType) {
+			/* Else if the left is a literal struct type, error out */
+			
 			TokenizerError(pState->pState, "Local structs cannot be assigned")
 		}
 		else if (LeftType->Size < RightType->Size) {
+			/* Else if the variable is smaller than the right operand, error out */
+			
 			TokenizerError(pState->pState, "Right side operand of ':=' cannot be a bigger type than left side operand")
 		}
 		else {
+			/* Otherwise, the result type is the right type */
 			ResultType := RightType
 		}
 	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		/* For an array access, make sure the index type isn't a pointer/struct */
+		
 		if (RightType->PointerDepth || RightType->TrueType->IsStructType) {
 			TokenizerError(pState->pState, "Right side operand of '[' must not be a pointer or struct.")
 		}
 		
+		/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
+		
 		ResultType := DecrementPointerType(pState, LeftType)
 	}
 	else {
+		/* Otherwise, just follow default binary typing rules */
+		
 		ResultType := GetBinaryResultType(pState, LeftType, RightType)
 	}
+	
+	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
 	
 	if (Left->NodeType = NODE_TYPE_INTEGER) {
 		Left->ValueType := ResultType
 	}
-	
 	if (Right->NodeType = NODE_TYPE_INTEGER) {
 		Right->ValueType := ResultType
 	}
 	
+	/* Allocate a result node */
+	
 	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
+	
+	/* Populate the node */
 	
 	Result->Left := Left
 	Result->Operator := OperatorToken
 	Result->Right := Right
 	
+	/* Wrap it, and return it */
 	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
 }
 define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
+	/* Builds a NODE_TYPE_UNARY for the given operand/operator combo */
+	
 	UnaryExpression* Result := Alloc(UnaryExpression.Size) As UnaryExpression*
 	
+	/* Get the  */
 	Type* ResultType := Operand->ValueType
 	i8 Operator := (OperatorToken->Value) As i8
 	
@@ -1562,26 +1715,34 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
 }
 define ASTNode* MakeCall(ParserState* pState, SafeWideString* Name, ASTNode** Parameters, i32 ParameterCount) {
+	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
+	
 	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
 	
+	/* Find the function which is being called. Todo: Allow incomplete functions */
 	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
 	
 	if !(FoundFunction) {
+		/* And if the function was not found, then error out */
 		PrintSafeString(Name)
 		Console:WriteNewLine()
 		TokenizerError(pState->pState, "Function definition not found.")
 	}
 	
+	/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
 	FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 	
+	/* And verify the parameter counts match */
 	if (FoundDefine->ParameterCount != ParameterCount) {
 		TokenizerError(pState->pState, "Invalid number of parameters passed to function.")
 	}
 	
+	/* And populate the CallExpression with the info inside the callee */
 	Result->TargetFunction := FoundDefine
 	Result->Parameters := Parameters
 	Result->ParameterCount := ParameterCount
 	
+	/* Wrap the CallExpression with a NODE_TYPE_CALL and with a ResultType of the callee's return type */
 	return AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, FoundDefine->ReturnType)
 }
 
@@ -1598,6 +1759,7 @@ struct ParserState {
 	HashMap* Globals,
 	HashMap* Types,
 	
+	/* In order to prevent recreating the default types, they are just stored in the parser state */
 	TypeInfo* i8,
 	TypeInfo* i16,
 	TypeInfo* i32,
@@ -1612,23 +1774,33 @@ struct ParserState {
 }
 
 define void ParserError(ParserState* pState, i8* ErrorMessage) {
+	/* Helper for raising an error from the parser */
+	
 	TokenizerError(pState->pState, ErrorMessage)
 }
 
 define i32 FreezeParser(ParserState* pState) {
+	/* Gets the tokenizer state in order to backtrack to said state */
+	
 	return pState->pState->Index
 }
 define void UnfreezeParser(ParserState* pState, i32 Index) {
+	/* Restores the tokenizer to a given state in order to backtrack */
+	
 	pState->pState->Index := Index
 }
 
 define Token* ParserNextToken(ParserState* pState) {
-	Token* NextToken := GetNextToken(pState->pState)
+	/* Gets the next token */
 	
-	return NextToken
+	return GetNextToken(pState->pState)
 }
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
+	/* Compares two tokens using type/value */
+	
 	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING) {
+		/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
+		
 		if (TokenToTest->Type = TokenType) {
 			return true
 		}
@@ -1641,21 +1813,26 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	return false
 }
 define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
 	
 	Token* NextToken := ParserNextToken(pState)
 	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
 	
 	if !(Matches) {
+		/* Backtrack if the next token didn't match */
 		UnfreezeParser(pState, FrozenState)
 	}
 	
 	return Matches
 }
 define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
+	/* Gets the next token and ensures it is a TokenText:TokenValue token (with Reason being an error message for when the next token doesn't match) */
+	
 	Token* NextToken := ParserNextToken(pState)
 	
 	if (NextToken->Type = TOKEN_TYPE_EOF) {
+		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
 		TokenizerError(pState->pState, "Unexpected EOF")
 	}
 	
@@ -1667,6 +1844,8 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 }
 
 define void ParserStart(TokenizerState* pState) {
+	/* Initializes pState and parses a program */
+	
 	ParserState P
 	P.pState := pState
 	
@@ -1693,6 +1872,8 @@ define void ParserStart(TokenizerState* pState) {
 */
 
 define void ParseProgram(ParserState* pState) {
+	/* Parse a whole program */
+	
 	loop {
 		Token* NextToken := ParserNextToken(pState)
 		
@@ -1717,102 +1898,132 @@ define void ParseProgram(ParserState* pState) {
 }
 
 define Type* ParseTypeName(ParserState* pState) {
+	/* Parses a type name, and returns a Type* representing that type */
+	
+	/* Find the base type name */
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
 	i8 PointerDepth := 0
 	
+	/* And the pointer depth of the type */
 	while (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 		PointerDepth += 1
 	}
 	
-	Type* ResultType := GetType(pState, Name, PointerDepth)
-	
-	return ResultType
+	/* Get (and return) a type (which might be incomplete) using the parsed info */
+	return GetType(pState, Name, PointerDepth)
 }
 
 define void ParseAndAddStruct(ParserState* pState) {
+	/* Parses a struct type, and adds it to pState */
+	
+	/* Gets the type name */
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
+	/* Consumes the opening '{' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
+	/* Creates a hashmap for the struct fields */
 	HashMap* Fields := NewHashMap()
 	i16 FieldCount := 0
+	
+	/* Stores where the next field will be */
 	i16 NextFieldOffset := 0
+	
+	/* Stores the total size of the struct */
 	i16 TotalSize := 0
 	
 	loop {
+		/* Allocate a StructField for the next field */
 		StructField* NextField := Alloc(StructField.Size) As StructField*
 		
+		/* Parse the type of the field */
 		NextField->ValueType := ParseTypeName(pState)
-
-		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		
+		/* Get the name of the field */
+		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (NameToken->Value) As SafeWideString*
 		
-		NextField->Name := FieldName
+		/* Add the field to the field map */
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
+		/* Populate the StructField */
+		NextField->Name := FieldName	
 		NextField->Offset := NextFieldOffset
+		
+		/* Set the offset of the next field */
 		NextFieldOffset += NextField->ValueType->Size
 		
+		/* Update the number of fields, and total size */
 		FieldCount += 1
 		TotalSize := NextFieldOffset
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			/* And if the next token is not a ',' break the loop */
 			break
 		}
 	
 	}
 	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected open brace for struct body")
+	
+	/* Check if there's already a type with this name */
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
 	TypeInfo* FoundType := 0
 	
 	if (FoundElement) {
-		/*
-			If an element for this type already exists in the type list then:
-				A) It has been used as an incomplete type or,
-				B) It has a duplicate definition
-			We can check ->IsIncomplete to find out which is true
-		*/
+		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
 		
 		FoundType := (FoundElement->Value) As TypeInfo*
 		
 		if !(FoundType->IsIncomplete) {
+			/* If the type we found isn't incomplete, then error out */
 			TokenizerError(pState->pState, "Duplicate type definition")
 		}
 		
+		/* Otherwise, update the found type with the info we just parsed */
 		FoundType->StructTypeFields := Fields
 		FoundType->Size := TotalSize
 		FoundType->IsStructType := true
-		FoundType->IsIncomplete := false
+		FoundType->IsIncomplete := false /* And set that it is no longer incomplete */
 	}
 	else {
+		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
 		AddType(pState, Name, Fields, TotalSize, true, false)
 	}
 }
 
 define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableName) {
+	/* Finds a variable, prioritizing locals over globals */
+	
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	VariableInfo* FoundVariable := 0
 	
 	if (CurrentFunction) {
+		/* If we are in a function, try to find the variable in the locals */
 		FoundVariable := HashMapGetVariable(CurrentFunction->Locals, VariableName)
 	}
 	
 	if !(FoundVariable) {
+		/* If we didn't find the variable in the locals, then check the globals */
 		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
 	}
 	
 	if !(FoundVariable) {
+		/* If we still haven't found the variable, then it is undefined */
 		TokenizerError(pState->pState, "Undefined variable")
 	}
+	
+	/* Variable has to have been found at some point for this to be reached */
 	
 	return FoundVariable
 }
 
 define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
+	/* Adds a local variable to the current function */
+	
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	
 	Console:AWrite("Adding local ")
@@ -1820,13 +2031,16 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	Console:WriteNewLine()
 	
 	if !(CurrentFunction) {
+		/* If we don't have a current function, then something's wrong */
 		TokenizerError(pState->pState, "Unexpected local variable")
 	}
 	
 	if (HashMapGetVariable(CurrentFunction->Locals, NewLocal->Name)) {
+		/* Else if we already have a local in the local hashmap, then it's a duplicate definition */
 		TokenizerError(pState->pState, "Duplicate definition")
 	}
 	
+	/* Add the new local (with its index as an ID) */
 	NewLocal->ScopedID := CurrentFunction->LocalCount
 	CurrentFunction->LocalCount += 1
 	
@@ -1834,54 +2048,78 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 }
 
 define ASTNode* ParseAndAddDefine(ParserState* pState) {
+	/* Parses a 'define' statement */
+	
+	/* Allocate the AST node early so it can be added to the function list (so recursive functions work) */
 	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
 	
+	/* Create a hashmap for the functions' locals */
 	NewDefine->Locals := NewHashMap()
 	NewDefine->LocalCount := 0
 	
+	/* Set the current function to this function */
 	pState->CurrentFunction := NewDefine
 	
+	/* Parse the return type */
 	NewDefine->ReturnType := ParseTypeName(pState)
 
+	/* Get the function name, and set our function's name */
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	NewDefine->Name := (NameToken->Value) As SafeWideString*
 	
+	/* Build the container node */
 	ASTNode* NewDefineNode := AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE)
 	
+	/* And add it to the function hashmap */
 	HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)
 	
+	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
+	/* Set up a buffer for parameters */
 	i8 ParameterCount := 0
 	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
+		
 		loop {
+			/* Allocate a VariableInfo struct for the next parameter */
 			VariableInfo* NextParameter := AllocateNewVariableInfo()
 			
+			/* Max parameter count since I cba to expand the buffer. Todo: Fix this */
 			if (ParameterCount >= 16) {
 				TokenizerError(pState->pState, "Max parameter limit reached")
 			}
 			
+			/* Insert the VariableInfo structure into the parameter list */
 			ParameterList[ParameterCount] := NextParameter
 			
+			/* Parse the parameter type */
 			NextParameter->Type := ParseTypeName(pState)
 			
+			/* Get the parameter name */
 			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 			
+			/* Populate the VariableInfo structure */
 			NextParameter->Name := (NextParameterNameToken->Value) As SafeWideString*
 			NextParameter->IsGlobal := false
 			NextParameter->IsParameter := true
 			NextParameter->ScopedID := ParameterCount
 			
+			/* Add the parameter as a local */
 			ParserAddLocal(pState, NextParameter)
 			
+			/* Update the parameter count */
 			ParameterCount += 1
 			
 			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
 				break
 			}
 		}
+		
+		/* If the loop was broken by any token besides a ')', then there's something wrong */
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 			TokenizerError(pState->pState, "Expected closing paren for parameter list")
@@ -1891,9 +2129,12 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	Console:AWrite("Parameter Count: ")
 	Console:IWriteLine(ParameterCount)
 	
+	/* Update the function's parameter list/count */
+	
 	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
 	
+	/* Parse the body of the function */
 	NewDefine->Body := ParseBlock(pState)
 	
 	PrintAST(NewDefineNode)
@@ -1901,29 +2142,40 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 }
 
 define Block* ParseBlock(ParserState* pState) {
+	/* Parses and builds a block of statements */
+	
+	/* Consume the { */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
 	
+	/* Set up a buffer for the statements */
 	i16 StatementBufferSize := 8
 	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
 	i16 StatementCount := 0
 	
 	loop {
+		/* Loop until NextMatches('}') */
+		
 		if (StatementCount * 8 <= StatementBufferSize) {
+			/* If the buffer needs to be expanded, expand it */
+			
 			Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
 			StatementBufferSize += (10 * 8)
 		}
 		
+		/* Parse a statement and put it into the statement list */
 		Statements[StatementCount] := ParseStatement(pState)
 		StatementCount += 1
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			/* If the next token is a '}', then break */
 			break
 		}
 		else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
-			TokenizerError(pState->pState, "Expected close brace in block")
+			TokenizerError(pState->pState, "Expected close brace for block")
 		}
 	}
 	
+	/* Allocate a block structure and populate it with the statement list/count */
 	Block* NewBlock := Alloc(Block.Size) As Block*
 	NewBlock->Statements := Statements
 	NewBlock->StatementCount := StatementCount
@@ -1936,6 +2188,9 @@ define Block* ParseBlock(ParserState* pState) {
 }
 
 define ASTNode* ParseStatement(ParserState* pState) {
+	/* Parses a single statement */
+	
+	/* Freeze the parser just in case the next token isn't a keyword */
 	i32 FrozenState := FreezeParser(pState)
 	
 	Token* NextToken := ParserNextToken(pState)
@@ -1943,16 +2198,24 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
 		if (NextToken->Value = KEYWORD_CONTINUE) {
+			/* A continue statement is a NODE_TYPE_CONTINUEBREAK with the value 1 */
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true, TYPE_NONE)
 		}
 		else if (NextToken->Value = KEYWORD_BREAK) {
+			/* A break statement is a NODE_TYPE_CONTINUEBREAK with the value 0 */
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false, TYPE_NONE)
 		}
 		else if (NextToken->Value = KEYWORD_RETURN) {
+			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
+			
+			/* Parse the expression to return */
 			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
 			
+			/* Get the type of the return expression, and the current function's return type */
 			Type* ActualReturnType := ExpressionToReturn->ValueType
 			Type* ExpectedReturnType := pState->CurrentFunction->ReturnType
+			
+			/* And ensure that the two types are compatible */
 			
 			if (ActualReturnType->Size > ExpectedReturnType->Size) {
 				TokenizerError(pState->pState, "Return type too large")
@@ -1964,11 +2227,15 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				TokenizerError(pState->pState, "Return type should be a struct type")
 			}
 			
+			/* Then set the result to a new NODE_TYPE_RETURN */
+			
 			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 		}
 	}
 	
 	if (Result = 0) {
+		/* If Result isn't set yet, then this is an expression statement, so parse and expression and make a NODE_TYPE_EXPRESSION node */
+		
 		UnfreezeParser(pState, FrozenState)
 		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
 	}
@@ -1977,34 +2244,53 @@ define ASTNode* ParseStatement(ParserState* pState) {
 }
 
 define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
+	/* Returns a type for the given number (smallest type that can store the number unsigned) */
+	
 	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		/* If any of the upper 33 bits are set, then it's an i64 */
+		
 		return MakeType(pState->i64, 0)
 	}
 	else if (NumberToCheck & 0x7FFF8000) {
+		/* If bits 15-31 are set, then it's an i32 */
+		
 		return MakeType(pState->i32, 0)
 	}
 	else if (NumberToCheck & 0x7F80) {
+		/* If bits 7-14 are set, then it's an i16 */
+		
 		return MakeType(pState->i16, 0)
 	}
 	else if (NumberToCheck & 0x7F || NumberToCheck = 0) {
+		/* Else if 0-6 are set, or the number is 0, it's an i8 */
+		
 		return MakeType(pState->i8, 0)
 	}
 }
 
 
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
+	/* Translates some kind of token in an AST node which contains the actual version of the token */
+	
 	Type* ResultType := 0
 	
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
+		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
+		
 		ResultType := GetNumberType(pState, TokenToTranslate->Value)
 		
 		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
+		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
+		
 		VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
+		/* Using the found variable's type as the node type */
 		
 		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)
 	}
+	
+	/* Otherwise, this has been called incorrectly, and is a bug */
 	
 	Console:AWrite("Unknown fuck ")
 	PrintToken(TokenToTranslate)
@@ -2012,10 +2298,15 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 }
 
 define ASTNode* ParseExpressionOperand(ParserState* pState) {
+	/* Parses and returns a single operand of an expression */
+	
+	/* Copy the next token since ParserNextMatches can overwrite it */
 	Token* NextToken := CopyToken(ParserNextToken(pState))
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
+		/* If the next token is an (, then parse a subexpression and consume a closing ) */
+		
 		Result := ParseExpression(pState, 0)
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
@@ -2023,46 +2314,67 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+		/* Else if the next token is an identifier */
+		
 		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			/* If the next-next token is an (, then this is a function call */
+			
 			i8 ParameterIndex := 0
 			ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
 			
+			/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
 			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 				while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA) || ParameterIndex = 0) {
 					Parameters[ParameterIndex] := ParseExpression(pState, 0)
 					ParameterIndex += 1
 				}
 				
+				/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
+				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 					TokenizerError(pState->pState, "Expected closing paren for function call")
 				}
 			}
 			
+			/* Make a NODE_TYPE_CALL node for the function call */
+			
 			Result := MakeCall(pState, (NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
 		}
 		else {
+			/* Else, this is just a variable being used, so make a NODE_TYPE_VARIABLE node */
+			
 			Result := TranslateTokenToNode(pState, NextToken)
 		}
 	}
-	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {	
+	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
+		/* A literal integer, just make a NODE_TYPE_INTEGER for it */
+		
 		Result := TranslateTokenToNode(pState, NextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
+		/* A prefix operator, parse an expression only containing operators of a higher precedence than the prefix operator */
+		
 		Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
 		
+		/* And make a NODE_TYPE_UNARY for the unary operator/operand pair */
 		Result := MakeUnary(pState, NextToken, Result)
 	}
 	else {
+		/* Else, this token isn't something we expected here, so error out */
+		
 		PrintToken(NextToken)
 		TokenizerError(pState->pState, "Unexpected token in expression")
 	}
 	
+	/* Free the copy of NextToken */
 	FreeToken(NextToken)
 	
 	return Result
 }
 
 define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
+	/* Parses and returns and expression only containing operators with higher precedence than Precedence */
+	
 	ASTNode* Result := ParseExpressionOperand(pState)
 	
 	i32 FrozenState := FreezeParser(pState)
@@ -2078,22 +2390,34 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		ASTNode* Operand := 0
 		
 		if (OperatorToken->Value = OPERATOR_OPEN_BRACKET) {
+			/* If the next operator is [, then parse the index expression (for the right operand) and consume the closing ] */
+			
 			Operand := ParseExpression(pState, 0)
 			
 			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
 		}
 		else if (OperatorToken->Value = OPERATOR_AS) {
+			/* Else if the next operator is 'as' then parse a type name as the right operand */
+			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, ParseTypeName(pState) As void*, TYPE_NONE)
 		}
 		else {
+			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
+			
 			Operand := ParseExpression(pState, NewPrecedence)
 		}
 		
+		/* Fold the left/operator/right into just the left */
 		Result := MakeBinary(pState, Result, OperatorToken, Operand)
 		
+		/* Update where to restore the parser to once the expression ends */
 		FrozenState := FreezeParser(pState)
+		
+		/* Update the next operator */
 		OperatorToken := CopyToken(ParserNextToken(pState))
 	}
+	
+	/* Debug print the expression result type (and text) */
 	
 	PrintType(Result->ValueType)
 	Console:WriteCharacter(' ')
@@ -2106,6 +2430,8 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 }
 
 define void PrintAST(ASTNode* NodeToPrint) {
+	/* Recursively prints an AST node and all child nodes */
+	
 	i8 NodeType := NodeToPrint->NodeType
 	
 	if (NodeType = NODE_TYPE_UNARY) {
@@ -2259,6 +2585,8 @@ struct CompilerState {
 	i32 LabelBufferCapacity,
 	
 	i32 LabelIndex,
+	
+	Type* CurrentFunctionReturnType,
 	i32 CurrentFunctionReturnLabel,
 	i32 LastReturnOffset,
 	
@@ -2305,50 +2633,82 @@ define i8 PopRegisterStack(CompilerState* cState) {
 }
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
+	/* Compiles a single function */
+	
+	/* Allocates a label to be the return position, and updates the current return label */
 	i32 ReturnLabel := NextLabel(cState)
 	cState->CurrentFunctionReturnLabel := ReturnLabel
 	
+	/* Store the current return type so return can cast values to it */
+	
+	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
+	
+	/* By default, assume 4 register parameters, and 0 stack parameters */
 	i8 RegisterParameterCount := 4
 	i16 StackParameterCount := 0
 	
 	if (FunctionToCompile->ParameterCount < 4) {
+		/* If there are less than 4 parameters, then the number of register parameters is just the number of parameters */
+		
 		RegisterParameterCount := (FunctionToCompile->ParameterCount) As i8
 	}
 	else if (FunctionToCompile->ParameterCount >= 5) {
+		/* Else if there are 5+ parameters, the stack parameter count is (TotalParamCount - 4) */
+		
 		StackParameterCount := (FunctionToCompile->ParameterCount) - 4
+		
+		/* Also, store RSP in RBX for extracting the stack parameters with smaller offsets */
 		EmitMove_R64_R64(cState, RBX, RSP)
 	}
 	
+	/* Set up the stack frame for this function */
 	EmitEnter_I16(cState, (FunctionToCompile->LocalCount) * 8)
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
+		/* For each register parameter */
+		
+		/* Get the VariableInfo structure for the parameter */
 		VariableInfo* NextParameter := (FunctionToCompile->Parameters)[RegisterParameterIndex]
+		
+		/* And which register it is in (RCX/RDX/R8/R9) */
 		i8 NextParameterRegister := RegisterParameterIndex + 1
 		
 		if (NextParameterRegister > 2) {
 			NextParameterRegister += 5
 		}
 		
+		/* And write the parameter register's value into the parameter's stack space */
 		EmitMove_RX_DISP8_RX(cState, RBP, NextParameterRegister, -((NextParameter->ScopedID) * 8), NextParameter->Type->Size)
 	}
 	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
+		/* For each stack parameter */
+		
+		/* Get the VariableInfo structure for the parameter */
 		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + 4]
 		
+		/* Load RAX with the parameter's value (using RBX as a base) */
 		EmitMove_RX_RX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
+		
+		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		EmitMove_RX_DISP8_RX(cState, RBP, RAX, -((NextStackParameter->ScopedID) * 8), NextStackParameter->Type->Size)
 	}
 	
-	
+	/* Compile the body of the function */
 	CompileBlock(cState, FunctionToCompile->Body)
 	
+	/* Set the return label to the current index */
 	SetLabel(cState, ReturnLabel)
+	
+	/* Resolve all labels inside the function */
 	ResolveAllLabels(cState)
 	
 	if (cState->LastReturnOffset = cState->Index) {
+		/* If the last instruction was jmp ReturnLabel, then remove it (since it is useless) */
 		cState->Index -= 5
 	}
 	
+	/* Emit the leave/ret instructions for this function (the return value will be set by a return statement */
 	EmitLeave(cState)
 	EmitReturn(cState)
 	
@@ -2365,11 +2725,13 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	FinalizeBuilder(B)
 	
-	PrintBuilder(B)
+	WriteBuilder(B, "C:\Users\Connor\Desktop\Valite\text.exe")
 	
 	/*PrintCodeBytes(cState)*/
 }
 define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
+	/* Compiles a block of statements */
+	
 	for (i32 Index := 0, Index < BlockToCompile->StatementCount, Index += 1) {
 		ASTNode* NextStatement := (BlockToCompile->Statements)[Index]
 		
@@ -2377,12 +2739,27 @@ define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 	}
 }
 define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
+	/* Compiles a return statement */
+	
+	/* Compile the expression to return */
 	CompileExpression(cState, RAX, ReturnExpression)
 	
+	i16 ReturnValueSize := ReturnExpression->ValueType->Size
+	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
+	
+	if (ReturnValueSize < ReturnTypeSize) {
+		EmitMove_R64_RX(cState, RAX, RAX, ReturnValueSize)
+	}
+	
+	/* And jump to this function's return label */
 	EmitJump_Label(cState, cState->CurrentFunctionReturnLabel)
+	
+	/* Also update the LastReturnOffset so this jump can be eliminated if it is the last instruction in the function */
 	cState->LastReturnOffset := cState->Index
 }
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
+	/* Compiles some kind of statement */
+	
 	i8 NodeType := NodeToCompile->NodeType
 	
 	if (NodeType = NODE_TYPE_RETURN) {
@@ -2393,12 +2770,18 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	}
 }
 define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
+	/* Compiles some kind of expression */
+	
 	i8 ExpressionType := ExpressionToCompile->NodeType
 	
 	if (ExpressionType = NODE_TYPE_INTEGER) {
+		/* Simply move the integer being used into the result register */
+		
 		EmitMove_RX_IX(cState, ResultRegister, (ExpressionToCompile->TrueNode) As i64, ExpressionToCompile->ValueType->Size)
 	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
+		/* Todo: Replace with some kind of GetVariable call */
+		
 		VariableInfo* TargetVariable := (ExpressionToCompile->TrueNode) As VariableInfo*
 		
 		EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
@@ -2407,6 +2790,8 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	
 	}
 	else if (ExpressionType = NODE_TYPE_BINARY) {
+		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
+		
 		BinaryExpression* BinaryNode := (ExpressionToCompile->TrueNode) As BinaryExpression*
 		Type* ResultType := ExpressionToCompile->ValueType
 		
@@ -2415,6 +2800,8 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 
 }
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile) {
+	/* Compiles a binary expression, and both operands of the expression */
+	
 	ASTNode* Left := ExpressionToCompile->Left
 	ASTNode* Right := ExpressionToCompile->Right
 	
@@ -2425,28 +2812,40 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	i8 RightRegister := 0
 	
 	if (ExpressionToCompile->Operator->Value != OPERATOR_COLON_EQUAL) {
+		/* As long as we're not compiling an assignment, compile the left operand into the result register */
+		
 		CompileExpression(cState, LeftRegister, Left)
+		
+		/* And allocate a new register for the right operand */
 		
 		RightRegister := PushRegisterStack(cState)
 	}
 	else {
+		/* Otherwise, this is an assignment, so we can reuse the result register for the side side, and ignore the left */
+		
 		RightRegister := ResultRegister
 	}
 	
 	CompileExpression(cState, RightRegister, Right)
 	
 	if (LeftSize > RightSize) {
-		EmitMove_R64_RX(cState, RightRegister, RightRegister, RightSize)
+		/* If the right side is smaller than the left, cast the right side up to LeftSize */
+		EmitMove_R64_RX(cState, RightRegister, RightRegister, LeftSize)
 	}
 	else if (RightSize > LeftSize) {
-		EmitMove_R64_RX(cState, LeftRegister, LeftRegister, LeftSize)
+		/* If the left side is smaller than the right, cast the left side up to RightSize */
+		EmitMove_R64_RX(cState, LeftRegister, LeftRegister, RightSize)
 	}
 	
 	CompileBinaryOperation(cState, ResultRegister, ResultType, ExpressionToCompile->Operator, Left)
 }
 define void CompileBinaryOperation(CompilerState* cState, i8 LeftRegister, Type* ResultType, Token* OperatorToCompile, ASTNode* Left) {
+	/* Uses LeftRegister and TopOfRegisterStack as operands for OperatorToCompile's operation, with LeftRegister as the result register */
+	
 	i8 Operator := (OperatorToCompile->Value) As i8
-
+	
+	/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
+	
 	if (Operator = OPERATOR_PLUS) {
 		EmitAdd_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
 	}
@@ -2456,11 +2855,8 @@ define void CompileBinaryOperation(CompilerState* cState, i8 LeftRegister, Type*
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
 		
+		/* Todo: Replace with a SetVariable helper, also check for the left side actually being a variable */
 		EmitMove_RX_DISP8_RX(cState, RBP, LeftRegister, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
-		
-		if (TargetVariable->Type->Size < ResultType->Size) {
-			EmitMove_R64_RX(cState, LeftRegister, LeftRegister, ResultType->Size)
-		}
 	}
 
 
@@ -2513,6 +2909,8 @@ define i32 NextLabel(CompilerState* cState) {
 }
 
 define void EnsureLabelBufferCapacity(CompilerState* cState) {
+	/* Ensures that cState can hold at least one more label in its label buffer */
+	
 	if (cState->LabelBufferCapacity <= (cState->LabelCount + 1)) {
 		cState->Labels := ReAlloc((cState->Labels) As void*, (cState->LabelBufferCapacity + 10) * 8) As Label**
 		cState->LabelBufferCapacity += 10
@@ -2520,6 +2918,8 @@ define void EnsureLabelBufferCapacity(CompilerState* cState) {
 }
 
 define void UseLabel(CompilerState* cState, i32 LabelNumber) {
+	/* Registers a label as being used, and writes a placeholder value into CodeBuffer for the label */
+	
 	EnsureLabelBufferCapacity(cState)
 	
 	Label* NewLabel := Alloc(Label.Size) As Label*
@@ -2535,6 +2935,8 @@ define void UseLabel(CompilerState* cState, i32 LabelNumber) {
 }
 
 define Label* SetLabel(CompilerState* cState, i32 LabelNumber) {
+	/* Creates a new label which points to the current cState->Index */
+	
 	EnsureLabelBufferCapacity(cState)
 	
 	Label* NewLabel := Alloc(Label.Size) As Label*
@@ -2550,10 +2952,13 @@ define Label* SetLabel(CompilerState* cState, i32 LabelNumber) {
 }
 
 define void ResolveAllLabels(CompilerState* cState) {
+	/* Goes through each label which is not a placeholder, but actually points to an index */
+	
 	for (i32 Index := 0, Index < cState->LabelCount, Index += 1) {
 		Label* NextLabel := (cState->Labels)[Index]
 		
 		if !(NextLabel->IsPlaceholder) {
+			/* And resolves each use of the label to the offset */
 			ResolveLabel(cState, NextLabel->LabelNumber, NextLabel->OffsetToReplace)
 		}
 	}
@@ -2577,14 +2982,20 @@ define void ResolveLabel(CompilerState* cState, i32 LabelNumber, i32 Value) {
 */
 
 define void* GetIndexAsPointer(CompilerState* cState) {
+	/* Helper to get a pointer into cState->CodeBuffer */
+	
 	return ((cState->CodeBuffer) + (cState->Index)) As void*
 }
+
+/* Helpers which write a number into cState->CodeBuffer and increment cState->Index */
 
 define void PushI8(CompilerState* cState, i8 NumberToPush) {
 	(cState->CodeBuffer)[cState->Index] := NumberToPush
 	cState->Index += 1
 }
 define void PushByte(CompilerState* cState, i8 NumberToPush) {
+	/* Alternate name for PushI8 since I was too used to typing PushByte */
+	
 	PushI8(cState, NumberToPush)
 }
 
@@ -2613,16 +3024,22 @@ define void PushI64(CompilerState* cState, i64 NumberToPush) {
 ==========================================
 */
 
+/* Helpers to translate our R8-R15 into x64 R8-R15 */
+
 define i8 RegisterRequiresREX(i8 RegisterNumber) {
 	return RegisterNumber >= 8
 }
 define i8 ClampRegisterNumber(i8 RegisterNumber) {
+	/* Takes a 0-15 register number and returns it as a 0-7 number (which might need a REX prefix) */
+	
 	if (RegisterRequiresREX(RegisterNumber)) {
 		return RegisterNumber - 8
 	}
 	
 	return RegisterNumber
 }
+
+/* Constants used while generating code */
 
 i8 REX_BASE := 0x40
 
@@ -2640,6 +3057,9 @@ i8 RSP := 4
 i8 RBP := 5
 i8 RSI := 6
 i8 RDI := 7
+
+/* Although R8-R15 actually have the same numbers of RAX-RDI, REX.B is encoded as bit 3 (which is removed and replaced with a REX prefix while actually encoding) */
+
 i8 R8 := 8
 i8 R9 := 9
 i8 R10 := 10
@@ -3000,6 +3420,8 @@ define void EmitReturn(CompilerState* cState) {
 ==========================================
 */
 
+/* Lots of padding fields to ensure correct alignment */
+
 struct MZHeader {
 	i8 MagicM,
 	i8 MagicZ,
@@ -3035,6 +3457,8 @@ struct MZHeader {
 	i32 PEHeaderOffset
 }
 
+/* Header offsets used to index a buffer holding a PE file */
+
 i16 MZ_HEADER_OFFSET := 0x00
 i16 MZ_HEADER_SIZE := 0x40
 i16 MZ_PADDING_SIZE := 0xB0
@@ -3051,8 +3475,11 @@ i16 PE_HEADER_SIZE := 0xF0
 i16 SECTION_HEADER_SIZE := 0x28
 
 define void WriteDOSHeader(void* IntoBuffer) {
+	/* Writes the DOS MZ header into the given buffer */
+	
 	MZHeader* NewHeader := IntoBuffer As MZHeader*
 	
+	/* Some of this is probably wrong, but who's going to check? */
 	NewHeader->MagicM := 'M'
 	NewHeader->MagicZ := 'Z'
 	NewHeader->BytesInLastPage := 0x90
@@ -3075,11 +3502,14 @@ define void WriteDOSHeader(void* IntoBuffer) {
 }
 
 define void WriteDOSStub(void* IntoBuffer) {
+	/* Writes the DOS stub code into the given buffer */
+	
 	IntoBuffer[0] := 0xCD09B4000EBA1F0E
 	
 	/* Rewrite the first byte since the sign bit gets dropped at some point */
 	(IntoBuffer As i8*)[0] := 0xCD
 	
+	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
 	IntoBuffer[1] := 0x685421CD4C01B821
 	IntoBuffer[2] := 0x72676F7270207369
 	IntoBuffer[3] := 0x6F6E6E6163206D61
@@ -3215,10 +3645,14 @@ i32 DEFAULT_RESERVE := 0x00100000
 i32 DEFAULT_COMMIT := 0x8000
 
 define void WritePEHeader(void* IntoBuffer) {
+	/* Writes all the default COFF/PE header values into the given buffer */
+	
 	i8* MagicString := (IntoBuffer + PE_MAGIC_OFFSET) As i8*
 	
 	MagicString[0] := 'P'
 	MagicString[1] := 'E'
+	
+	/* PE00 signature is not part of any header, so it has to be manually written */
 	
 	COFFHeader* NewCOFF := (IntoBuffer + COFF_HEADER_OFFSET) As COFFHeader*
 	
@@ -3288,6 +3722,8 @@ i64 SECTION_READ := 0x40000000
 i64 SECTION_WRITE := 0x80000000
 
 define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Characteristics) {
+	/* Writes a section header with the given Name/Characteristics into the given buffer */
+	
 	SectionHeader* NewSection := IntoBuffer As SectionHeader*
 	
 	NewSection->PackedName := Name
@@ -3302,6 +3738,8 @@ define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Charact
 ==========================================
 */
 
+/* Acts as a list of imports from a given dll */
+
 struct ImportHelper {
 	i16 ImportCount,
 	i32* RVABuffer
@@ -3314,6 +3752,8 @@ struct ImportTableEntry {
 	i32 DllNameRVA,
 	i32 ThunkTableRVA
 }
+
+/* Acts as a list of relocations for a given page */
 
 struct RelocationHelper {
 	i32 PageRVA,
@@ -3334,35 +3774,53 @@ struct RelocationBlockHeader {
 */
 
 struct PEBuilder {
+	/* Actual buffer (which will be written into the output file) */
 	void* Buffer,
+	i32 BufferSize,
+	
+	/* Various headers which are written into Buffer by BuildBuilder, all pointers will point into Buffer */
 	MZHeader* MZ,
 	COFFHeader* COFF,
 	PEHeader* PE,
 	
+	/* Prewritten section headers */
 	SectionHeader* RelocHeader,
 	SectionHeader* IDataHeader,
 	SectionHeader* DataHeader,
 	SectionHeader* TextHeader,
 	
+	/* Number of actual functions imported (used to calculate .idata size in advance) */
 	i32 ImportFunctionCount,
 	
+	/* List of dll name RVAs which have functions imported from them */
 	i32* ImportSourceNameRVAs,
 	i32 ImportSourceCount,
 	
+	/* Parallel array (with ImportSourceNameRVAs) with one element for each import source dll */
 	ImportHelper** ImportHelpers,
 	
+	/* Hint/name/import strings buffer, directly copied into the output file */
 	i8* HintNameTable,
 	i32 HintNameTableSize,
 	
+	/* Holds a pointer/RVA to the built idata lookup table for import address fixups */
+	i16* ImportLookupTable,
+	i32 ImportLookupTableRVA,
+	
+	/* One entry per page that has relocations */
 	RelocationHelper** RelocationPages,
 	i32 RelocationPageCount,
+	
+	/* Number of total relocations (used along with RelocationCount to calculate the size of .reloc */
 	i32 RelocationCount,
 	
-	i32 NextRVA,
-	i32 BufferSize
+	/* Next section RVA (calculated by the last section that was added) */
+	i32 NextRVA
 }
 
 define i32 RoundTo(i32 Value, i32 BaseValue) {
+	/* Rounds Value up to a multiple of BaseValue */
+	
 	i32 Remainder := Value % BaseValue
 	
 	if (Remainder = 0) {
@@ -3373,6 +3831,8 @@ define i32 RoundTo(i32 Value, i32 BaseValue) {
 }
 
 define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
+	/* Extends BuilderToReAlloc->Buffer to NewSize, and reassigns all the header pointers to the new buffer */
+	
 	BuilderToReAlloc->Buffer := ReAlloc(BuilderToReAlloc->Buffer, NewSize)
 	
 	void* Buffer := (BuilderToReAlloc->Buffer)
@@ -3390,32 +3850,52 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 }
 
 define void* AllocatePEBuffer() {
+	/* Allocates enough memory for all of the PE headers (including our 4 section headers) */
+	
 	return Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
 }
 
 define PEBuilder* BuildBuilder() {
+	/* Allocates a PEBuilder and sets all of the default headers, along with writing the section headers */
+	
 	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
 	
 	NewBuilder->Buffer := AllocatePEBuffer()
 	
+	/* Now we've got enough memory for the headers, so we can start writing them */
+	
 	WriteDOSHeader(NewBuilder->Buffer)
 	WritePEHeader(NewBuilder->Buffer)
+	
+	/* Now we've got the headers written, so we can store pointers to each in the builder */
 	
 	NewBuilder->MZ := (NewBuilder->Buffer) As MZHeader*
 	NewBuilder->COFF := ((NewBuilder->Buffer) + COFF_HEADER_OFFSET) As COFFHeader*
 	NewBuilder->PE := ((NewBuilder->Buffer) + PE_HEADER_OFFSET) As PEHeader*
 	
+	/* Localize NewBuilder->Buffer for line-length */
+	
 	void* Sections := NewBuilder->Buffer
+	
+	/* Write all the sections (out of order, since they are moved around via changing XXXXX_OFFSET */
 	
 	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
 	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
 	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
 	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
 	
+	/* Note: The characteristics are also hardcoded, but based on which section is being written */
+	
+	/* Buffer/size book-keeping */
+	
 	NewBuilder->BufferSize := MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4)
 	NewBuilder->PE->SizeOfHeaders := RoundTo(NewBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
 	
+	/* The first section starts at IMAGEBASE + DEFAULT_SECTION_ALIGNMENT, so set the next open RVA to reflect that */
+	
 	NewBuilder->NextRVA := DEFAULT_SECTION_ALIGNMENT
+	
+	/* Set up all the helpers/buffers for imports and relocations */
 	
 	NewBuilder->ImportSourceNameRVAs := Alloc(4) As i32*
 	NewBuilder->ImportHelpers := Alloc(8) As ImportHelper**
@@ -3429,14 +3909,20 @@ define PEBuilder* BuildBuilder() {
 }
 
 define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, i8* Data, i32 DataLength) {
+	/* Copies DataLength bytes out of Data into ToBuilder->Buffer at the next open DEFAULT_FILE_ALIGNMENT boundry */
+	
 	i32 FileOffset := RoundTo(ToBuilder->BufferSize, DEFAULT_FILE_ALIGNMENT)
 	i32 NewSize := FileOffset + DataLength
 	i32 RVA := ToBuilder->NextRVA
+	
+	/* Update the given section header to contain the correct info about the data it now holds */
 	
 	TargetSection->Size := DataLength
 	TargetSection->RVA := RVA
 	TargetSection->RoundedSize := RoundTo(DataLength, DEFAULT_FILE_ALIGNMENT)
 	TargetSection->DataOffset := FileOffset
+	
+	/* Extend ToBuilder->Buffer to hold the data passed */
 	
 	ExtendBuilder(ToBuilder, NewSize)
 	
@@ -3445,6 +3931,8 @@ define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, 
 	for (i32 Index := 0, Index < DataLength, Index += 1) {
 		SectionBuffer[Index] := Data[Index]
 	}
+	
+	/* Update the next open section RVA */
 	
 	ToBuilder->NextRVA += (DataLength / DEFAULT_SECTION_ALIGNMENT) * DEFAULT_SECTION_ALIGNMENT
 	
@@ -3460,12 +3948,16 @@ define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, 
 */
 
 define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
+	/* Sets the .data section to be DataSize but without any initialized data */
+	
 	i32 DataRVA := (ToBuilder->NextRVA)
 	
 	ToBuilder->DataHeader->Size := DataSize
 	ToBuilder->DataHeader->RVA := DataRVA
 	ToBuilder->DataHeader->RoundedSize := 0
 	ToBuilder->DataHeader->DataOffset := 0
+	
+	/* Update the next RVA (since .data is still mapped into memory */
 	
 	ToBuilder->NextRVA += (DataSize / DEFAULT_SECTION_ALIGNMENT) * DEFAULT_SECTION_ALIGNMENT
 	
@@ -3475,6 +3967,9 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 }
 
 define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
+	/* Sets .text to hold CodeLength bytes of code inside of CodeBytes */
+	
+	/* Builds .idata and .reloc first (since they come before .text in output files */
 	FinalizeImports(ToBuilder)
 	FinalizeRelocations(ToBuilder)
 	
@@ -3482,30 +3977,41 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
 	
 	PopulateSection(ToBuilder, ToBuilder->TextHeader, CodeBytes, CodeLength)
 	
+	/* Update the PE header's fields for code info */
+	
 	ToBuilder->PE->SizeOfCode := CodeLength
-	ToBuilder->PE->AddressOfEntryPoint := RVA
+	ToBuilder->PE->AddressOfEntryPoint := RVA /* Todo: Make the entry point a parameter */
 	ToBuilder->PE->BaseOfCode := RVA
 }
 
 define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
-	ToBuilder->RelocationCount += 1
+	/* Adds a relocation for PageRVA + OffsetInPage for either a 32 or 64 bit value */
+	
+	ToBuilder->RelocationCount += 1 /* Increment the total number of relocations */
 	
 	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
 		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
 		
 		if (NextPage->PageRVA = PageRVA) {
+			/* If a RelocationHelper already exists for this page, add the relocation to the found helper */
 			return AddRelocationToHelper(NextPage, OffsetInPage, Is64Bit)
 		}
 	}
+	
+	/* Otherwise, we need to build a new RelocationHelper for this page */
 	
 	RelocationHelper* NewHelper := Alloc(RelocationHelper.Size) As RelocationHelper*
 	NewHelper->PageRVA := PageRVA
 	NewHelper->Entries := Alloc(2) As i16*
 	NewHelper->EntryCount
 	
+	/* And add it to ToBuilder's relocation helper array */
+	
 	ToBuilder->RelocationPages := ReAlloc((ToBuilder->RelocationPages) As void*, ((ToBuilder->RelocationPageCount) + 1) * 8) As RelocationHelper**
 	(ToBuilder->RelocationPages)[ToBuilder->RelocationPageCount] := NewHelper
 	ToBuilder->RelocationPageCount += 1
+	
+	/* Then we can add the relocation to the new helper */
 	
 	AddRelocationToHelper(NewHelper, OffsetInPage, Is64Bit)
 }
@@ -3515,6 +4021,8 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	Relocation helpers
 ==========================================
 */
+
+/* (Multiplication since I forgot to implement bit shift operators) */
 
 i16 RELOCATION_HIGHLOW := 3 * 0x1000
 i16 RELOCATION_DIR64 := 10 * 0x1000
@@ -3526,12 +4034,19 @@ define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8
 		Type := RELOCATION_DIR64
 	}
 	
+	/* Extend the RelocationHelper's buffer to hold another relocation */
+	
 	Helper->Entries := ReAlloc((Helper->Entries) as void*, ((Helper->EntryCount) + 1) * 2) As i16*
+	
+	/* Add the new relocation to the Helper's buffer */
+	
 	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
 	Helper->EntryCount += 1
 }
 
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
+	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
+	
 	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * RelocationBlockHeader.Size
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
 	
@@ -3541,15 +4056,25 @@ define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	i32 BufferIndex := 0
 	
 	for (i32 PageIndex := 0, PageIndex < (TargetBuilder->RelocationPageCount), PageIndex += 1) {
+		/* For each page with relocations */
+		
 		RelocationBlockHeader* NextBlock := (Buffer + BufferIndex) As RelocationBlockHeader*
 		BufferIndex += 8
 		
+		/* Write a relocation block header into the buffer */
+		
 		RelocationHelper* NextHelper := (TargetBuilder->RelocationPages)[PageIndex]
+		
+		/* And get the list of relocations in the block */
 		
 		NextBlock->PageRVA := NextHelper->PageRVA
 		NextBlock->BlockSize := 8 + ((NextHelper->EntryCount) * 2)
 		
+		/* Set the block header's fields */
+		
 		for (i32 EntryIndex := 0, EntryIndex < (NextHelper->EntryCount), EntryIndex += 1) {
+			/* For each relocation inside of the current page, write it into the buffer */
+			
 			i16 NextEntry := (NextHelper->Entries)[EntryIndex]
 			
 			((Buffer + BufferIndex) As i16*)[0] := NextEntry
@@ -3557,8 +4082,12 @@ define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 		}
 	}
 	
+	/* Update the PE data directory for relocations */
+	
 	TargetBuilder->PE->BaseRelocationTableRVA := TargetBuilder->NextRVA
 	TargetBuilder->PE->BaseRelocationTableSize := RelocationSectionSize
+	
+	/* Write the .reloc section */
 	
 	PopulateSection(TargetBuilder, TargetBuilder->RelocHeader, Buffer As i8*, RelocationSectionSize)
 }
@@ -3570,27 +4099,42 @@ define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 */
 
 define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeWideString* EntryText) {
+	/* Writes EntryText as an ASCII string into ToBuilder->HintNameTable, and expands ToBuilder->HintNameTable */
+	
 	i32 Offset := ToBuilder->HintNameTableSize
+	
+	/* Calculate the new size of the buffer (including 2/3 padding bytes) */
+	
 	i32 NewSize := (ToBuilder->HintNameTableSize) + (EntryText->Length) + 2
 	
 	if (NewSize % 2) {
 		NewSize += 1
 	}
 	
+	/* Exapand the hint name table buffer */
+	
 	ToBuilder->HintNameTable := ReAlloc((ToBuilder->HintNameTable) As void*, NewSize) As i8*
 	ToBuilder->HintNameTableSize := NewSize
+	
+	/* Copy the string into the expanded buffer */
 	
 	for (i32 Index := 0, Index < (EntryText->Length), Index += 1) {
 		(ToBuilder->HintNameTable)[Offset + Index] := (EntryText->Buffer)[Index] As i8
 	}
 	
+	/* Return the offset into the buffer where the string was written */
+	
 	return Offset
 }
+
+/* Magic number to signal failure fo FindHintNameTableEntry (since 0 is a valid result) */
 
 i32 HINT_NAME_ENTRY_NOT_FOUND := 0x0FFFFFFF
 
 define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToFind) {
 	i32 Run := 0
+	
+	/* Scan InBuilder->HintNameTable for EntryToFind as an ASCII string */
 	
 	for (i32 Index := 0, Index < (InBuilder->HintNameTableSize), Index += 1) {
 		if ((InBuilder->HintNameTable)[Index] = (EntryToFind->Buffer)[Run]) {
@@ -3615,30 +4159,49 @@ define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToF
 */
 
 define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
-	i32 FoundIndex := 0
+	/* Gets the index into ToBuilder->ImportSourceNameRVAs and ToBuilder->ImportHelpers for a given dll name */
 	
 	i32 TargetRVA := FindHintNameTableEntry(ToBuilder, DllName)
 	
 	if (TargetRVA = HINT_NAME_ENTRY_NOT_FOUND) {
-		FoundIndex := ToBuilder->ImportSourceCount
+		/* If we did not find the dll name in the hint/name table, then we need to add it */
 		
-		(ToBuilder->ImportSourceNameRVAs)[FoundIndex] := AddHintNameTableEntry(ToBuilder, DllName)
+		i32 NewIndex := ToBuilder->ImportSourceCount
+		i32 NewSize := (NewIndex + 1) * 8
+		
+		/* Add the dll name to the hint/name table, and add the name RVA to ImportSourceNameRVAs (after extending it) */
+		
+		ToBuilder->ImportSourceNameRVAs := ReAlloc((ToBuilder->ImportSourceNameRVAs) as void*, NewSize) As i32*
+		(ToBuilder->ImportSourceNameRVAs)[NewIndex] := AddHintNameTableEntry(ToBuilder, DllName)
+		
+		/* Allocate an ImportHelper for the dll */
 		
 		ImportHelper* ThisDllHelper := Alloc(ImportHelper.Size) As ImportHelper*
 		
-		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, (FoundIndex + 1) * 8) As ImportHelper**
-		(ToBuilder->ImportHelpers)[FoundIndex] := ThisDllHelper
+		/* Extend the ImportHelper list and add the new helper to it */
+		
+		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, NewSize) As ImportHelper**
+		(ToBuilder->ImportHelpers)[NewIndex] := ThisDllHelper
+		
+		/* Set default fields of the new helper */
 		
 		ThisDllHelper->ImportCount := 0
-		ThisDllHelper->RVABuffer := Alloc(4) As i32*
+		ThisDllHelper->RVABuffer := Alloc(4) As i32* /* Alloc(4) just so ReAlloc can be called on this */
 		
+		/* Update ImportFunctionCount to have space for the padding this entry will require */
 		ToBuilder->ImportFunctionCount += 1
+		
+		/* Update the import source count */
 		ToBuilder->ImportSourceCount += 1
 		
-		return FoundIndex
+		return NewIndex /* Return the index of the new Helper/Name RVA */
 	}
 	else {
+		/* The dll name exists in the hint/name table already */
+		
 		for (i32 Index := 0, Index < (ToBuilder->ImportSourceCount), Index += 1) {
+			/* Scan over all the import source names and find which one has a name RVA equal to where we found our dll name */
+			
 			i32 FoundNameRVA := (ToBuilder->ImportSourceNameRVAs)[Index]
 			
 			if (FoundNameRVA = TargetRVA) {
@@ -3649,16 +4212,25 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 }
 
 define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName) {
+	/* Higher-level function to easily add an import */
+	
+	/* Find the index of the dll (or add it if it isn't found) */
 	i32 EntryIndex := FindOrAddImportDll(ToBuilder, ToDll)
 	
+	/* Get the helper for this dll using the index */
 	ImportHelper* EntryHelper := (ToBuilder->ImportHelpers)[EntryIndex]
 	
+	/* Extend the function name RVA buffer to hold 1 more name RVA */
 	EntryHelper->RVABuffer := ReAlloc((EntryHelper->RVABuffer) As void*, ((EntryHelper->ImportCount) + 1) * 4)
 	
+	/* Add the function name to the hint/name table, and add the new RVA to EntryHelper->RVABuffer */
 	(EntryHelper->RVABuffer)[EntryHelper->ImportCount] := AddHintNameTableEntry(ToBuilder, FunctionName)
-	EntryHelper->ImportCount += 1
 	
+	/* Update the size book-keeping info */
+	EntryHelper->ImportCount += 1
 	ToBuilder->ImportFunctionCount += 1
+	
+	/* Note: All of the info here is used in FinalizeImports to actually build the .idata section, which is why this is so simple */
 }
 
 /*
@@ -3668,16 +4240,28 @@ define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideStrin
 */
 
 define void FinalizeImports(PEBuilder* TargetBuilder) {
+	/* Builds/Writes .idata into TargetBuilder */
+	
+	/* Calculate all of the different structure/array offsets using the import book-keeping info */
+	
 	i32 ImportSectionRVA := TargetBuilder->NextRVA
+	
+	/* Holds the arrays of function name RVAs, along with the thunks */
 	
 	i32 ImportLookupBase := ImportSectionRVA
 	i32 ImportLookupSize := RoundTo(TargetBuilder->ImportFunctionCount, 2) * 16
 	
+	/* Holds the array of import sources */
+	
 	i32 ImportTableBase := ImportLookupBase + ImportLookupSize
 	i32 ImportTableSize := RoundTo(((TargetBuilder->ImportSourceCount) + 1) * ImportTableEntry.Size, 16)
 	
+	/* Holds the dll/function names */
+	
 	i32 HintNameBase := ImportTableBase + ImportTableSize
 	i32 HintNameSize := TargetBuilder->HintNameTableSize
+	
+	/* Debug print the table sizes */
 	
 	Console:IWrite(ImportTableSize)
 	Console:WriteCharacter(':')
@@ -3685,8 +4269,11 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	Console:WriteCharacter(':')
 	Console:IWriteLine(HintNameSize)
 	
+	/* Final (true) size of the .idata section */
 	
 	i32 ImportSectionSize := ImportTableSize + ImportLookupSize + HintNameSize
+	
+	/* Update the PE header before building with the values we just calculated */
 	
 	TargetBuilder->PE->ImportTableRVA := ImportTableBase
 	TargetBuilder->PE->ImportTableSize := ImportSectionSize
@@ -3694,36 +4281,58 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	TargetBuilder->PE->ImportAddressTableRVA := ImportLookupBase
 	TargetBuilder->PE->ImportAddressTableSize := ((TargetBuilder->ImportFunctionCount) - (TargetBuilder->ImportSourceCount)) * 8
 	
+	/* Allocate a buffer to work in */
 	
 	void* ImportSectionBuffer := Alloc(ImportSectionSize)
+	
+	/* Get pointers to each area of .idata to make writing easier */
 	
 	i64* ImportLookups := ImportSectionBuffer As i64*
 	ImportTableEntry* ImportEntries := (ImportSectionBuffer + ImportLookupSize) As ImportTableEntry*
 	i8* HintName := (ImportSectionBuffer + ImportLookupSize + ImportTableSize) As i8*
 	
+	/* Index into the lookup array buffer */
 	i32 LookupIndex := 0
+	
+	/* Max index into the lookup array (used as an offset to write the thunk table into) */
 	i32 LookupMaxIndex := RoundTo(TargetBuilder->ImportFunctionCount, 2)
 	
 	for (i32 Index := 0, Index < (TargetBuilder->ImportSourceCount), Index += 1) {
+		/* For each import source */
+		
+		/* Get the RVA of the dll name */
 		i32 NextEntryNameRVA := (TargetBuilder->ImportSourceNameRVAs)[Index]
+		
+		/* And the ImportHelper for this dll */
 		ImportHelper* NextHelper := (TargetBuilder->ImportHelpers)[Index]
 		
+		/* Then calculate where the entry should be written, and cast it to an ImportTableEntry */
 		ImportTableEntry* NextEntry := (ImportEntries + (Index * ImportTableEntry.Size)) As ImportTableEntry*
 		
+		/* Update the entry with the name RVA/LookupTable RVA/ThunkTable RVA */
 		NextEntry->DllNameRVA := HintNameBase + NextEntryNameRVA
 		NextEntry->LookupTableRVA := ImportLookupBase + (LookupIndex * 8)
 		NextEntry->ThunkTableRVA := ImportLookupBase + (LookupIndex * 8) + (LookupMaxIndex * 8)
 		
 		for (i32 ImportIndex := 0, ImportIndex < (NextHelper->ImportCount), ImportIndex += 1) {
+			/* For each function imported from this dll */
+			
+			/* Get the function name RVA */
 			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
 			
+			/* And write it into the lookup table */
 			ImportLookups[LookupIndex] := (HintNameBase + NextImportNameRVA) - 2
+			
+			/* And also into the thunk table */
 			ImportLookups[LookupIndex + LookupMaxIndex] := (HintNameBase + NextImportNameRVA) - 2
 			LookupIndex += 1
 		}
 		
+		/* Increment LookupIndex to account for the null terminator after each lookup table array */
 		LookupIndex += 1
 	}
+	
+	/* Debug print the hint/name table */
 	
 	for (i32 CopyIndex := 0, CopyIndex < (TargetBuilder->HintNameTableSize), CopyIndex += 1) {
 		Console:WriteCharacter((TargetBuilder->HintNameTable)[CopyIndex])
@@ -3731,6 +4340,8 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	}
 	
 	Console:WriteNewLine()
+	
+	/* Write .idata into TargetBuilder->Buffer */
 	
 	PopulateSection(TargetBuilder, TargetBuilder->IDataHeader, ImportSectionBuffer As i8*, ImportSectionSize)
 }
@@ -3742,13 +4353,54 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 */
 
 define void FinalizeBuilder(PEBuilder* Builder) {
-	i32 FileSize := RoundTo(Builder->BufferSize, DEFAULT_FILE_ALIGNMENT)
+	/* Updates any header fields which need to be done before the file is "done" */
 	
+	/* Pad the file so the last section ends on a DEFAULT_FILE_ALIGNMENT boundry (this is required) */
+	i32 FileSize := RoundTo(Builder->BufferSize, DEFAULT_FILE_ALIGNMENT)
 	ExtendBuilder(Builder, FileSize)
 	
-	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT)
-	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size)
-	Builder->PE->SizeOfUnInitializedData := (Builder->DataHeader->Size)
+	/* Update the SizeOf header fields with: */
+	
+	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
+	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
+	Builder->PE->SizeOfUnInitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
+}
+
+DllImport i64 CreateFileA(i8*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileA}
+DllImport i8 WriteFile(i64, void*, i32, i32*, void) {Kernel32.dll, WriteFile}
+
+define void WriteBuilder(PEBuilder* Builder, i8* ToFile) {
+	i32 GENERIC_WRITE := 0x40000000
+	i8 FILE_SHARE_READ := 1
+	i8 FILE_SHARE_WRITE := 2
+	i8 CREATE_ALWAYS := 2
+	i16 FILE_ATTRIBUTE_NORMAL := 128
+	
+	i64 OutputFileHandle := CreateFileA(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
+	
+	if (OutputFileHandle = -1) {
+		Console:AWrite("Could not open output file: error code ")
+		Console:IWriteLine(GetLastError())
+		Console:AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	i32 BytesWritten := 0
+	
+	i8 Result := WriteFile(OutputFileHandle, Builder->Buffer, Builder->BufferSize, &BytesWritten, 0)
+	
+	if (Result = 0 || (BytesWritten != (Builder->BufferSize))) {
+		Console:AWrite("Error writing output file: ")
+		Console:IWriteLine(GetLastError())
+		Console:AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	Console:AWrite("Done writing output file, ")
+	Console:IWrite(BytesWritten)
+	Console:AWriteLine(" bytes written.")
+	
+	CloseHandle(OutputFileHandle)
 }
 
 define void PrintBuilder(PEBuilder* Builder) {
