@@ -1345,6 +1345,13 @@ define Type* DecrementPointerType(ParserState* pState, Type* TypeToDecrement) {
 	NewType->TrueType := TypeToDecrement->TrueType
 	NewType->PointerDepth := (TypeToDecrement->PointerDepth) - 1
 	
+	if (NewType->PointerDepth) {
+		NewType->Size := 8
+	}
+	else {
+		NewType->Size := NewType->TrueType->Size
+	}
+	
 	return NewType
 }
 define Type* IncrementPointerType(ParserState* pState, Type* TypeToIncrement) {
@@ -1354,6 +1361,7 @@ define Type* IncrementPointerType(ParserState* pState, Type* TypeToIncrement) {
 	
 	NewType->TrueType := TypeToIncrement->TrueType
 	NewType->PointerDepth := (TypeToIncrement->PointerDepth) + 1
+	NewType->Size := 8
 
 	return NewType
 }
@@ -1641,6 +1649,9 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			/* Else if the variable is smaller than the right operand, error out */
 			
 			TokenizerError(pState->pState, "Right side operand of ':=' cannot be a bigger type than left side operand")
+		}
+		else if (Left->NodeType != NODE_TYPE_VARIABLE) {
+			TokenizerError(pState->pState, "Left side of ':=' must be a variable.")
 		}
 		else {
 			/* Otherwise, the result type is the right type */
@@ -2234,9 +2245,53 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	}
 	
 	if (Result = 0) {
-		/* If Result isn't set yet, then this is an expression statement, so parse and expression and make a NODE_TYPE_EXPRESSION node */
+		/* When we don't have a result yet, this is either a declaration or a expression statement, so try to figure out which it is */
 		
 		UnfreezeParser(pState, FrozenState)
+		
+		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+			/* If the next token isn't an identifier, then it's definitely not a declaration */
+			
+			Type* PotentialType := ParseTypeName(pState)
+			
+			/* Holds the parser state right after `Type*` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+			i32 DefaultValueExpressionStart := FreezeParser(pState)
+			Token* PotentialName := ParserNextToken(pState)
+			
+			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+				/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+				
+				/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+				
+				SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+				
+				VariableInfo* NewLocal := AllocateNewVariableInfo()
+				
+				NewLocal->Name := NameString
+				NewLocal->Type := PotentialType
+				NewLocal->IsGlobal := False
+				NewLocal->IsParameter := False
+				
+				ParserAddLocal(pState, NewLocal)
+			
+				if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+					UnfreezeParser(pState, DefaultValueExpressionStart)
+				}
+				else {
+					/* The next token is not a `:=`, so the following tokens are not a default value for this variable */
+					
+					return AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+				}
+			}
+			else {
+				/* Token after the type name was not an identifier */
+				
+				UnfreezeParser(pState, FrozenState)
+			}
+		}
+		
+		/* This expression will either be at A) The start of the line or B) After a type name (for declarations) */
+		
 		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
 	}
 	
@@ -2399,7 +2454,9 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		else if (OperatorToken->Value = OPERATOR_AS) {
 			/* Else if the next operator is 'as' then parse a type name as the right operand */
 			
-			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, ParseTypeName(pState) As void*, TYPE_NONE)
+			Type* CastToType := ParseTypeName(pState)
+			
+			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 		}
 		else {
 			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
@@ -2523,6 +2580,25 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		Console:AWriteLine(") {")
 		
+		void* Elements := DefineNode->Locals->Elements
+		
+		for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
+			if (Elements[ElementIndex]) {
+				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				
+				while (FoundElement) {
+					VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
+					
+					PrintType(NextLocal->Type)
+					Console:WriteCharacter(' ')
+					PrintSafeString(NextLocal->Name)
+					Console:WriteNewLine()
+					
+					FoundElement := (FoundElement->NextElement) As HashMapElement*
+				}
+			}
+		}
+		
 		i32 StatementIndex := 0
 		
 		loop (DefineNode->Body->StatementCount) {
@@ -2631,6 +2707,41 @@ define i8 PopRegisterStack(CompilerState* cState) {
 	
 	return (cState->RegisterStackIndex) + 8
 }
+
+/*
+==========================================
+	Variable helpers
+==========================================
+*/
+
+define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
+	PrintSafeString(TargetVariable->Name)
+	Console:WriteCharacter(':')
+	Console:IWriteLine(TargetVariable->ScopedID)
+	
+	EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+}
+define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
+	PrintSafeString(TargetVariable->Name)
+	Console:WriteCharacter(':')
+	Console:IWriteLine(TargetVariable->ScopedID)
+	
+	EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8))
+}
+define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
+	PrintSafeString(TargetVariable->Name)
+	Console:WriteCharacter(':')
+	Console:IWriteLine(TargetVariable->ScopedID)
+	
+	EmitMove_RX_DISP8_RX(cState, RBP, SourceRegister, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+}
+
+
+/*
+==========================================
+	Actual compile functions
+==========================================
+*/
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
 	/* Compiles a single function */
@@ -2744,6 +2855,9 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	/* Compile the expression to return */
 	CompileExpression(cState, RAX, ReturnExpression)
 	
+	Console:AWrite("aaaaaaaaaaaaaaaaaaaaa ")
+	Console:IWriteLine(ReturnExpression->ValueType->Size)
+	
 	i16 ReturnValueSize := ReturnExpression->ValueType->Size
 	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
 	
@@ -2780,14 +2894,15 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		EmitMove_RX_IX(cState, ResultRegister, (ExpressionToCompile->TrueNode) As i64, ExpressionToCompile->ValueType->Size)
 	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
-		/* Todo: Replace with some kind of GetVariable call */
-		
 		VariableInfo* TargetVariable := (ExpressionToCompile->TrueNode) As VariableInfo*
 		
-		EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+		GetVariableValue(cState, TargetVariable, ResultRegister)
 	}
 	else if (ExpressionType = NODE_TYPE_UNARY) {
+		UnaryExpression* UnaryNode := (ExpressionToCompile->TrueNode) As UnaryExpression*
+		Type* ResultType := ExpressionToCompile->ValueType
 	
+		CompileUnary(cState, ResultRegister, ResultType, UnaryNode)
 	}
 	else if (ExpressionType = NODE_TYPE_BINARY) {
 		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
@@ -2799,6 +2914,26 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	}
 
 }
+define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile) {
+	/* Compiles a unary operator and operand */
+	
+	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
+	
+	if (Operator = OPERATOR_AND) {
+		VariableInfo* OperandVariable := (ExpressionToCompile->Operand->TrueNode) As VariableInfo*
+		
+		GetVariableAddress(cState, OperandVariable, ResultRegister)
+	}
+	else {
+		/* Only compile the operand when the operator isn't `&` (since it doesn't use the operand value) */
+		CompileExpression(cState, ResultRegister, ExpressionToCompile->Operand)
+		
+		if (Operator = OPERATOR_STAR) {
+			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, ResultType->Size)
+		}
+	}
+}
+
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
@@ -2815,6 +2950,19 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		/* As long as we're not compiling an assignment, compile the left operand into the result register */
 		
 		CompileExpression(cState, LeftRegister, Left)
+		
+		if (ExpressionToCompile->Operator->Value = OPERATOR_AS) {
+			/* For 'As', just compile the left operand, cast it, and return */
+			Type* RightType := (Right->TrueNode) As Type*
+			
+			if (Left->NodeType != NODE_TYPE_INTEGER) {
+				/* Only emit cast instructions for values which aren't integers, since integer casts are done at compile time */
+				
+				EmitMove_R64_RX(cState, LeftRegister, LeftRegister, RightType->Size)
+			}
+			
+			return 0
+		}
 		
 		/* And allocate a new register for the right operand */
 		
@@ -2855,8 +3003,7 @@ define void CompileBinaryOperation(CompilerState* cState, i8 LeftRegister, Type*
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
 		
-		/* Todo: Replace with a SetVariable helper, also check for the left side actually being a variable */
-		EmitMove_RX_DISP8_RX(cState, RBP, LeftRegister, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+		SetVariableValue(cState, TargetVariable, LeftRegister)
 	}
 
 
@@ -3303,6 +3450,52 @@ define void EmitMove_R32_DISP8_R32(CompilerState* cState, i8 DestinationRegister
 }
 define void EmitMove_R64_DISP8_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
 	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, REX_W)
+	PushByte(cState, Displacement)
+}
+
+/*
+==========================================
+	Deref moves
+==========================================
+*/
+
+define void EmitMove_RX_RIX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
+	if (Size = 1) {
+		EmitMove_R8_RI8(cState, DestinationRegister, SourceRegister)
+	}
+	else if (Size = 2) {
+		EmitMove_R16_RI16(cState, DestinationRegister, SourceRegister)
+	}
+	else if (Size = 4) {
+		EmitMove_R32_RI32(cState, DestinationRegister, SourceRegister)
+	}
+	else {
+		EmitMove_R64_RI64(cState, DestinationRegister, SourceRegister)
+	}
+}
+
+define void EmitMove_R8_RI8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x8A, MODE_PTOR, DestinationRegister, SourceRegister, REX_BASE)
+}
+define void EmitMove_R16_RI16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitMove_R32_RI32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitMove_R64_RI64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, REX_W)
+}
+
+/*
+==========================================
+	Lea
+==========================================
+*/
+
+define void EmitLea_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x8D, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_W)
 	PushByte(cState, Displacement)
 }
 
