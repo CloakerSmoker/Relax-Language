@@ -1675,6 +1675,12 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		ResultType := GetBinaryResultType(pState, LeftType, RightType)
 	}
 	
+	if (Operator = OPERATOR_STAR && ResultType->Size = 1) {
+		/* Automatically promote 8 bit multiplication to 16 bit, since there is no instruction for general 8 bit multiplication */
+		
+		ResultType := MakeType(pState->i16, 0)
+	}
+	
 	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
 	
 	if (Left->NodeType = NODE_TYPE_INTEGER) {
@@ -2542,16 +2548,6 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		Console:WriteCharacter(')')
 	}
-	else if (NodeType = NODE_TYPE_TOKEN) {
-		Token* TokenNode := (NodeToPrint->TrueNode) As Token*
-		
-		if (TokenNode->Type = TOKEN_TYPE_IDENTIFER) {
-			PrintSafeString((TokenNode->Value) As SafeWideString*)
-		}
-		else if (TokenNode->Type = TOKEN_TYPE_INTEGER) {
-			Console:IWrite(TokenNode->Value)
-		}
-	}
 	else if (NodeType = NODE_TYPE_DEFINE) {
 		FunctionDefine* DefineNode := (NodeToPrint->TrueNode) As FunctionDefine*
 		
@@ -2580,20 +2576,34 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		Console:AWriteLine(") {")
 		
+		/* Brute-force loop through the function local hashmap */
+		
 		void* Elements := DefineNode->Locals->Elements
 		
 		for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
+			/* Loop through each slot in the hashmap bucket */
+			
 			if (Elements[ElementIndex]) {
+				/* If the slot has an element */
+				
 				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				/* Then start walking the element hashmap, printing each element */
 				
 				while (FoundElement) {
+					/* Print the current element's value as a local */
+					
 					VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
 					
-					PrintType(NextLocal->Type)
-					Console:WriteCharacter(' ')
-					PrintSafeString(NextLocal->Name)
-					Console:WriteNewLine()
+					if !(NextLocal->IsParameter) {
+						/* Stop parameters from being double printed */
 					
+						PrintType(NextLocal->Type)
+						Console:WriteCharacter(' ')
+						PrintSafeString(NextLocal->Name)
+						Console:WriteNewLine()
+					}
+					
+					/* And update the current element to be the next element in the linked list */
 					FoundElement := (FoundElement->NextElement) As HashMapElement*
 				}
 			}
@@ -2942,6 +2952,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	
 	i16 LeftSize := Left->ValueType->Size
 	i16 RightSize := Right->ValueType->Size
+	i16 ResultSize := ResultType->Size
 	
 	i8 LeftRegister := ResultRegister
 	i8 RightRegister := 0
@@ -2976,13 +2987,12 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	
 	CompileExpression(cState, RightRegister, Right)
 	
-	if (LeftSize > RightSize) {
-		/* If the right side is smaller than the left, cast the right side up to LeftSize */
-		EmitMove_R64_RX(cState, RightRegister, RightRegister, LeftSize)
+	/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
+	if (RightSize < ResultSize) {
+		EmitMove_R64_RX(cState, RightRegister, RightRegister, ResultSize)
 	}
-	else if (RightSize > LeftSize) {
-		/* If the left side is smaller than the right, cast the left side up to RightSize */
-		EmitMove_R64_RX(cState, LeftRegister, LeftRegister, RightSize)
+	if (LeftSize < ResultSize) {
+		EmitMove_R64_RX(cState, LeftRegister, LeftRegister, ResultSize)
 	}
 	
 	CompileBinaryOperation(cState, ResultRegister, ResultType, ExpressionToCompile->Operator, Left)
@@ -2999,6 +3009,9 @@ define void CompileBinaryOperation(CompilerState* cState, i8 LeftRegister, Type*
 	}
 	else if (Operator = OPERATOR_MINUS) {
 		EmitSub_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
+	}
+	else if (Operator = OPERATOR_STAR) {
+		EmitIMul_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
 	}
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
@@ -3568,6 +3581,44 @@ define void EmitSub_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 So
 }
 define void EmitSub_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
 	EmitREXOpcodeModRM(cState, 0x2A, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
+}
+
+/*
+==========================================
+	Mul/div
+==========================================
+*/
+
+define void EmitIMul_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
+	if (Size = 1) {
+		Console:AWriteLine("Bad size passed to EmitIMul_RX_RX")
+	}
+	else if (Size = 2) {
+		EmitIMul_R16_R16(cState, DestinationRegister, SourceRegister)
+	}
+	else if (Size = 4) {
+		EmitIMul_R32_R32(cState, DestinationRegister, SourceRegister)
+	}
+	else {
+		EmitIMul_R64_R64(cState, DestinationRegister, SourceRegister)
+	}
+}
+
+define void EmitIMul_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
+}
+define void EmitIMul_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitIMul_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+
+define void EmitIMul_AL_R8(CompilerState* cState, i8 SourceRegister) {
+	/* Opcode entension 5 */
+	
+	EmitREXOpcodeModRM(cState, 0x2A, MODE_RTOR, 5, SourceRegister, 0)
 }
 
 /*
