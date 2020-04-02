@@ -334,21 +334,30 @@ define i8 TokenizerAtEnd(TokenizerState* pState) {
 	return (pState->Index) > (pState->SourceLength)
 }
 
-define void TokenizerError(TokenizerState* pState, i8* Message) {
+define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
+	Console:TextColor(Console:Red)
 	Console:AWriteLine(Message)
 	Console:AWrite("At: ")
+	Console:ResetColors()
 	
-	Backtrack(pState)
+	PrintToken(AtToken)
 	
-	SafeWideString SourcePrintoutHelper
+	/* SafeWideString SourcePrintoutHelper
 	
-	SourcePrintoutHelper.Buffer := (pState->Source) + ((pState->Index) * 2)
-	
-	SourcePrintoutHelper.Length := WideStringLength(SourcePrintoutHelper.Buffer)
+	SourcePrintoutHelper.Buffer := (tState->Source) + (((AtToken->PositionInSource) - 8) * 2)
+	SourcePrintoutHelper.Length := (AtToken->LengthInSource) + 8
 	
 	PrintSafeString(&SourcePrintoutHelper)
+	Console:WriteNewLine()
+	Console:WriteNewLine() */
 	
 	Exit(1)
+}
+
+define void TokenizerError(TokenizerState* tState, i8* Message) {
+	Backtrack(tState)
+	
+	Error(tState, tState->CurrentToken, Message)
 }
 
 
@@ -1209,6 +1218,7 @@ struct TypeInfo {
 	SafeWideString* Name,
 	HashMap* StructTypeFields,
 	i16 Size,
+	i8 Flags,
 	i8 IsStructType,
 	i8 IsIncomplete
 }
@@ -1233,7 +1243,21 @@ struct StructField {
 
 Type* TYPE_NONE := 0
 
-define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 IsStructType, i8 IsIncomplete) {
+i8 TYPE_REGULAR := 0
+i8 TYPE_STRUCT := 1
+i8 TYPE_INCOMPLETE := 2
+
+define void UpdateTypeFlags(TypeInfo* TargetType) {
+	if (TargetType->Flags & TYPE_STRUCT) {
+		TargetType->IsStructType := True
+	}
+	
+	if (TargetType->Flags & TYPE_INCOMPLETE) {
+		TargetType->IsIncomplete := True
+	}
+}
+
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
 	
 	/* Should only be called once per type name */
@@ -1242,8 +1266,9 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	NewType->Name := Name
 	NewType->StructTypeFields := Fields
 	NewType->Size := Size
-	NewType->IsStructType := IsStructType
-	NewType->IsIncomplete := IsIncomplete
+	NewType->Flags := Flags
+	
+	UpdateTypeFlags(NewType)
 	
 	Console:AWrite("Adding ")
 	PrintSafeString(Name)
@@ -1277,14 +1302,28 @@ define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the standard types, only called once */
 	
 	/* All standard types are not structs, and are not incomplete */
-	pState->i8 := AddType(pState, AToS("i8"), 0, 1, false, false)
-	pState->i16 := AddType(pState, AToS("i16"), 0, 2, false, false)
-	pState->i32 := AddType(pState, AToS("i32"), 0, 4, false, false)
-	pState->i64 := AddType(pState, AToS("i64"), 0, 8, false, false)
-	pState->void := AddType(pState, AToS("void"), 0, 8, false, false)
+	pState->i8 := AddType(pState, AToS("i8"), 0, 1, TYPE_REGULAR)
+	pState->i16 := AddType(pState, AToS("i16"), 0, 2, TYPE_REGULAR)
+	pState->i32 := AddType(pState, AToS("i32"), 0, 4, TYPE_REGULAR)
+	pState->i64 := AddType(pState, AToS("i64"), 0, 8, TYPE_REGULAR)
+	pState->void := AddType(pState, AToS("void"), 0, 8, TYPE_REGULAR)
+	
+	pState->EmptyType := MakeType(pState->void, 0)
 }
 
 define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
+	i8* ErrorMessage := 0
+	
+	Type* Result := TryGetType(pState, TypeName, PointerDepth, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->pState, ErrorMessage)
+	}
+	
+	return Result
+}
+
+define Type* TryGetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth, i8** ErrorMessage) {
 	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
 	
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
@@ -1307,11 +1346,13 @@ define Type* GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDe
 		*/
 		
 		if (PointerDepth = 0) {
-			TokenizerError(pState->pState, "Incomplete types can only be used with pointers")
+			ErrorMessage[0] := "Incomplete types can only be used with pointers"
+			return 0 As Type*
 		}
-		
-		/* We didn't find a type with the name, build an incomplete type for it */
-		FoundTypeInfo := AddType(pState, TypeName, 0, 0, true, true)
+		else {
+			/* We didn't find a type with the name, build an incomplete type for it */
+			FoundTypeInfo := AddType(pState, TypeName, 0, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+		}
 	}
 	
 	/* Allocate and populate a Type for the given TypeInfo and PointerDepth */
@@ -1386,7 +1427,7 @@ define void PrintType(Type* TypeToPrint) {
 struct VariableInfo {
 	SafeWideString* Name,
 	Type* Type,
-	i16 ScopedID,
+	i32 StackOffset,
 	i8 IsGlobal,
 	i8 IsParameter
 }
@@ -1419,7 +1460,6 @@ i8 NODE_TYPE_TOKEN := 1
 i8 NODE_TYPE_UNARY := 2
 i8 NODE_TYPE_BINARY := 3
 i8 NODE_TYPE_CALL := 4
-i8 NODE_TYPE_ARRAYACCESS := 5
 
 i8 NODE_TYPE_DEFINE := 6
 i8 NODE_TYPE_DLLIMPORT := 7
@@ -1440,6 +1480,7 @@ i8 NODE_TYPE_STRING := 17
 
 i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
 i8 NODE_TYPE_STRUCT_ACCESS := 19
+i8 NODE_TYPE_IDENTIFIER := 20
 
 /*
 ==========================================
@@ -1501,7 +1542,7 @@ struct FunctionDefine {
 	HashMap* Locals,
 	Type* ReturnType,
 	i16 ParameterCount,
-	i16 LocalCount
+	i16 LocalOffset
 }
 
 struct CallExpression {
@@ -1565,7 +1606,7 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 }
 
 define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
-	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_ARRAYACCESS or NODE_TYPE_STRUCT_ACCESS */
+	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_STRUCT_ACCESS */
 	
 	i8 Operator := (OperatorToken->Value) As i8
 	Type* ResultType := 0
@@ -1575,11 +1616,15 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	TypeInfo* LeftBaseType := LeftType->TrueType
 	TypeInfo* RightBaseType := RightType->TrueType
 	
+	/* Warnings/Errors are defered until the ASTNode result is built, so ASTError/ASTWarn can be used */
+	i8* WarningText := 0
+	i8* ErrorMessage := 0
+	
 	if (Operator = OPERATOR_AS) {
 		/* OPERATOR_AS does nothing, just switches the result type of the expression */
 		
 		if (Right->NodeType != NODE_TYPE_TYPE) {
-			TokenizerError(pState->pState, "Right side operand of 'as' must be a type name")
+			ErrorMessage := "Right side operand of 'as' must be a type name"
 		}
 		
 		ResultType := RightType
@@ -1587,48 +1632,46 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
 		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
 		
-		if !(LeftType->TrueType->IsStructType) {
+		if !(LeftBaseType->IsStructType) {
 			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
-			TokenizerError(pState->pState, "Left side operand of '.' and '->' must be of a struct type")
+			ErrorMessage := "Left side operand of '.' and '->' must be of a struct type"
 		}
-		
-		if (LeftType->TrueType->IsIncomplete) {
+		else if (LeftBaseType->IsIncomplete) {
 			/* Ensure the left type is not incomplete (otherwise we don't know what the result type would be) */
-			TokenizerError(pState->pState, "Fields of incomplete structs cannot be accessed.")
+			ErrorMessage := "Fields of incomplete structs cannot be accessed."
 		}
-		
-		if (Right->NodeType != NODE_TYPE_VARIABLE) {
+		else if (Right->NodeType != NODE_TYPE_IDENTIFIER) {
 			/* If the right operand isn't an identifier(/NODE_TYPE_VARIABLE) then it is not what we need */
-			TokenizerError(pState->pState, "Right side operand of of '.' and '->' must be a string")
+			ErrorMessage := "Right side operand of of '.' and '->' must be a string"
 		}
-		
-		/* Get the right side text */
-		SafeWideString* RightText := ((Right->TrueNode) As VariableInfo*)->Name
-		
-		/* And look up the struct field with that name */
-		HashMapElement* FoundStructField := HashMapGetValue(LeftType->TrueType->StructTypeFields, RightText)
-		
-		if !(FoundStructField) {
-			/* If we didn't find a field with that name, then error out */
+		else {
+			/* Get the right side text */
+			SafeWideString* RightText := (Right->TrueNode) As SafeWideString*
 			
-			PrintSafeString(RightText)
-			Console:WriteNewLine()
-			TokenizerError(pState->pState, "Unknown struct field")
+			/* And look up the struct field with that name */
+			HashMapElement* FoundStructField := HashMapGetValue(LeftType->TrueType->StructTypeFields, RightText)
+			
+			if (FoundStructField) {
+				/* Convert the HashMapElement* into a StructField* */
+				StructField* TargetField := (FoundStructField->Value) As StructField*
+				
+				/* Build a StructAccessExpression node */
+				StructAccessExpression* NewAccess := Alloc(StructAccessExpression.Size) As StructAccessExpression*
+				
+				/* Populate the StructAccessExpression node */
+				NewAccess->Left := Left
+				NewAccess->Operator := OperatorToken
+				NewAccess->TargetField := TargetField
+				
+				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
+				return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, TargetField->ValueType)
+			}
+			else {
+				/* If we didn't find a field with that name, then error out */
+				
+				ErrorMessage := "Unknown struct field"
+			}
 		}
-		
-		/* Convert the HashMapElement* into a StructField* */
-		StructField* TargetField := (FoundStructField->Value) As StructField*
-		
-		/* Build a StructAccessExpression node */
-		StructAccessExpression* NewAccess := Alloc(StructAccessExpression.Size) As StructAccessExpression*
-		
-		/* Populate the StructAccessExpression node */
-		NewAccess->Left := Left
-		NewAccess->Operator := OperatorToken
-		NewAccess->TargetField := TargetField
-		
-		/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
-		return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, TargetField->ValueType)
 	}
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		/* If this is an assignment do some extra type checking */
@@ -1640,45 +1683,46 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			
 			ResultType := LeftType
 		}
-		else if (LeftType->PointerDepth != 0 && LeftBaseType->IsStructType) {
+		else if (LeftType->PointerDepth = 0 && LeftBaseType->IsStructType) {
 			/* Else if the left is a literal struct type, error out */
 			
-			TokenizerError(pState->pState, "Local structs cannot be assigned")
+			ErrorMessage := "Local structs cannot be assigned"
 		}
 		else if (LeftType->Size < RightType->Size) {
-			/* Else if the variable is smaller than the right operand, error out */
+			/* Warn of the right side being truncated to fit the left */
 			
-			TokenizerError(pState->pState, "Right side operand of ':=' cannot be a bigger type than left side operand")
+			if !(Right->NodeType = NODE_TYPE_INTEGER && (LeftType->Size >= GetNumberSize(Right->TrueNode))) {
+				/* If the right operand is a number, and the actual size of the number is less than the variable size, don't show this warning */
+				
+				WarningText := "Right side operand of ':=' is bigger than left, right side will be truncated"
+			}
+			
+			ResultType := LeftType
 		}
-		else if (Left->NodeType != NODE_TYPE_VARIABLE) {
-			TokenizerError(pState->pState, "Left side of ':=' must be a variable.")
+		else if (Left->NodeType != NODE_TYPE_VARIABLE && Left->NodeType != NODE_TYPE_STRUCT_ACCESS) {
+			ErrorMessage := "Left side of ':=' must be a variable."
 		}
 		else {
 			/* Otherwise, the result type is the right type */
-			ResultType := RightType
+			ResultType := LeftType
 		}
 	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
 		/* For an array access, make sure the index type isn't a pointer/struct */
 		
 		if (RightType->PointerDepth || RightType->TrueType->IsStructType) {
-			TokenizerError(pState->pState, "Right side operand of '[' must not be a pointer or struct.")
+			ErrorMessage := "Right side operand of '[' must not be a pointer or struct."
 		}
-		
-		/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
-		
-		ResultType := DecrementPointerType(pState, LeftType)
+		else {
+			/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
+			
+			ResultType := DecrementPointerType(pState, LeftType)
+		}
 	}
 	else {
-		/* Otherwise, just follow default binary typing rules */
+		/* Otherwise, just follow standard binary typing rules */
 		
 		ResultType := GetBinaryResultType(pState, LeftType, RightType)
-	}
-	
-	if (Operator = OPERATOR_STAR && ResultType->Size = 1) {
-		/* Automatically promote 8 bit multiplication to 16 bit, since there is no instruction for general 8 bit multiplication */
-		
-		ResultType := MakeType(pState->i16, 0)
 	}
 	
 	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
@@ -1701,7 +1745,19 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	Result->Right := Right
 	
 	/* Wrap it, and return it */
-	return AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
+	
+	if (WarningText) {
+		/* But show a warning (if we have one) */
+		ASTWarn(ResultNode, WarningText)
+	}
+	
+	if (ErrorMessage) {
+		/* Or show an error (if we have one) */
+		ASTError(ResultNode, ErrorMessage)
+	}
+	
+	return ResultNode
 }
 define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
 	/* Builds a NODE_TYPE_UNARY for the given operand/operator combo */
@@ -1776,12 +1832,14 @@ struct ParserState {
 	HashMap* Globals,
 	HashMap* Types,
 	
-	/* In order to prevent recreating the default types, they are just stored in the parser state */
+	/* In order to prevent recreating the standard types, they are just stored in the parser state */
 	TypeInfo* i8,
 	TypeInfo* i16,
 	TypeInfo* i32,
 	TypeInfo* i64,
 	TypeInfo* void,
+	
+	Type* EmptyType,
 	
 	FunctionDefine* CurrentFunction,
 	
@@ -1794,6 +1852,26 @@ define void ParserError(ParserState* pState, i8* ErrorMessage) {
 	/* Helper for raising an error from the parser */
 	
 	TokenizerError(pState->pState, ErrorMessage)
+}
+define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
+	Console:TextColor(Console:Red)
+	Console:AWriteLine(ErrorMessage)
+	Console:AWrite("At: ")
+	Console:ResetColors()
+	
+	PrintAST(BadNode)
+	
+	Exit(1)
+}
+define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
+	Console:TextColor(Console:Red | Console:Green)
+	Console:AWriteLine(WarnMessage)
+	Console:AWrite("At: ")
+	Console:ResetColors()
+	
+	PrintAST(BadNode)
+	
+	Console:WriteNewLine()
 }
 
 define i32 FreezeParser(ParserState* pState) {
@@ -1844,17 +1922,28 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	return Matches
 }
 define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
+	i8* ErrorMessage := 0
+	
+	Token* Result := TryConsume(pState, TokenType, TokenValue, Reason, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->pState, Reason)
+	}
+	
+	return Result
+}
+define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
 	/* Gets the next token and ensures it is a TokenText:TokenValue token (with Reason being an error message for when the next token doesn't match) */
 	
 	Token* NextToken := ParserNextToken(pState)
 	
 	if (NextToken->Type = TOKEN_TYPE_EOF) {
 		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
-		TokenizerError(pState->pState, "Unexpected EOF")
+		ErrorMessage[0] := "Unexpected EOF"
 	}
 	
 	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
-		TokenizerError(pState->pState, Reason)
+		ErrorMessage[0] := Reason
 	}
 	
 	return NextToken
@@ -1914,11 +2003,11 @@ define void ParseProgram(ParserState* pState) {
 	}
 }
 
-define Type* ParseTypeName(ParserState* pState) {
+define Type* TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
 	/* Parses a type name, and returns a Type* representing that type */
 	
 	/* Find the base type name */
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers")
+	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
 	i8 PointerDepth := 0
@@ -1929,7 +2018,18 @@ define Type* ParseTypeName(ParserState* pState) {
 	}
 	
 	/* Get (and return) a type (which might be incomplete) using the parsed info */
-	return GetType(pState, Name, PointerDepth)
+	return TryGetType(pState, Name, PointerDepth, ErrorMessage)
+}
+define Type* ParseTypeName(ParserState* pState) {
+	i8* ErrorMessage := 0
+	
+	Type* Result := TryParseTypeName(pState, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->pState, "Return type should be a struct type")
+	}
+	
+	return Result
 }
 
 define void ParseAndAddStruct(ParserState* pState) {
@@ -1963,22 +2063,25 @@ define void ParseAndAddStruct(ParserState* pState) {
 		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (NameToken->Value) As SafeWideString*
 		
-		/* Add the field to the field map */
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
-		/* Populate the StructField */
-		NextField->Name := FieldName	
+		i16 FieldSize := NextField->ValueType->Size
+		
+		NextField->Name := FieldName
+		
+		if (NextFieldOffset % FieldSize) {
+			/* Pad the field to a multiple of its size */
+			NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
+		}
+		
 		NextField->Offset := NextFieldOffset
 		
-		/* Set the offset of the next field */
-		NextFieldOffset += NextField->ValueType->Size
-		
-		/* Update the number of fields, and total size */
+		NextFieldOffset += FieldSize
 		FieldCount += 1
 		TotalSize := NextFieldOffset
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-			/* And if the next token is not a ',' break the loop */
+			/* If the next token is not a ',' break the loop */
 			break
 		}
 	
@@ -2008,7 +2111,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		AddType(pState, Name, Fields, TotalSize, true, false)
+		AddType(pState, Name, Fields, TotalSize, TYPE_STRUCT)
 	}
 }
 
@@ -2030,6 +2133,9 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 	
 	if !(FoundVariable) {
 		/* If we still haven't found the variable, then it is undefined */
+		Console:WriteNewLine()
+		PrintSafeString(VariableName)
+		Console:WriteCharacter(':')
 		TokenizerError(pState->pState, "Undefined variable")
 	}
 	
@@ -2058,8 +2164,25 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	}
 	
 	/* Add the new local (with its index as an ID) */
-	NewLocal->ScopedID := CurrentFunction->LocalCount
-	CurrentFunction->LocalCount += 1
+	NewLocal->StackOffset := CurrentFunction->LocalOffset
+	
+	i16 NewLocalSize := NewLocal->Type->Size
+	
+	if (NewLocalSize <= 8) {
+		CurrentFunction->LocalOffset += 8
+	}
+	else {
+		i16 Remainder := NewLocalSize % 8
+		
+		i16 RoundedSize := NewLocalSize
+		
+		if (Remainder != 0) {
+			RoundedSize += 8 - Remainder
+		}
+		
+		NewLocal->StackOffset += RoundedSize
+		CurrentFunction->LocalOffset += RoundedSize
+	}
 	
 	HashMapAddVariable(CurrentFunction->Locals, NewLocal)
 }
@@ -2072,7 +2195,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	/* Create a hashmap for the functions' locals */
 	NewDefine->Locals := NewHashMap()
-	NewDefine->LocalCount := 0
+	NewDefine->LocalOffset := 0
 	
 	/* Set the current function to this function */
 	pState->CurrentFunction := NewDefine
@@ -2122,7 +2245,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			NextParameter->Name := (NextParameterNameToken->Value) As SafeWideString*
 			NextParameter->IsGlobal := false
 			NextParameter->IsParameter := true
-			NextParameter->ScopedID := ParameterCount
+			NextParameter->StackOffset := (ParameterCount * 8)
 			
 			/* Add the parameter as a local */
 			ParserAddLocal(pState, NextParameter)
@@ -2258,74 +2381,93 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
-			Type* PotentialType := ParseTypeName(pState)
+			i8* ErrorMessage := 0
 			
-			/* Holds the parser state right after `Type*` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
-			i32 DefaultValueExpressionStart := FreezeParser(pState)
-			Token* PotentialName := ParserNextToken(pState)
+			Type* PotentialType := TryParseTypeName(pState, &ErrorMessage)
 			
-			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
-				/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
-				
-				/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
-				
-				SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
-				
-				VariableInfo* NewLocal := AllocateNewVariableInfo()
-				
-				NewLocal->Name := NameString
-				NewLocal->Type := PotentialType
-				NewLocal->IsGlobal := False
-				NewLocal->IsParameter := False
-				
-				ParserAddLocal(pState, NewLocal)
+			Console:WriteCharacter('a')
 			
-				if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
-					UnfreezeParser(pState, DefaultValueExpressionStart)
+			if ((PotentialType != 0) && (ErrorMessage = 0)) {
+				/* Holds the parser state right after `Type*` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(pState)
+				Token* PotentialName := ParserNextToken(pState)
+				
+				Console:WriteCharacter('b')
+				
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+					Console:WriteCharacter('c')
+					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+					
+					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					
+					NewLocal->Name := NameString
+					NewLocal->Type := PotentialType
+					NewLocal->IsGlobal := False
+					NewLocal->IsParameter := False
+					
+					ParserAddLocal(pState, NewLocal)
+					
+					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						Console:WriteCharacter('d')
+						UnfreezeParser(pState, DefaultValueExpressionStart)
+					}
+					else {
+						/* The next token is not a `:=`, so the following tokens are not a value for this variable */
+						Console:WriteCharacter('e')
+						return AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+					}
 				}
 				else {
-					/* The next token is not a `:=`, so the following tokens are not a default value for this variable */
-					
-					return AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+					/* Token after the type name was not an identifier */
+					Console:WriteCharacter('f')
+					UnfreezeParser(pState, FrozenState)
 				}
 			}
 			else {
-				/* Token after the type name was not an identifier */
-				
+				Console:WriteCharacter('g')
 				UnfreezeParser(pState, FrozenState)
 			}
 		}
 		
 		/* This expression will either be at A) The start of the line or B) After a type name (for declarations) */
-		
+		Console:WriteCharacter('h')
 		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
 	}
 	
 	return Result
 }
 
+define i8 GetNumberSize(i64 NumberToCheck) {
+	/* Returns the minimum number of bytes needed to store NumberToCheck */
+	
+	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		return 8
+	}
+	else if (NumberToCheck & 0x7FFF8000) {
+		return 4
+	}
+	else if (NumberToCheck & 0x7F80) {
+		return 2
+	}
+	else {
+		return 1
+	}
+}
+
 define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
-	/* Returns a type for the given number (smallest type that can store the number unsigned) */
+	/* Returns a type for the given number (smallest type that can store the number signed) */
 	
 	if (NumberToCheck & 0x7FFFFFFF80000000) {
 		/* If any of the upper 33 bits are set, then it's an i64 */
 		
 		return MakeType(pState->i64, 0)
 	}
-	else if (NumberToCheck & 0x7FFF8000) {
-		/* If bits 15-31 are set, then it's an i32 */
+	else {
+		/* Smallest type for a number is i32 for the sake of sanity (10 * 300 = 300, not 44) */
 		
 		return MakeType(pState->i32, 0)
-	}
-	else if (NumberToCheck & 0x7F80) {
-		/* If bits 7-14 are set, then it's an i16 */
-		
-		return MakeType(pState->i16, 0)
-	}
-	else if (NumberToCheck & 0x7F || NumberToCheck = 0) {
-		/* Else if 0-6 are set, or the number is 0, it's an i8 */
-		
-		return MakeType(pState->i8, 0)
 	}
 }
 
@@ -2333,12 +2475,10 @@ define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
 	/* Translates some kind of token in an AST node which contains the actual version of the token */
 	
-	Type* ResultType := 0
-	
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
 		
-		ResultType := GetNumberType(pState, TokenToTranslate->Value)
+		Type* ResultType := GetNumberType(pState, TokenToTranslate->Value)
 		
 		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
@@ -2423,7 +2563,6 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else {
 		/* Else, this token isn't something we expected here, so error out */
 		
-		PrintToken(NextToken)
 		TokenizerError(pState->pState, "Unexpected token in expression")
 	}
 	
@@ -2449,20 +2588,29 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		}
 		
 		ASTNode* Operand := 0
+		i8 Operator := (OperatorToken->Value) As i8
 		
-		if (OperatorToken->Value = OPERATOR_OPEN_BRACKET) {
+		if (Operator = OPERATOR_OPEN_BRACKET) {
 			/* If the next operator is [, then parse the index expression (for the right operand) and consume the closing ] */
 			
 			Operand := ParseExpression(pState, 0)
 			
 			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
 		}
-		else if (OperatorToken->Value = OPERATOR_AS) {
+		else if (Operator = OPERATOR_AS) {
 			/* Else if the next operator is 'as' then parse a type name as the right operand */
 			
 			Type* CastToType := ParseTypeName(pState)
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
+		}
+		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+			
+			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
+			
+			PrintSafeString((Right->Value) As SafeWideString*)
+			
+			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, pState->EmptyType)
 		}
 		else {
 			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
@@ -2646,6 +2794,16 @@ define void PrintAST(ASTNode* NodeToPrint) {
 	else if (NodeType = NODE_TYPE_TYPE) {
 		PrintType((NodeToPrint->TrueNode) As Type*)
 	}
+	else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
+		StructAccessExpression* AccessNode := (NodeToPrint->TrueNode) As StructAccessExpression*
+		
+		PrintAST(AccessNode->Left)
+		PrintOperator(AccessNode->Operator->Value)
+		PrintSafeString(AccessNode->TargetField->Name)
+	}
+	else if (NodeType = NODE_TYPE_IDENTIFIER) {
+		PrintSafeString((NodeToPrint->TrueNode) As SafeWideString*)
+	}
 }
 
 /*
@@ -2727,23 +2885,33 @@ define i8 PopRegisterStack(CompilerState* cState) {
 define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
 	PrintSafeString(TargetVariable->Name)
 	Console:WriteCharacter(':')
-	Console:IWriteLine(TargetVariable->ScopedID)
+	Console:IWriteLine(TargetVariable->StackOffset)
 	
-	EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+	if (TargetVariable->Type->PointerDepth = 0 && TargetVariable->Type->TrueType->IsStructType) {
+		/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
+			So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
+			Any time this could be abused *should* be caught by type checking 
+		*/
+		
+		GetVariableAddress(cState, TargetVariable, ResultRegister)
+	}
+	else {
+		EmitMove_RX_RX_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset), TargetVariable->Type->Size)
+	}
 }
 define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
 	PrintSafeString(TargetVariable->Name)
 	Console:WriteCharacter(':')
-	Console:IWriteLine(TargetVariable->ScopedID)
+	Console:IWriteLine(TargetVariable->StackOffset)
 	
-	EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -((TargetVariable->ScopedID) * 8))
+	EmitLea_R64_R64_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset))
 }
 define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	PrintSafeString(TargetVariable->Name)
 	Console:WriteCharacter(':')
-	Console:IWriteLine(TargetVariable->ScopedID)
+	Console:IWriteLine(TargetVariable->StackOffset)
 	
-	EmitMove_RX_DISP8_RX(cState, RBP, SourceRegister, -((TargetVariable->ScopedID) * 8), TargetVariable->Type->Size)
+	EmitMove_RX_DISPX_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset), TargetVariable->Type->Size)
 }
 
 
@@ -2752,6 +2920,10 @@ define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 	Actual compile functions
 ==========================================
 */
+
+define void Cast(CompilerState* cState, i8 Register, i8 Size) {
+	EmitMove_R64_RX(cState, Register, Register, Size)
+}
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
 	/* Compiles a single function */
@@ -2764,7 +2936,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
 	
-	/* By default, assume 4 register parameters, and 0 stack parameters */
+	/* Assume 4 register parameters, and 0 stack parameters */
 	i8 RegisterParameterCount := 4
 	i16 StackParameterCount := 0
 	
@@ -2783,7 +2955,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	/* Set up the stack frame for this function */
-	EmitEnter_I16(cState, (FunctionToCompile->LocalCount) * 8)
+	EmitEnter_I16(cState, FunctionToCompile->LocalOffset)
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -2799,7 +2971,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 		
 		/* And write the parameter register's value into the parameter's stack space */
-		EmitMove_RX_DISP8_RX(cState, RBP, NextParameterRegister, -((NextParameter->ScopedID) * 8), NextParameter->Type->Size)
+		SetVariableValue(cState, NextParameter, NextParameterRegister)
 	}
 	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
@@ -2812,7 +2984,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitMove_RX_RX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
-		EmitMove_RX_DISP8_RX(cState, RBP, RAX, -((NextStackParameter->ScopedID) * 8), NextStackParameter->Type->Size)
+		SetVariableValue(cState, NextStackParameter, RAX)
 	}
 	
 	/* Compile the body of the function */
@@ -2842,7 +3014,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	AddRelocation(B, 0x1000, 40, 1)
 	
-	AddCode(B, cState->CodeBuffer, 40)
+	AddCode(B, cState->CodeBuffer, 0x100)
 	
 	FinalizeBuilder(B)
 	
@@ -2871,8 +3043,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	i16 ReturnValueSize := ReturnExpression->ValueType->Size
 	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
 	
-	if (ReturnValueSize < ReturnTypeSize) {
-		EmitMove_R64_RX(cState, RAX, RAX, ReturnValueSize)
+	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
+		Cast(cState, RAX, ReturnValueSize)
 	}
 	
 	/* And jump to this function's return label */
@@ -2897,6 +3069,7 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	/* Compiles some kind of expression */
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
+	Type* ResultType := ExpressionToCompile->ValueType
 	
 	if (ExpressionType = NODE_TYPE_INTEGER) {
 		/* Simply move the integer being used into the result register */
@@ -2910,7 +3083,6 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	}
 	else if (ExpressionType = NODE_TYPE_UNARY) {
 		UnaryExpression* UnaryNode := (ExpressionToCompile->TrueNode) As UnaryExpression*
-		Type* ResultType := ExpressionToCompile->ValueType
 	
 		CompileUnary(cState, ResultRegister, ResultType, UnaryNode)
 	}
@@ -2918,9 +3090,13 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
 		
 		BinaryExpression* BinaryNode := (ExpressionToCompile->TrueNode) As BinaryExpression*
-		Type* ResultType := ExpressionToCompile->ValueType
 		
 		CompileBinary(cState, ResultRegister, ResultType, BinaryNode)
+	}
+	else if (ExpressionType = NODE_TYPE_STRUCT_ACCESS) {
+		StructAccessExpression* AccessNode := (ExpressionToCompile->TrueNode) As StructAccessExpression*
+		
+		CompileGetStructAccess(cState, ResultRegister, AccessNode)
 	}
 
 }
@@ -2944,6 +3120,26 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 	}
 }
 
+define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	i16 TargetFieldSize := TargetField->ValueType->Size
+	
+	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
+	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	EmitMove_RX_RX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+}
+
+define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	
+	i8 ResultPointerRegister := PushRegisterStack(cState)
+	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
+	
+	EmitMove_RX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	
+	PopRegisterStack(cState)
+}
+
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
@@ -2957,72 +3153,74 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	i8 LeftRegister := ResultRegister
 	i8 RightRegister := 0
 	
-	if (ExpressionToCompile->Operator->Value != OPERATOR_COLON_EQUAL) {
+	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
+	
+	if (Operator = OPERATOR_COLON_EQUAL) {
+		/* This is an assignment, so we can reuse the result register for the side side, and ignore the left */
+		
+		if (Left->NodeType = NODE_TYPE_VARIABLE) {
+			VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
+			
+			SetVariableValue(cState, TargetVariable, LeftRegister)
+		}
+		else if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			CompileExpression(cState, ResultRegister, Right)
+			
+			CompileSetStructAccess(cState, ResultRegister, (Left->TrueNode) As StructAccessExpression*)
+		}
+	}
+	else {
 		/* As long as we're not compiling an assignment, compile the left operand into the result register */
 		
 		CompileExpression(cState, LeftRegister, Left)
 		
-		if (ExpressionToCompile->Operator->Value = OPERATOR_AS) {
+		if (Operator = OPERATOR_AS) {
 			/* For 'As', just compile the left operand, cast it, and return */
 			Type* RightType := (Right->TrueNode) As Type*
 			
 			if (Left->NodeType != NODE_TYPE_INTEGER) {
 				/* Only emit cast instructions for values which aren't integers, since integer casts are done at compile time */
 				
-				EmitMove_R64_RX(cState, LeftRegister, LeftRegister, RightType->Size)
+				Cast(cState, LeftRegister, RightType->Size)
+			}
+		}
+		else {
+			/* Allocate a new register for the right operand */
+			
+			RightRegister := PushRegisterStack(cState)
+			CompileExpression(cState, RightRegister, Right)
+	
+			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
+			if (RightSize < ResultSize) {
+				Cast(cState, RightRegister, ResultSize)
+			}
+			if (LeftSize < ResultSize) {
+				Cast(cState, LeftRegister, ResultSize)
 			}
 			
-			return 0
+			/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
+			
+			i8 RightRegister := PopRegisterStack(cState)
+			
+			if (Operator = OPERATOR_PLUS) {
+				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+			}
+			else if (Operator = OPERATOR_MINUS) {
+				EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+			}
+			else if (Operator = OPERATOR_STAR) {
+				if (ResultType->Size = 1) {
+					/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
+					EmitIMul_R16_R16(cState, LeftRegister, RightRegister)
+					Cast(cState, LeftRegister, 1)
+				}
+				else {	
+					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+				}
+			}
 		}
-		
-		/* And allocate a new register for the right operand */
-		
-		RightRegister := PushRegisterStack(cState)
 	}
-	else {
-		/* Otherwise, this is an assignment, so we can reuse the result register for the side side, and ignore the left */
-		
-		RightRegister := ResultRegister
-	}
-	
-	CompileExpression(cState, RightRegister, Right)
-	
-	/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
-	if (RightSize < ResultSize) {
-		EmitMove_R64_RX(cState, RightRegister, RightRegister, ResultSize)
-	}
-	if (LeftSize < ResultSize) {
-		EmitMove_R64_RX(cState, LeftRegister, LeftRegister, ResultSize)
-	}
-	
-	CompileBinaryOperation(cState, ResultRegister, ResultType, ExpressionToCompile->Operator, Left)
 }
-define void CompileBinaryOperation(CompilerState* cState, i8 LeftRegister, Type* ResultType, Token* OperatorToCompile, ASTNode* Left) {
-	/* Uses LeftRegister and TopOfRegisterStack as operands for OperatorToCompile's operation, with LeftRegister as the result register */
-	
-	i8 Operator := (OperatorToCompile->Value) As i8
-	
-	/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
-	
-	if (Operator = OPERATOR_PLUS) {
-		EmitAdd_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
-	}
-	else if (Operator = OPERATOR_MINUS) {
-		EmitSub_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
-	}
-	else if (Operator = OPERATOR_STAR) {
-		EmitIMul_RX_RX(cState, LeftRegister, PopRegisterStack(cState), ResultType->Size)
-	}
-	else if (Operator = OPERATOR_COLON_EQUAL) {
-		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
-		
-		SetVariableValue(cState, TargetVariable, LeftRegister)
-	}
-
-
-
-}
-
 /*
 ==========================================
 	Code printing helpers
@@ -3231,6 +3429,7 @@ i8 R15 := 15
 
 i8 MODE_PTOR := 0
 i8 MODE_PTOR_DISP8 := 1
+i8 MODE_PTOR_DISP32 := 2
 
 i8 MODE_RTOR := 3
 
@@ -3398,6 +3597,50 @@ define void EmitMove_R64_R32(CompilerState* cState, i8 DestinationRegister, i8 S
 	EmitREXOpcodeModRM(cState, 0x63, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 
+define void EmitMove_RX_RX_DISPX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
+	i8 DisplacementSize := GetNumberSize(Displacement As i64)
+	
+	if (DisplacementSize > 1) {
+		EmitMove_RX_RX_DISP32(cState, DestinationRegister, SourceRegister, Displacement As i32, Size)
+	}
+	else {
+		EmitMove_RX_RX_DISP8(cState, DestinationRegister, SourceRegister, Displacement As i8, Size)
+	}
+}
+
+define void EmitMove_RX_RX_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
+	if (Size = 1) {
+		EmitMove_R8_R8_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else if (Size = 2) {
+		EmitMove_R16_R16_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else if (Size = 4) {
+		EmitMove_R32_R32_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else {
+		EmitMove_R64_R64_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+}
+
+define void EmitMove_R8_R8_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x8A, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, REX_BASE)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R16_R16_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, 0)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R32_R32_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, 0)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R64_R64_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, REX_W)
+	PushI32(cState, Displacement)
+}
+
 define void EmitMove_RX_RX_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
 	if (Size = 1) {
 		EmitMove_R8_R8_DISP8(cState, DestinationRegister, SourceRegister, Displacement)
@@ -3429,6 +3672,54 @@ define void EmitMove_R32_R32_DISP8(CompilerState* cState, i8 DestinationRegister
 define void EmitMove_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
 	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_W)
 	PushByte(cState, Displacement)
+}
+
+/* Move [register + displacement], register */
+
+define void EmitMove_RX_DISPX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
+	i8 DisplacementSize := GetNumberSize(Displacement As i64)
+	
+	if (DisplacementSize > 1) {
+		EmitMove_RX_DISP32_RX(cState, DestinationRegister, SourceRegister, Displacement As i32, Size)
+	}
+	else {
+		EmitMove_RX_DISP8_RX(cState, DestinationRegister, SourceRegister, Displacement As i8, Size)
+	}
+}
+
+define void EmitMove_RX_DISP32_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
+	if (Size = 1) {
+		EmitMove_R8_DISP32_R8(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else if (Size = 2) {
+		EmitMove_R16_DISP32_R16(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else if (Size = 4) {
+		EmitMove_R32_DISP32_R32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+	else {
+		EmitMove_R64_DISP32_R64(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+}
+
+/* Flipped operands due to MR encoding */
+
+define void EmitMove_R8_DISP32_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x88, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, REX_BASE)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R16_DISP32_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, 0)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R32_DISP32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, 0)
+	PushI32(cState, Displacement)
+}
+define void EmitMove_R64_DISP32_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, REX_W)
+	PushI32(cState, Displacement)
 }
 
 define void EmitMove_RX_DISP8_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
@@ -3507,9 +3798,24 @@ define void EmitMove_R64_RI64(CompilerState* cState, i8 DestinationRegister, i8 
 ==========================================
 */
 
-define void EmitLea_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
+define void EmitLea_R64_R64_DISPX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	i8 Size := GetNumberSize(Displacement)
+	
+	if (Size = 1) {
+		EmitLea_R64_R64_DISP8(cState, DestinationRegister, SourceRegister, Displacement As i8)
+	}
+	else {
+		EmitLea_R64_R64_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
+	}
+}
+
+define void EmitLea_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
 	EmitREXOpcodeModRM(cState, 0x8D, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_W)
 	PushByte(cState, Displacement)
+}
+define void EmitLea_R64_R64_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+	EmitREXOpcodeModRM(cState, 0x8D, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, REX_W)
+	PushI32(cState, Displacement)
 }
 
 /*
@@ -3889,7 +4195,7 @@ i32 DEFAULT_RESERVE := 0x00100000
 i32 DEFAULT_COMMIT := 0x8000
 
 define void WritePEHeader(void* IntoBuffer) {
-	/* Writes all the default COFF/PE header values into the given buffer */
+	/* Writes all the standard COFF/PE header values into the given buffer */
 	
 	i8* MagicString := (IntoBuffer + PE_MAGIC_OFFSET) As i8*
 	
@@ -4100,7 +4406,7 @@ define void* AllocatePEBuffer() {
 }
 
 define PEBuilder* BuildBuilder() {
-	/* Allocates a PEBuilder and sets all of the default headers, along with writing the section headers */
+	/* Allocates a PEBuilder and sets all of the headers, along with writing the section headers */
 	
 	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
 	
@@ -4427,7 +4733,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, NewSize) As ImportHelper**
 		(ToBuilder->ImportHelpers)[NewIndex] := ThisDllHelper
 		
-		/* Set default fields of the new helper */
+		/* Set standard fields of the new helper */
 		
 		ThisDllHelper->ImportCount := 0
 		ThisDllHelper->RVABuffer := Alloc(4) As i32* /* Alloc(4) just so ReAlloc can be called on this */

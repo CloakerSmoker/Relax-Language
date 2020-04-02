@@ -525,7 +525,8 @@ class Builtins {
 			DllImport i16** __CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
 			
 			DllImport void __LocalFree(void*) {Kernel32.dll, LocalFree}
-			DllImport void __ExitProcess(i32) {Kernel32.dll, ExitProcess}
+			DllImport i64 __GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
+			DllImport void __TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
 			
 			i16** __Saved__ArgV := 0
 			
@@ -543,12 +544,13 @@ class Builtins {
 				
 				__LocalFree(__ArgV As void*)
 				
-				__ExitProcess(__ExitCode)
+				__TerminateProcess(__GetCurrentProcess(), __ExitCode)
 			}
 			
 			define void Exit(i32 __ExitCode) {
 				__LocalFree(__Saved__ArgV As void*)
-				__ExitProcess(__ExitCode)
+				
+				__TerminateProcess(__GetCurrentProcess(), __ExitCode)
 			}
 			
 			DllImport i64 __GetProcessHeap() {Kernel32.dll, GetProcessHeap}
