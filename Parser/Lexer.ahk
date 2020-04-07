@@ -13,6 +13,16 @@
 		return new Token(Tokens.IDENTIFIER, ErrorAreaText, ErrorAreaContext, this.CodeString)
 	}
 	
+	Add(Code) {
+		CodeLexer := new Lexer()
+		CodeTokens := CodeLexer.Start(Code)
+		CodeTokens.Pop()
+		
+		for k, v in CodeTokens {
+			this.Tokens.Push(v)
+		}
+	}
+	
 	Start(Code) {
 		this.CodeString := Code
 		this.Source := Code
@@ -29,6 +39,8 @@
 		}
 		catch E {
 			this.CriticalError := True
+			
+			ShowError(E.Message)
 		}
 		
 		this.AddToken(Tokens.EOF, "EOF")
@@ -167,6 +179,52 @@
 				else {
 					this.AddToken(Tokens.IDENTIFIER, IdentifierText)
 				}
+			}
+			Case "#": {
+				while (IsAlphaNumeric(this.Peek())) {
+					this.Advance()
+				}
+				
+				DirectiveName := this.SubStr(this.TokenStart + 1, this.Index)
+				
+				;MsgBox, % DirectiveName
+				
+				if (DirectiveName = "Include") {
+					this.Advance()
+					
+					ParameterStart := this.Index
+					
+					while !(IsWhiteSpace(this.Peek())) {
+						this.Advance()
+					}
+					
+					ParameterText := this.SubStr(ParameterStart, this.Index)
+					
+					;MsgBox, % "I: " ParameterText
+					
+					try {
+						;MsgBox, % A_WorkingDir "/" ParameterText
+						IncludedFile := FileOpen(A_WorkingDir "/" ParameterText, "r")
+					}
+					
+					if !(IsObject(IncludedFile)) {
+						new Error("Tokenizer")
+							.LongText("Could not open include file")
+							.Token(this.ErrorFakeToken())
+							.Source(this.Source)
+						.Throw()
+					}
+					
+					IncludeLexer := new Lexer()
+					
+					IncludedTokens := IncludeLexer.Start(IncludedFile.Read())
+					IncludedTokens.Pop() ; Remove the EOF token
+					
+					for k, IncludedToken in IncludedTokens {
+						this.Tokens.Push(IncludedToken)
+					}
+				}
+				
 			}
 			Default: {
 				new Error("Tokenizer")

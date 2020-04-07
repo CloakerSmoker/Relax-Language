@@ -1,0 +1,105 @@
+struct HashMapElement {
+	i64 Hash,
+	void Value,
+	void* NextElement
+}
+
+struct HashMap {
+	i32 BufferMaxCount,
+	void *Elements
+}
+
+define HashMap* NewHashMap() {
+	HashMap* NewMap := Alloc(HashMap.Size) As HashMap*
+	
+	NewMap->BufferMaxCount := 50
+	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
+	
+	return NewMap
+}
+define i64 HashString(SafeWideString* StringToHash) {
+	i64 Hash := 5281
+	i32 Index := 0
+	
+	loop (StringToHash->Length) {
+		Hash := ((Hash * 32) + Hash) ^ ((StringToHash->Buffer)[Index])
+		Index += 1
+	}
+	
+	return Hash
+}
+define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
+	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	
+	HashMapElement* Node := (TargetMap->Elements)[Index]
+	
+	if !(Node) {
+		return false As HashMapElement*
+	}
+
+	while (Node->Hash != Hash) {
+		if !(Node->NextElement) {
+			return Node
+		}
+		
+		Node := (Node->NextElement) As HashMapElement*
+		/* The cast is since types can't contain themselves yet */
+	}
+	
+	return Node
+}
+define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) {
+	i64 Hash := HashString(Key)
+	
+	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
+	
+	if (Result != 0) {
+		if (Result->Hash = Hash) {
+			return Result
+		}
+	}
+	
+	return false As HashMapElement*
+}
+define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
+	i64 Hash := HashString(Key)
+	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	
+	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
+	HashMapElement* NewElement := 0
+	
+	if (TailElement = 0) {
+		/* If TailElement = 0 then:
+			No linked list exists for this index
+			Create one, and insert the head into the element list
+		*/
+		
+		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement->NextElement := 0
+		
+		(TargetMap->Elements)[Index] := NewElement
+	}
+	else if (TailElement->Hash != Hash) {
+		/* else if TailElement->Hash != Hash:
+			Linked list exists, but doesn't contain the key yet
+			Create new element, and insert it into to the list
+		*/
+		
+		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement->NextElement := TailElement->NextElement
+	
+		TailElement->NextElement := NewElement
+	}
+	else {
+		/* Else, the tail node exists, and the hash matches
+			Aka this key already has an element
+			So just overwrite the values in it
+		*/
+		
+		NewElement := TailElement
+		TailElement->NextElement := 0
+	}
+	
+	NewElement->Hash := Hash
+	NewElement->Value := Value
+}

@@ -37,7 +37,7 @@ ConsoleWrite(Colors.Purple, "Relax Compiler Version " Relax.Version)
 
 SetWorkingDir, % A_ScriptDir
 ;A_Args := StrSplit("-i Examples\Struct.rlx -o out.exe --no-confirm", " ")
-;A_Args := StrSplit("-i Bootstrap\Lexer.rlx -o out.exe --verbose", " ")
+;A_Args := StrSplit("-i Bootstrap\Lexer.rlx -o out.exe --dump --no-confirm", " ")
 
 ;todo memory module is fucked
 
@@ -57,6 +57,10 @@ for k, Arg in A_Args {
 	Switch (Arg) {
 		Case "-i": {
 			InputFile := A_Args.RemoveAt(k + 1)
+			Seperator := InStr(InputFile, "\") ? "\" : "/"
+			
+			SetWorkingDir, % A_WorkingDir Seperator SubStr(InputFile, 1, InStr(InputFile, Seperator))
+			InputFile := SubStr(InputFile, InStr(InputFile, Seperator) + 1)
 		}
 		Case "-o": {
 			OutputFile := StrReplace(A_Args.RemoveAt(k + 1), "/", "\")

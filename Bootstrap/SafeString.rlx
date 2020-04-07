@@ -1,0 +1,170 @@
+struct SafeWideString {
+	i32 Length,
+	i16* Buffer
+}
+
+define SafeWideString* AllocateNewSafeString() {
+	return Alloc(SafeWideString.Size) As SafeWideString*
+}
+define void FreeSafeString(SafeWideString* StringToFree) {
+	Free(StringToFree As void*)
+}
+
+define SafeWideString* AToS(i8* SourceString) {
+	/* Converts an ASCII string to a SafeWideString (without freeing anything ever) */
+	
+	SafeWideString* NewString := AllocateNewSafeString()
+	
+	i32 Length := 0
+	
+	loop {
+		i8 NextCharacter := SourceString[Length]
+		
+		if (NextCharacter = 0) {
+			Break
+		}
+		
+		Length += 1
+	}
+	
+	NewString->Buffer := AToW(SourceString, Length)
+	NewString->Length := Length
+	
+	return NewString
+}
+
+define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
+	/* Compares a SafeWideString and i8* ASCII string */
+	
+	i32 Index := 0
+	
+	loop {
+		if (Index >= StringOne->Length) {
+			if (StringTwo[Index] = 0) {
+				return true
+			}
+			else {
+				return false
+			}
+		}
+		else if (StringTwo[Index] = 0) {
+			return false
+		}
+		
+		if !(CharacterEqualsNoCase((StringOne->Buffer)[Index], StringTwo[Index])) {
+			return false
+		}
+		
+		Index += 1
+	}
+
+	return true
+}
+
+define void PrintSafeString(SafeWideString* StringToPrint) {
+	/* Prints a safe string (safely) by using the string's length */
+	
+	i32 CharactersWritten := 0
+	
+	WriteConsole(STDOUT, StringToPrint->Buffer, StringToPrint->Length, &CharactersWritten, 0)
+	
+	return CharactersWritten
+}
+
+define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
+	/* Reads a hex number out of StringToReadFrom and returns it as an integer */
+	
+	i64 Result := 0
+	
+	i16* WString := StringToReadFrom->Buffer
+	
+	i16 FirstCharacter := WString[0]
+	
+	if !(IsHex(FirstCharacter)) {
+		Success[0] := 0
+		return 0
+	}
+	
+	i32 Length := StringToReadFrom->Length
+	
+	for (i32 Index := 0, Index <= Length, Index += 1) {
+		i16 NextCharacter := WString[Index]
+		
+		if !(IsHex(NextCharacter)) {
+			Break
+		}
+		
+		if (IsNumeric(NextCharacter)) {
+			NextCharacter -= '0'
+		}
+		else {
+			if (NextCharacter = 'a' || NextCharacter = 'A') {
+				NextCharacter := 10
+			}
+			else if (NextCharacter = 'b' || NextCharacter = 'B') {
+				NextCharacter := 11
+			}
+			else if (NextCharacter = 'c' || NextCharacter = 'C') {
+				NextCharacter := 12
+			}
+			else if (NextCharacter = 'd' || NextCharacter = 'D') {
+				NextCharacter := 13
+			}
+			else if (NextCharacter = 'e' || NextCharacter = 'E') {
+				NextCharacter := 14
+			}
+			else if (NextCharacter = 'f' || NextCharacter = 'F') {
+				NextCharacter := 15
+			}
+		}
+		
+		Result := (Result * 16) + (NextCharacter)
+	}
+	
+	Success[0] := 1
+	
+	return Result
+}
+
+
+define i64 SafeStringToI64(SafeWideString* StringToReadFrom, i8* Success) {
+	/* Reads an (signed) integer out of StringToReadFrom and returns it */
+	
+	i64 Result := 0
+	i64 Negative := 0
+	
+	i16* WString := StringToReadFrom->Buffer
+	
+	i16 FirstCharacter := WString[0]
+	
+	if (FirstCharacter = '-') {
+		Negative := 1
+		WString += 2
+		FirstCharacter := WString[0]
+	}
+	
+	if !(IsNumeric(FirstCharacter)) {
+		Success[0] := 0
+		return 0
+	}
+	
+	i32 Length := StringToReadFrom->Length
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i16 NextCharacter := WString[Index]
+		
+		if !(IsNumeric(NextCharacter)) {
+			Break
+		}
+		
+		Result := (Result * 10) + (NextCharacter - '0')
+	}
+	
+	Success[0] := 1
+	
+	if (Negative) {
+		Result := -Result
+	}
+	
+	return Result
+}

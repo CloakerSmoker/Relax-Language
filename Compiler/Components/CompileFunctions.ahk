@@ -447,6 +447,10 @@
 			return this.Typing.GetType(FunctionNode.ReturnType.Value) ; Give back the function's return type
 		}
 		
+		for k, v in StrSplit(this.Program.Stringify(), "`n", "`r") {
+			ConsoleWrite(Colors.White, v)
+		}
+		
 		new Error("Compile")
 			.LongText("Function '" Expression.Target.Stringify() "' is not callable.")
 			.Token(Expression.Target)

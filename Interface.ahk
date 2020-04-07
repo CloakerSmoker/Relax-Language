@@ -72,7 +72,7 @@ class Relax {
 			CodeString .= "`n" Builtins.__DllRuntime__.Code
 		}
 		else {
-			CodeString .= "`n" Builtins.__Runtime__.Code
+			;CodeString .= "`n" Builtins.__Runtime__.Code
 		}
 		
 		CodeCompiler := this.CompileCode(CodeString, Flags)
@@ -551,24 +551,6 @@ class Builtins {
 				__LocalFree(__Saved__ArgV As void*)
 				
 				__TerminateProcess(__GetCurrentProcess(), __ExitCode)
-			}
-			
-			DllImport i64 __GetProcessHeap() {Kernel32.dll, GetProcessHeap}
-			DllImport void* __HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
-			DllImport void* __HeapReAlloc(i64, i32, void*, i64) {Kernel32.dll, HeapReAlloc}
-			DllImport i8 __HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
-			
-			i64 __ProcessHeap := __GetProcessHeap()
-			i32 __HEAP_ZERO_MEMORY := 0x00000008
-			
-			define void* Alloc(i64 Size) {
-				return __HeapAlloc(__ProcessHeap, __HEAP_ZERO_MEMORY, Size)
-			}
-			define void* ReAlloc(void* Memory, i64 NewSize) {
-				return __HeapReAlloc(__ProcessHeap, __HEAP_ZERO_MEMORY, Memory, NewSize)
-			}
-			define i8 Free(void* Memory) {
-				return __HeapFree(__ProcessHeap, 0, Memory)
 			}
 		)"
 	}

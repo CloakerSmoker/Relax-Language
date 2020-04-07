@@ -118,8 +118,7 @@ class CharacterTokens {
 					,"}": Tokens.RIGHT_BRACE
 					,"[": Tokens.LEFT_BRACKET
 					,"]": Tokens.RIGHT_BRACKET
-					,",": Tokens.COMMA
-					,"#": Tokens.POUND}
+					,",": Tokens.COMMA}
 }
 
 class OperatorClasses {
