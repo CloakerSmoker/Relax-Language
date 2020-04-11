@@ -153,10 +153,10 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	
 	UpdateTypeFlags(NewType)
 	
-	AWrite("Adding ")
+	/* AWrite("Adding ")
 	PrintSafeString(Name)
 	AWrite(" at ")
-	IWriteLine(NewType As i64)
+	IWriteLine(NewType As i64) */
 	
 	HashMapAddValue(pState->Types, Name, NewType As void)
 	
@@ -211,18 +211,12 @@ define Type* TryGetType(ParserState* pState, SafeWideString* TypeName, i8 Pointe
 	
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
 	TypeInfo* FoundTypeInfo := 0
-	
-	AWrite("Found ")
-	PrintSafeString(TypeName)
-	AWrite(" at ")
-	
+
 	if (FoundElement) {
 		/* We found the type with the given name, so we can now set FoundTypeInfo */
-		IWriteLine((FoundElement->Value) As i64)
 		FoundTypeInfo := (FoundElement->Value) As TypeInfo*
 	}
 	else {
-		IWriteLine(0)
 		/*
 			If we did not find a typeinfo, then this type has to be an undefined user type, which is defined somewhere else
 			So, we will call AddType and add it as incomplete
@@ -760,12 +754,12 @@ define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 define i32 FreezeParser(ParserState* pState) {
 	/* Gets the tokenizer state in order to backtrack to said state */
 	
-	return pState->pState->Index
+	return pState->pState->TokenIndex
 }
 define void UnfreezeParser(ParserState* pState, i32 Index) {
 	/* Restores the tokenizer to a given state in order to backtrack */
 	
-	pState->pState->Index := Index
+	pState->pState->TokenIndex := Index
 }
 
 define Token* ParserNextToken(ParserState* pState) {
@@ -794,11 +788,17 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
 	
+	/* AWrite("Frozen at: ")
+	IWriteLine(FrozenState) */
+	
 	Token* NextToken := ParserNextToken(pState)
 	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
 	
 	if !(Matches) {
 		/* Backtrack if the next token didn't match */
+		/* AWrite("Unfreezing from: ")
+		IWriteLine(pState->pState->TokenIndex) */
+		
 		UnfreezeParser(pState, FrozenState)
 	}
 	
@@ -875,8 +875,6 @@ define void ParseProgram(ParserState* pState) {
 		
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
-			AWriteLine("Found struct")
-			
 			ParseAndAddStruct(pState)
 		}
 		
@@ -922,6 +920,10 @@ define void ParseAndAddStruct(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
+	AWrite("Found struct ")
+	PrintSafeString(Name)
+	WriteNewLine()
+	
 	/* Consumes the opening '{' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
@@ -945,6 +947,12 @@ define void ParseAndAddStruct(ParserState* pState) {
 		/* Get the name of the field */
 		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (NameToken->Value) As SafeWideString*
+		
+		WriteCharacter('	')
+		PrintType(NextField->ValueType)
+		WriteCharacter(' ')
+		PrintSafeString(FieldName)
+		WriteNewLine()
 		
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
@@ -1384,8 +1392,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	/* Parses and returns a single operand of an expression */
 	
-	/* Copy the next token since ParserNextMatches can overwrite it */
-	Token* NextToken := CopyToken(ParserNextToken(pState))
+	Token* NextToken := ParserNextToken(pState)
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
@@ -1461,7 +1468,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	ASTNode* Result := ParseExpressionOperand(pState)
 	
 	i32 FrozenState := FreezeParser(pState)
-	Token* OperatorToken := CopyToken(ParserNextToken(pState))
+	Token* OperatorToken := ParserNextToken(pState)
 	
 	while (OperatorToken->Type = TOKEN_TYPE_OPERATOR && GetPrecedence(OperatorToken) >= Precedence) {
 		i8 NewPrecedence := GetPrecedence(OperatorToken)
@@ -1508,7 +1515,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		FrozenState := FreezeParser(pState)
 		
 		/* Update the next operator */
-		OperatorToken := CopyToken(ParserNextToken(pState))
+		OperatorToken := ParserNextToken(pState)
 	}
 	
 	/* Debug print the expression result type (and text) */

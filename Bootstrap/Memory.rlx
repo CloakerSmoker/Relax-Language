@@ -5,13 +5,19 @@ DllImport i8 HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
 
 i64 ProcessHeap := GetProcessHeap()
 i32 HEAP_ZERO_MEMORY := 0x00000008
+i32 HEAP_REALLOC_IN_PLACE_ONLY := 0x00000010
 
 define void* Alloc(i64 Size) {
 	return HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Size)
 }
+
 define void* ReAlloc(void* Memory, i64 NewSize) {
 	return HeapReAlloc(ProcessHeap, HEAP_ZERO_MEMORY, Memory, NewSize)
 }
+define void* ReAllocInPlace(void* Memory, i64 NewSize) {
+	return HeapReAlloc(ProcessHeap, HEAP_ZERO_MEMORY | HEAP_REALLOC_IN_PLACE_ONLY, Memory, NewSize)
+}
+
 define i8 Free(void* Memory) {
 	return HeapFree(ProcessHeap, 0, Memory)
 }

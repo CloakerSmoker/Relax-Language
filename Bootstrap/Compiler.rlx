@@ -210,7 +210,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	FinalizeBuilder(B)
 	
-	WriteBuilder(B, "C:\Users\Connor\Desktop\Valite\text.exe")
+	WriteBuilder(B, "text.exe")
 	
 	/*PrintCodeBytes(cState)*/
 }

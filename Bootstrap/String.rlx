@@ -59,6 +59,33 @@ define i8 _IsHex(i16 Character) {
 	
 	return false
 }
+define i8 IsWhiteSpace(i16 Character) {
+	if (Character = ' ' || Character = '	') {
+		/* space+tab */
+		return true
+	}
+	else if (Character = 10 || Character = 13) {
+		/* linefeeds */
+		return true
+	}
+
+	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
+	
+	return false
+}
+define i8 IsPath(i16 Character) {
+	if (IsAlphaNumeric(Character)) {
+		return true
+	}
+	else if (Character = '/' || Character = '\') {
+		return true
+	}
+	else if (Character = '.') {
+		return true
+	}
+	
+	return false
+}
 
 define i8 IsNumeric(i16 Character) {
 	/* Checks if a character is a number of not */

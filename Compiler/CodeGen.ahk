@@ -754,6 +754,14 @@ class X64CodeGen {
 		this.GlobalPlaceholder(GlobalName)
 	}
 	
+	SysCall() {
+		this.PushByte(0x0F)
+		this.PushByte(0x05)
+	}
+	SysEnter() {
+		this.PushByte(0x0F)
+		this.PushByte(0x34)
+	}
 	
 	;============================
 

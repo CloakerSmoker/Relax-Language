@@ -40,25 +40,28 @@ define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
 	
 	loop {
 		if (Index >= StringOne->Length) {
+			/* Handle reaching the end of the safe string */
+			
 			if (StringTwo[Index] = 0) {
+				/* If the AString has also ended, then they are equal */
 				return true
 			}
 			else {
+				/* Otherwise, they aren't equal */
 				return false
 			}
 		}
 		else if (StringTwo[Index] = 0) {
+			/* If the AString ends before the SafeWideString, then they are not equal */
 			return false
 		}
 		
-		if !(CharacterEqualsNoCase((StringOne->Buffer)[Index], StringTwo[Index])) {
+		if (Lower((StringOne->Buffer)[Index]) != Lower(StringTwo[Index])) {
 			return false
 		}
 		
 		Index += 1
 	}
-
-	return true
 }
 
 define void PrintSafeString(SafeWideString* StringToPrint) {
