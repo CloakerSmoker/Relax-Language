@@ -604,6 +604,9 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			ResultType := DecrementPointerType(pState, LeftType)
 		}
 	}
+	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
+		ResultType := MakeType(pState->i8, 0)
+	}
 	else {
 		/* Otherwise, just follow standard binary typing rules */
 		
@@ -1295,7 +1298,10 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			
 			/* And ensure that the two types are compatible */
 			
-			if (ActualReturnType->Size > ExpectedReturnType->Size) {
+			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER && GetNumberSize(ExpressionToReturn->TrueNode) < ExpectedReturnType->Size) {
+				/* Dummy branch */
+			}
+			else if (ActualReturnType->Size > ExpectedReturnType->Size) {
 				TokenizerError(pState->pState, "Return type too large")
 			}
 			else if (ActualReturnType->PointerDepth != ExpectedReturnType->PointerDepth) {

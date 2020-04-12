@@ -757,16 +757,16 @@ define void EmitReturn(CompilerState* cState) {
 
 define void EmitTest_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	if (Size = 1) {
-		EmitTest_R8_R8(cState, DestinationRegister, SourceRegister)
+		EmitTest_R8_R8(cState, SourceRegister, DestinationRegister)
 	}
 	else if (Size = 2) {
-		EmitTest_R16_R16(cState, DestinationRegister, SourceRegister)
+		EmitTest_R16_R16(cState, SourceRegister, DestinationRegister)
 	}
 	else if (Size = 4) {
-		EmitTest_R32_R32(cState, DestinationRegister, SourceRegister)
+		EmitTest_R32_R32(cState, SourceRegister, DestinationRegister)
 	}
 	else {
-		EmitTest_R64_R64(cState, DestinationRegister, SourceRegister)
+		EmitTest_R64_R64(cState, SourceRegister, DestinationRegister)
 	}
 }
 define void EmitTest_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
@@ -783,6 +783,55 @@ define void EmitTest_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 S
 	EmitREXOpcodeModRM(cState, 0x85, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 
+define void EmitCmp_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
+	if (Size = 1) {
+		EmitCmp_R8_R8(cState, SourceRegister, DestinationRegister)
+	}
+	else if (Size = 2) {
+		EmitCmp_R16_R16(cState, SourceRegister, DestinationRegister)
+	}
+	else if (Size = 4) {
+		EmitCmp_R32_R32(cState, SourceRegister, DestinationRegister)
+	}
+	else {
+		EmitCmp_R64_R64(cState, SourceRegister, DestinationRegister)
+	}
+}
+define void EmitCmp_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x38, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
+}
+define void EmitCmp_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitCmp_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitCmp_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
+}
 
+/*
+==========================================
+	Specific Logic
+==========================================
+*/
 
-
+define void EmitSetE_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x94, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}
+define void EmitSetNE_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x95, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}
+define void EmitSetL_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9C, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}
+define void EmitSetLE_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9E, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}
+define void EmitSetG_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9F, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}
+define void EmitSetGE_R8(CompilerState* cState, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9D, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+}

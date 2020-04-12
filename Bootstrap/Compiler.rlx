@@ -300,6 +300,8 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 	}
 	
 	SetLabel(cState, EndLabel)
+	
+	cState->LastReturnOffset -= 1 /* Clobber the last return index so no code is eliminated from the body of a branch */
 }
 
 
@@ -427,6 +429,11 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			
 			RightRegister := PushRegisterStack(cState)
 			CompileExpression(cState, RightRegister, Right)
+			
+			if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
+				ResultSize := GetBinaryResultType(0 As ParserState*, Left->ValueType, Right->ValueType)->Size
+				EmitCmp_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+			}
 	
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
 			if (RightSize < ResultSize) {
@@ -441,10 +448,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			i8 RightRegister := PopRegisterStack(cState)
 			
 			if (Operator = OPERATOR_PLUS) {
-				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
 			else if (Operator = OPERATOR_MINUS) {
-				EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+				EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
 			else if (Operator = OPERATOR_STAR) {
 				if (ResultType->Size = 1) {
@@ -453,8 +460,26 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 					Cast(cState, LeftRegister, 1)
 				}
 				else {	
-					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultType->Size)
+					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 				}
+			}
+			else if (Operator = OPERATOR_EQUAL) {
+				EmitSetE_R8(cState, ResultRegister)
+			}
+			else if (Operator = OPERATOR_BANG_EQUAL) {
+				EmitSetNE_R8(cState, ResultRegister)
+			}
+			else if (Operator = OPERATOR_LESS) {
+				EmitSetL_R8(cState, ResultRegister)
+			}
+			else if (Operator = OPERATOR_LESS_EQAUL) {
+				EmitSetLE_R8(cState, ResultRegister)
+			}
+			else if (Operator = OPERATOR_GREATER) {
+				EmitSetG_R8(cState, ResultRegister)
+			}
+			else if (Operator = OPERATOR_GREATER_EQAUL) {
+				EmitSetGE_R8(cState, ResultRegister)
 			}
 		}
 	}
