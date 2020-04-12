@@ -123,8 +123,14 @@
 		}
 		
 		if (LeftType.Family = RightType.Family) {
+			if (LeftType.Family = "Pointer" && RightType.Family = "Pointer") {
+				; If both types are pointers, just let them work
+			
+				return LeftType
+			}
+			
 			if !(LeftType.Family = "Pointer" && LeftType.Name != RightType.Name) {
-				; If both types are pointers, but not pointers to the same thing, then there is no cast
+				; I have no clue what this does, but the runtime code breaks without it
 			
 				UsePrecision := True
 			}
@@ -195,6 +201,9 @@
 		}
 		else if (FromType.Family = "Custom" || ToType.Family = "Custom") {
 			Throw, Exception("No cast possible")
+		}
+		else if (FromType.Family = "Pointer" && ToType.Family = "Pointer") {
+			return []
 		}
 		
 		if (PathArray) {

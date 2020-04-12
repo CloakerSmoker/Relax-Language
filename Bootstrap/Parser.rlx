@@ -412,6 +412,14 @@ struct Block {
 	i16 StatementCount
 }
 
+struct IfGroup {
+	ASTNode** Conditions,
+	Block** Bodies,
+	Block* ElseBranch,
+	i16 BranchCount
+}
+
+
 struct FunctionDefine {
 	SafeWideString* Name,
 	Block* Body,
@@ -1218,6 +1226,43 @@ define Block* ParseBlock(ParserState* pState) {
 	return NewBlock
 }
 
+define ASTNode* ParseIf(ParserState* pState) {
+	IfGroup* NewIf := Alloc(IfGroup.Size) As IfGroup*
+	
+	NewIf->Conditions := Alloc(8 * 10) As ASTNode**
+	NewIf->Bodies := Alloc(8 * 10) As Block**
+	i32 BranchCapacity := 10
+	i32 BranchIndex := 0
+	
+	loop {
+		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_IF) || BranchIndex = 0) {
+			if (BranchCapacity <= BranchIndex) {
+				BranchCapacity += 10
+			
+				NewIf->Conditions := ReAlloc(NewIf->Conditions, BranchCapacity * 8)
+				NewIf->Bodies := ReAlloc(NewIf->Bodies, BranchCapacity * 8)
+			}
+			
+			(NewIf->Conditions)[BranchIndex] := ParseExpression(pState, 0)
+			(NewIf->Bodies)[BranchIndex] := ParseBlock(pState)
+		
+			BranchIndex += 1
+
+			if !(ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ELSE)) {
+				break
+			}
+		}
+		else {
+			NewIf->ElseBranch := ParseBlock(pState)
+			break
+		}
+	}
+	
+	NewIf->BranchCount := BranchIndex
+
+	return AllocateNewASTNode(NODE_TYPE_IF, NewIf, TYPE_NONE)
+}
+
 define ASTNode* ParseStatement(ParserState* pState) {
 	/* Parses a single statement */
 	
@@ -1228,15 +1273,17 @@ define ASTNode* ParseStatement(ParserState* pState) {
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
-		if (NextToken->Value = KEYWORD_CONTINUE) {
+		i8 NextKeyword := (NextToken->Value) As i8
+		
+		if (NextKeyword = KEYWORD_CONTINUE) {
 			/* A continue statement is a NODE_TYPE_CONTINUEBREAK with the value 1 */
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, true, TYPE_NONE)
 		}
-		else if (NextToken->Value = KEYWORD_BREAK) {
+		else if (NextKeyword = KEYWORD_BREAK) {
 			/* A break statement is a NODE_TYPE_CONTINUEBREAK with the value 0 */
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, false, TYPE_NONE)
 		}
-		else if (NextToken->Value = KEYWORD_RETURN) {
+		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
 			
 			/* Parse the expression to return */
@@ -1261,6 +1308,9 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			/* Then set the result to a new NODE_TYPE_RETURN */
 			
 			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+		}
+		else if (NextKeyword = KEYWORD_IF) {
+			Result := ParseIf(pState)
 		}
 	}
 	
@@ -1693,5 +1743,57 @@ define void PrintAST(ASTNode* NodeToPrint) {
 	}
 	else if (NodeType = NODE_TYPE_IDENTIFIER) {
 		PrintSafeString((NodeToPrint->TrueNode) As SafeWideString*)
+	}
+	else if (NodeType = NODE_TYPE_IF) {
+		IfGroup* IfNode := (NodeToPrint->TrueNode) As IfGroup*
+		
+		AWrite("if ")
+		
+		i32 BranchIndex := 0
+		
+		loop (IfNode->BranchCount) {
+			if (BranchIndex != 0) {
+				AWrite("else if ")
+			}
+			
+			PrintAST((IfNode->Conditions)[BranchIndex])
+			
+			AWrite(" {")
+			WriteNewLine()
+			
+			Block* BranchBody := (IfNode->Bodies)[BranchIndex]
+			
+			i32 StatementIndex := 0
+			
+			loop (BranchBody->StatementCount) {
+				ASTNode* BodyStatement := (BranchBody->Statements)[StatementIndex]
+				
+				PrintAST(BodyStatement)
+				
+				StatementIndex += 1
+			}
+			
+			WriteCharacter('}')
+			WriteNewLine()
+			
+			BranchIndex += 1
+		}
+		
+		if (IfNode->ElseBranch) {
+			AWrite("else {")
+			
+			i32 ElseStatementIndex := 0
+			
+			loop (IfNode->ElseBranch->StatementCount) {
+				ASTNode* BodyStatement := (IfNode->ElseBranch->Statements)[ElseStatementIndex]
+				
+				PrintAST(BodyStatement)
+				
+				ElseStatementIndex += 1
+			}
+			
+			WriteCharacter('}')
+			WriteNewLine()
+		}
 	}
 }

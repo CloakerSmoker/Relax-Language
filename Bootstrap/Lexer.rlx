@@ -231,7 +231,7 @@ define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
 define void TokenizerError(TokenizerState* tState, i8* Message) {
 	Backtrack(tState)
 	
-	Error(tState, (tState->Tokens)[tState->TokenIndex], Message)
+	Error(tState, (tState->Tokens)[(tState->TokenIndex) - 1], Message)
 }
 
 
