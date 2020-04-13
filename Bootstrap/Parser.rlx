@@ -43,7 +43,7 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
 		return 9
 	}
-	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH) {
+	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 		return 10
 	}
 	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR) {
@@ -1587,7 +1587,19 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 }
 
 define void PrintAST(ASTNode* NodeToPrint) {
+	IndentPrintAST(NodeToPrint, 0)
+}
+
+define void PrintIndent(i8 IndentLevel) {
+	loop (IndentLevel) {
+		AWrite("    ")
+	}
+}
+
+define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	/* Recursively prints an AST node and all child nodes */
+	
+	PrintIndent(IndentLevel)
 	
 	i8 NodeType := NodeToPrint->NodeType
 	
@@ -1690,7 +1702,8 @@ define void PrintAST(ASTNode* NodeToPrint) {
 					
 					if !(NextLocal->IsParameter) {
 						/* Stop parameters from being double printed */
-					
+						
+						PrintIndent(IndentLevel + 1)
 						PrintType(NextLocal->Type)
 						WriteCharacter(' ')
 						PrintSafeString(NextLocal->Name)
@@ -1708,7 +1721,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		loop (DefineNode->Body->StatementCount) {
 			ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
 			
-			PrintAST(BodyStatement)
+			IndentPrintAST(BodyStatement, IndentLevel + 1)
 			
 			StatementIndex += 1
 		}
@@ -1759,6 +1772,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		
 		loop (IfNode->BranchCount) {
 			if (BranchIndex != 0) {
+				PrintIndent(IndentLevel)
 				AWrite("else if ")
 			}
 			
@@ -1774,11 +1788,12 @@ define void PrintAST(ASTNode* NodeToPrint) {
 			loop (BranchBody->StatementCount) {
 				ASTNode* BodyStatement := (BranchBody->Statements)[StatementIndex]
 				
-				PrintAST(BodyStatement)
+				IndentPrintAST(BodyStatement, IndentLevel + 1)
 				
 				StatementIndex += 1
 			}
 			
+			PrintIndent(IndentLevel)
 			WriteCharacter('}')
 			WriteNewLine()
 			
@@ -1786,18 +1801,21 @@ define void PrintAST(ASTNode* NodeToPrint) {
 		}
 		
 		if (IfNode->ElseBranch) {
+			PrintIndent(IndentLevel)
 			AWrite("else {")
+			WriteNewLine()
 			
 			i32 ElseStatementIndex := 0
 			
 			loop (IfNode->ElseBranch->StatementCount) {
-				ASTNode* BodyStatement := (IfNode->ElseBranch->Statements)[ElseStatementIndex]
+				ASTNode* ElseBodyStatement := (IfNode->ElseBranch->Statements)[ElseStatementIndex]
 				
-				PrintAST(BodyStatement)
+				IndentPrintAST(ElseBodyStatement, IndentLevel + 1)
 				
 				ElseStatementIndex += 1
 			}
 			
+			PrintIndent(IndentLevel)
 			WriteCharacter('}')
 			WriteNewLine()
 		}

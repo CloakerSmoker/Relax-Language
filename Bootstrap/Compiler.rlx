@@ -287,7 +287,18 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 		CompileBlock(cState, (IfToCompile->Bodies)[BranchIndex])
 		
 		if (HasElse || (BranchIndex != (BranchCount - 1))) {
-			EmitJump_Label(cState, EndLabel)
+			/* Only emit a jump to the end label if: We have an 'else', or we are not the last branch 
+				This will eliminate a single extra `jmp, endlabel` on the final 'else if' of the statement
+				
+			*/
+			
+			if (cState->LastReturnOffset != cState->Index) {
+				/* Also, check that the statement didn't jump to the return label 
+					If it did, we don't need to emit a second unconditional jump right after
+				*/
+				
+				EmitJump_Label(cState, EndLabel)
+			}
 		}
 	}
 	
@@ -461,6 +472,40 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 				}
 				else {	
 					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+				}
+			}
+			else if (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
+				if (LeftRegister != RAX) {
+					/* i8 TempRAX := PushRegisterStack(cState)
+					
+					EmitMove_RX_RX(cState, TempRAX, RAX, ResultSize) */
+					EmitMove_RX_RX(cState, RAX, LeftRegister, ResultSize)
+				}
+				
+				EmitZeroRegister(cState, RDX)
+				
+				if (ResultSize = 1) {
+					EmitIDiv_RAX_R16(cState, RightRegister)
+				}
+				else {
+					EmitIDiv_RAX_RX(cState, RightRegister, ResultSize)
+				}
+				
+				if (Operator = OPERATOR_SLASH && ResultRegister != RAX) {
+					EmitMove_RX_RX(cState, ResultRegister, RAX, ResultSize)
+					/* EmitMove_RX_RX(cState, RAX, TempRAX, ResultSize)
+					PopRegisterStack(cState) */
+				}
+				else if (Operator = OPERATOR_PERCENT && ResultRegister != RDX) {
+					EmitMove_RX_RX(cState, ResultRegister, RDX, ResultSize)
+				}
+				/* else {
+					The result is already in the correct register
+				}
+				*/
+				
+				if (ResultSize = 1) {
+					Cast(cState, ResultRegister, 1)
 				}
 			}
 			else if (Operator = OPERATOR_EQUAL) {

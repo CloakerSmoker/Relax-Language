@@ -714,6 +714,37 @@ define void EmitIMul_AL_R8(CompilerState* cState, i8 SourceRegister) {
 	EmitREXOpcodeModRM(cState, 0x2A, MODE_RTOR, 5, SourceRegister, 0)
 }
 
+
+define void EmitCDO(CompilerState* cState) {
+	PushByte(cState, REX_BASE | REX_W)
+	PushByte(cState, 0x99)
+}
+
+define void EmitIDiv_RAX_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
+	if (Size = 1) {
+		AWriteLine("Bad size passed to EmitIDiv_RAX_RX")
+	}
+	else if (Size = 2) {
+		EmitIDiv_RAX_R16(cState, SourceRegister)
+	}
+	else if (Size = 4) {
+		EmitIDiv_RAX_R32(cState, SourceRegister)
+	}
+	else {
+		EmitIDiv_RAX_R64(cState, SourceRegister)
+	}
+}
+define void EmitIDiv_RAX_R16(CompilerState* cState, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, 0)
+}
+define void EmitIDiv_RAX_R32(CompilerState* cState, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, 0)
+}
+define void EmitIDiv_RAX_R64(CompilerState* cState, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, REX_W)
+}
+
 /*
 ==========================================
 	Push/Pop
