@@ -402,21 +402,20 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	i16 ResultSize := ResultType->Size
 	
 	i8 LeftRegister := ResultRegister
-	i8 RightRegister := 0
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
 	
 	if (Operator = OPERATOR_COLON_EQUAL) {
 		/* This is an assignment, so we can reuse the result register for the side side, and ignore the left */
 		
+		CompileExpression(cState, ResultRegister, Right)
+		
 		if (Left->NodeType = NODE_TYPE_VARIABLE) {
 			VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
 			
-			SetVariableValue(cState, TargetVariable, LeftRegister)
+			SetVariableValue(cState, TargetVariable, ResultRegister)
 		}
 		else if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			CompileExpression(cState, ResultRegister, Right)
-			
 			CompileSetStructAccess(cState, ResultRegister, (Left->TrueNode) As StructAccessExpression*)
 		}
 	}
@@ -438,7 +437,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		else {
 			/* Allocate a new register for the right operand */
 			
-			RightRegister := PushRegisterStack(cState)
+			i8 RightRegister := PushRegisterStack(cState)
 			CompileExpression(cState, RightRegister, Right)
 			
 			if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
@@ -455,8 +454,6 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			}
 			
 			/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
-			
-			i8 RightRegister := PopRegisterStack(cState)
 			
 			if (Operator = OPERATOR_PLUS) {
 				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
@@ -476,15 +473,18 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			}
 			else if (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 				if (LeftRegister != RAX) {
-					/* i8 TempRAX := PushRegisterStack(cState)
+					/* Handle the left operand not being in RAX by saving RAX into a temp register and setting RAX := Left */
 					
-					EmitMove_RX_RX(cState, TempRAX, RAX, ResultSize) */
+					i8 TempRAX := PushRegisterStack(cState)
+					
+					EmitMove_RX_RX(cState, TempRAX, RAX, ResultSize)
 					EmitMove_RX_RX(cState, RAX, LeftRegister, ResultSize)
 				}
 				
-				EmitZeroRegister(cState, RDX)
+				EmitZeroRegister(cState, RDX) /* Ensure that negative numbers won't work. Todo: Fix this */
 				
 				if (ResultSize = 1) {
+					/* Handle 8 bit division through a 16 bit operation, which will have a result casted down */
 					EmitIDiv_RAX_R16(cState, RightRegister)
 				}
 				else {
@@ -493,8 +493,8 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 				
 				if (Operator = OPERATOR_SLASH && ResultRegister != RAX) {
 					EmitMove_RX_RX(cState, ResultRegister, RAX, ResultSize)
-					/* EmitMove_RX_RX(cState, RAX, TempRAX, ResultSize)
-					PopRegisterStack(cState) */
+					EmitMove_RX_RX(cState, RAX, TempRAX, ResultSize)
+					PopRegisterStack(cState)
 				}
 				else if (Operator = OPERATOR_PERCENT && ResultRegister != RDX) {
 					EmitMove_RX_RX(cState, ResultRegister, RDX, ResultSize)
@@ -526,6 +526,8 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			else if (Operator = OPERATOR_GREATER_EQAUL) {
 				EmitSetGE_R8(cState, ResultRegister)
 			}
+			
+			PopRegisterStack(cState) /* Pop the right register */
 		}
 	}
 }
