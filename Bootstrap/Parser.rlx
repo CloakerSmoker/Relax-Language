@@ -427,7 +427,9 @@ struct FunctionDefine {
 	HashMap* Locals,
 	Type* ReturnType,
 	i16 ParameterCount,
-	i16 LocalOffset
+	i16 LocalOffset,
+	i8 HasFullDefinition,
+	i32 LabelNumber /* A magic thing we'll need later */
 }
 
 struct CallExpression {
@@ -862,7 +864,7 @@ define void ParserStart(TokenizerState* pState) {
 	
 	ParseProgram(&P)
 	
-	return 0
+	CompilerStart(&P)
 }
 
 /*
@@ -1092,28 +1094,36 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	/* Parses a 'define' statement */
 	
-	/* Allocate the AST node early so it can be added to the function list (so recursive functions work) */
-	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
-	
-	/* Create a hashmap for the functions' locals */
-	NewDefine->Locals := NewHashMap()
-	NewDefine->LocalOffset := 0
-	
-	/* Set the current function to this function */
-	pState->CurrentFunction := NewDefine
-	
-	/* Parse the return type */
-	NewDefine->ReturnType := ParseTypeName(pState)
 
-	/* Get the function name, and set our function's name */
+	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+
+	NewDefine->ReturnType := ParseTypeName(pState)
+	
+	pState->CurrentFunction := NewDefine
+
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	NewDefine->Name := (NameToken->Value) As SafeWideString*
 	
-	/* Build the container node */
-	ASTNode* NewDefineNode := AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE)
+	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, NewDefine->Name)
 	
-	/* And add it to the function hashmap */
-	HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)
+	if (FoundFunctionElement) {
+		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
+		
+		if (FoundFunction->HasFullDefinition) {
+			TokenizerError(pState->pState, "Duplicate definition")
+		}
+		
+		NewDefine := FoundFunctionElement
+	}
+	else {	
+		HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)
+		
+		NewDefine->LabelNumber := pState->FunctionCount
+		pState->FunctionCount += 1
+		
+		NewDefine->Locals := NewHashMap()
+		NewDefine->LocalOffset := 0
+	}
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
@@ -1177,10 +1187,19 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	NewDefine->ParameterCount := ParameterCount
 	
 	/* Parse the body of the function */
-	NewDefine->Body := ParseBlock(pState)
 	
-	PrintAST(NewDefineNode)
-	CompilerStart(NewDefine)
+	i32 BeforeBody := FreezeParser(pState)
+	
+	NewDefine->HasFullDefinition := ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+	
+	UnfreezeParser(pState, BeforeBody)
+	
+	if (NewDefine->HasFullDefinition) {
+		AWriteLine("HAS BODY")
+		NewDefine->Body := ParseBlock(pState)
+	}
+	
+	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE))
 }
 
 define Block* ParseBlock(ParserState* pState) {
@@ -1680,53 +1699,58 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			}
 		}
 		
-		AWriteLine(") {")
+		WriteCharacter(')')
 		
-		/* Brute-force loop through the function local hashmap */
-		
-		void* Elements := DefineNode->Locals->Elements
-		
-		for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
-			/* Loop through each slot in the hashmap bucket */
+		if (DefineNode->HasFullDefinition) {
+			AWriteLine(" {")
 			
-			if (Elements[ElementIndex]) {
-				/* If the slot has an element */
+			/* Brute-force loop through the function local hashmap */
+			
+			void* Elements := DefineNode->Locals->Elements
+			
+			for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
+				/* Loop through each slot in the hashmap bucket */
 				
-				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-				/* Then start walking the element hashmap, printing each element */
-				
-				while (FoundElement) {
-					/* Print the current element's value as a local */
+				if (Elements[ElementIndex]) {
+					/* If the slot has an element */
 					
-					VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					/* Then start walking the element hashmap, printing each element */
 					
-					if !(NextLocal->IsParameter) {
-						/* Stop parameters from being double printed */
+					while (FoundElement) {
+						/* Print the current element's value as a local */
 						
-						PrintIndent(IndentLevel + 1)
-						PrintType(NextLocal->Type)
-						WriteCharacter(' ')
-						PrintSafeString(NextLocal->Name)
-						WriteNewLine()
+						VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
+						
+						if !(NextLocal->IsParameter) {
+							/* Stop parameters from being double printed */
+							
+							PrintIndent(IndentLevel + 1)
+							PrintType(NextLocal->Type)
+							WriteCharacter(' ')
+							PrintSafeString(NextLocal->Name)
+							WriteNewLine()
+						}
+						
+						/* And update the current element to be the next element in the linked list */
+						FoundElement := (FoundElement->NextElement) As HashMapElement*
 					}
-					
-					/* And update the current element to be the next element in the linked list */
-					FoundElement := (FoundElement->NextElement) As HashMapElement*
 				}
 			}
+			
+			i32 StatementIndex := 0
+			
+			loop (DefineNode->Body->StatementCount) {
+				ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
+				
+				IndentPrintAST(BodyStatement, IndentLevel + 1)
+				
+				StatementIndex += 1
+			}
+			
+			WriteCharacter('}')
 		}
 		
-		i32 StatementIndex := 0
-		
-		loop (DefineNode->Body->StatementCount) {
-			ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
-			
-			IndentPrintAST(BodyStatement, IndentLevel + 1)
-			
-			StatementIndex += 1
-		}
-		
-		WriteCharacter('}')
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_RETURN) {

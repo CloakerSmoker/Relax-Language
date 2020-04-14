@@ -12,6 +12,10 @@ struct Label {
 }
 
 struct CompilerState {
+	ParserState* pState,
+	
+	PEBuilder* Builder,
+	
 	i8* CodeBuffer,
 	i32 CodeBufferSize,
 	i32 Index,
@@ -35,10 +39,13 @@ struct CompilerState {
 ==========================================
 */
 
-define void CompilerStart(FunctionDefine* StartFunction) {
+define void CompilerStart(ParserState* pState) {
 	CompilerState C
+	
+	C.pState := pState
+	
 	C.CodeBuffer := Alloc(200) As i8*
-	C.CodeBufferSize := 100
+	C.CodeBufferSize := 200
 	C.Index := 0
 	
 	C.Labels := Alloc(80) As Label**
@@ -48,7 +55,42 @@ define void CompilerStart(FunctionDefine* StartFunction) {
 	C.LabelIndex := 0
 	C.RegisterStackIndex := 0
 	
-	CompileFunction(&C, StartFunction)
+	C.Builder := BuildBuilder()
+	
+	void* Elements := pState->Functions->Elements
+			
+	for (i32 ElementIndex := 0, ElementIndex < (pState->Functions->BufferMaxCount), ElementIndex += 1) {
+		if (Elements[ElementIndex]) {
+			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+			
+			while (FoundElement) {
+				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+				
+				if !(NextFunction->HasFullDefinition) {
+					TokenizerError(pState->pState, "Undefined function")
+				}
+				
+				CompileFunction(&C, NextFunction)
+				
+				/* Update the current element to be the next element in the linked list */
+				FoundElement := (FoundElement->NextElement) As HashMapElement*
+			}
+		}
+	}
+	
+	AddData(C.Builder, 0x149)
+	
+	AddImport(C.Builder, AToS("Kernel32"), AToS("ExitProcess"))
+	AddImport(C.Builder, AToS("Kernel32"), AToS("LocalFree"))
+	
+	AddRelocation(C.Builder, 0x1000, 40, 1)
+	
+	AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize)
+	
+	FinalizeBuilder(C.Builder)
+	
+	WriteBuilder(C.Builder, "text.exe")
+	
 }
 
 define i8 PushRegisterStack(CompilerState* cState) {
@@ -66,6 +108,13 @@ define i8 PopRegisterStack(CompilerState* cState) {
 	cState->RegisterStackIndex -= 1
 	
 	return (cState->RegisterStackIndex) + 8
+}
+
+define void EnsureCodeBufferSize(CompilerState* cState) {
+	if ((cState->Index + 0x10) >= (cState->CodeBufferSize)) {
+		cState->CodeBufferSize += 0x100
+		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
+	}
 }
 
 #Include CodeGen.rlx
@@ -187,8 +236,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	/* Set the return label to the current index */
 	SetLabel(cState, ReturnLabel)
 	
-	/* Resolve all labels inside the function */
-	ResolveAllLabels(cState)
 	
 	if (cState->LastReturnOffset = cState->Index) {
 		/* If the last instruction was jmp ReturnLabel, then remove it (since it is useless) */
@@ -198,21 +245,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	/* Emit the leave/ret instructions for this function (the return value will be set by a return statement */
 	EmitLeave(cState)
 	EmitReturn(cState)
-	
-	PEBuilder* B := BuildBuilder()
-	
-	AddData(B, 0x149)
-	
-	AddImport(B, AToS("Kernel32"), AToS("ExitProcess"))
-	AddImport(B, AToS("Kernel32"), AToS("LocalFree"))
-	
-	AddRelocation(B, 0x1000, 40, 1)
-	
-	AddCode(B, cState->CodeBuffer, 0x200)
-	
-	FinalizeBuilder(B)
-	
-	WriteBuilder(B, "text.exe")
 	
 	/*PrintCodeBytes(cState)*/
 }
@@ -355,6 +387,7 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 	/* Compiles a unary operator and operand */
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
+	i16 ResultSize := ResultType->Size
 	
 	if (Operator = OPERATOR_AND) {
 		VariableInfo* OperandVariable := (ExpressionToCompile->Operand->TrueNode) As VariableInfo*
@@ -366,10 +399,18 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 		CompileExpression(cState, ResultRegister, ExpressionToCompile->Operand)
 		
 		if (Operator = OPERATOR_STAR) {
-			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, ResultType->Size)
+			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, ResultSize)
 		}
 		else if (Operator = OPERATOR_MINUS) {
-			EmitNeg_RX(cState, ResultRegister, ResultType->Size)
+			EmitNeg_RX(cState, ResultRegister, ResultSize)
+		}
+		else if (Operator = OPERATOR_BANG) {
+			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, ResultSize)
+			EmitSetE_R8(cState, ResultRegister)
+			
+			if (ResultSize > 1) {
+				Cast(cState, ResultRegister, ResultSize)
+			}
 		}
 	}
 }

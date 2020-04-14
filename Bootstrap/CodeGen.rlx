@@ -125,6 +125,8 @@ define void* GetIndexAsPointer(CompilerState* cState) {
 /* Helpers which write a number into cState->CodeBuffer and increment cState->Index */
 
 define void PushI8(CompilerState* cState, i8 NumberToPush) {
+	EnsureCodeBufferSize(cState)
+	
 	(cState->CodeBuffer)[cState->Index] := NumberToPush
 	cState->Index += 1
 }
@@ -135,18 +137,24 @@ define void PushByte(CompilerState* cState, i8 NumberToPush) {
 }
 
 define void PushI16(CompilerState* cState, i16 NumberToPush) {
+	EnsureCodeBufferSize(cState)
+	
 	i16* PushLocation := GetIndexAsPointer(cState) As i16*
 	PushLocation[0] := NumberToPush
 	
 	cState->Index += 2
 }
 define void PushI32(CompilerState* cState, i32 NumberToPush) {
+	EnsureCodeBufferSize(cState)
+	
 	i32* PushLocation := GetIndexAsPointer(cState) As i32*
 	PushLocation[0] := NumberToPush
 	
 	cState->Index += 4
 }
 define void PushI64(CompilerState* cState, i64 NumberToPush) {
+	EnsureCodeBufferSize(cState)
+	
 	i64* PushLocation := GetIndexAsPointer(cState) As i64*
 	PushLocation[0] := NumberToPush
 	
