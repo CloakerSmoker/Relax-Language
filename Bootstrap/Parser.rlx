@@ -1113,7 +1113,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			TokenizerError(pState->pState, "Duplicate definition")
 		}
 		
-		NewDefine := FoundFunctionElement
+		NewDefine := FoundFunction
 	}
 	else {	
 		HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)

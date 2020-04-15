@@ -816,6 +816,11 @@ define void EmitReturn(CompilerState* cState) {
 	PushByte(cState, 0xC3)
 }
 
+define void EmitCall_Label(CompilerState* cState, i32 LabelNumber) {
+	PushByte(cState, 0xE8)
+	UseLabel(cState, LabelNumber)
+}
+
 /*
 ==========================================
 	Logic

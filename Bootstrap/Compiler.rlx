@@ -27,10 +27,10 @@ struct CompilerState {
 	i32 LabelIndex,
 	
 	Type* CurrentFunctionReturnType,
-	i32 CurrentFunctionReturnLabel,
-	i32 LastReturnOffset,
 	
-	i8 RegisterStackIndex
+	i8 RegisterStackIndex,
+	
+	i8 NoClobberCD89
 }
 
 /*
@@ -52,7 +52,7 @@ define void CompilerStart(ParserState* pState) {
 	C.LabelCount := 0
 	C.LabelBufferCapacity := 10
 	
-	C.LabelIndex := 0
+	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
 	C.Builder := BuildBuilder()
@@ -70,6 +70,10 @@ define void CompilerStart(ParserState* pState) {
 					TokenizerError(pState->pState, "Undefined function")
 				}
 				
+				AWrite("Compiling ")
+				PrintSafeString(NextFunction->Name)
+				WriteNewLine()
+				
 				CompileFunction(&C, NextFunction)
 				
 				/* Update the current element to be the next element in the linked list */
@@ -77,6 +81,8 @@ define void CompilerStart(ParserState* pState) {
 			}
 		}
 	}
+	
+	ResolveAllLabels(&C)
 	
 	AddData(C.Builder, 0x149)
 	
@@ -171,13 +177,11 @@ define void Cast(CompilerState* cState, i8 Register, i8 Size) {
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
 	/* Compiles a single function */
 	
-	/* Allocates a label to be the return position, and updates the current return label */
-	i32 ReturnLabel := NextLabel(cState)
-	cState->CurrentFunctionReturnLabel := ReturnLabel
-	
 	/* Store the current return type so return can cast values to it */
 	
 	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
+	
+	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
 	/* Assume 4 register parameters, and 0 stack parameters */
 	i8 RegisterParameterCount := 4
@@ -198,6 +202,14 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	/* Set up the stack frame for this function */
+	i16 LocalSpace := FunctionToCompile->LocalOffset
+	i16 LocalSpaceRemainder := LocalSpace % 16
+	
+	if (LocalSpaceRemainder) {
+		/* Round the space up to a multiple of 16 to keep the stack aligned */
+		LocalSpace += (16 - LocalSpaceRemainder)
+	}
+	
 	EmitEnter_I16(cState, FunctionToCompile->LocalOffset)
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
@@ -232,21 +244,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	/* Compile the body of the function */
 	CompileBlock(cState, FunctionToCompile->Body)
-	
-	/* Set the return label to the current index */
-	SetLabel(cState, ReturnLabel)
-	
-	
-	if (cState->LastReturnOffset = cState->Index) {
-		/* If the last instruction was jmp ReturnLabel, then remove it (since it is useless) */
-		cState->Index -= 5
-	}
-	
-	/* Emit the leave/ret instructions for this function (the return value will be set by a return statement */
-	EmitLeave(cState)
-	EmitReturn(cState)
-	
-	/*PrintCodeBytes(cState)*/
 }
 define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 	/* Compiles a block of statements */
@@ -273,11 +270,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 		Cast(cState, RAX, ReturnValueSize)
 	}
 	
-	/* And jump to this function's return label */
-	EmitJump_Label(cState, cState->CurrentFunctionReturnLabel)
-	
-	/* Also update the LastReturnOffset so this jump can be eliminated if it is the last instruction in the function */
-	cState->LastReturnOffset := cState->Index
+	EmitLeave(cState)
+	EmitReturn(cState)
 }
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
@@ -324,13 +318,7 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 				
 			*/
 			
-			if (cState->LastReturnOffset != cState->Index) {
-				/* Also, check that the statement didn't jump to the return label 
-					If it did, we don't need to emit a second unconditional jump right after
-				*/
-				
-				EmitJump_Label(cState, EndLabel)
-			}
+			EmitJump_Label(cState, EndLabel)
 		}
 	}
 	
@@ -343,8 +331,6 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 	}
 	
 	SetLabel(cState, EndLabel)
-	
-	cState->LastReturnOffset -= 1 /* Clobber the last return index so no code is eliminated from the body of a branch */
 }
 
 
@@ -381,8 +367,81 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		
 		CompileGetStructAccess(cState, ResultRegister, AccessNode)
 	}
+	else if (ExpressionType = NODE_TYPE_CALL) {
+		CallExpression* CallNode := (ExpressionToCompile->TrueNode) As CallExpression*
+		
+		CompileCall(cState, ResultRegister, CallNode)
+	}
 
 }
+
+define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
+	FunctionDefine* TargetFunction := CallNode->TargetFunction
+	
+	/* Todo: Smart logic to save/restore volatile portions of the register stack */
+	
+	i32 ParameterCount := CallNode->ParameterCount
+	i32 StackParameterCount := 0
+	i8 ExtraPadding := false
+	
+	if (ParameterCount > 4) {
+		StackParameterCount := ParameterCount - 4
+	}
+	
+	if (StackParameterCount % 2) {
+		EmitPush_R64(cState, RBX)
+		ExtraPadding := true
+	}
+	
+	
+	cState->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
+	
+	i8 ParameterRegister := RBX
+	
+	if (ParameterCount != 0) {
+		for (i32 ParameterIndex := ParameterCount, ParameterIndex >= 0, ParameterIndex -= 1) {
+			VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
+			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
+			
+			i8 ThisParameterRegister := ParameterRegister
+			
+			if (ParameterIndex = 4) {ThisParameterRegister := R9}
+			else if (ParameterIndex = 3) {ThisParameterRegister := R8}
+			else if (ParameterIndex = 2) {ThisParameterRegister := RDX}
+			else if (ParameterIndex = 1) {ThisParameterRegister := RCX}
+			
+			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
+			
+			if (NextParameterValue->ValueType->Size < NextParameter->Type->Size) {
+				Cast(cState, ThisParameterRegister, NextParameter->Type->Size)
+			}
+			
+			if (ParameterIndex > 4) {
+				EmitPush_R64(cState, ThisParameterRegister)
+			}
+		}
+	}
+
+	cState->NoClobberCD89 := false
+	
+	for (i32 ShadowSpaceIndex := 0, ShadowSpaceIndex < 4, ShadowSpaceIndex += 1) {
+		EmitPush_R64(cState, R8 + ShadowSpaceIndex)
+	}
+	
+	EmitCall_Label(cState, TargetFunction->LabelNumber)
+	
+	for (i32 ReversedShadowSpaceIndex := 0, ReversedShadowSpaceIndex < 4, ReversedShadowSpaceIndex += 1) {
+		EmitPop_R64(cState, R12 - ReversedShadowSpaceIndex)
+	}
+	
+	if (ExtraPadding) {
+		EmitPop_R64(cState, RBX)
+	}
+	
+	EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
+}
+
+
 define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile) {
 	/* Compiles a unary operator and operand */
 	
@@ -549,6 +608,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 					EmitMove_RX_RX(cState, RAX, LeftRegister, ResultSize)
 				}
 				
+				if (cState->NoClobberCD89) {
+					EmitPush_R64(cState, RDX)
+				}
+				
 				if (ResultSize = 1) {
 					/* Handle 8 bit division through a 16 bit operation, which will have a result casted down */
 					EmitCWD(cState)
@@ -571,6 +634,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 					The result is already in the correct register
 				}
 				*/
+				
+				if (cState->NoClobberCD89) {
+					EmitPop_R64(cState, RDX)
+				}
 				
 				if (ResultSize = 1) {
 					Cast(cState, ResultRegister, 1)

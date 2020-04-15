@@ -111,6 +111,7 @@
 		RoundedStackSpace := Floor(RoundedStackSpace / 8) + 1
 		
 		;MsgBox, % Name " Flat:" RequiredStackSpace ", Round" RoundedStackSpace
+		; what the fuck is going on here?
 		
 		if (Mod(RequiredStackSpace, 2) != 1) {
 			RequiredStackSpace++
