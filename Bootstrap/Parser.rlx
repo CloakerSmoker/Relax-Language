@@ -884,6 +884,11 @@ define void ParseProgram(ParserState* pState) {
 			
 			ParseAndAddDefine(pState)
 		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
+			AWriteLine("Found declare")
+			
+			ParseAndAddDeclare(pState)
+		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
 		
 		}
@@ -1091,18 +1096,13 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	HashMapAddVariable(CurrentFunction->Locals, NewLocal)
 }
 
-define ASTNode* ParseAndAddDefine(ParserState* pState) {
-	/* Parses a 'define' statement */
+define FunctionDefine* ParseDefineDeclareCommon(ParserState* pState) {
+	Type* ReturnType := ParseTypeName(pState)
+	SafeWideString* Name := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")->Value
 	
-
-	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
-
-	NewDefine->ReturnType := ParseTypeName(pState)
-
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
-	NewDefine->Name := (NameToken->Value) As SafeWideString*
+	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
 	
-	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, NewDefine->Name)
+	FunctionDefine* NewDefine := 0
 	
 	if (FoundFunctionElement) {
 		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
@@ -1116,15 +1116,69 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		/* Todo: Free old version of NewDefine which has already had some stuff allocated */
 		NewDefine := FoundFunction
 	}
-	else {	
-		HashMapAddValue(pState->Functions, NewDefine->Name, NewDefine As void)
+	else {
+		NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+		
+		HashMapAddValue(pState->Functions, Name, NewDefine As void)
 		
 		NewDefine->LabelNumber := pState->FunctionCount
 		pState->FunctionCount += 1
 	}
 	
+	NewDefine->ReturnType := ReturnType
+	NewDefine->Name := Name
 	NewDefine->Locals := NewHashMap()
 	NewDefine->LocalOffset := 0
+	
+	return NewDefine
+}
+
+define ASTNode* ParseAndAddDeclare(ParserState* pState) {
+	FunctionDefine* NewDefine := ParseDefineDeclareCommon(pState)
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	
+	i8 ParameterCount := 0
+	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
+	
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		loop {
+			VariableInfo* NextParameter := AllocateNewVariableInfo()
+			
+			if (ParameterCount >= 16) {
+				TokenizerError(pState->pState, "Max parameter limit reached")
+			}
+			
+			ParameterList[ParameterCount] := NextParameter
+			
+			NextParameter->Type := ParseTypeName(pState)
+			NextParameter->Name := NewDefine->Name /* Dummy value, it will never be used */
+			NextParameter->IsGlobal := false
+			NextParameter->IsParameter := true
+			NextParameter->StackOffset := (ParameterCount * 8)
+			
+			/* Update the parameter count */
+			ParameterCount += 1
+			
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
+				break
+			}
+		}
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			TokenizerError(pState->pState, "Expected closing paren for parameter list")
+		}
+	}
+	
+	NewDefine->ParameterCount := ParameterCount
+	NewDefine->HasFullDefinition := false
+}
+
+define ASTNode* ParseAndAddDefine(ParserState* pState) {
+	/* Parses a 'define' statement */
+
+	FunctionDefine* NewDefine := ParseDefineDeclareCommon(pState)
 	
 	pState->CurrentFunction := NewDefine
 	
@@ -1191,16 +1245,8 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	/* Parse the body of the function */
 	
-	i32 BeforeBody := FreezeParser(pState)
-	
-	NewDefine->HasFullDefinition := ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
-	
-	UnfreezeParser(pState, BeforeBody)
-	
-	if (NewDefine->HasFullDefinition) {
-		AWriteLine("HAS BODY")
-		NewDefine->Body := ParseBlock(pState)
-	}
+	NewDefine->HasFullDefinition := true
+	NewDefine->Body := ParseBlock(pState)
 	
 	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE))
 }
@@ -1691,8 +1737,11 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
 			
 			PrintType(NextDefineParameter->Type)
-			WriteCharacter(' ')
-			PrintSafeString(NextDefineParameter->Name)
+			
+			if (DefineNode->HasFullDefinition) {
+				WriteCharacter(' ')
+				PrintSafeString(NextDefineParameter->Name)
+			}
 			
 			ParameterIndex += 1
 			

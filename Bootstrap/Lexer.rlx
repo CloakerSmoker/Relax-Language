@@ -173,21 +173,22 @@ i8 PUNCTUATION_CLOSE_BRACKET := 4
 i8 PUNCTUATION_COMMA := 5
 
 
-i8 KEYWORD_DEFINE := 0
-i8 KEYWORD_DLLIMPORT := 1
+i8 KEYWORD_DECLARE := 0
+i8 KEYWORD_DEFINE := 1
+i8 KEYWORD_DLLIMPORT := 2
 
-i8 KEYWORD_IF := 2
-i8 KEYWORD_ELSE := 3
+i8 KEYWORD_IF := 3
+i8 KEYWORD_ELSE := 4
 
-i8 KEYWORD_FOR := 4
-i8 KEYWORD_WHILE := 5
-i8 KEYWORD_LOOP := 6
+i8 KEYWORD_FOR := 5
+i8 KEYWORD_WHILE := 6
+i8 KEYWORD_LOOP := 7
 
-i8 KEYWORD_CONTINUE := 7
-i8 KEYWORD_BREAK := 8
+i8 KEYWORD_CONTINUE := 8
+i8 KEYWORD_BREAK := 9
 
-i8 KEYWORD_STRUCT := 9
-i8 KEYWORD_RETURN := 10
+i8 KEYWORD_STRUCT := 10
+i8 KEYWORD_RETURN := 11
 
 define void Backtrack(TokenizerState* pState) {
 	pState->SourceIndex -= 1
@@ -592,7 +593,10 @@ define Token* _GetNextToken(TokenizerState* pState) {
 define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	/* Converts PotentialKeyword into a KEYWORD_ constant */
 	
-	if (SafeStringEqualsAString(PotentialKeyword, "define")) {
+	if (SafeStringEqualsAString(PotentialKeyword, "declare")) {
+		return KEYWORD_DECLARE
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "define")) {
 		return KEYWORD_DEFINE
 	}
 	else if (SafeStringEqualsAString(PotentialKeyword, "dllimport")) {
@@ -814,7 +818,10 @@ define void PrintPunctuation(i8 Punctuation) {
 define void PrintKeyword(i8 Keyword) {
 	/* ugh, prints a keyword in the worst way possible */
 	
-	if (Keyword = KEYWORD_DEFINE) {
+	if (Keyword = KEYWORD_DECLARE) {
+		AWrite("declare")
+	}
+	else if (Keyword = KEYWORD_DEFINE) {
 		AWrite("define")
 	}
 	else if (Keyword = KEYWORD_DLLIMPORT) {
