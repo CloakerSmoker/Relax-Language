@@ -145,7 +145,12 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 		GetVariableAddress(cState, TargetVariable, ResultRegister)
 	}
 	else {
-		EmitMove_RX_RX_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		if (TargetVariable->StackOffset < 112) {
+			EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		}
+		else {
+			EmitMove_RX_RX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		}
 	}
 }
 define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
@@ -153,14 +158,24 @@ define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariab
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	EmitLea_R64_R64_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+	if (TargetVariable->StackOffset < 112) {
+		EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+	}
+	else {
+		EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+	}
 }
 define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	PrintSafeString(TargetVariable->Name)
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	EmitMove_RX_DISPX_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+	if (TargetVariable->StackOffset < 112) {
+		EmitMove_RX_DISP8_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+	}
+	else {
+		EmitMove_RX_DISP32_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+	}
 }
 
 
@@ -377,6 +392,11 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
+	
+	if !(TargetFunction->HasFullDefinition) {
+		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
+	}
+	
 	
 	/* Todo: Smart logic to save/restore volatile portions of the register stack */
 	
