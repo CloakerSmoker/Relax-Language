@@ -21,3 +21,37 @@ define void* ReAllocInPlace(void* Memory, i64 NewSize) {
 define i8 Free(void* Memory) {
 	return HeapFree(ProcessHeap, 0, Memory)
 }
+
+
+
+
+struct ExpandArray {
+	i32 ElementSize,
+	i32 CurrentCapacity	
+}
+
+define void* AllocArray(i32 ElementSize, i32 InitialCapacity) {
+	void* Buffer := Alloc((ExpandArray.Size) + (ElementSize * InitialCapacity))
+	ExpandArray* NewArray := Buffer
+	
+	NewArray->ElementSize := ElementSize
+	NewArray->CurrentCapacity := InitialCapacity
+	
+	return Buffer + (ExpandArray.Size)
+}
+define void* ReAllocArray(void* ArrayBuffer, i32 AdditionalCapacity) {
+	ExpandArray* Array := ArrayBuffer - (ExpandArray.Size)
+	
+	i32 ElementSize := Array->ElementSize
+	i32 OldCapacity := Array->CurrentCapacity
+	i32 NewCapacity := OldCapacity + AdditionalCapacity
+	
+	Array->CurrentCapacity := NewCapacity
+	
+	i32 NewSize := (ExpandArray.Size) + (ElementSize * NewCapacity)
+	
+	return ReAlloc(Array, NewSize)
+}
+define void FreeArray(void* ArrayBuffer) {
+	Free(ArrayBuffer - (ExpandArray.Size))
+}

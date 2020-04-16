@@ -145,7 +145,7 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 		GetVariableAddress(cState, TargetVariable, ResultRegister)
 	}
 	else {
-		EmitMove_RX_RX_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset), TargetVariable->Type->Size)
+		EmitMove_RX_RX_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
 	}
 }
 define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
@@ -153,14 +153,14 @@ define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariab
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	EmitLea_R64_R64_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset))
+	EmitLea_R64_R64_DISPX(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
 }
 define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	PrintSafeString(TargetVariable->Name)
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	EmitMove_RX_DISPX_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset), TargetVariable->Type->Size)
+	EmitMove_RX_DISPX_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
 }
 
 
@@ -399,16 +399,21 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	i8 ParameterRegister := RBX
 	
 	if (ParameterCount != 0) {
-		for (i32 ParameterIndex := ParameterCount, ParameterIndex >= 0, ParameterIndex -= 1) {
+		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
+			AWrite("Compiling parameter ")
+			IWrite(ParameterIndex)
+			AWrite(" out of ")
+			IWriteLine(ParameterCount)
+			
 			VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
 			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
 			
 			i8 ThisParameterRegister := ParameterRegister
 			
-			if (ParameterIndex = 4) {ThisParameterRegister := R9}
-			else if (ParameterIndex = 3) {ThisParameterRegister := R8}
-			else if (ParameterIndex = 2) {ThisParameterRegister := RDX}
-			else if (ParameterIndex = 1) {ThisParameterRegister := RCX}
+			if (ParameterIndex = 3) {ThisParameterRegister := R9}
+			else if (ParameterIndex = 2) {ThisParameterRegister := R8}
+			else if (ParameterIndex = 1) {ThisParameterRegister := RDX}
+			else if (ParameterIndex = 0) {ThisParameterRegister := RCX}
 			
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
@@ -431,7 +436,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	EmitCall_Label(cState, TargetFunction->LabelNumber)
 	
 	for (i32 ReversedShadowSpaceIndex := 0, ReversedShadowSpaceIndex < 4, ReversedShadowSpaceIndex += 1) {
-		EmitPop_R64(cState, R12 - ReversedShadowSpaceIndex)
+		EmitPop_R64(cState, R11 - ReversedShadowSpaceIndex)
 	}
 	
 	if (ExtraPadding) {

@@ -1098,8 +1098,6 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	FunctionDefine* NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
 
 	NewDefine->ReturnType := ParseTypeName(pState)
-	
-	pState->CurrentFunction := NewDefine
 
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	NewDefine->Name := (NameToken->Value) As SafeWideString*
@@ -1110,9 +1108,12 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
 		
 		if (FoundFunction->HasFullDefinition) {
+			PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, FoundFunction, pState->EmptyType))
+			
 			TokenizerError(pState->pState, "Duplicate definition")
 		}
 		
+		/* Todo: Free old version of NewDefine which has already had some stuff allocated */
 		NewDefine := FoundFunction
 	}
 	else {	
@@ -1120,10 +1121,12 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		
 		NewDefine->LabelNumber := pState->FunctionCount
 		pState->FunctionCount += 1
-		
-		NewDefine->Locals := NewHashMap()
-		NewDefine->LocalOffset := 0
 	}
+	
+	NewDefine->Locals := NewHashMap()
+	NewDefine->LocalOffset := 0
+	
+	pState->CurrentFunction := NewDefine
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
