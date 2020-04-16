@@ -421,7 +421,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 				Cast(cState, ThisParameterRegister, NextParameter->Type->Size)
 			}
 			
-			if (ParameterIndex > 4) {
+			if (ParameterIndex >= 4) {
 				EmitPush_R64(cState, ThisParameterRegister)
 			}
 		}
