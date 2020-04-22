@@ -266,6 +266,11 @@ define void EmitREXBigOpcodeModRM(CompilerState* cState, i8 FirstOpcodeByte, i8 
 ==========================================
 */
 
+
+define void EmitJump_RI64(CompilerState* cState, i8 Register) {
+	EmitREXOpcodeModRM(cState, 0xFF, MODE_PTOR, 4, Register, 0)
+}
+
 define void EmitJump_Label(CompilerState* cState, i32 LabelNumber) {
 	PushByte(cState, 0xE9)
 	UseLabel(cState, LabelNumber)

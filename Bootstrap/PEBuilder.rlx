@@ -277,8 +277,8 @@ define void WritePEHeader(void* IntoBuffer) {
 
 i16 DATA_OFFSET := 0x1F8
 i16 IDATA_OFFSET := 0x220
-i16 RELOC_OFFSET := 0x248
-i16 TEXT_OFFSET := 0x270
+i16 TEXT_OFFSET := 0x248
+i16 RELOC_OFFSET := 0x270
 
 struct SectionHeader {
 	i64 PackedName,
@@ -326,7 +326,8 @@ define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Charact
 
 struct ImportHelper {
 	i16 ImportCount,
-	i32* RVABuffer
+	i32* RVABuffer,
+	i64** FixUps
 }
 
 struct ImportTableEntry {
@@ -553,9 +554,9 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
 	/* Sets .text to hold CodeLength bytes of code inside of CodeBytes */
 	
-	/* Builds .idata and .reloc first (since they come before .text in output files */
+	/* Builds .idata first */
 	FinalizeImports(ToBuilder)
-	FinalizeRelocations(ToBuilder)
+	
 	
 	i32 RVA := ToBuilder->NextRVA
 	
@@ -571,7 +572,7 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
 define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
 	/* Adds a relocation for PageRVA + OffsetInPage for either a 32 or 64 bit value */
 	
-	ToBuilder->RelocationCount += 1 /* Increment the total number of relocations */
+	ToBuilder->RelocationCount += 1
 	
 	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
 		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
@@ -587,7 +588,6 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	RelocationHelper* NewHelper := Alloc(RelocationHelper.Size) As RelocationHelper*
 	NewHelper->PageRVA := PageRVA
 	NewHelper->Entries := Alloc(2) As i16*
-	NewHelper->EntryCount
 	
 	/* And add it to ToBuilder's relocation helper array */
 	
@@ -631,7 +631,7 @@ define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
 	
-	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * RelocationBlockHeader.Size
+	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (RelocationBlockHeader.Size + 4)
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
 	
 	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
@@ -663,6 +663,12 @@ define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 			
 			((Buffer + BufferIndex) As i16*)[0] := NextEntry
 			BufferIndex += 2
+		}
+		
+		i32 Remainder := BufferIndex % 32
+		
+		if (Remainder) {
+			BufferIndex += 32 - Remainder
 		}
 	}
 	
@@ -758,11 +764,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 		ToBuilder->ImportSourceNameRVAs := ReAlloc((ToBuilder->ImportSourceNameRVAs) as void*, NewSize) As i32*
 		(ToBuilder->ImportSourceNameRVAs)[NewIndex] := AddHintNameTableEntry(ToBuilder, DllName)
 		
-		/* Allocate an ImportHelper for the dll */
-		
 		ImportHelper* ThisDllHelper := Alloc(ImportHelper.Size) As ImportHelper*
-		
-		/* Extend the ImportHelper list and add the new helper to it */
 		
 		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, NewSize) As ImportHelper**
 		(ToBuilder->ImportHelpers)[NewIndex] := ThisDllHelper
@@ -770,12 +772,12 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 		/* Set standard fields of the new helper */
 		
 		ThisDllHelper->ImportCount := 0
-		ThisDllHelper->RVABuffer := Alloc(4) As i32* /* Alloc(4) just so ReAlloc can be called on this */
+		ThisDllHelper->RVABuffer := Alloc(4) As i32*
+		ThisDllHelper->FixUps := Alloc(4) As i64**
 		
 		/* Update ImportFunctionCount to have space for the padding this entry will require */
 		ToBuilder->ImportFunctionCount += 1
 		
-		/* Update the import source count */
 		ToBuilder->ImportSourceCount += 1
 		
 		return NewIndex /* Return the index of the new Helper/Name RVA */
@@ -795,25 +797,25 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 	}
 }
 
-define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName) {
+define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName, i64* WriteFinalAddressTo) {
 	/* Higher-level function to easily add an import */
 	
 	/* Find the index of the dll (or add it if it isn't found) */
 	i32 EntryIndex := FindOrAddImportDll(ToBuilder, ToDll)
 	
-	/* Get the helper for this dll using the index */
 	ImportHelper* EntryHelper := (ToBuilder->ImportHelpers)[EntryIndex]
 	
-	/* Extend the function name RVA buffer to hold 1 more name RVA */
-	EntryHelper->RVABuffer := ReAlloc((EntryHelper->RVABuffer) As void*, ((EntryHelper->ImportCount) + 1) * 4)
+	i32 Index := EntryHelper->ImportCount
 	
-	/* Add the function name to the hint/name table, and add the new RVA to EntryHelper->RVABuffer */
-	(EntryHelper->RVABuffer)[EntryHelper->ImportCount] := AddHintNameTableEntry(ToBuilder, FunctionName)
+	EntryHelper->RVABuffer := ReAlloc(EntryHelper->RVABuffer, (Index + 1) * 4)
+	EntryHelper->FixUps := ReAlloc(EntryHelper->FixUps, (Index + 1) * 8)
 	
-	/* Update the size book-keeping info */
+	(EntryHelper->RVABuffer)[Index] := AddHintNameTableEntry(ToBuilder, FunctionName)
+	(EntryHelper->Fixups)[Index] := WriteFinalAddressTo
+	
 	EntryHelper->ImportCount += 1
 	ToBuilder->ImportFunctionCount += 1
-	
+
 	/* Note: All of the info here is used in FinalizeImports to actually build the .idata section, which is why this is so simple */
 }
 
@@ -903,12 +905,18 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			
 			/* Get the function name RVA */
 			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
+			i64* WriteFinalAddressTo := (NextHelper->Fixups)[ImportIndex]
 			
 			/* And write it into the lookup table */
 			ImportLookups[LookupIndex] := (HintNameBase + NextImportNameRVA) - 2
 			
 			/* And also into the thunk table */
 			ImportLookups[LookupIndex + LookupMaxIndex] := (HintNameBase + NextImportNameRVA) - 2
+			
+			if (WriteFinalAddressTo) {
+				WriteFinalAddressTo[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (LookupIndex * 8)
+			}
+			
 			LookupIndex += 1
 		}
 		
@@ -938,6 +946,8 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 
 define void FinalizeBuilder(PEBuilder* Builder) {
 	/* Updates any header fields which need to be done before the file is "done" */
+	
+	FinalizeRelocations(Builder)
 	
 	/* Pad the file so the last section ends on a DEFAULT_FILE_ALIGNMENT boundry (this is required) */
 	i32 FileSize := RoundTo(Builder->BufferSize, DEFAULT_FILE_ALIGNMENT)

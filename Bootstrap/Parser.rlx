@@ -419,17 +419,23 @@ struct IfGroup {
 	i16 BranchCount
 }
 
-
 struct FunctionDefine {
 	SafeWideString* Name,
 	Block* Body,
+	
+	i16 ParameterCount,
 	VariableInfo** Parameters,
+	
 	HashMap* Locals,
 	Type* ReturnType,
-	i16 ParameterCount,
+	
+	i8 IsImported,
+	SafeWideString* ImportFileName,
+	SafeWideString* ImportFunctionName,
+	
 	i16 LocalOffset,
 	i8 HasFullDefinition,
-	i32 LabelNumber /* A magic thing we'll need later */
+	i32 LabelNumber
 }
 
 struct CallExpression {
@@ -873,6 +879,9 @@ define void ParserStart(TokenizerState* pState) {
 ==========================================
 */
 
+i8 IS_NOT_IMPORT := 0
+i8 IS_IMPORT := 1
+
 define void ParseProgram(ParserState* pState) {
 	/* Parse a whole program */
 	
@@ -887,10 +896,12 @@ define void ParseProgram(ParserState* pState) {
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
 			AWriteLine("Found declare")
 			
-			ParseAndAddDeclare(pState)
+			ParseAndAddDeclare(pState, IS_NOT_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
-		
+			AWriteLine("Found import")
+			
+			ParseAndAddDeclare(pState, IS_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 			ParseAndAddStruct(pState)
@@ -1096,7 +1107,7 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	HashMapAddVariable(CurrentFunction->Locals, NewLocal)
 }
 
-define FunctionDefine* ParseDefineDeclareCommon(ParserState* pState) {
+define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 	Type* ReturnType := ParseTypeName(pState)
 	SafeWideString* Name := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")->Value
 	
@@ -1133,8 +1144,8 @@ define FunctionDefine* ParseDefineDeclareCommon(ParserState* pState) {
 	return NewDefine
 }
 
-define ASTNode* ParseAndAddDeclare(ParserState* pState) {
-	FunctionDefine* NewDefine := ParseDefineDeclareCommon(pState)
+define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
+	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
 	
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
@@ -1171,14 +1182,38 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState) {
 		}
 	}
 	
+	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
+	
+	if (IsImported) {
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+		
+		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file name expected")->Value
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+			Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file extension expected")
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
+		
+		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source function name expected")->Value
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+		
+		NewDefine->IsImported := true
+		NewDefine->ImportFileName := FileName
+		NewDefine->ImportFunctionName := FunctionName
+	}
+	
 	NewDefine->HasFullDefinition := false
+	
+	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine, pState->EmptyType))
 }
 
 define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	/* Parses a 'define' statement */
 
-	FunctionDefine* NewDefine := ParseDefineDeclareCommon(pState)
+	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
 	
 	pState->CurrentFunction := NewDefine
 	
@@ -1725,7 +1760,16 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	else if (NodeType = NODE_TYPE_DEFINE) {
 		FunctionDefine* DefineNode := (NodeToPrint->TrueNode) As FunctionDefine*
 		
-		AWrite("define ")
+		if (DefineNode->IsImported) {
+			AWrite("DllImport ")
+		}
+		else if (DefineNode->HasFullDefinition) {
+			AWrite("define ")
+		}
+		else {
+			AWrite("declare ")
+		}
+		
 		PrintType(DefineNode->ReturnType)
 		WriteCharacter(' ')
 		PrintSafeString(DefineNode->Name)
@@ -1800,6 +1844,14 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 				StatementIndex += 1
 			}
 			
+			WriteCharacter('}')
+		}
+		else if (DefineNode->IsImported) {
+			WriteCharacter(' ')
+			WriteCharacter('{')
+			PrintSafeString(DefineNode->ImportFileName)
+			AWrite(".dll, ")
+			PrintSafeString(DefineNode->ImportFunctionName)
 			WriteCharacter('}')
 		}
 		

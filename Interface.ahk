@@ -121,7 +121,14 @@ class Relax {
 		CodeTokens := CodeLexer.Start(CodeString)
 	
 		CodeParser := new Parser(CodeLexer)
+		
+		Start := A_TickCount
+		
 		CodeAST := CodeParser.Start(CodeTokens)
+		
+		End := A_TickCount
+		
+		ConsoleWrite(Colors.Green, "Done parsing, took " (End - Start) / 1000 " seconds")
 		
 		CodeOptimizer := new ASTOptimizer(CodeLexer, CodeParser, Flags)
 		CodeOptimizer.OptimizeProgram(CodeAST)

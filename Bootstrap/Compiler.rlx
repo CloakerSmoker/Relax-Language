@@ -20,6 +20,9 @@ struct CompilerState {
 	i32 CodeBufferSize,
 	i32 Index,
 	
+	i32* CodeRelocations,
+	i32 CodeRelocationCount,
+	
 	LabelPlaceholder** Labels,
 	i32 LabelCount,
 	i32 LabelBufferCapacity,
@@ -48,6 +51,9 @@ define void CompilerStart(ParserState* pState) {
 	C.CodeBufferSize := 200
 	C.Index := 0
 	
+	C.CodeRelocations := Alloc(8) As i64*
+	C.CodeRelocationCount := 0
+	
 	C.Labels := Alloc(80) As Label**
 	C.LabelCount := 0
 	C.LabelBufferCapacity := 10
@@ -66,15 +72,19 @@ define void CompilerStart(ParserState* pState) {
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				if !(NextFunction->HasFullDefinition) {
-					TokenizerError(pState->pState, "Undefined function")
-				}
-				
 				AWrite("Compiling ")
 				PrintSafeString(NextFunction->Name)
 				WriteNewLine()
 				
-				CompileFunction(&C, NextFunction)
+				if (NextFunction->IsImported) {
+					CompileImportStub(&C, NextFunction)
+				}
+				else if !(NextFunction->HasFullDefinition) {
+					TokenizerError(pState->pState, "Undefined function")
+				}
+				else {
+					CompileFunction(&C, NextFunction)
+				}
 				
 				/* Update the current element to be the next element in the linked list */
 				FoundElement := (FoundElement->NextElement) As HashMapElement*
@@ -86,12 +96,19 @@ define void CompilerStart(ParserState* pState) {
 	
 	AddData(C.Builder, 0x149)
 	
-	AddImport(C.Builder, AToS("Kernel32"), AToS("ExitProcess"))
-	AddImport(C.Builder, AToS("Kernel32"), AToS("LocalFree"))
-	
-	AddRelocation(C.Builder, 0x1000, 40, 1)
+	AddImport(C.Builder, AToS("Kernel32"), AToS("ExitProcess"), 0)
+	AddImport(C.Builder, AToS("Kernel32"), AToS("LocalFree"), 0)
 	
 	AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize)
+	
+	for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
+		i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
+		
+		i32 PageRVA := (C.Builder->NextRVA) + (NextRelocationOffset / 0x1000)
+		i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
+		
+		AddRelocation(C.Builder, PageRVA, OffsetInPage, true)
+	}
 	
 	FinalizeBuilder(C.Builder)
 	
@@ -124,6 +141,16 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 }
 
 #Include CodeGen.rlx
+
+define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
+	i32 Index := cState->CodeRelocationCount
+	
+	cState->CodeRelocations := ReAlloc(cState->CodeRelocations, (Index + 1) * 8)
+	(cState->CodeRelocations)[Index] := Offset
+	
+	cState->CodeRelocationCount += 1
+}
+
 
 /*
 ==========================================
@@ -188,6 +215,21 @@ define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 define void Cast(CompilerState* cState, i8 Register, i8 Size) {
 	EmitMove_R64_RX(cState, Register, Register, Size)
 }
+
+define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToCompile) {
+	/* Compiles an imported function by emitting a jump to the actual function */
+	
+	SetLabel(cState, FunctionToCompile->LabelNumber)
+	
+	EmitMove_R64_I64(cState, RBX, 0)
+	
+	i64* JumpToPointerPointer := GetIndexAsPointer(cState) - 8
+	AddImport(cState->Builder, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, JumpToPointerPointer)
+	AddCodeRelocation(cState, cState->Index - 8)
+	
+	EmitJump_RI64(cState, RBX)
+}
+
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
 	/* Compiles a single function */
@@ -393,7 +435,7 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
-	if !(TargetFunction->HasFullDefinition) {
+	if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
 	}
 	
