@@ -725,7 +725,11 @@ struct ParserState {
 	TokenizerState* pState,
 	
 	HashMap* Functions,
+	
+	i64 GlobalOffset,
 	HashMap* Globals,
+	ASTNode** GlobalDefaults,
+	
 	HashMap* Types,
 	
 	/* In order to prevent recreating the standard types, they are just stored in the parser state */
@@ -858,7 +862,10 @@ define void ParserStart(TokenizerState* pState) {
 	P.pState := pState
 	
 	P.Globals := NewHashMap()
+	P.GlobalOffset := 0
 	P.GlobalCount := 0
+	
+	P.GlobalDefaults := AllocArray(8, 0)
 	
 	P.Functions := NewHashMap()
 	P.FunctionCount := 0
@@ -886,6 +893,7 @@ define void ParseProgram(ParserState* pState) {
 	/* Parse a whole program */
 	
 	loop {
+		i32 FrozenState := FreezeParser(pState)
 		Token* NextToken := ParserNextToken(pState)
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
@@ -906,9 +914,56 @@ define void ParseProgram(ParserState* pState) {
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 			ParseAndAddStruct(pState)
 		}
-		
-		if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
+		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
+		}
+		else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+			/* If the next token isn't an identifier, then it's definitely not a declaration */
+			
+			UnfreezeParser(pState, FrozenState)
+			
+			i8* ErrorMessage := 0
+			
+			Type* PotentialType := TryParseTypeName(pState, &ErrorMessage)
+			
+			if ((PotentialType != 0) && (ErrorMessage = 0)) {
+				/* Holds the parser state right after `Type*` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(pState)
+				Token* PotentialName := ParserNextToken(pState)
+				
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, 0)) {
+					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+
+					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+					
+					VariableInfo* NewGlobal := AllocateNewVariableInfo()
+					
+					NewGlobal->Name := NameString
+					NewGlobal->Type := PotentialType
+					NewGlobal->IsGlobal := True
+					NewGlobal->IsParameter := False
+					
+					ParserAddGlobal(pState, NewGlobal)
+					
+					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						UnfreezeParser(pState, DefaultValueExpressionStart)
+						
+						AWriteLine("Found global default")
+						
+						i32 Index := GetArrayLength(pState->GlobalDefaults)
+						
+						AWrite("Inserting at index ")
+						IWriteLine(Index)
+						AWrite("into array at ")
+						IWriteLine((pState->GlobalDefaults) As i64)
+						
+						pState->GlobalDefaults := ReAllocArray(pState->GlobalDefaults, 1)
+						
+						(pState->GlobalDefaults)[Index] := ParseExpression(pState, 0)
+					}
+				}
+			}
 		}
 	}
 }
@@ -1064,47 +1119,56 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 	return FoundVariable
 }
 
-define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
-	/* Adds a local variable to the current function */
-	
-	FunctionDefine* CurrentFunction := pState->CurrentFunction
-	
-	AWrite("Adding local ")
-	PrintSafeString(NewLocal->Name)
-	WriteNewLine()
-	
-	if !(CurrentFunction) {
-		/* If we don't have a current function, then something's wrong */
-		TokenizerError(pState->pState, "Unexpected local variable")
-	}
-	
-	if (HashMapGetVariable(CurrentFunction->Locals, NewLocal->Name)) {
-		/* Else if we already have a local in the local hashmap, then it's a duplicate definition */
+define i32 ParserAddVariable(ParserState* pState, HashMap* ToScope, VariableInfo* NewVariable, i32 Offset) {
+	if (HashMapGetVariable(ToScope, NewVariable->Name)) {
+		/* If we already have this name in the hashmap, then it's a duplicate definition */
 		TokenizerError(pState->pState, "Duplicate definition")
 	}
 	
-	/* Add the new local (with its index as an ID) */
-	NewLocal->StackOffset := CurrentFunction->LocalOffset
+	HashMapAddVariable(ToScope, NewVariable)
 	
-	i16 NewLocalSize := NewLocal->Type->Size
+	NewVariable->StackOffset := Offset
 	
-	if (NewLocalSize <= 8) {
-		CurrentFunction->LocalOffset += 8
+	i16 NewVariableSize := NewVariable->Type->Size
+	
+	if (NewVariableSize <= 8) {
+		return 8
 	}
 	else {
-		i16 Remainder := NewLocalSize % 8
+		i16 Remainder := NewVariableSize % 8
 		
-		i16 RoundedSize := NewLocalSize
+		i16 RoundedSize := NewVariableSize
 		
 		if (Remainder != 0) {
 			RoundedSize += 8 - Remainder
 		}
 		
-		NewLocal->StackOffset += RoundedSize
-		CurrentFunction->LocalOffset += RoundedSize
+		NewVariable->StackOffset += RoundedSize
+		
+		return RoundedSize
 	}
+}
+
+
+define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal) {
+	/* Adds a global variable to the current program */
 	
-	HashMapAddVariable(CurrentFunction->Locals, NewLocal)
+	AWrite("Adding global ")
+	PrintSafeString(NewGlobal->Name)
+	WriteNewLine()
+	
+	pState->GlobalOffset += ParserAddVariable(pState, pState->Globals, NewGlobal, pState->GlobalOffset)
+}
+
+define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
+	/* Adds a local variable to the current function */
+	
+	AWrite("Adding local ")
+	PrintSafeString(NewLocal->Name)
+	WriteNewLine()
+	
+	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	CurrentFunction->LocalOffset += ParserAddVariable(pState, CurrentFunction->Locals, NewLocal, CurrentFunction->LocalOffset)
 }
 
 define FunctionDefine* ParseFunctionInfo(ParserState* pState) {

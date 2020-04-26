@@ -392,6 +392,10 @@ struct PEBuilder {
 	i16* ImportLookupTable,
 	i32 ImportLookupTableRVA,
 	
+	/* A pointer to where import address fixups should be written */
+	
+	void* ImportFixupBase,
+	
 	/* One entry per page that has relocations */
 	RelocationHelper** RelocationPages,
 	i32 RelocationPageCount,
@@ -551,7 +555,7 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 	}
 }
 
-define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
+define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 EntryPointOffset) {
 	/* Sets .text to hold CodeLength bytes of code inside of CodeBytes */
 	
 	/* Builds .idata first */
@@ -565,7 +569,7 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength) {
 	/* Update the PE header's fields for code info */
 	
 	ToBuilder->PE->SizeOfCode := CodeLength
-	ToBuilder->PE->AddressOfEntryPoint := RVA /* Todo: Make the entry point a parameter */
+	ToBuilder->PE->AddressOfEntryPoint := RVA + EntryPointOffset
 	ToBuilder->PE->BaseOfCode := RVA
 }
 
@@ -773,7 +777,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 		
 		ThisDllHelper->ImportCount := 0
 		ThisDllHelper->RVABuffer := Alloc(4) As i32*
-		ThisDllHelper->FixUps := Alloc(4) As i64**
+		ThisDllHelper->FixUps := Alloc(8) As i64**
 		
 		/* Update ImportFunctionCount to have space for the padding this entry will require */
 		ToBuilder->ImportFunctionCount += 1
@@ -905,7 +909,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			
 			/* Get the function name RVA */
 			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
-			i64* WriteFinalAddressTo := (NextHelper->Fixups)[ImportIndex]
+			i64* FixupOffset := (NextHelper->Fixups)[ImportIndex]
 			
 			/* And write it into the lookup table */
 			ImportLookups[LookupIndex] := (HintNameBase + NextImportNameRVA) - 2
@@ -913,8 +917,13 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			/* And also into the thunk table */
 			ImportLookups[LookupIndex + LookupMaxIndex] := (HintNameBase + NextImportNameRVA) - 2
 			
-			if (WriteFinalAddressTo) {
-				WriteFinalAddressTo[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (LookupIndex * 8)
+			if (FixupOffset) {
+				AWrite("Import fixup ")
+				IWrite(ImportIndex)
+				AWrite(" at ")
+				IWriteLine(FixupOffset as i64)
+				
+				(TargetBuilder->ImportFixupBase + FixupOffset)[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (LookupIndex * 8)
 			}
 			
 			LookupIndex += 1

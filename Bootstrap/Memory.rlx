@@ -27,31 +27,37 @@ define i8 Free(void* Memory) {
 
 struct ExpandArray {
 	i32 ElementSize,
-	i32 CurrentCapacity	
+	i32 Capacity	
 }
 
-define void* AllocArray(i32 ElementSize, i32 InitialCapacity) {
+define void* AllocArray(i16 ElementSize, i16 InitialCapacity) {
 	void* Buffer := Alloc((ExpandArray.Size) + (ElementSize * InitialCapacity))
 	ExpandArray* NewArray := Buffer
 	
 	NewArray->ElementSize := ElementSize
-	NewArray->CurrentCapacity := InitialCapacity
+	NewArray->Capacity := InitialCapacity
 	
 	return Buffer + (ExpandArray.Size)
 }
+
 define void* ReAllocArray(void* ArrayBuffer, i32 AdditionalCapacity) {
 	ExpandArray* Array := ArrayBuffer - (ExpandArray.Size)
 	
 	i32 ElementSize := Array->ElementSize
-	i32 OldCapacity := Array->CurrentCapacity
+	i32 OldCapacity := Array->Capacity
 	i32 NewCapacity := OldCapacity + AdditionalCapacity
 	
-	Array->CurrentCapacity := NewCapacity
+	Array->Capacity := NewCapacity
 	
 	i32 NewSize := (ExpandArray.Size) + (ElementSize * NewCapacity)
 	
-	return ReAlloc(Array, NewSize)
+	return ReAlloc(Array, NewSize) + (ExpandArray.Size)
 }
+
+define i32 GetArrayLength(void* ArrayBuffer) {
+	return ((ArrayBuffer - 8) As ExpandArray*)->Capacity
+}
+
 define void FreeArray(void* ArrayBuffer) {
 	Free(ArrayBuffer - (ExpandArray.Size))
 }

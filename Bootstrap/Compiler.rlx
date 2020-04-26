@@ -62,9 +62,13 @@ define void CompilerStart(ParserState* pState) {
 	C.RegisterStackIndex := 0
 	
 	C.Builder := BuildBuilder()
+	C.Builder->ImportFixupBase := C.CodeBuffer
+	
+	i32 MainOffset := 0
+	i8 FoundMain := false
 	
 	void* Elements := pState->Functions->Elements
-			
+	
 	for (i32 ElementIndex := 0, ElementIndex < (pState->Functions->BufferMaxCount), ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
 			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
@@ -83,7 +87,15 @@ define void CompilerStart(ParserState* pState) {
 					TokenizerError(pState->pState, "Undefined function")
 				}
 				else {
-					CompileFunction(&C, NextFunction)
+					i8 IsMain := SafeStringEqualsAString(NextFunction->Name, "Main")
+					
+					if (IsMain) {
+						AWriteLine("Found main")
+						FoundMain := true
+						MainOffset := C.Index
+					}
+					
+					CompileFunction(&C, NextFunction, IsMain)
 				}
 				
 				/* Update the current element to be the next element in the linked list */
@@ -92,14 +104,21 @@ define void CompilerStart(ParserState* pState) {
 		}
 	}
 	
+	if !(FoundMain) {
+		TokenizerError(pState->pState, "Main function not found")
+	}
+	
 	ResolveAllLabels(&C)
 	
-	AddData(C.Builder, 0x149)
+	AWrite("global bytes ")
+	IWriteLine(C.pState->GlobalOffset)
+	
+	AddData(C.Builder, C.pState->GlobalOffset)
 	
 	AddImport(C.Builder, AToS("Kernel32"), AToS("ExitProcess"), 0)
 	AddImport(C.Builder, AToS("Kernel32"), AToS("LocalFree"), 0)
 	
-	AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize)
+	AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize, MainOffset)
 	
 	for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
 		i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
@@ -137,6 +156,7 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 	if ((cState->Index + 0x10) >= (cState->CodeBufferSize)) {
 		cState->CodeBufferSize += 0x100
 		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
+		cState->Builder->ImportFixupBase := cState->CodeBuffer
 	}
 }
 
@@ -163,20 +183,28 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	if (TargetVariable->Type->PointerDepth = 0 && TargetVariable->Type->TrueType->IsStructType) {
-		/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
-			So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
-			Any time this could be abused *should* be caught by type checking 
-		*/
+	if (TargetVariable->IsGlobal) {
+		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 8)
 		
-		GetVariableAddress(cState, TargetVariable, ResultRegister)
+		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetVariable->Type->Size)
 	}
 	else {
-		if (TargetVariable->StackOffset < 112) {
-			EmitMove_RX_RX_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		if (TargetVariable->Type->PointerDepth = 0 && TargetVariable->Type->TrueType->IsStructType) {
+			/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
+				So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
+				Any time this could be abused *should* be caught by type checking 
+			*/
+			
+			GetVariableAddress(cState, TargetVariable, ResultRegister)
 		}
 		else {
-			EmitMove_RX_RX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+			if (TargetVariable->StackOffset < 112) {
+				EmitMove_RX_RIX_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+			}
+			else {
+				EmitMove_RX_RIX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+			}
 		}
 	}
 }
@@ -185,11 +213,17 @@ define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariab
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	if (TargetVariable->StackOffset < 112) {
-		EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+	if (TargetVariable->IsGlobal) {
+		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 8)
 	}
 	else {
-		EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+		if (TargetVariable->StackOffset < 112) {
+			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+		}
+		else {
+			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+		}
 	}
 }
 define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
@@ -197,11 +231,20 @@ define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 	WriteCharacter(':')
 	IWriteLine(TargetVariable->StackOffset)
 	
-	if (TargetVariable->StackOffset < 112) {
-		EmitMove_RX_DISP8_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+	if (TargetVariable->IsGlobal) {
+		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 8)
+		
+		/* Todo: Implement encodings for Move_RIX_RX so we don't have to waste a byte with Move_RIX_DISP8_RX */
+		EmitMove_RIX_DISP8_RX(cState, RBX, SourceRegister, 0, TargetVariable->Type->Size)
 	}
 	else {
-		EmitMove_RX_DISP32_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		if (TargetVariable->StackOffset < 112) {
+			EmitMove_RIX_DISP8_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		}
+		else {
+			EmitMove_RIX_DISP32_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+		}
 	}
 }
 
@@ -223,15 +266,14 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 	
 	EmitMove_R64_I64(cState, RBX, 0)
 	
-	i64* JumpToPointerPointer := GetIndexAsPointer(cState) - 8
-	AddImport(cState->Builder, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, JumpToPointerPointer)
+	AddImport(cState->Builder, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, (cState->Index) - 8)
 	AddCodeRelocation(cState, cState->Index - 8)
 	
 	EmitJump_RI64(cState, RBX)
 }
 
 
-define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile) {
+define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
 	/* Store the current return type so return can cast values to it */
@@ -293,10 +335,19 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + 4]
 		
 		/* Load RAX with the parameter's value (using RBX as a base) */
-		EmitMove_RX_RX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
+		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		SetVariableValue(cState, NextStackParameter, RAX)
+	}
+	
+	if (IsMain) {
+		ASTNode** GlobalDefaults := cState->pState->GlobalDefaults
+		i32 Length := GetArrayLength(GlobalDefaults)
+		
+		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
+			CompileExpression(cState, RAX, GlobalDefaults[GlobalDefaultIndex])
+		}
 	}
 	
 	/* Compile the body of the function */
@@ -547,7 +598,7 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
 	CompileExpression(cState, ResultRegister, TargetAccess->Left)
-	EmitMove_RX_RX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+	EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
 }
 
 define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
@@ -556,7 +607,7 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i8 ResultPointerRegister := PushRegisterStack(cState)
 	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
 	
-	EmitMove_RX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
 	
 	PopRegisterStack(cState)
 }

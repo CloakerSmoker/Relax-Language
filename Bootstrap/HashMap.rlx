@@ -19,11 +19,9 @@ define HashMap* NewHashMap() {
 }
 define i64 HashString(SafeWideString* StringToHash) {
 	i64 Hash := 5281
-	i32 Index := 0
 	
-	loop (StringToHash->Length) {
-		Hash := ((Hash * 32) + Hash) ^ ((StringToHash->Buffer)[Index])
-		Index += 1
+	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
+		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
 	}
 	
 	return Hash
