@@ -307,9 +307,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	i16 LocalSpace := FunctionToCompile->LocalOffset
 	i16 LocalSpaceRemainder := LocalSpace % 16
 	
-	if (LocalSpaceRemainder) {
+	if !(LocalSpaceRemainder) {
 		/* Round the space up to a multiple of 16 to keep the stack aligned */
-		LocalSpace += (16 - LocalSpaceRemainder)
+		LocalSpace += 8
 	}
 	
 	EmitEnter_I16(cState, FunctionToCompile->LocalOffset)

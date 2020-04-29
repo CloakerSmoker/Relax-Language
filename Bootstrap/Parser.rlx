@@ -289,7 +289,7 @@ define void PrintType(Type* TypeToPrint) {
 	
 	PrintSafeString(TypeToPrint->TrueType->Name)
 	
-	loop (TypeToPrint->PointerDepth) {
+	for (i32 Index := 0, Index < (TypeToPrint->PointerDepth), Index += 1) {
 		WriteCharacter('*')
 	}
 }
@@ -1743,9 +1743,31 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			Result := MakeCall(pState, (NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
 		}
 		else {
-			/* Else, this is just a variable being used, so make a NODE_TYPE_VARIABLE node */
+			/* Else, this isn't a function call, but might be still be StructType.Size */
 			
-			Result := TranslateTokenToNode(pState, NextToken)
+			i32 FrozenAfterIdentifier := FreezeParser(pState)
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+				SafeWideString* LeftText := (NextToken->Value) As SafeWideString*
+				
+				i8* ErrorMessage := 0
+				Type* LeftType := TryGetType(pState, LeftText, 0, &ErrorMessage)
+				
+				if (LeftType != 0 && (!ErrorMessage)) {
+					SafeWideString* KeyName := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Dummy message", &ErrorMessage)->Value
+					
+					if (KeyName != 0 && (!ErrorMessage)) {
+						if (SafeStringEqualsAString(KeyName, "Size")) {
+							Result := AllocateNewASTNode(NODE_TYPE_INTEGER, LeftType->Size, MakeType(pState->i16, 0))
+						}
+					}
+				}
+			}
+			
+			if !(Result) {
+				UnfreezeParser(pState, FrozenAfterIdentifier)
+				Result := TranslateTokenToNode(pState, NextToken)
+			}
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
@@ -1805,7 +1827,6 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 		}
 		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
-			
 			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
 			
 			PrintSafeString((Right->Value) As SafeWideString*)
@@ -1845,7 +1866,7 @@ define void PrintAST(ASTNode* NodeToPrint) {
 }
 
 define void PrintIndent(i8 IndentLevel) {
-	loop (IndentLevel) {
+	for (i32 Index := 0, Index < IndentLevel, Index += 1) {
 		AWrite("    ")
 	}
 }
@@ -1891,16 +1912,12 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		
 		WriteCharacter('(')
 		
-		i32 ParameterIndex := 0
-		
-		loop (CallNode->ParameterCount) {
+		for (i32 ParameterIndex := 0, ParameterIndex < (CallNode->ParameterCount), ParameterIndex += 1) {
 			ASTNode* NextCallParameter := (CallNode->Parameters)[ParameterIndex]
 			
 			PrintAST(NextCallParameter)
 			
-			ParameterIndex += 1
-			
-			if (ParameterIndex != CallNode->ParameterCount) {
+			if (ParameterIndex + 1 < (CallNode->ParameterCount)) {
 				WriteCharacter(',')
 				WriteCharacter(' ')
 			}
@@ -1926,9 +1943,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		PrintSafeString(DefineNode->Name)
 		WriteCharacter('(')
 		
-		i32 ParameterIndex := 0
-		
-		loop (DefineNode->ParameterCount) {
+		for (i32 ParameterIndex := 0, ParameterIndex < (DefineNode->ParameterCount), ParameterIndex += 1) {
 			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
 			
 			PrintType(NextDefineParameter->Type)
@@ -1938,9 +1953,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 				PrintSafeString(NextDefineParameter->Name)
 			}
 			
-			ParameterIndex += 1
-			
-			if (ParameterIndex != DefineNode->ParameterCount) {
+			if (ParameterIndex + 1 < (DefineNode->ParameterCount)) {
 				WriteCharacter(',')
 				WriteCharacter(' ')
 			}
@@ -1985,14 +1998,10 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 				}
 			}
 			
-			i32 StatementIndex := 0
-			
-			loop (DefineNode->Body->StatementCount) {
+			for (i32 StatementIndex := 0, StatementIndex < (DefineNode->Body->StatementCount), StatementIndex += 1) {
 				ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
 				
 				IndentPrintAST(BodyStatement, IndentLevel + 1)
-				
-				StatementIndex += 1
 			}
 			
 			WriteCharacter('}')
@@ -2057,9 +2066,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		
 		AWrite("if ")
 		
-		i32 BranchIndex := 0
-		
-		loop (IfNode->BranchCount) {
+		for (i32 BranchIndex := 0, BranchIndex < (IfNode->BranchCount), BranchIndex += 1) {
 			if (BranchIndex != 0) {
 				PrintIndent(IndentLevel)
 				AWrite("else if ")
@@ -2072,21 +2079,15 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			
 			Block* BranchBody := (IfNode->Bodies)[BranchIndex]
 			
-			i32 StatementIndex := 0
-			
-			loop (BranchBody->StatementCount) {
+			for (i32 StatementIndex := 0, StatementIndex < (BranchBody->StatementCount), StatementIndex += 1) {
 				ASTNode* BodyStatement := (BranchBody->Statements)[StatementIndex]
 				
 				IndentPrintAST(BodyStatement, IndentLevel + 1)
-				
-				StatementIndex += 1
 			}
 			
 			PrintIndent(IndentLevel)
 			WriteCharacter('}')
 			WriteNewLine()
-			
-			BranchIndex += 1
 		}
 		
 		if (IfNode->ElseBranch) {
@@ -2094,14 +2095,12 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			AWrite("else {")
 			WriteNewLine()
 			
-			i32 ElseStatementIndex := 0
+			Block* ElseBody := IfNode->ElseBranch
 			
-			loop (IfNode->ElseBranch->StatementCount) {
-				ASTNode* ElseBodyStatement := (IfNode->ElseBranch->Statements)[ElseStatementIndex]
+			for (i32 ElseStatementIndex := 0, ElseStatementIndex < (ElseBody->StatementCount), ElseStatementIndex += 1) {
+				ASTNode* ElseBodyStatement := (ElseBody->Statements)[ElseStatementIndex]
 				
 				IndentPrintAST(ElseBodyStatement, IndentLevel + 1)
-				
-				ElseStatementIndex += 1
 			}
 			
 			PrintIndent(IndentLevel)
