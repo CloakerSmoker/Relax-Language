@@ -624,9 +624,26 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 	i16 ResultSize := ResultType->Size
 	
 	if (Operator = OPERATOR_AND) {
-		VariableInfo* OperandVariable := (ExpressionToCompile->Operand->TrueNode) As VariableInfo*
+		ASTNode* Operand := ExpressionToCompile->Operand
+		i8 OperandType := Operand->NodeType
 		
-		GetVariableAddress(cState, OperandVariable, ResultRegister)
+		if (OperandType = NODE_TYPE_VARIABLE) {
+			VariableInfo* OperandVariable := (Operand->TrueNode) As VariableInfo*
+			
+			GetVariableAddress(cState, OperandVariable, ResultRegister)
+		}
+		else if (OperandType = NODE_TYPE_STRUCT_ACCESS) {
+			StructAccessExpression* OperandStructAccess := (Operand->TrueNode) As StructAccessExpression*
+			
+			CompileGetStructAccessPointer(cState, ResultRegister, OperandStructAccess)
+		}
+		else if (OperandType = NODE_TYPE_BINARY) {
+			BinaryExpression* OperandExpression := (Operand->TrueNode) As BinaryExpression*
+			
+			if (OperandExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
+				CompileGetArrayAccess(cState, ResultRegister, OperandExpression->Left, OperandExpression->Right, true)
+			}
+		}
 	}
 	else {
 		/* Only compile the operand when the operator isn't `&` (since it doesn't use the operand value) */
@@ -647,6 +664,14 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 			}
 		}
 	}
+}
+
+define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	i16 TargetFieldSize := TargetField->ValueType->Size
+	
+	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, TargetField->Offset)
 }
 
 define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
@@ -870,7 +895,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	}
 }
 
-define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
+define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index) {
 	i8 PointerRegister := ResultRegister
 	CompileExpression(cState, PointerRegister, Pointer)
 	
@@ -891,44 +916,24 @@ define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTN
 		IndexScale := PointerType->TrueType->Size
 	}
 	
-	
 	EmitMove_R32_I32(cState, RSI, IndexScale)
 	EmitIMul_R32_R32(cState, IndexRegister, RSI) /* ScaledIndex := Index * Scale */
-	
 	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
-	
-	if !(GetAddress) {
-		EmitMove_RX_RIX(cState, PointerRegister, PointerRegister, IndexScale)
-	}
 	
 	PopRegisterStack(cState)
+	
+	return IndexScale
+}
+
+define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
+	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
+	
+	if !(GetAddress) {
+		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, IndexScale)
+	}
 }
 define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
-	i8 PointerRegister := ResultRegister
-	CompileExpression(cState, PointerRegister, Pointer)
+	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
 	
-	i8 IndexRegister := PushRegisterStack(cState)
-	CompileExpression(cState, IndexRegister, Index)
-	
-	i32 IndexSize := Index->ValueType->Size
-	
-	if (IndexSize < 4) {
-		Cast(cState, IndexRegister, IndexSize)
-	}
-	
-	Type* PointerType := Pointer->ValueType
-	
-	i32 IndexScale := PointerType->Size
-	
-	if (PointerType->PointerDepth = 1) {
-		IndexScale := PointerType->TrueType->Size
-	}
-	
-	
-	EmitMove_R32_I32(cState, RSI, IndexScale)
-	EmitIMul_R32_R32(cState, IndexRegister, RSI) /* ScaledIndex := Index * Scale */
-	
-	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
-	
-	EmitMove_RIX_DISP8_RX(cState, PointerRegister, ValueRegister, 0, IndexScale)
+	EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister, 0, IndexScale)
 }

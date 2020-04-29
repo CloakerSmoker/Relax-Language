@@ -698,8 +698,21 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 		ResultType := MakeType(pState->i8, 0)
 	}
 	else if (Operator = OPERATOR_AND) {
-		if (Operand->NodeType != NODE_TYPE_VARIABLE) {
-			TokenizerError(pState->pState, "Operand of the '&' operator must be a variable.")
+		i8 OperandType := (Operand->NodeType) As i8
+		
+		if (OperandType != NODE_TYPE_VARIABLE && OperandType != NODE_TYPE_STRUCT_ACCESS) {
+			i8* BadOperandTypeMessage := "Operand of the '&' operator must be a variable."
+			
+			if (OperandType = NODE_TYPE_BINARY) {
+				BinaryExpression* OperandExpression := (Operand->TrueNode) As BinaryExpression*
+				
+				if (OperandExpression->Operator->Value != OPERATOR_OPEN_BRACKET) {
+					TokenizerError(pState->pState, BadOperandTypeMessage)
+				}
+			}
+			else {
+				TokenizerError(pState->pState, BadOperandTypeMessage)
+			}
 		}
 		
 		ResultType := IncrementPointerType(pState, ResultType)
