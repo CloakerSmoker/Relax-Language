@@ -426,6 +426,11 @@ struct ForLoop {
 	Block* Body
 }
 
+struct WhileLoop {
+	ASTNode* Condition,
+	Block* Body
+}
+
 struct FunctionDefine {
 	SafeWideString* Name,
 	Block* Body,
@@ -1538,6 +1543,9 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			
 			pState->InLoop := false
 		}
+		else if (NextKeyword = KEYWORD_WHILE) {
+			Result := ParseWhile(pState)
+		}
 	}
 	
 	if (Result = 0) {
@@ -1646,6 +1654,18 @@ define ASTNode* ParseFor(ParserState* pState) {
 	pState->InLoop := false
 	
 	return AllocateNewASTNode(NODE_TYPE_FOR, NewLoop, TYPE_NONE)
+}
+
+define ASTNode* ParseWhile(ParserState* pState) {
+	WhileLoop* NewWhile := Alloc(WhileLoop.Size) As WhileLoop*
+	
+	NewWhile->Condition := ParseExpression(pState, 0)
+	
+	pState->InLoop := true
+	NewWhile->Body := ParseBlock(pState)
+	pState->InLoop := false
+	
+	return AllocateNewASTNode(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
 }
 
 define i8 GetNumberSize(i64 NumberToCheck) {
@@ -2150,6 +2170,26 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			ASTNode* NextBodyStatement := (ForBody->Statements)[ForBodyIndex]
 			
 			IndentPrintAST(NextBodyStatement, IndentLevel + 1)
+		}
+		
+		PrintIndent(IndentLevel)
+		WriteCharacter('}')
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_WHILE) {
+		WhileLoop* WhileNode := (NodeToPrint->TrueNode) As WhileLoop*
+		
+		AWrite("while ")
+		PrintAST(WhileNode->Condition)
+		AWrite(" {")
+		WriteNewLine()
+		
+		Block* WhileBody := WhileNode->Body
+		
+		for (i32 WhileBodyIndex := 0, WhileBodyIndex < (WhileBody->StatementCount), WhileBodyIndex += 1) {
+			ASTNode* WhileBodyStatement := (WhileBody->Statements)[WhileBodyIndex]
+			
+			IndentPrintAST(WhileBodyStatement, IndentLevel + 1)
 		}
 		
 		PrintIndent(IndentLevel)

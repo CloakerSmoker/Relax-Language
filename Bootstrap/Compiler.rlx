@@ -401,6 +401,9 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_LOOP) {
 		CompileLoop(cState, (NodeToCompile->TrueNode) As Block*)
 	}
+	else if (NodeType = NODE_TYPE_WHILE) {
+		CompileWhile(cState, (NodeToCompile->TrueNode) As WhileLoop*)
+	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
 		i8 IsContinue := (NodeToCompile->TrueNode) As i8
 		
@@ -464,7 +467,7 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
 	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
 	
-	CompileExpression(cState, RDI, ForToCompile->Initializer)
+	CompileExpression(cState, RAX, ForToCompile->Initializer)
 	
 	i32 StartLabel := NextLabel(cState)
 	i32 ContinueLabel := NextLabel(cState)
@@ -472,9 +475,9 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	
 	SetLabel(cState, StartLabel)
 	
-	CompileExpression(cState, RDI, ForToCompile->Condition)
+	CompileExpression(cState, RAX, ForToCompile->Condition)
 	
-	EmitTest_RX_RX(cState, RDI, RDI, ForToCompile->Condition->ValueType->Size)
+	EmitTest_RX_RX(cState, RAX, RAX, ForToCompile->Condition->ValueType->Size)
 	EmitJEZ_Label(cState, EndLabel)
 	
 	/* Prelude stuff done, condition is checked, so now we can compile the body */
@@ -491,7 +494,7 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	}
 	
 	SetLabel(cState, ContinueLabel) /* On continue (or after the body ends naturally) execute the step, and jump to the condition check */
-	CompileExpression(cState, RDI, ForToCompile->Step)
+	CompileExpression(cState, RAX, ForToCompile->Step)
 	
 	EmitJump_Label(cState, StartLabel)
 	
@@ -514,6 +517,31 @@ define void CompileLoop(CompilerState* cState, Block* LoopBody) {
 	SetLabel(cState, StartLabel)
 	
 	CompileBlock(cState, LoopBody)
+	
+	EmitJump_Label(cState, StartLabel)
+	SetLabel(cState, EndLabel)
+	
+	cState->CurrentLoopContinueLabel := OldContinueLabel
+	cState->CurrentLoopBreakLabel := OldBreakLabel
+}
+
+define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
+	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
+	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
+	
+	i32 StartLabel := NextLabel(cState)
+	i32 EndLabel := NextLabel(cState)
+	
+	cState->CurrentLoopContinueLabel := StartLabel
+	cState->CurrentLoopBreakLabel := EndLabel
+	
+	SetLabel(cState, StartLabel)
+	
+	CompileExpression(cState, RDI, WhileToCompile->Condition)
+	EmitTest_RX_RX(cState, RDI, RDI, WhileToCompile->Condition->ValueType->Size)
+	EmitJEZ_Label(cState, EndLabel)
+	
+	CompileBlock(cState, WhileToCompile->Body)
 	
 	EmitJump_Label(cState, StartLabel)
 	SetLabel(cState, EndLabel)
@@ -732,33 +760,64 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
 	
-	if (Operator = OPERATOR_COLON_EQUAL) {
+	if (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT) {
 		/* This is an assignment, so we can reuse the result register for the side side, and ignore the left */
 		
-		if (Left->NodeType = NODE_TYPE_BINARY) {
-			BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
-			
-			if (LeftExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
-				i8 ValueRegister := PushRegisterStack(cState)
-				CompileExpression(cState, ValueRegister, Right)
-				
-				CompileSetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, ValueRegister)
-				
-				PopRegisterStack(cState)
-			}
-		}
-		else {
+		i8 LeftType := (Left->NodeType) As i8
+		
+		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
+		StructAccessExpression* LeftAccess := (Left->TrueNode) As StructAccessExpression*
+		BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
+		
+		if (Operator = OPERATOR_COLON_EQUAL) {
 			CompileExpression(cState, ResultRegister, Right)
 			
-			if (Left->NodeType = NODE_TYPE_VARIABLE) {
-				VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
-				
+			if (LeftType = NODE_TYPE_VARIABLE) {
 				SetVariableValue(cState, TargetVariable, ResultRegister)
 			}
-			else if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-				CompileSetStructAccess(cState, ResultRegister, (Left->TrueNode) As StructAccessExpression*)
+			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
+				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
 			}
-		} 
+			else if (LeftType = NODE_TYPE_BINARY) {
+				CompileSetArrayAccess(cState, RSI, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+			}
+		}
+		else {				
+			CompileExpression(cState, RSI, Right)
+			
+			/* Prelude to get old value of all valid left side expressions */
+			
+			if (LeftType = NODE_TYPE_VARIABLE) {
+				GetVariableValue(cState, TargetVariable, ResultRegister)
+			}
+			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
+				CompileGetStructAccess(cState, ResultRegister, LeftAccess)
+			}
+			else if (LeftType = NODE_TYPE_BINARY) {
+				CompileGetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, false)
+			}
+			
+			/* Actual operator implementation */
+			
+			if (Operator = OPERATOR_PLUS_EQUAL) {
+				EmitAdd_RX_RX(cState, ResultRegister, RSI, ResultSize)
+			}
+			else if (Operator = OPERATOR_MINUS_EQUAL) {
+				EmitSub_RX_RX(cState, ResultRegister, RSI, ResultSize)
+			}
+			
+			/* Epilog to store the new value for each valid left side */
+			
+			if (LeftType = NODE_TYPE_VARIABLE) {
+				SetVariableValue(cState, TargetVariable, ResultRegister)
+			}
+			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
+				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
+			}
+			else if (LeftType = NODE_TYPE_BINARY) {
+				CompileSetArrayAccess(cState, RSI, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+			}
+		}
 	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
 		CompileGetArrayAccess(cState, ResultRegister, Left, Right, false)
@@ -940,8 +999,8 @@ define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNo
 		IndexScale := PointerType->TrueType->Size
 	}
 	
-	EmitMove_R32_I32(cState, RSI, IndexScale)
-	EmitIMul_R32_R32(cState, IndexRegister, RSI) /* ScaledIndex := Index * Scale */
+	EmitMove_R32_I32(cState, RDI, IndexScale)
+	EmitIMul_R32_R32(cState, IndexRegister, RDI) /* ScaledIndex := Index * Scale */
 	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
 	
 	PopRegisterStack(cState)
