@@ -686,16 +686,33 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 	if (Operator = OPERATOR_COLON_EQUAL) {
 		/* This is an assignment, so we can reuse the result register for the side side, and ignore the left */
 		
-		CompileExpression(cState, ResultRegister, Right)
-		
-		if (Left->NodeType = NODE_TYPE_VARIABLE) {
-			VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
+		if (Left->NodeType = NODE_TYPE_BINARY) {
+			BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
 			
-			SetVariableValue(cState, TargetVariable, ResultRegister)
+			if (LeftExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
+				i8 ValueRegister := PushRegisterStack(cState)
+				CompileExpression(cState, ValueRegister, Right)
+				
+				CompileSetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, ValueRegister)
+				
+				PopRegisterStack(cState)
+			}
 		}
-		else if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			CompileSetStructAccess(cState, ResultRegister, (Left->TrueNode) As StructAccessExpression*)
-		}
+		else {
+			CompileExpression(cState, ResultRegister, Right)
+			
+			if (Left->NodeType = NODE_TYPE_VARIABLE) {
+				VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
+				
+				SetVariableValue(cState, TargetVariable, ResultRegister)
+			}
+			else if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+				CompileSetStructAccess(cState, ResultRegister, (Left->TrueNode) As StructAccessExpression*)
+			}
+		} 
+	}
+	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		CompileGetArrayAccess(cState, ResultRegister, Left, Right, false)
 	}
 	else {
 		/* As long as we're not compiling an assignment, compile the left operand into the result register */
@@ -851,4 +868,67 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			PopRegisterStack(cState) /* Pop the right register */
 		}
 	}
+}
+
+define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
+	i8 PointerRegister := ResultRegister
+	CompileExpression(cState, PointerRegister, Pointer)
+	
+	i8 IndexRegister := PushRegisterStack(cState)
+	CompileExpression(cState, IndexRegister, Index)
+	
+	i32 IndexSize := Index->ValueType->Size
+	
+	if (IndexSize < 4) {
+		Cast(cState, IndexRegister, IndexSize)
+	}
+	
+	Type* PointerType := Pointer->ValueType
+	
+	i32 IndexScale := PointerType->Size
+	
+	if (PointerType->PointerDepth = 1) {
+		IndexScale := PointerType->TrueType->Size
+	}
+	
+	
+	EmitMove_R32_I32(cState, RSI, IndexScale)
+	EmitIMul_R32_R32(cState, IndexRegister, RSI) /* ScaledIndex := Index * Scale */
+	
+	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
+	
+	if !(GetAddress) {
+		EmitMove_RX_RIX(cState, PointerRegister, PointerRegister, IndexScale)
+	}
+	
+	PopRegisterStack(cState)
+}
+define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
+	i8 PointerRegister := ResultRegister
+	CompileExpression(cState, PointerRegister, Pointer)
+	
+	i8 IndexRegister := PushRegisterStack(cState)
+	CompileExpression(cState, IndexRegister, Index)
+	
+	i32 IndexSize := Index->ValueType->Size
+	
+	if (IndexSize < 4) {
+		Cast(cState, IndexRegister, IndexSize)
+	}
+	
+	Type* PointerType := Pointer->ValueType
+	
+	i32 IndexScale := PointerType->Size
+	
+	if (PointerType->PointerDepth = 1) {
+		IndexScale := PointerType->TrueType->Size
+	}
+	
+	
+	EmitMove_R32_I32(cState, RSI, IndexScale)
+	EmitIMul_R32_R32(cState, IndexRegister, RSI) /* ScaledIndex := Index * Scale */
+	
+	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
+	
+	EmitMove_RIX_DISP8_RX(cState, PointerRegister, ValueRegister, 0, IndexScale)
 }

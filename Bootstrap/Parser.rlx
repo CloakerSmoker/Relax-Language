@@ -576,6 +576,8 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		/* If this is an assignment do some extra type checking */
 		
+		i16 LeftNodeType := (Left->NodeType) As i16
+		
 		if (LeftType->PointerDepth && LeftBaseType->IsStructType && RightType->PointerDepth && RightBaseType->Size = 8) {
 			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
 			
@@ -599,8 +601,26 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			
 			ResultType := LeftType
 		}
-		else if (Left->NodeType != NODE_TYPE_VARIABLE && Left->NodeType != NODE_TYPE_STRUCT_ACCESS) {
-			ErrorMessage := "Left side of ':=' must be a variable."
+		else if (LeftNodeType != NODE_TYPE_VARIABLE && LeftNodeType != NODE_TYPE_STRUCT_ACCESS) {
+			i8* LeftHasWrongType := "Left side of ':=' must be a variable or struct/array access."
+			
+			if (LeftNodeType = NODE_TYPE_BINARY) {
+				BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
+				
+				IWriteLine(LeftExpression->Operator->Value)
+				WriteNewLine()
+				
+				if (LeftExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
+					AWriteLine("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+					ResultType := LeftType
+				}
+				else {
+					ErrorMessage := LeftHasWrongType
+				}
+			}
+			else {
+				ErrorMessage := LeftHasWrongType
+			}
 		}
 		else {
 			/* Otherwise, the result type is the right type */

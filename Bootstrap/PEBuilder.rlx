@@ -923,11 +923,15 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			
 			if (FixupOffset) {
 				AWrite("Import fixup ")
+				IWrite(Index)
+				WriteCharacter(':')
 				IWrite(ImportIndex)
 				AWrite(" at ")
-				IWriteLine(FixupOffset as i64)
+				IWrite(FixupOffset as i64)
+				AWrite(" is ")
+				IWriteLine((NextEntry->ThunkTableRVA) + (ImportIndex * 8))
 				
-				(TargetBuilder->ImportFixupBase + FixupOffset)[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (LookupIndex * 8)
+				(TargetBuilder->ImportFixupBase + FixupOffset)[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (ImportIndex * 8)
 			}
 			
 			LookupIndex += 1
