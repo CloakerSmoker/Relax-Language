@@ -29,6 +29,9 @@ struct CompilerState {
 	
 	i32 LabelIndex,
 	
+	i32 CurrentLoopContinueLabel,
+	i32 CurrentLoopBreakLabel,
+	
 	Type* CurrentFunctionReturnType,
 	
 	i8 RegisterStackIndex,
@@ -47,8 +50,8 @@ define void CompilerStart(ParserState* pState) {
 	
 	C.pState := pState
 	
-	C.CodeBuffer := Alloc(200) As i8*
 	C.CodeBufferSize := 200
+	C.CodeBuffer := Alloc(200) As i8*
 	C.Index := 0
 	
 	C.CodeRelocations := Alloc(8) As i64*
@@ -392,6 +395,19 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_IF) {
 		CompileIf(cState, (NodeToCompile->TrueNode) As IfGroup*)
 	}
+	else if (NodeType = NODE_TYPE_FOR) {
+		CompileFor(cState, (NodeToCompile->TrueNode) As ForLoop*)
+	}
+	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
+		i8 IsContinue := (NodeToCompile->TrueNode) As i8
+		
+		if (IsContinue) {
+			EmitJump_Label(cState, cState->CurrentLoopContinueLabel)
+		}
+		else {
+			EmitJump_Label(cState, cState->CurrentLoopBreakLabel)
+		}
+	}
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
 		CompileExpression(cState, RAX, (NodeToCompile->TrueNode) As ASTNode*)
 	}
@@ -439,6 +455,47 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 	}
 	
 	SetLabel(cState, EndLabel)
+}
+
+define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
+	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
+	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
+	
+	CompileExpression(cState, RDI, ForToCompile->Initializer)
+	
+	i32 StartLabel := NextLabel(cState)
+	i32 ContinueLabel := NextLabel(cState)
+	i32 EndLabel := NextLabel(cState)
+	
+	SetLabel(cState, StartLabel)
+	
+	CompileExpression(cState, RDI, ForToCompile->Condition)
+	
+	EmitTest_RX_RX(cState, RDI, RDI, ForToCompile->Condition->ValueType->Size)
+	EmitJEZ_Label(cState, EndLabel)
+	
+	/* Prelude stuff done, condition is checked, so now we can compile the body */
+	
+	cState->CurrentLoopContinueLabel := ContinueLabel
+	cState->CurrentLoopBreakLabel := EndLabel
+	
+	Block* ForBody := ForToCompile->Body
+	
+	for (i32 BodyIndex := 0, BodyIndex < (ForBody->StatementCount), BodyIndex += 1) {
+		ASTNode* NextStatement := (ForBody->Statements)[BodyIndex]
+		
+		Compile(cState, NextStatement)
+	}
+	
+	SetLabel(cState, ContinueLabel) /* On continue (or after the body ends naturally) execute the step, and jump to the condition check */
+	CompileExpression(cState, RDI, ForToCompile->Step)
+	
+	EmitJump_Label(cState, StartLabel)
+	
+	SetLabel(cState, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
+	
+	cState->CurrentLoopContinueLabel := OldContinueLabel
+	cState->CurrentLoopBreakLabel := OldBreakLabel
 }
 
 
@@ -685,17 +742,22 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			i8 RightRegister := PushRegisterStack(cState)
 			CompileExpression(cState, RightRegister, Right)
 			
-			if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
+			i8 IsComparison := (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
+			
+			if (IsComparison) {
 				ResultSize := GetBinaryResultType(0 As ParserState*, Left->ValueType, Right->ValueType)->Size
-				EmitCmp_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
-	
+			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
 			if (RightSize < ResultSize) {
-				Cast(cState, RightRegister, ResultSize)
+				Cast(cState, RightRegister, RightSize)
 			}
 			if (LeftSize < ResultSize) {
-				Cast(cState, LeftRegister, ResultSize)
+				Cast(cState, LeftRegister, LeftSize)
+			}
+			
+			if (IsComparison) {
+				EmitCmp_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
 			
 			/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */

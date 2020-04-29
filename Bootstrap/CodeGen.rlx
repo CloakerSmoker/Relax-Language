@@ -924,22 +924,29 @@ define void EmitOr_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 Sou
 	EmitREXOpcodeModRM(cState, 0x09, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 
+define void R8NeedsREX(i8 RegisterNumber) {
+	if (4 <= RegisterNumber && RegisterNumber <= 7) {
+		return REX_BASE
+	}
+	
+	return 0
+}
 
 define void EmitSetE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x94, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x94, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 define void EmitSetNE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x95, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x95, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 define void EmitSetL_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9C, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9C, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 define void EmitSetLE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9E, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9E, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 define void EmitSetG_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9F, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9F, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 define void EmitSetGE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9D, MODE_RTOR, NO_REGISTER, DestinationRegister, 0)
+	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9D, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }

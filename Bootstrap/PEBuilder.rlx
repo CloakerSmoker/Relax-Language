@@ -539,6 +539,10 @@ define void PopulateSection(PEBuilder* ToBuilder, SectionHeader* TargetSection, 
 define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 	/* Sets the .data section to be DataSize but without any initialized data */
 	
+	if (DataSize = 0) {
+		DataSize := 8 /* Round the size up to 8 to prevent generating an invalid executable */
+	}
+	
 	i32 DataRVA := (ToBuilder->NextRVA)
 	
 	ToBuilder->DataHeader->Size := DataSize
