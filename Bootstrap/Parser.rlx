@@ -1531,6 +1531,13 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		else if (NextKeyword = KEYWORD_FOR) {
 			Result := ParseFor(pState)
 		}
+		else if (NextKeyword = KEYWORD_LOOP) {
+			pState->InLoop := true
+			
+			Result := AllocateNewASTNode(NODE_TYPE_LOOP, ParseBlock(pState) As void*, TYPE_NONE)
+			
+			pState->InLoop := false
+		}
 	}
 	
 	if (Result = 0) {
@@ -2015,6 +2022,22 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 			WriteCharacter('}')
 		}
 		
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_LOOP) {
+		Block* LoopBody := (NodeToPrint->TrueNode) As Block*
+		
+		AWrite("loop {")
+		WriteNewLine()
+		
+		for (i32 LoopBodyIndex := 0, LoopBodyIndex < (LoopBody->StatementCount), LoopBodyIndex += 1) {
+			ASTNode* NextStatement := (LoopBody->Statements)[LoopBodyIndex]
+			
+			IndentPrintAST(NextStatement, IndentLevel + 1)
+		}
+		
+		PrintIndent(IndentLevel)
+		WriteCharacter('}')
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {

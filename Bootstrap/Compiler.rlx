@@ -398,6 +398,9 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_FOR) {
 		CompileFor(cState, (NodeToCompile->TrueNode) As ForLoop*)
 	}
+	else if (NodeType = NODE_TYPE_LOOP) {
+		CompileLoop(cState, (NodeToCompile->TrueNode) As Block*)
+	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
 		i8 IsContinue := (NodeToCompile->TrueNode) As i8
 		
@@ -493,6 +496,27 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	EmitJump_Label(cState, StartLabel)
 	
 	SetLabel(cState, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
+	
+	cState->CurrentLoopContinueLabel := OldContinueLabel
+	cState->CurrentLoopBreakLabel := OldBreakLabel
+}
+
+define void CompileLoop(CompilerState* cState, Block* LoopBody) {
+	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
+	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
+	
+	i32 StartLabel := NextLabel(cState)
+	i32 EndLabel := NextLabel(cState)
+	
+	cState->CurrentLoopContinueLabel := StartLabel
+	cState->CurrentLoopBreakLabel := EndLabel
+	
+	SetLabel(cState, StartLabel)
+	
+	CompileBlock(cState, LoopBody)
+	
+	EmitJump_Label(cState, StartLabel)
+	SetLabel(cState, EndLabel)
 	
 	cState->CurrentLoopContinueLabel := OldContinueLabel
 	cState->CurrentLoopBreakLabel := OldBreakLabel
