@@ -507,7 +507,7 @@ define void EmitMove_RI32_DISP32_R32(CompilerState* cState, i8 DestinationRegist
 	PushI32(cState, Displacement)
 }
 define void EmitMove_RI64_DISP32_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, REX_W)
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, REX_W)
 	PushI32(cState, Displacement)
 }
 

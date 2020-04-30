@@ -447,7 +447,10 @@ struct FunctionDefine {
 	
 	i16 LocalOffset,
 	i8 HasFullDefinition,
-	i32 LabelNumber
+	i32 LabelNumber,
+	
+	i8* StringBuffer,
+	i32 StringBufferSize
 }
 
 struct CallExpression {
@@ -1390,8 +1393,9 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	NewDefine->ParameterCount := ParameterCount
 	
 	/* Parse the body of the function */
-	
 	NewDefine->HasFullDefinition := true
+	NewDefine->StringBuffer := Alloc(4) As i8*
+	NewDefine->StringBufferSize := 0
 	NewDefine->Body := ParseBlock(pState)
 	
 	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE))
@@ -1797,6 +1801,27 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			}
 		}
 	}
+	else if (NextToken->Type = TOKEN_TYPE_STRING) {
+		FunctionDefine* CurrentFunction := pState->CurrentFunction
+		
+		if !(CurrentFunction) {
+			TokenizerError(pState->pState, "Strings can only be used inside functions")
+		}
+		
+		SafeWideString* StringText := (NextToken->Value) As SafeWideString*
+		
+		i32 Offset := CurrentFunction->StringBufferSize
+		i32 NewSize := Offset + (StringText->Length) + 1
+		
+		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
+		CurrentFunction->StringBufferSize := NewSize
+		
+		for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
+			(CurrentFunction->StringBuffer)[Offset + Index] := (StringText->Buffer)[Index]
+		}
+		
+		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(pState->i8, 1))
+	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
 		/* A literal integer, just make a NODE_TYPE_INTEGER for it */
 		
@@ -1990,6 +2015,20 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		
 		if (DefineNode->HasFullDefinition) {
 			AWriteLine(" {")
+			
+			if (DefineNode->StringBufferSize) {
+				PrintIndent(1)
+				AWrite("i8* StringBuffer := ")
+				
+				WriteCharacter('"')
+				
+				for (i32 StringIndex := 0, StringIndex < (DefineNode->StringBufferSize), StringIndex += 1) {
+					WriteCharacter((DefineNode->StringBuffer)[StringIndex])
+				}
+				
+				WriteCharacter('"')
+				WriteNewLine()
+			}
 			
 			/* Brute-force loop through the function local hashmap */
 			
@@ -2195,5 +2234,10 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		PrintIndent(IndentLevel)
 		WriteCharacter('}')
 		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_STRING) {
+		AWrite("(StringTable + ")
+		IWrite(NodeToPrint->TrueNode)
+		WriteCharacter(')')
 	}
 }

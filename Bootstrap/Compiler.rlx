@@ -34,6 +34,8 @@ struct CompilerState {
 	
 	Type* CurrentFunctionReturnType,
 	
+	i32 CurrentFunctionStringBufferOffset,
+	
 	i8 RegisterStackIndex,
 	
 	i8 NoClobberCD89
@@ -305,14 +307,25 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	/* Set up the stack frame for this function */
 	i16 LocalSpace := FunctionToCompile->LocalOffset
+	
+	if (FunctionToCompile->StringBufferSize) {
+		i32 RoundedStringSize := (FunctionToCompile->StringBufferSize) As i16
+		i32 StringRemainder := RoundedStringSize % 8
+		
+		if (StringRemainder) {
+			RoundedStringSize += 8 - StringRemainder
+		}
+		
+		LocalSpace += RoundedStringSize As i16
+	}
+	
 	i16 LocalSpaceRemainder := LocalSpace % 16
 	
-	if !(LocalSpaceRemainder) {
-		/* Round the space up to a multiple of 16 to keep the stack aligned */
+	if (LocalSpaceRemainder) {
 		LocalSpace += 8
 	}
 	
-	EmitEnter_I16(cState, FunctionToCompile->LocalOffset)
+	EmitEnter_I16(cState, LocalSpace)
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -350,6 +363,35 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
 			CompileExpression(cState, RAX, GlobalDefaults[GlobalDefaultIndex])
+		}
+	}
+	
+	if (FunctionToCompile->StringBufferSize) {
+		i32 StringBufferOffset := FunctionToCompile->LocalOffset
+		i32 StringBufferSize := FunctionToCompile->StringBufferSize
+		
+		i32 ChunkCount := StringBufferSize / 8
+		i32 Remainder := StringBufferSize % 8
+		
+		if (Remainder) {
+			ChunkCount += 1
+		}
+		
+		cState->CurrentFunctionStringBufferOffset := StringBufferOffset + (ChunkCount * 8)
+		i64* ChunkBuffer := (FunctionToCompile->StringBuffer) As i64*
+		
+		for (i32 ChunkIndex := 0, ChunkIndex < ChunkCount, ChunkIndex += 1) {
+			i64 NextChunk := ChunkBuffer[ChunkIndex]
+			EmitMove_R64_I64(cState, RAX, NextChunk)
+			
+			i32 ThisChunkOffset := StringBufferOffset + ((ChunkCount - 1 - ChunkIndex) * 8)
+			
+			if (ThisChunkOffset < 112) {
+				EmitMove_RI64_DISP8_R64(cState, RBP, RAX, -(ThisChunkOffset + 8) As i8)
+			}
+			else {
+				EmitMove_RI64_DISP32_R64(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32)
+			}
 		}
 	}
 	
@@ -589,7 +631,18 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		
 		CompileCall(cState, ResultRegister, CallNode)
 	}
-
+	else if (ExpressionType = NODE_TYPE_STRING) {
+		i32 StringOffset := (ExpressionToCompile->TrueNode) As i32
+		
+		i32 RBPOffect := (cState->CurrentFunctionStringBufferOffset) - StringOffset
+		
+		if (RBPOffect < 112) {
+			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(RBPOffect) As i8)
+		}
+		else {
+			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(RBPOffect) As i32)
+		}
+	}
 }
 
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
