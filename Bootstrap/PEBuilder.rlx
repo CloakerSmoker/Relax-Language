@@ -855,14 +855,6 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	i32 HintNameBase := ImportTableBase + ImportTableSize
 	i32 HintNameSize := TargetBuilder->HintNameTableSize
 	
-	/* Debug print the table sizes */
-	
-	IWrite(ImportTableSize)
-	WriteCharacter(':')
-	IWrite(ImportLookupSize)
-	WriteCharacter(':')
-	IWriteLine(HintNameSize)
-	
 	/* Final (true) size of the .idata section */
 	
 	i32 ImportSectionSize := ImportTableSize + ImportLookupSize + HintNameSize
@@ -921,16 +913,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			/* And also into the thunk table */
 			ImportLookups[LookupIndex + LookupMaxIndex] := (HintNameBase + NextImportNameRVA) - 2
 			
-			if (FixupOffset) {
-				AWrite("Import fixup ")
-				IWrite(Index)
-				WriteCharacter(':')
-				IWrite(ImportIndex)
-				AWrite(" at ")
-				IWrite(FixupOffset as i64)
-				AWrite(" is ")
-				IWriteLine((NextEntry->ThunkTableRVA) + (ImportIndex * 8))
-				
+			if (FixupOffset) {				
 				(TargetBuilder->ImportFixupBase + FixupOffset)[0] := (TargetBuilder->PE->ImageBase) + (NextEntry->ThunkTableRVA) + (ImportIndex * 8)
 			}
 			

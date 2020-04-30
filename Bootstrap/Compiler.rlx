@@ -83,7 +83,8 @@ define void CompilerStart(ParserState* pState) {
 				
 				AWrite("Compiling ")
 				PrintSafeString(NextFunction->Name)
-				WriteNewLine()
+				AWrite(" into offset ")
+				IWriteLine(C.Index)
 				
 				if (NextFunction->IsImported) {
 					CompileImportStub(&C, NextFunction)
@@ -95,7 +96,6 @@ define void CompilerStart(ParserState* pState) {
 					i8 IsMain := SafeStringEqualsAString(NextFunction->Name, "Main")
 					
 					if (IsMain) {
-						AWriteLine("Found main")
 						FoundMain := true
 						MainOffset := C.Index
 					}
@@ -385,6 +385,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	/* Compile the body of the function */
 	CompileBlock(cState, FunctionToCompile->Body)
+	
+	EmitLeave(cState)
+	EmitReturn(cState)
 }
 define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 	/* Compiles a block of statements */
@@ -660,11 +663,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	
 	if (ParameterCount != 0) {
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
-			AWrite("Compiling parameter ")
-			IWrite(ParameterIndex)
-			AWrite(" out of ")
-			IWriteLine(ParameterCount)
-			
 			VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
 			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
 			
@@ -678,7 +676,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
 			if (NextParameterValue->ValueType->Size < NextParameter->Type->Size) {
-				Cast(cState, ThisParameterRegister, NextParameter->Type->Size)
+				Cast(cState, ThisParameterRegister, NextParameterValue->ValueType->Size)
 			}
 			
 			if (ParameterIndex >= 4) {
@@ -810,6 +808,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		if (Operator = OPERATOR_COLON_EQUAL) {
 			CompileExpression(cState, ResultRegister, Right)
 			
+			if (RightSize < LeftSize) {
+				Cast(cState, ResultRegister, RightSize)
+			}
+			
 			if (LeftType = NODE_TYPE_VARIABLE) {
 				SetVariableValue(cState, TargetVariable, ResultRegister)
 			}
@@ -822,6 +824,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		}
 		else {				
 			CompileExpression(cState, RSI, Right)
+			
+			if (RightSize < LeftSize) {
+				Cast(cState, RSI, RightSize)
+			}
 			
 			/* Prelude to get old value of all valid left side expressions */
 			

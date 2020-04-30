@@ -1412,26 +1412,28 @@ define Block* ParseBlock(ParserState* pState) {
 	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
 	i16 StatementCount := 0
 	
-	loop {
-		/* Loop until NextMatches('}') */
-		
-		if (StatementCount * 8 <= StatementBufferSize) {
-			/* If the buffer needs to be expanded, expand it */
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {		
+		loop {
+			/* Loop until NextMatches('}') */
 			
-			Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
-			StatementBufferSize += (10 * 8)
-		}
-		
-		/* Parse a statement and put it into the statement list */
-		Statements[StatementCount] := ParseStatement(pState)
-		StatementCount += 1
-		
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-			/* If the next token is a '}', then break */
-			break
-		}
-		else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
-			TokenizerError(pState->pState, "Expected close brace for block")
+			if (StatementCount * 8 <= StatementBufferSize) {
+				/* If the buffer needs to be expanded, expand it */
+				
+				Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
+				StatementBufferSize += (10 * 8)
+			}
+			
+			/* Parse a statement and put it into the statement list */
+			Statements[StatementCount] := ParseStatement(pState)
+			StatementCount += 1
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				/* If the next token is a '}', then break */
+				break
+			}
+			else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
+				TokenizerError(pState->pState, "Expected close brace for block")
+			}
 		}
 	}
 	

@@ -14,8 +14,6 @@ struct TokenizerState {
 	Token** Tokens,
 	i32 TokenIndex,
 	i32 MaxTokenIndex,
-	
-	void* TokenBuffer,
 	i32 TokenCapacity
 }
 
@@ -26,8 +24,6 @@ define TokenizerState* NewTokenizer(i16* Source, i32 SourceLength) {
 	NewState->SourceLength := SourceLength
 	
 	NewState->Tokens := Alloc(8 * 300) As Token**
-	NewState->TokenBuffer := Alloc(Token.Size * 300)
-	NewState->TokenCapacity := 300
 	
 	NewState->SourceIndex := 0
 	NewState->TokenIndex := 0
@@ -40,7 +36,6 @@ define void EnsureTokenCapacity(TokenizerState* tState) {
 	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
 		tState->TokenCapacity += 300
 		
-		tState->TokenBuffer := ReAlloc(tState->TokenBuffer, Token.Size * (tState->TokenCapacity))
 		tState->Tokens := ReAlloc((tState->Tokens) As void*, 8 * (tState->TokenCapacity)) As Token**
 	}
 }
@@ -50,8 +45,7 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 	
 	i32 Index := tState->MaxTokenIndex
 	
-	/* Manually calculate where this token will go */
-	Token* OutputToken := ((tState->TokenBuffer) + (Index * (Token.Size))) As Token*
+	Token* OutputToken := Alloc(Token.Size) As Token*
 	
 	/* Insert the token into the token list */
 	(tState->Tokens)[Index] := OutputToken
@@ -387,10 +381,6 @@ define Token* _GetNextToken(TokenizerState* pState) {
 		else if (NextCharacter = ':') {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		}
-		else if (NextCharacter = 'a' && PeekNextCharacter(pState) = 's') {
-			GetNextCharacter(pState)
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
-		}
 		else if (NextCharacter = '(') {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 		}
@@ -478,6 +468,14 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			return ResultToken
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
+			if (NextCharacter = 'a') {
+				if (GetNextCharacter(pState) = 's' && IsWhiteSpace(PeekNextCharacter(pState))) {
+					return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
+				}
+				
+				Backtrack(pState)
+			}
+			
 			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
 				NextCharacter := GetNextCharacter(pState)
 			}
