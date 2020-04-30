@@ -10,6 +10,19 @@ define i16* AToW(i8* AString, i32 Length) {
 	return NewBuffer
 }
 
+define i32 ALen(i8* AString) {
+	for (i32 Length := 0, *(AString + Length) != 0, Length += 1) {
+	}
+	
+	return Length
+}
+define i32 WLen(i16* WString) {
+	for (i32 Length := 0, *(WString + Length) != 0, Length += 2) {
+	}
+	
+	return (Length / 2)
+}
+
 define i16 Lower(i16 Character) {
 	/* Gets a character as lowercase */
 	
@@ -25,11 +38,6 @@ define i8 CharacterEqualsNoCase(i16 CharacterOne, i16 CharacterTwo) {
 	return Lower(CharacterOne) = Lower(CharacterTwo)
 }
 
-define i8 IsAlphaNumeric(i16 Character) {
-	/* Checks if a character is alphanumeric(/can be part of an identifier) */
-	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
-}
-
 define i8 IsAlpha(i16 Character) {
 	/* Checks if a character is alpha */
 	
@@ -42,37 +50,16 @@ define i8 IsAlpha(i16 Character) {
 
 	return 0
 }
+define i8 IsNumeric(i16 Character) {
+	/* Checks if a character is a number of not */
+	return (Character >= '0') && (Character <= '9')
+}
 
-define i8 IsHex(i16 Character) {
-	/* Checks if a character is numeric or hex */
-	return IsNumeric(Character) || _IsHex(Character)
+define i8 IsAlphaNumeric(i16 Character) {
+	/* Checks if a character is alphanumeric(/can be part of an identifier) */
+	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
 }
-define i8 _IsHex(i16 Character) {
-	/* Checks if a character is a hex character (a-fA-F) */
-	
-	if ((Character >= 'a') && (Character <= 'f')) {
-		return true
-	}
-	else if ((Character >= 'A') && (Character <= 'F')) {
-		return true
-	}
-	
-	return false
-}
-define i8 IsWhiteSpace(i16 Character) {
-	if (Character = ' ' || Character = '	') {
-		/* space+tab */
-		return true
-	}
-	else if (Character = 10 || Character = 13) {
-		/* linefeeds */
-		return true
-	}
 
-	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
-	
-	return false
-}
 define i8 IsPath(i16 Character) {
 	if (IsAlphaNumeric(Character)) {
 		return true
@@ -87,22 +74,36 @@ define i8 IsPath(i16 Character) {
 	return false
 }
 
-define i8 IsNumeric(i16 Character) {
-	/* Checks if a character is a number of not */
-	return (Character >= '0') && (Character <= '9')
+define i8 _IsHex(i16 Character) {
+	/* Checks if a character is a hex character (a-fA-F) */
+	
+	if ((Character >= 'a') && (Character <= 'f')) {
+		return true
+	}
+	else if ((Character >= 'A') && (Character <= 'F')) {
+		return true
+	}
+	
+	return false
+}
+define i8 IsHex(i16 Character) {
+	/* Checks if a character is numeric or hex */
+	return IsNumeric(Character) || _IsHex(Character)
 }
 
-define i32 ALen(i8* AString) {
-	for (i32 Length := 0, *(AString + Length) != 0, Length += 1) {
+define i8 IsWhiteSpace(i16 Character) {
+	if (Character = ' ' || Character = '	') {
+		/* space+tab */
+		return true
 	}
-	
-	return Length
-}
-define i32 WLen(i16* WString) {
-	for (i32 Length := 0, *(WString + Length) != 0, Length += 2) {
+	else if (Character = 10 || Character = 13) {
+		/* linefeeds */
+		return true
 	}
+
+	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
 	
-	return (Length / 2)
+	return false
 }
 
 define void AReverse(i8* Buffer) {
@@ -132,7 +133,7 @@ define i8* IToA(i64 Number) {
 		Number := -Number
 	}
 	
-	for (i32 Index := 0, Number > 0, Index++) {
+	for (i32 Index := 0, Number > 0, Index += 1) {
 		Buffer[Index] := (Number % 10) + '0'
 		Number := Number / 10
 	}

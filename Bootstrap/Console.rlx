@@ -7,6 +7,32 @@ i64 STDIN := GetStdHandle(-10)
 i64 STDOUT := GetStdHandle(-11)
 i64 STDERR := GetStdHandle(-12)
 
+define i32 Write(i16* WString) {
+	i32 CharactersWritten := 0
+	
+	WriteConsole(STDOUT, WString, WLen(WString), &CharactersWritten, 0)
+	
+	return CharactersWritten
+}
+define i32 WriteLine(i16* WString) {
+	i64 NewLine := 0x00000000000D000A
+	
+	i32 ReturnValue := Write(WString)
+	Write((&NewLine) As i16*)
+	
+	return ReturnValue
+}
+define void WriteCharacter(i16 Character) {
+	i32 CharactersWritten := 0
+	
+	WriteConsole(STDOUT, &Character, 1, &CharactersWritten, 0)
+}
+
+define void WriteNewLine() {
+	i64 NewLine := 0x00000000000D000A
+	Write((&NewLine) As i16*)
+}
+
 define i32 AWrite(i8* AString) {
 	i16* WString := AToW(AString, ALen(AString))
 	
@@ -25,34 +51,6 @@ define i32 AWriteLine(i8* AString) {
 	Free(WString As void*)
 	
 	return Result
-}
-
-define i32 Write(i16* WString) {
-	i32 CharactersWritten := 0
-	
-	WriteConsole(STDOUT, WString, WLen(WString), &CharactersWritten, 0)
-	
-	return CharactersWritten
-}
-
-define void WriteCharacter(i16 Character) {
-	i32 CharactersWritten := 0
-	
-	WriteConsole(STDOUT, &Character, 1, &CharactersWritten, 0)
-}
-
-define void WriteNewLine() {
-	i64 NewLine := 0x00000000000D000A
-	Write((&NewLine) As i16*)
-}
-
-define i32 WriteLine(i16* WString) {
-	i64 NewLine := 0x00000000000D000A
-	
-	i32 ReturnValue := Write(WString)
-	Write((&NewLine) As i16*)
-	
-	return ReturnValue
 }
 
 define i32 IWrite(i64 Number) {
@@ -82,31 +80,23 @@ i16 Blue := 0x01
 i16 White := 0x0F
 i16 Black := 0x00
 
+define void SetColor(i8 Foreground, i8 Background) {
+	Background := Background * 10 As i8
+	
+	SetConsoleTextAttribute(STDOUT, Foreground | Background)
+}
 define void ResetColors() {
 	SetColor(White, Black)
 }
 define void TextColor(i16 Foreground) {
-	return SetColor(Foreground, Black)
+	SetColor(Foreground, Black)
 }
 
-define void SetColor(i8 Foreground, i8 Background) {
-	Background := Background * 10
-	
-	SetConsoleTextAttribute(STDOUT, Foreground | Background)
-}
+define i16* ReadLine(i32 MaxLength) {
+	i16* Buffer := Alloc(MaxLength * 2)
+	i32 CharactersRead := 0
 
-define i16* ReadLine() {
-	void* Buffer := Alloc(64)
-	i32 ChunkCount := 1
+	ReadConsole(STDIN, Buffer, MaxLength, &CharactersRead, 0)
 	
-	for (i32 CharactersRead := 32, CharactersRead = 32, ChunkCount++) {
-		i32 BufferOffset := (ChunkCount - 1) * 64
-		CharactersRead := 32
-		
-		ReadConsole(STDIN, Buffer + BufferOffset, 32, &CharactersRead, 0)
-		
-		Buffer := ReAlloc(Buffer, BufferOffset + 128)
-	}
-	
-	return (Buffer As i16*)
+	return Buffer
 }
