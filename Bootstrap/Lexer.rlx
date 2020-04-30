@@ -516,10 +516,6 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			SafeWideString* DirectiveText := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
 			StartingIndex := pState->SourceIndex
 			
-			AWrite("Found directive: ")
-			PrintSafeString(DirectiveText)
-			WriteNewLine()
-			
 			if (SafeStringEqualsAString(DirectiveText, "include")) {
 				if !(IsWhiteSpace(GetNextCharacter(pState))) {
 					AWriteLine("Fuck off")
@@ -556,13 +552,8 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				
 				TokenizerState* IncludeTokenizer := NewTokenizer(IncludeFileText, IncludeFileSize)
 				
-				AWrite("start index: ")
-				IWriteLine(pState->TokenIndex)
-				
 				loop {
 					Token* NextIncludeToken := GetNextToken(IncludeTokenizer)
-					
-					/* PrintToken(NextIncludeToken) */
 					
 					if (NextIncludeToken->Type = TOKEN_TYPE_EOF) {
 						break
@@ -573,10 +564,9 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				
 				AWriteLine("Done including file")
 				
-				AWrite("end index: ")
-				IWriteLine(pState->TokenIndex)
+				pState->TokenIndex -= 1
 				
-				continue
+				return GetNextToken(pState)
 			}
 		}
 		

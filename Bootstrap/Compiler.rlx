@@ -184,10 +184,6 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 */
 
 define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
-	PrintSafeString(TargetVariable->Name)
-	WriteCharacter(':')
-	IWriteLine(TargetVariable->StackOffset)
-	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
@@ -214,10 +210,6 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 	}
 }
 define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
-	PrintSafeString(TargetVariable->Name)
-	WriteCharacter(':')
-	IWriteLine(TargetVariable->StackOffset)
-	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
@@ -232,10 +224,6 @@ define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariab
 	}
 }
 define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
-	PrintSafeString(TargetVariable->Name)
-	WriteCharacter(':')
-	IWriteLine(TargetVariable->StackOffset)
-	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
@@ -412,9 +400,6 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	
 	/* Compile the expression to return */
 	CompileExpression(cState, RAX, ReturnExpression)
-	
-	AWrite("aaaaaaaaaaaaaaaaaaaaa ")
-	IWriteLine(ReturnExpression->ValueType->Size)
 	
 	i16 ReturnValueSize := ReturnExpression->ValueType->Size
 	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
