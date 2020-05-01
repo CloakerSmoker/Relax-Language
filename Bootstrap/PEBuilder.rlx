@@ -927,11 +927,8 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	/* Debug print the hint/name table */
 	
 	for (i32 CopyIndex := 0, CopyIndex < (TargetBuilder->HintNameTableSize), CopyIndex += 1) {
-		WriteCharacter((TargetBuilder->HintNameTable)[CopyIndex])
 		HintName[CopyIndex] := (TargetBuilder->HintNameTable)[CopyIndex]
 	}
-	
-	WriteNewLine()
 	
 	/* Write .idata into TargetBuilder->Buffer */
 	

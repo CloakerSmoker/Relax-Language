@@ -368,6 +368,7 @@ i8 NODE_TYPE_IDENTIFIER := 20
 struct ASTNode {
 	void* TrueNode,
 	Type* ValueType,
+	SafeWideString* SourceFilePath,
 	i8 NodeType
 }
 
@@ -615,11 +616,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			if (LeftNodeType = NODE_TYPE_BINARY) {
 				BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
 				
-				IWriteLine(LeftExpression->Operator->Value)
-				WriteNewLine()
-				
 				if (LeftExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
-					AWriteLine("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 					ResultType := LeftType
 				}
 				else {
@@ -677,6 +674,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	/* Wrap it, and return it */
 	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
+	ResultNode->SourceFilePath := OperatorToken->SourceFilePath
 	
 	if (WarningText) {
 		/* But show a warning (if we have one) */
@@ -729,11 +727,15 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 		ResultType := DecrementPointerType(pState, ResultType)
 	}
 	
-	return AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
+	ResultNode->SourceFilePath := OperatorToken->SourceFilePath
+	
+	return ResultNode
 }
-define ASTNode* MakeCall(ParserState* pState, SafeWideString* Name, ASTNode** Parameters, i32 ParameterCount) {
+define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
 	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
 	
+	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
 	
 	/* Find the function which is being called. Todo: Allow incomplete functions */
@@ -760,7 +762,10 @@ define ASTNode* MakeCall(ParserState* pState, SafeWideString* Name, ASTNode** Pa
 	Result->ParameterCount := ParameterCount
 	
 	/* Wrap the CallExpression with a NODE_TYPE_CALL and with a ResultType of the callee's return type */
-	return AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, FoundDefine->ReturnType)
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, FoundDefine->ReturnType)
+	ResultNode->SourceFilePath := NameToken->SourceFilePath
+	
+	return ResultNode
 }
 
 /*
@@ -806,18 +811,38 @@ define void ParserError(ParserState* pState, i8* ErrorMessage) {
 define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	TextColor(Red)
 	AWriteLine(ErrorMessage)
+	
+	if (BadNode->SourceFilePath != 0) {
+		AWrite("In: ")
+		TextColor(White)
+		PrintSafeString(BadNode->SourceFilePath)
+		TextColor(Red)
+		WriteNewLine()
+	}
+	
 	AWrite("At: ")
 	ResetColors()
 	
 	PrintAST(BadNode)
+	
+	WriteNewLine()
 	
 	Exit(1)
 }
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	TextColor(Red | Green)
 	AWriteLine(WarnMessage)
+	
+	if (BadNode->SourceFilePath != 0) {
+		AWrite("In: ")
+		TextColor(White)
+		PrintSafeString(BadNode->SourceFilePath)
+		TextColor(Red | Green)
+		WriteNewLine()
+	}
+	
 	AWrite("At: ")
-	ResetColors()
+	TextColor(White)
 	
 	PrintAST(BadNode)
 	
@@ -947,18 +972,12 @@ define void ParseProgram(ParserState* pState) {
 		Token* NextToken := ParserNextToken(pState)
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
-			AWriteLine("Found define")
-			
 			ParseAndAddDefine(pState)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-			AWriteLine("Found declare")
-			
 			ParseAndAddDeclare(pState, IS_NOT_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
-			AWriteLine("Found import")
-			
 			ParseAndAddDeclare(pState, IS_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
@@ -999,14 +1018,7 @@ define void ParseProgram(ParserState* pState) {
 					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
 						UnfreezeParser(pState, DefaultValueExpressionStart)
 						
-						AWriteLine("Found global default")
-						
 						i32 Index := GetArrayLength(pState->GlobalDefaults)
-						
-						AWrite("Inserting at index ")
-						IWriteLine(Index)
-						AWrite("into array at ")
-						IWriteLine((pState->GlobalDefaults) As i64)
 						
 						pState->GlobalDefaults := ReAllocArray(pState->GlobalDefaults, 1)
 						
@@ -1054,10 +1066,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
-	AWrite("Found struct ")
-	PrintSafeString(Name)
-	WriteNewLine()
-	
 	/* Consumes the opening '{' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
@@ -1082,11 +1090,11 @@ define void ParseAndAddStruct(ParserState* pState) {
 		Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (NameToken->Value) As SafeWideString*
 		
-		WriteCharacter('	')
+		/* WriteCharacter('	')
 		PrintType(NextField->ValueType)
 		WriteCharacter(' ')
 		PrintSafeString(FieldName)
-		WriteNewLine()
+		WriteNewLine() */
 		
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
@@ -1203,19 +1211,11 @@ define i32 ParserAddVariable(ParserState* pState, HashMap* ToScope, VariableInfo
 define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal) {
 	/* Adds a global variable to the current program */
 	
-	AWrite("Adding global ")
-	PrintSafeString(NewGlobal->Name)
-	WriteNewLine()
-	
 	pState->GlobalOffset += ParserAddVariable(pState, pState->Globals, NewGlobal, pState->GlobalOffset)
 }
 
 define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal) {
 	/* Adds a local variable to the current function */
-	
-	AWrite("Adding local ")
-	PrintSafeString(NewLocal->Name)
-	WriteNewLine()
 	
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	CurrentFunction->LocalOffset += ParserAddVariable(pState, CurrentFunction->Locals, NewLocal, CurrentFunction->LocalOffset)
@@ -1320,8 +1320,6 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 	}
 	
 	NewDefine->HasFullDefinition := false
-	
-	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine, pState->EmptyType))
 }
 
 define ASTNode* ParseAndAddDefine(ParserState* pState) {
@@ -1384,9 +1382,6 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		}
 	}
 	
-	AWrite("Parameter Count: ")
-	IWriteLine(ParameterCount)
-	
 	/* Update the function's parameter list/count */
 	
 	NewDefine->Parameters := ParameterList
@@ -1397,8 +1392,6 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	NewDefine->StringBuffer := Alloc(4) As i8*
 	NewDefine->StringBufferSize := 0
 	NewDefine->Body := ParseBlock(pState)
-	
-	PrintAST(AllocateNewASTNode(NODE_TYPE_DEFINE, NewDefine As void*, TYPE_NONE))
 }
 
 define Block* ParseBlock(ParserState* pState) {
@@ -1441,10 +1434,6 @@ define Block* ParseBlock(ParserState* pState) {
 	Block* NewBlock := Alloc(Block.Size) As Block*
 	NewBlock->Statements := Statements
 	NewBlock->StatementCount := StatementCount
-	
-	AWrite("Made new block with ")
-	IWrite(StatementCount)
-	AWriteLine(" statements")
 	
 	return NewBlock
 }
@@ -1501,11 +1490,11 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		i8 IsContinue := (NextKeyword = KEYWORD_CONTINUE)
 		
 		if (NextKeyword = KEYWORD_BREAK || IsContinue) {
-			if !(pState->InLoop) {
-				TokenizerError(pState->pState, "Continue/Break must be inside loops")
-			}
-			
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
+			
+			if !(pState->InLoop) {
+				ASTError(Result, "Continue/Break must be inside loops")
+			}
 		}
 		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
@@ -1519,22 +1508,21 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			
 			/* And ensure that the two types are compatible */
 			
-			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER && GetNumberSize(ExpressionToReturn->TrueNode) < ExpectedReturnType->Size) {
+			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+			Result->SourceFilePath := ExpressionToReturn->SourceFilePath
+			
+			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER && GetNumberSize(ExpressionToReturn->TrueNode) <= ExpectedReturnType->Size) {
 				/* Dummy branch */
 			}
 			else if (ActualReturnType->Size > ExpectedReturnType->Size) {
-				TokenizerError(pState->pState, "Return type too large")
+				ASTError(Result, "Return type too large")
 			}
 			else if (ActualReturnType->PointerDepth != ExpectedReturnType->PointerDepth) {
-				TokenizerError(pState->pState, "Return type has wrong pointer depth")
+				ASTError(Result, "Return type has wrong pointer depth")
 			}
 			else if (ExpectedReturnType->TrueType->IsStructType != ActualReturnType->TrueType->IsStructType) {
-				TokenizerError(pState->pState, "Return type should be a struct type")
+				ASTError(Result, "Return type should be a struct type")
 			}
-			
-			/* Then set the result to a new NODE_TYPE_RETURN */
-			
-			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 		}
 		else if (NextKeyword = KEYWORD_IF) {
 			Result := ParseIf(pState)
@@ -1710,20 +1698,37 @@ define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
 	/* Translates some kind of token in an AST node which contains the actual version of the token */
 	
+	ASTNode* Result := 0
+	
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
 		
 		Type* ResultType := GetNumberType(pState, TokenToTranslate->Value)
 		
-		return AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
+		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
+		Result->SourceFilePath := TokenToTranslate->SourceFilePath
+		
+		return Result
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
 		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
 		
-		VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
-		/* Using the found variable's type as the node type */
+		if (SafeStringEqualsAString(TokenToTranslate->Value, "true")) {
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 1, MakeType(pState->i32, 0))
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
+		}
+		else {
+			VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
+			/* Using the found variable's type as the node type */
+			
+			Result := AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)		
+		}
 		
-		return AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)
+		Result->SourceFilePath := TokenToTranslate->SourceFilePath
+		
+		return Result
 	}
 	
 	/* Otherwise, this has been called incorrectly, and is a bug */
@@ -1773,7 +1778,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			
 			/* Make a NODE_TYPE_CALL node for the function call */
 			
-			Result := MakeCall(pState, (NextToken->Value) As SafeWideString*, Parameters, ParameterIndex)
+			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex)
 		}
 		else {
 			/* Else, this isn't a function call, but might be still be StructType.Size */
@@ -1902,13 +1907,6 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		/* Update the next operator */
 		OperatorToken := ParserNextToken(pState)
 	}
-	
-	/* Debug print the expression result type (and text) */
-	
-	PrintType(Result->ValueType)
-	WriteCharacter(' ')
-	PrintAST(Result)
-	WriteNewLine()
 	
 	UnfreezeParser(pState, FrozenState)
 	

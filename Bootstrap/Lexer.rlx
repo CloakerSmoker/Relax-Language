@@ -1,12 +1,14 @@
 struct Token {
 	void* Value,
 	i16* Source,
+	SafeWideString* SourceFilePath,
 	i32 PositionInSource,
 	i16 LengthInSource,
 	i8 Type
 }
 
 struct TokenizerState {
+	SafeWideString* SourceFilePath,
 	i16* Source,
 	i32 SourceIndex,
 	i32 SourceLength,
@@ -17,9 +19,10 @@ struct TokenizerState {
 	i32 TokenCapacity
 }
 
-define TokenizerState* NewTokenizer(i16* Source, i32 SourceLength) {
+define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(TokenizerState.Size) As TokenizerState*
 	
+	NewState->SourceFilePath := SourceFilePath
 	NewState->Source := Source
 	NewState->SourceLength := SourceLength
 	
@@ -54,6 +57,7 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 	
 	/* Populate the token */
 	OutputToken->Value := Value
+	OutputToken->SourceFilePath := tState->SourceFilePath
 	OutputToken->Source := Source
 	OutputToken->PositionInSource := PositionInSource
 	OutputToken->LengthInSource := LengthInSource
@@ -215,6 +219,11 @@ define i8 TokenizerAtEnd(TokenizerState* pState) {
 define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
 	TextColor(Red)
 	AWriteLine(Message)
+	
+	AWrite("In: ")
+	PrintSafeString(AtToken->SourceFilePath)
+	WriteNewLine()
+	
 	AWrite("At: ")
 	ResetColors()
 	
@@ -347,6 +356,24 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
 		}
 		else if (NextCharacter = '/') {
+			if (NextCharacterMatches(pState, '*')) {
+				loop {
+					NextCharacter := GetNextCharacter(pState)
+					
+					if (NextCharacter = '*' && PeekNextCharacter(pState) = '/') {
+						GetNextCharacter(pState)
+						break
+					}
+					
+					if (TokenizerAtEnd(pState)) {
+						TokenizerError(pState, "Expected closing comment character")
+					}
+				}
+				
+				continue
+			}
+			
+			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
 		}
 		else if (NextCharacter = '%') {
@@ -548,7 +575,7 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				
 				(IncludePath->Buffer)[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				
-				TokenizerState* IncludeTokenizer := NewTokenizer(IncludeFileText, IncludeFileSize)
+				TokenizerState* IncludeTokenizer := NewTokenizer(IncludePath, IncludeFileText, IncludeFileSize)
 				
 				loop {
 					Token* NextIncludeToken := GetNextToken(IncludeTokenizer)
@@ -557,7 +584,8 @@ define Token* _GetNextToken(TokenizerState* pState) {
 						break
 					}
 					
-					PushToken(pState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
+					Token* IncludeToken := PushToken(pState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
+					IncludeToken->SourceFilePath := IncludePath
 				}
 				
 				AWriteLine("Done including file")

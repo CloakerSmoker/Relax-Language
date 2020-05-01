@@ -102,8 +102,6 @@ define i8 IsWhiteSpace(i16 Character) {
 	}
 
 	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
-	
-	return false
 }
 
 define void AReverse(i8* Buffer) {
