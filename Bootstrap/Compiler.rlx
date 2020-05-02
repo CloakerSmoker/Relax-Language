@@ -1010,6 +1010,9 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			else if (Operator = OPERATOR_GREATER_EQAUL) {
 				EmitSetGE_R8(cState, ResultRegister)
 			}
+			else if (Operator = OPERATOR_XOR) {
+				EmitXor_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+			}
 			else if (Operator = OPERATOR_AND) {
 				EmitAnd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}

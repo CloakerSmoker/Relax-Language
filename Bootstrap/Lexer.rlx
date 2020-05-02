@@ -19,6 +19,12 @@ struct TokenizerState {
 	i32 TokenCapacity
 }
 
+declare i8 LookupKeyword(SafeWideString*)
+declare void PrintToken(Token*)
+declare void PrintOperator(i8)
+declare void PrintPunctuation(i8)
+declare void PrintKeyword(i8)
+
 define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(TokenizerState.Size) As TokenizerState*
 	
@@ -160,7 +166,7 @@ i8 OPERATOR_COLON := 22
 i8 OPERATOR_AS := 23
 
 i8 OPERATOR_OPEN_BRACKET := 24
-
+i8 OPERATOR_XOR := 25
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
@@ -247,6 +253,8 @@ define void TokenizerError(TokenizerState* tState, i8* Message) {
 	Error(tState, (tState->Tokens)[(tState->TokenIndex) - 1], Message)
 }
 
+
+declare Token* _GetNextToken(TokenizerState*)
 
 define Token* GetNextToken(TokenizerState* tState) {
 	Token* Result := _GetNextToken(tState)
@@ -387,6 +395,9 @@ define Token* _GetNextToken(TokenizerState* pState) {
 		}
 		else if (NextCharacter = '>') {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
+		}
+		else if (NextCharacter = '^') {
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_XOR)
 		}
 		else if (NextCharacter = '&') {
 			if (NextCharacterMatches(pState, '&')) {
@@ -787,6 +798,9 @@ define void PrintOperator(i8 Operator) {
 	}
 	else if (Operator = OPERATOR_GREATER) {
 		FirstCharacter := '>'
+	}
+	else if (Operator = OPERATOR_XOR) {
+		FirstCharacter := '^'
 	}
 	else if (Operator = OPERATOR_AND) {
 		FirstCharacter := '&'

@@ -139,6 +139,13 @@
 				this.ParseAndAddStruct()
 				return None
 			}
+			else if (Next.Value = Keywords.DECLARE) {
+				this.ParseTypeName()
+				this.Consume(Tokens.IDENTIFIER, "Declare name expected")
+				this.ParseParamGrouping(True, False)
+				
+				return None
+			}
 		}
 		else if (Next.Type = Tokens.IDENTIFIER) {
 			this.Index-- ; Backtrack to capture the type name again

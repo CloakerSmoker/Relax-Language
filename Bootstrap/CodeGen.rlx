@@ -924,6 +924,26 @@ define void EmitOr_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 Sou
 	EmitREXOpcodeModRM(cState, 0x09, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 
+define void EmitXor_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
+	if (Size = 1) {EmitXor_R8_R8(cState, DestinationRegister, SourceRegister)}
+	else if (Size = 2) {EmitXor_R16_R16(cState, DestinationRegister, SourceRegister)}
+	else if (Size = 4) {EmitXor_R32_R32(cState, DestinationRegister, SourceRegister)}
+	else if (Size = 8) {EmitXor_R64_R64(cState, DestinationRegister, SourceRegister)}
+}
+define void EmitXor_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x30, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
+}
+define void EmitXor_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitXor_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, 0)
+}
+define void EmitXor_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
+}
+
 define void R8NeedsREX(i8 RegisterNumber) {
 	if (4 <= RegisterNumber && RegisterNumber <= 7) {
 		return REX_BASE

@@ -352,6 +352,7 @@ class Keywords extends Enum {
 	static Options := "
 	(
 		define
+		declare
 		import
 		dllimport
 		export

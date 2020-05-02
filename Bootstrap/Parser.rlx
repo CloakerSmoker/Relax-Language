@@ -46,7 +46,7 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 		return 10
 	}
-	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR) {
+	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
 		return 12
 	}
 }
@@ -736,34 +736,39 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
 	
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	
 	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
+	Result->Parameters := Parameters
+	Result->ParameterCount := ParameterCount
+	
+	/* Wrap the CallExpression with a NODE_TYPE_CALL for any errors */
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, TYPE_NONE)
+	ResultNode->SourceFilePath := NameToken->SourceFilePath
 	
 	/* Find the function which is being called. Todo: Allow incomplete functions */
 	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
 	
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
-		PrintSafeString(Name)
-		WriteNewLine()
-		TokenizerError(pState->pState, "Function definition not found.")
+		
+		FunctionDefine* DummyFunction := Alloc(FunctionDefine.Size) As FunctionDefine*
+		DummyFunction->Name := Name
+		
+		Result->TargetFunction := DummyFunction /* Dummy function needs to be created since PrintAST uses it to print the callee name */
+		
+		ASTError(ResultNode, "Function definition not found.")
 	}
 	
 	/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
 	FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 	
+	Result->TargetFunction := FoundDefine
+	ResultNode->ValueType := FoundDefine->ReturnType
+	
 	/* And verify the parameter counts match */
 	if (FoundDefine->ParameterCount != ParameterCount) {
-		TokenizerError(pState->pState, "Invalid number of parameters passed to function.")
+		ASTError(ResultNode, "Wrong number of parameters passed to function.")
 	}
-	
-	/* And populate the CallExpression with the info inside the callee */
-	Result->TargetFunction := FoundDefine
-	Result->Parameters := Parameters
-	Result->ParameterCount := ParameterCount
-	
-	/* Wrap the CallExpression with a NODE_TYPE_CALL and with a ResultType of the callee's return type */
-	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, FoundDefine->ReturnType)
-	ResultNode->SourceFilePath := NameToken->SourceFilePath
 	
 	return ResultNode
 }
@@ -1491,6 +1496,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		
 		if (NextKeyword = KEYWORD_BREAK || IsContinue) {
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
+			Result->SourceFilePath := NextToken->SourceFilePath
 			
 			if !(pState->InLoop) {
 				ASTError(Result, "Continue/Break must be inside loops")
@@ -1888,8 +1894,6 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
 			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
 			
-			PrintSafeString((Right->Value) As SafeWideString*)
-			
 			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, pState->EmptyType)
 		}
 		else {
@@ -1943,19 +1947,21 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	else if (NodeType = NODE_TYPE_BINARY) {
 		BinaryExpression* BinaryNode := (NodeToPrint->TrueNode) As BinaryExpression*
 		
-		WriteCharacter('(')
-		
-		PrintAST(BinaryNode->Left)
-		
-		WriteCharacter(' ')
-		
-		PrintOperator(BinaryNode->Operator->Value)
-		
-		WriteCharacter(' ')
-		
-		PrintAST(BinaryNode->Right)
-		
-		WriteCharacter(')')
+		if (BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET) {
+			PrintAST(BinaryNode->Left)
+			WriteCharacter('[')
+			PrintAST(BinaryNode->Right)
+			WriteCharacter(']')
+		}
+		else {
+			WriteCharacter('(')
+			PrintAST(BinaryNode->Left)
+			WriteCharacter(' ')
+			PrintOperator(BinaryNode->Operator->Value)
+			WriteCharacter(' ')
+			PrintAST(BinaryNode->Right)
+			WriteCharacter(')')
+		}
 	}
 	else if (NodeType = NODE_TYPE_CALL) {
 		CallExpression* CallNode := (NodeToPrint->TrueNode) As CallExpression*
