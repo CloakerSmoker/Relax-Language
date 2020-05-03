@@ -58,6 +58,23 @@ i16 PE_HEADER_SIZE := 0xF0
 
 i16 SECTION_HEADER_SIZE := 0x28
 
+define void WriteDOSStub(void* IntoBuffer) {
+	/* Writes the DOS stub code into the given buffer */
+	
+	IntoBuffer[0] := 0xCD09B4000EBA1F0E
+	
+	/* Rewrite the first byte since the sign bit gets dropped at some point */
+	(IntoBuffer As i8*)[0] := 0xCD
+	
+	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
+	IntoBuffer[1] := 0x685421CD4C01B821
+	IntoBuffer[2] := 0x72676F7270207369
+	IntoBuffer[3] := 0x6F6E6E6163206D61
+	IntoBuffer[4] := 0x6E75722065622074
+	IntoBuffer[5] := 0x20534F44206E6920
+	IntoBuffer[6] := 0x0000242E65646F6D
+}
+
 define void WriteDOSHeader(void* IntoBuffer) {
 	/* Writes the DOS MZ header into the given buffer */
 	
@@ -83,23 +100,6 @@ define void WriteDOSHeader(void* IntoBuffer) {
 	
 	WriteDOSStub(IntoBuffer + MZ_HEADER_SIZE)
 	
-}
-
-define void WriteDOSStub(void* IntoBuffer) {
-	/* Writes the DOS stub code into the given buffer */
-	
-	IntoBuffer[0] := 0xCD09B4000EBA1F0E
-	
-	/* Rewrite the first byte since the sign bit gets dropped at some point */
-	(IntoBuffer As i8*)[0] := 0xCD
-	
-	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
-	IntoBuffer[1] := 0x685421CD4C01B821
-	IntoBuffer[2] := 0x72676F7270207369
-	IntoBuffer[3] := 0x6F6E6E6163206D61
-	IntoBuffer[4] := 0x6E75722065622074
-	IntoBuffer[5] := 0x20534F44206E6920
-	IntoBuffer[6] := 0x0000242E65646F6D
 }
 
 struct COFFHeader {
@@ -327,7 +327,7 @@ define SectionHeader* WriteSectionHeader(void* IntoBuffer, i64 Name, i32 Charact
 struct ImportHelper {
 	i16 ImportCount,
 	i32* RVABuffer,
-	i64** FixUps
+	i64* FixUps
 }
 
 struct ImportTableEntry {
@@ -559,6 +559,8 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 	}
 }
 
+declare void FinalizeImports(PEBuilder*)
+
 define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 EntryPointOffset) {
 	/* Sets .text to hold CodeLength bytes of code inside of CodeBytes */
 	
@@ -575,6 +577,34 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 Ent
 	ToBuilder->PE->SizeOfCode := CodeLength
 	ToBuilder->PE->AddressOfEntryPoint := RVA + EntryPointOffset
 	ToBuilder->PE->BaseOfCode := RVA
+}
+
+/*
+==========================================
+	Relocation helpers
+==========================================
+*/
+
+/* (Multiplication since I forgot to implement bit shift operators) */
+
+i16 RELOCATION_HIGHLOW := 3 * 0x1000
+i16 RELOCATION_DIR64 := 10 * 0x1000
+
+define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
+	i32 Type := RELOCATION_HIGHLOW
+	
+	if (Is64Bit) {
+		Type := RELOCATION_DIR64
+	}
+	
+	/* Extend the RelocationHelper's buffer to hold another relocation */
+	
+	Helper->Entries := ReAlloc((Helper->Entries) as void*, ((Helper->EntryCount) + 1) * 2) As i16*
+	
+	/* Add the new relocation to the Helper's buffer */
+	
+	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
+	Helper->EntryCount += 1
 }
 
 define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
@@ -606,34 +636,6 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	/* Then we can add the relocation to the new helper */
 	
 	AddRelocationToHelper(NewHelper, OffsetInPage, Is64Bit)
-}
-
-/*
-==========================================
-	Relocation helpers
-==========================================
-*/
-
-/* (Multiplication since I forgot to implement bit shift operators) */
-
-i16 RELOCATION_HIGHLOW := 3 * 0x1000
-i16 RELOCATION_DIR64 := 10 * 0x1000
-
-define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
-	i32 Type := RELOCATION_HIGHLOW
-	
-	if (Is64Bit) {
-		Type := RELOCATION_DIR64
-	}
-	
-	/* Extend the RelocationHelper's buffer to hold another relocation */
-	
-	Helper->Entries := ReAlloc((Helper->Entries) as void*, ((Helper->EntryCount) + 1) * 2) As i16*
-	
-	/* Add the new relocation to the Helper's buffer */
-	
-	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
-	Helper->EntryCount += 1
 }
 
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
@@ -805,7 +807,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 	}
 }
 
-define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName, i64* WriteFinalAddressTo) {
+define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName, i64 WriteAddressToOffset) {
 	/* Higher-level function to easily add an import */
 	
 	/* Find the index of the dll (or add it if it isn't found) */
@@ -819,7 +821,7 @@ define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideStrin
 	EntryHelper->FixUps := ReAlloc(EntryHelper->FixUps, (Index + 1) * 8)
 	
 	(EntryHelper->RVABuffer)[Index] := AddHintNameTableEntry(ToBuilder, FunctionName)
-	(EntryHelper->Fixups)[Index] := WriteFinalAddressTo
+	(EntryHelper->FixUps)[Index] := WriteAddressToOffset
 	
 	EntryHelper->ImportCount += 1
 	ToBuilder->ImportFunctionCount += 1
@@ -905,7 +907,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 			
 			/* Get the function name RVA */
 			i32 NextImportNameRVA := (NextHelper->RVABuffer)[ImportIndex]
-			i64* FixupOffset := (NextHelper->Fixups)[ImportIndex]
+			i64 FixupOffset := (NextHelper->FixUps)[ImportIndex]
 			
 			/* And write it into the lookup table */
 			ImportLookups[LookupIndex] := (HintNameBase + NextImportNameRVA) - 2
@@ -954,7 +956,7 @@ define void FinalizeBuilder(PEBuilder* Builder) {
 	
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
 	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
-	Builder->PE->SizeOfUnInitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
+	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
 }
 
 DllImport i64 CreateFileA(i8*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileA}
@@ -993,6 +995,8 @@ define void WriteBuilder(PEBuilder* Builder, i8* ToFile) {
 	
 	CloseHandle(OutputFileHandle)
 }
+
+declare void PrintByteHex(i8)
 
 define void PrintBuilder(PEBuilder* Builder) {
 	i8* BufferAsBytes := (Builder->Buffer) As i8*

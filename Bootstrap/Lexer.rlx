@@ -2,6 +2,7 @@ struct Token {
 	void* Value,
 	i16* Source,
 	SafeWideString* SourceFilePath,
+	i32 LineNumber,
 	i32 PositionInSource,
 	i16 LengthInSource,
 	i8 Type
@@ -16,6 +17,7 @@ struct TokenizerState {
 	Token** Tokens,
 	i32 TokenIndex,
 	i32 MaxTokenIndex,
+	i32 CurrentLineNumber,
 	i32 TokenCapacity
 }
 
@@ -37,6 +39,7 @@ define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source,
 	NewState->SourceIndex := 0
 	NewState->TokenIndex := 0
 	NewState->MaxTokenIndex := 0
+	NewState->CurrentLineNumber := 1
 	
 	return NewState
 }
@@ -64,6 +67,7 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 	/* Populate the token */
 	OutputToken->Value := Value
 	OutputToken->SourceFilePath := tState->SourceFilePath
+	OutputToken->LineNumber := tState->CurrentLineNumber
 	OutputToken->Source := Source
 	OutputToken->PositionInSource := PositionInSource
 	OutputToken->LengthInSource := LengthInSource
@@ -196,17 +200,28 @@ i8 KEYWORD_BREAK := 9
 i8 KEYWORD_STRUCT := 10
 i8 KEYWORD_RETURN := 11
 
-define void Backtrack(TokenizerState* pState) {
-	pState->SourceIndex -= 1
-}
-
 define i16 PeekNextCharacter(TokenizerState* pState) {
 	return Lower((pState->Source)[pState->SourceIndex])
 }
+define void Backtrack(TokenizerState* pState) {
+	i16 ThisCharacter := PeekNextCharacter(pState)
+	
+	pState->SourceIndex -= 1
+	
+	i32 LastCharacter := PeekNextCharacter(pState)
+	
+	if (LastCharacter = 13 && ThisCharacter = 10) {
+		pState->CurrentLineNumber -= 1
+	}
+}
 define i16 GetNextCharacter(TokenizerState* pState) {
 	i16 NextCharacter := PeekNextCharacter(pState)
-
 	pState->SourceIndex += 1
+	
+	if (NextCharacter = 13 && PeekNextCharacter(pState) = 10) {
+		pState->CurrentLineNumber += 1
+	}
+	
 	return NextCharacter
 }
 define i8 NextCharacterMatches(TokenizerState* pState, i8 CharacterToCheck) {
@@ -596,7 +611,8 @@ define Token* _GetNextToken(TokenizerState* pState) {
 					}
 					
 					Token* IncludeToken := PushToken(pState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
-					IncludeToken->SourceFilePath := IncludePath
+					IncludeToken->SourceFilePath := NextIncludeToken->SourceFilePath
+					IncludeToken->LineNumber := NextIncludeToken->LineNumber
 				}
 				
 				AWriteLine("Done including file")

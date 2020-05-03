@@ -12,7 +12,7 @@ struct HashMap {
 define HashMap* NewHashMap() {
 	HashMap* NewMap := Alloc(HashMap.Size) As HashMap*
 	
-	NewMap->BufferMaxCount := 50
+	NewMap->BufferMaxCount := 100
 	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
 	
 	return NewMap

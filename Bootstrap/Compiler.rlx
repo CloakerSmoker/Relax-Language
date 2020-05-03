@@ -47,6 +47,11 @@ struct CompilerState {
 ==========================================
 */
 
+#Include CodeGen.rlx
+
+declare void CompileImportStub(CompilerState*, FunctionDefine*)
+declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
+
 define void CompilerStart(ParserState* pState) {
 	CompilerState C
 	
@@ -90,7 +95,11 @@ define void CompilerStart(ParserState* pState) {
 					CompileImportStub(&C, NextFunction)
 				}
 				else if !(NextFunction->HasFullDefinition) {
-					TokenizerError(pState->pState, "Undefined function")
+					ASTNode* FakeNode := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, NextFunction->Name, TYPE_NONE)
+					FakeNode->SourceFilePath := NextFunction->SourceFilePath
+					FakeNode->LineNumber := NextFunction->LineNumber
+					
+					ASTError(FakeNode, "Function is declared, but never defined.")
 				}
 				else {
 					i8 IsMain := SafeStringEqualsAString(NextFunction->Name, "Main")
@@ -148,13 +157,13 @@ define i8 PushRegisterStack(CompilerState* cState) {
 	return Result
 }
 define i8 TopOfRegisterStack(CompilerState* cState) {
-	return (cState->RegisterStackIndex) + 8
+	return (cState->RegisterStackIndex) + 8 As i8
 }
 
 define i8 PopRegisterStack(CompilerState* cState) {
 	cState->RegisterStackIndex -= 1
 	
-	return (cState->RegisterStackIndex) + 8
+	return (cState->RegisterStackIndex) + 8 As i8
 }
 
 define void EnsureCodeBufferSize(CompilerState* cState) {
@@ -164,8 +173,6 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 		cState->Builder->ImportFixupBase := cState->CodeBuffer
 	}
 }
-
-#Include CodeGen.rlx
 
 define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 	i32 Index := cState->CodeRelocationCount
@@ -183,6 +190,20 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
+define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
+	if (TargetVariable->IsGlobal) {
+		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 8)
+	}
+	else {
+		if (TargetVariable->StackOffset < 112) {
+			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+		}
+		else {
+			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
+		}
+	}
+}
 define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
@@ -206,20 +227,6 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 			else {
 				EmitMove_RX_RIX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
 			}
-		}
-	}
-}
-define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
-	if (TargetVariable->IsGlobal) {
-		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 8)
-	}
-	else {
-		if (TargetVariable->StackOffset < 112) {
-			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
-		}
-		else {
-			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8))
 		}
 	}
 }
@@ -265,6 +272,8 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 	EmitJump_RI64(cState, RBX)
 }
 
+declare void CompileExpression(CompilerState*, i8, ASTNode*)
+declare void CompileBlock(CompilerState*, Block*)
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
@@ -389,6 +398,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitLeave(cState)
 	EmitReturn(cState)
 }
+
+declare void Compile(CompilerState*, ASTNode*)
+
 define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 	/* Compiles a block of statements */
 	
@@ -398,22 +410,13 @@ define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
 		Compile(cState, NextStatement)
 	}
 }
-define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
-	/* Compiles a return statement */
-	
-	/* Compile the expression to return */
-	CompileExpression(cState, RAX, ReturnExpression)
-	
-	i16 ReturnValueSize := ReturnExpression->ValueType->Size
-	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
-	
-	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
-		Cast(cState, RAX, ReturnValueSize)
-	}
-	
-	EmitLeave(cState)
-	EmitReturn(cState)
-}
+
+declare void CompileReturn(CompilerState*, ASTNode*)
+declare void CompileIf(CompilerState*, IfGroup*)
+declare void CompileFor(CompilerState*, ForLoop*)
+declare void CompileLoop(CompilerState*, Block*)
+declare void CompileWhile(CompilerState*, WhileLoop*)
+
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
@@ -447,6 +450,23 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
 		CompileExpression(cState, RAX, (NodeToCompile->TrueNode) As ASTNode*)
 	}
+}
+
+define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
+	/* Compiles a return statement */
+	
+	/* Compile the expression to return */
+	CompileExpression(cState, RAX, ReturnExpression)
+	
+	i16 ReturnValueSize := ReturnExpression->ValueType->Size
+	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
+	
+	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
+		Cast(cState, RAX, ReturnValueSize)
+	}
+	
+	EmitLeave(cState)
+	EmitReturn(cState)
 }
 
 define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
@@ -580,6 +600,10 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	cState->CurrentLoopBreakLabel := OldBreakLabel
 }
 
+declare void CompileUnary(CompilerState*, i8, Type*, UnaryExpression*)
+declare void CompileBinary(CompilerState*, i8, Type*, BinaryExpression*)
+declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
+declare void CompileCall(CompilerState*, i8, CallExpression*)
 
 define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
@@ -704,6 +728,76 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
 }
 
+define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	i16 TargetFieldSize := TargetField->ValueType->Size
+	
+	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, TargetField->Offset)
+}
+
+define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	i16 TargetFieldSize := TargetField->ValueType->Size
+	
+	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
+	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+}
+
+define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
+	StructField* TargetField := TargetAccess->TargetField
+	
+	i8 ResultPointerRegister := PushRegisterStack(cState)
+	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
+	
+	EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	
+	PopRegisterStack(cState)
+}
+
+define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index) {
+	i8 PointerRegister := ResultRegister
+	CompileExpression(cState, PointerRegister, Pointer)
+	
+	i8 IndexRegister := PushRegisterStack(cState)
+	CompileExpression(cState, IndexRegister, Index)
+	
+	i32 IndexSize := Index->ValueType->Size
+	
+	if (IndexSize < 4) {
+		Cast(cState, IndexRegister, IndexSize)
+	}
+	
+	Type* PointerType := Pointer->ValueType
+	
+	i32 IndexScale := PointerType->Size
+	
+	if (PointerType->PointerDepth = 1) {
+		IndexScale := PointerType->TrueType->Size
+	}
+	
+	EmitMove_R32_I32(cState, RDI, IndexScale)
+	EmitIMul_R32_R32(cState, IndexRegister, RDI) /* ScaledIndex := Index * Scale */
+	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
+	
+	PopRegisterStack(cState)
+	
+	return IndexScale
+}
+
+define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
+	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
+	
+	if !(GetAddress) {
+		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, IndexScale)
+	}
+}
+define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
+	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
+	
+	EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister, 0, IndexScale)
+}
 
 define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile) {
 	/* Compiles a unary operator and operand */
@@ -752,34 +846,6 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 			}
 		}
 	}
-}
-
-define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
-	StructField* TargetField := TargetAccess->TargetField
-	i16 TargetFieldSize := TargetField->ValueType->Size
-	
-	CompileExpression(cState, ResultRegister, TargetAccess->Left)
-	EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, TargetField->Offset)
-}
-
-define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
-	StructField* TargetField := TargetAccess->TargetField
-	i16 TargetFieldSize := TargetField->ValueType->Size
-	
-	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
-	CompileExpression(cState, ResultRegister, TargetAccess->Left)
-	EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
-}
-
-define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
-	StructField* TargetField := TargetAccess->TargetField
-	
-	i8 ResultPointerRegister := PushRegisterStack(cState)
-	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
-	
-	EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
-	
-	PopRegisterStack(cState)
 }
 
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile) {
@@ -1023,47 +1089,4 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			PopRegisterStack(cState) /* Pop the right register */
 		}
 	}
-}
-
-define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index) {
-	i8 PointerRegister := ResultRegister
-	CompileExpression(cState, PointerRegister, Pointer)
-	
-	i8 IndexRegister := PushRegisterStack(cState)
-	CompileExpression(cState, IndexRegister, Index)
-	
-	i32 IndexSize := Index->ValueType->Size
-	
-	if (IndexSize < 4) {
-		Cast(cState, IndexRegister, IndexSize)
-	}
-	
-	Type* PointerType := Pointer->ValueType
-	
-	i32 IndexScale := PointerType->Size
-	
-	if (PointerType->PointerDepth = 1) {
-		IndexScale := PointerType->TrueType->Size
-	}
-	
-	EmitMove_R32_I32(cState, RDI, IndexScale)
-	EmitIMul_R32_R32(cState, IndexRegister, RDI) /* ScaledIndex := Index * Scale */
-	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
-	
-	PopRegisterStack(cState)
-	
-	return IndexScale
-}
-
-define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
-	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
-	
-	if !(GetAddress) {
-		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, IndexScale)
-	}
-}
-define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
-	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
-	
-	EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister, 0, IndexScale)
 }
