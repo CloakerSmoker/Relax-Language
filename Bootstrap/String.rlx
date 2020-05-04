@@ -146,8 +146,53 @@ define i8* IToA(i64 Number) {
 	return Buffer
 }
 
+define i8 NumberToHex(i8 Number) {
+	if (Number <= 9) {
+		Number := Number + '0'
+	}
+	else {
+		Number := (Number - 10) + 'A'
+	}
+	
+	return Number
+}
+
+define i8* IToAH(i64 Number) {
+	i8* Buffer := Alloc(100) As i8*
+	
+	if (Number = 0) {
+		Buffer[0] := '0'
+		return Buffer
+	}
+	
+	if (Number < 0) {
+		Number := -Number
+	}
+	
+	for (i32 Index := 0, Number > 0, Index += 1) {
+		Buffer[Index] := NumberToHex(Number % 0x10)
+		Number := Number / 0x10
+	}
+	
+	Buffer[Index + 0] := 'x'
+	Buffer[Index + 1] := '0'
+	Buffer[Index + 2] := 0
+	
+	AReverse(Buffer)
+	
+	return Buffer
+}
+
 define i16* IToW(i64 Number) {
 	i8* AString := IToA(Number)
+	i16* WString := AToW(AString, ALen(AString))
+	
+	Free(AString As void*)
+	
+	return WString
+}
+define i16* IToWH(i64 Number) {
+	i8* AString := IToAH(Number)
 	i16* WString := AToW(AString, ALen(AString))
 	
 	Free(AString As void*)

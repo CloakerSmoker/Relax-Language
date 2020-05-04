@@ -72,6 +72,25 @@ define i32 IWriteLine(i64 Number) {
 	return Result
 }
 
+define i32 IWriteHex(i64 Number) {
+	i16* WString := IToWH(Number)
+	
+	i32 Result := Write(WString)
+
+	Free(WString As void*)
+	
+	return Result
+}
+define i32 IWriteHexLine(i64 Number) {
+	i16* WString := IToWH(Number)
+	
+	i32 Result := WriteLine(WString)
+
+	Free(WString As void*)
+	
+	return Result
+}
+
 i16 Bright := 0x08
 i16 Red := 0x04
 i16 Green := 0x02

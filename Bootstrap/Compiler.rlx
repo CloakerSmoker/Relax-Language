@@ -52,7 +52,7 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
-define void CompilerStart(ParserState* pState) {
+define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
 	CompilerState C
 	
 	C.pState := pState
@@ -86,10 +86,10 @@ define void CompilerStart(ParserState* pState) {
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				AWrite("Compiling ")
+				IWriteHex(0x3000 + C.Index)
+				AWrite(": ")
 				PrintSafeString(NextFunction->Name)
-				AWrite(" into offset ")
-				IWriteLine(C.Index)
+				WriteNewLine()
 				
 				if (NextFunction->IsImported) {
 					CompileImportStub(&C, NextFunction)
@@ -145,7 +145,7 @@ define void CompilerStart(ParserState* pState) {
 	
 	FinalizeBuilder(C.Builder)
 	
-	WriteBuilder(C.Builder, "text.exe")
+	WriteBuilder(C.Builder, OutputFilePath)
 	
 }
 
@@ -277,6 +277,8 @@ declare void CompileBlock(CompilerState*, Block*)
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
+	
+	cState->RegisterStackIndex := 0
 	
 	/* Store the current return type so return can cast values to it */
 	
@@ -756,7 +758,7 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	PopRegisterStack(cState)
 }
 
-define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index) {
+define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister, i8 GetAddress) {
 	i8 PointerRegister := ResultRegister
 	CompileExpression(cState, PointerRegister, Pointer)
 	
@@ -771,32 +773,33 @@ define i32 GetArrayAccessPointer(CompilerState* cState, i8 ResultRegister, ASTNo
 	
 	Type* PointerType := Pointer->ValueType
 	
-	i32 IndexScale := PointerType->Size
+	i8 IndexScale := 8
 	
 	if (PointerType->PointerDepth = 1) {
-		IndexScale := PointerType->TrueType->Size
+		IndexScale := (PointerType->TrueType->Size) As i8
 	}
 	
-	EmitMove_R32_I32(cState, RDI, IndexScale)
-	EmitIMul_R32_R32(cState, IndexRegister, RDI) /* ScaledIndex := Index * Scale */
-	EmitAdd_R64_R64(cState, PointerRegister, IndexRegister) /* Pointer := Pointer + ScaledIndex */
+	i8 IsSet := (ValueRegister != 0)
+	
+	if (IsSet || GetAddress) {
+		EmitLea_R64_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+		
+		if (IsSet) {
+			EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister - 1, 0, IndexScale)
+		}
+	}
+	else {
+		EmitMove_RX_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+	}
 	
 	PopRegisterStack(cState)
-	
-	return IndexScale
 }
 
 define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
-	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
-	
-	if !(GetAddress) {
-		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, IndexScale)
-	}
+	CompileArrayAccess(cState, ResultRegister, Pointer, Index, 0, GetAddress)
 }
 define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
-	i32 IndexScale := GetArrayAccessPointer(cState, ResultRegister, Pointer, Index)
-	
-	EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister, 0, IndexScale)
+	CompileArrayAccess(cState, ResultRegister, Pointer, Index, ValueRegister + 1, false)
 }
 
 define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile) {

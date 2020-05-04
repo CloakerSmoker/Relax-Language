@@ -959,17 +959,17 @@ define void FinalizeBuilder(PEBuilder* Builder) {
 	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
 }
 
-DllImport i64 CreateFileA(i8*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileA}
+DllImport i64 CreateFileW(i16*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileW}
 DllImport i8 WriteFile(i64, void*, i32, i32*, void) {Kernel32.dll, WriteFile}
 
-define void WriteBuilder(PEBuilder* Builder, i8* ToFile) {
+define void WriteBuilder(PEBuilder* Builder, i16* ToFile) {
 	i32 GENERIC_WRITE := 0x40000000
 	i8 FILE_SHARE_READ := 1
 	i8 FILE_SHARE_WRITE := 2
 	i8 CREATE_ALWAYS := 2
 	i16 FILE_ATTRIBUTE_NORMAL := 128
 	
-	i64 OutputFileHandle := CreateFileA(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
+	i64 OutputFileHandle := CreateFileW(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
 	
 	if (OutputFileHandle = -1) {
 		AWrite("Could not open output file: error code ")

@@ -72,15 +72,19 @@ define i16* OpenAndRead(i16* FilePath, i32* OutFileSize) {
 
 
 define i32 Main(i64 ArgC, i16** ArgV) {
-	if (ArgC != 2) {
-		AWriteLine("No input file, aborting")
+	if (ArgC != 3) {
+		AWriteLine("No input+output file, aborting")
 		Exit(1)
 	}
 	
 	i16* InputFilePath := ArgV[1]
+	i16* OutputFilePath := ArgV[2]
 	
 	AWrite("Input File: ")
 	WriteLine(InputFilePath)
+	
+	AWrite("Output File: ")
+	WriteLine(OutputFilePath)
 	
 	i32 SourceLength := 0
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
@@ -89,5 +93,6 @@ define i32 Main(i64 ArgC, i16** ArgV) {
 	SourcePath.Buffer := InputFilePath
 	SourcePath.Length := WLen(InputFilePath)
 	
-	ParserStart(NewTokenizer(&SourcePath, Source, SourceLength))
+	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength))
+	CompilerStart(P, OutputFilePath)
 }

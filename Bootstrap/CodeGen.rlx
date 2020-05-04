@@ -4,17 +4,6 @@
 ==========================================
 */
 
-define i8 NumberToHex(i8 Number) {
-	if (Number <= 9) {
-		Number := Number + '0'
-	}
-	else {
-		Number := (Number - 10) + 'A'
-	}
-	
-	return Number
-}
-
 define void PrintByteHex(i8 NumberToPrint) {
 	i8 SecondCharacter := NumberToHex(NumberToPrint & 0x0F)
 	i8 FirstCharacter := NumberToHex((NumberToPrint / 0x10) & 0x0F)
@@ -260,6 +249,27 @@ define void EmitREXBigOpcodeModRM(CompilerState* cState, i8 FirstOpcodeByte, i8 
 	PushByte(cState, FirstOpcodeByte)
 	PushByte(cState, SecondOpcodeByte)
 	EmitModRM(cState, Mode, DestinationRegister, SourceRegister)
+}
+
+define void EmitSIB(CompilerState* cState, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
+	i8 TrueScale := 0
+	
+	if (Scale = 2) {TrueScale := 1}
+	else if (Scale = 4) {TrueScale := 2}
+	else if (Scale = 8) {TrueScale := 3}
+	
+	PushByte(cState, (TrueScale * 64) | (IndexRegister * 8) | BaseRegister)
+}
+
+define void EmitREXOpcodeModRMSIB(CompilerState* cState, i8 Opcode, i8 Mode, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister, i8 ExtraREX) {
+	if (RegisterRequiresREX(IndexRegister)) {
+		ExtraREX := ExtraREX | REX_X
+	}
+	
+	EmitREX(cState, DestinationRegister, BaseRegister, ExtraREX)
+	PushByte(cState, Opcode)
+	EmitModRM(cState, Mode, DestinationRegister, 4)
+	EmitSIB(cState, Scale, ClampRegisterNumber(IndexRegister), ClampRegisterNumber(BaseRegister))
 }
 
 /*
@@ -538,6 +548,28 @@ define void EmitMove_RIX_DISPX_RX(CompilerState* cState, i8 DestinationRegister,
 	}
 }
 
+
+define void EmitMove_R8_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
+	EmitREXOpcodeModRMSIB(cState, 0x8A, MODE_PTOR, DestinationRegister, 1, IndexRegister, BaseRegister, REX_BASE)
+}
+define void EmitMove_R16_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 2, IndexRegister, BaseRegister, 0)
+}
+define void EmitMove_R32_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
+	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 4, IndexRegister, BaseRegister, 0)
+}
+define void EmitMove_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
+	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 8, IndexRegister, BaseRegister, REX_W)
+}
+
+define void EmitMove_RX_SIB(CompilerState* cState, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
+	if (Scale = 1) {EmitMove_R8_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
+	else if (Scale = 2) {EmitMove_R16_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
+	else if (Scale = 4) {EmitMove_R32_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
+	else if (Scale = 8) {EmitMove_R64_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
+}
+
 /*
 ==========================================
 	Deref moves
@@ -595,6 +627,10 @@ define void EmitLea_R64_R64_DISPX(CompilerState* cState, i8 DestinationRegister,
 	else {
 		EmitLea_R64_R64_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
 	}
+}
+
+define void EmitLea_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
+	EmitREXOpcodeModRMSIB(cState, 0x8D, MODE_PTOR, DestinationRegister, Scale, IndexRegister, BaseRegister, REX_W)
 }
 
 /*

@@ -232,16 +232,16 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_PLUS || Operator = OPERATOR_MINUS) {
 		return 7
 	}
-	else if (Operator = OPERATOR_OPEN_BRACKET) {
+	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 		return 8
 	}
-	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
 		return 9
 	}
-	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
-		return 10
+	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		return 11
 	}
-	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
 		return 12
 	}
 }
@@ -271,10 +271,10 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 		return 4
 	}
 	else if (Operator = OPERATOR_BANG) {
-		return 11
+		return 10
 	}
 	else if (Operator = OPERATOR_MINUS) {
-		return 11
+		return 10
 	}
 	
 	return 0 /* Returns 0 when the operator is not a prefix operator */
@@ -999,29 +999,29 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 declare void ParseProgram(ParserState*)
 declare void CompilerStart(ParserState*)
 
-define void ParserStart(TokenizerState* pState) {
+define ParserState* ParserStart(TokenizerState* pState) {
 	/* Initializes pState and parses a program */
 	
-	ParserState P
-	P.pState := pState
+	ParserState* P := Alloc(ParserState.Size) As ParserState*
+	P->pState := pState
 	
-	P.Globals := NewHashMap()
-	P.GlobalOffset := 0
-	P.GlobalCount := 0
+	P->Globals := NewHashMap()
+	P->GlobalOffset := 0
+	P->GlobalCount := 0
 	
-	P.GlobalDefaults := AllocArray(8, 0)
+	P->GlobalDefaults := AllocArray(8, 0)
 	
-	P.Functions := NewHashMap()
-	P.FunctionCount := 0
+	P->Functions := NewHashMap()
+	P->FunctionCount := 0
 	
-	P.Types	:= NewHashMap()
-	P.TypeCount := 0
+	P->Types := NewHashMap()
+	P->TypeCount := 0
 	
-	CreateDefaultTypes(&P)
+	CreateDefaultTypes(P)
 	
-	ParseProgram(&P)
+	ParseProgram(P)
 	
-	CompilerStart(&P)
+	return P
 }
 
 define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableName) {

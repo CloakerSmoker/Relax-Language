@@ -15,17 +15,7 @@ define SafeWideString* AToS(i8* SourceString) {
 	
 	SafeWideString* NewString := AllocateNewSafeString()
 	
-	i32 Length := 0
-	
-	loop {
-		i8 NextCharacter := SourceString[Length]
-		
-		if (NextCharacter = 0) {
-			Break
-		}
-		
-		Length += 1
-	}
+	i32 Length := ALen(SourceString)
 	
 	NewString->Buffer := AToW(SourceString, Length)
 	NewString->Length := Length
