@@ -200,6 +200,9 @@ i8 KEYWORD_BREAK := 9
 i8 KEYWORD_STRUCT := 10
 i8 KEYWORD_RETURN := 11
 
+define i16 PeekNextCharacterRaw(TokenizerState* pState) {
+	return(pState->Source)[pState->SourceIndex]
+}
 define i16 PeekNextCharacter(TokenizerState* pState) {
 	return Lower((pState->Source)[pState->SourceIndex])
 }
@@ -223,6 +226,13 @@ define i16 GetNextCharacter(TokenizerState* pState) {
 	}
 	
 	return NextCharacter
+}
+define i16 GetNextCharacterRaw(TokenizerState* pState) {
+	i16 Result := PeekNextCharacterRaw(pState)
+	
+	GetNextCharacter(pState)
+	
+	return Result
 }
 define i8 NextCharacterMatches(TokenizerState* pState, i8 CharacterToCheck) {
 	if (PeekNextCharacter(pState) = CharacterToCheck) {
@@ -351,7 +361,7 @@ define Token* _GetNextToken(TokenizerState* pState) {
 		if (NextCharacter = ''') {
 			/* If the next character is an open single quote, then consume a single character as an integer */
 			
-			NextCharacter := GetNextCharacter(pState)
+			NextCharacter := GetNextCharacterRaw(pState)
 			
 			if (GetNextCharacter(pState) != ''') {
 				/* And make sure there's a close single quote */

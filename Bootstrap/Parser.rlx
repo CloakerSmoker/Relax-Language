@@ -1607,6 +1607,8 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
+			WriteCharacter('A')
+			
 			i8* ErrorMessage := 0
 			Type* PotentialType := TryParseTypeName(pState, &ErrorMessage)
 			
@@ -1615,17 +1617,33 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				i32 DefaultValueExpressionStart := FreezeParser(pState)
 				Token* PotentialName := ParserNextToken(pState)
 				
+				WriteCharacter('B')
+				
 				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					
+					WriteCharacter('C')
+					
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+					PrintSafeString(NameString)
+					
+					WriteCharacter('D')
 					
 					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					IWriteHexLine(NewLocal)
+					
+					WriteCharacter('E')
 					
 					NewLocal->Name := NameString
 					NewLocal->Type := PotentialType
 					NewLocal->IsGlobal := False
 					NewLocal->IsParameter := False
+					
+					WriteCharacter('F')
+					AWrite("NL: ")
+					PrintSafeString(NameString)
+					WriteNewLine()
 					
 					ParserAddLocal(pState, NewLocal, PotentialName)
 					

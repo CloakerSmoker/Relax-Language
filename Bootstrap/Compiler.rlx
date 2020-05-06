@@ -149,21 +149,50 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
 	
 }
 
+define i8 StackIndexToRegister(i8 Index) {
+	if (Index = 4) {
+		return R13
+	}
+	else if (Index > 4) {
+		return Index + 9
+	}
+	else {
+		return Index + 8
+	}
+}
+
+
+
 define i8 PushRegisterStack(CompilerState* cState) {
-	i8 Result := (cState->RegisterStackIndex) + 8
+	i8 Index := cState->RegisterStackIndex
 	
+	i8 TrueIndex := Index % 7
+	i8 Result := StackIndexToRegister(TrueIndex)
+	
+	if (Index >= 8) {
+		EmitPush_R64(cState, Result)
+	}
+
 	cState->RegisterStackIndex += 1
 	
 	return Result
 }
 define i8 TopOfRegisterStack(CompilerState* cState) {
-	return (cState->RegisterStackIndex) + 8 As i8
+	return StackIndexToRegister(cState->RegisterStackIndex)
 }
-
 define i8 PopRegisterStack(CompilerState* cState) {
 	cState->RegisterStackIndex -= 1
 	
-	return (cState->RegisterStackIndex) + 8 As i8
+	i8 Index := cState->RegisterStackIndex
+	
+	i8 TrueIndex := Index % 7
+	i8 Result := StackIndexToRegister(TrueIndex)
+	
+	if (Index >= 8) {
+		EmitPop_R64(cState, Result)
+	}
+	
+	return Result
 }
 
 define void EnsureCodeBufferSize(CompilerState* cState) {
@@ -677,7 +706,10 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		StackParameterCount := ParameterCount - 4
 	}
 	
-	if (StackParameterCount % 2) {
+	i8 RegisterStackIndex := cState->RegisterStackIndex
+	i8 StackIsAligned := RegisterStackIndex >= 8 && (RegisterStackIndex % 2 != 0)
+	
+	if (StackParameterCount % 2 || StackIsAligned) {
 		EmitPush_R64(cState, RBX)
 		ExtraPadding := true
 	}
