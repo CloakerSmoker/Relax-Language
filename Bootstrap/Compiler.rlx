@@ -29,6 +29,7 @@ struct CompilerState {
 	
 	i32 LabelIndex,
 	
+	i32 CurrentFunctionReturnLabel,
 	i32 CurrentLoopContinueLabel,
 	i32 CurrentLoopBreakLabel,
 	
@@ -38,7 +39,8 @@ struct CompilerState {
 	
 	i8 RegisterStackIndex,
 	
-	i8 NoClobberCD89
+	i8 NoClobberCD89,
+	i8 NoClobberA
 }
 
 /*
@@ -154,10 +156,10 @@ define i8 StackIndexToRegister(i8 Index) {
 		return R13
 	}
 	else if (Index > 4) {
-		return Index + 9
+		return Index + 9 As i8
 	}
 	else {
-		return Index + 8
+		return Index + 8 As i8
 	}
 }
 
@@ -313,6 +315,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
 	
+	i32 ReturnLabel := NextLabel(cState)
+	cState->CurrentFunctionReturnLabel := ReturnLabel
+	
 	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
 	/* Assume 4 register parameters, and 0 stack parameters */
@@ -353,7 +358,17 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		LocalSpace += 8
 	}
 	
-	EmitEnter_I16(cState, LocalSpace)
+	EmitPush_R64(cState, RBP)
+	EmitMove_R64_R64(cState, RBP, RSP)
+	EmitSub_R64_IX(cState, RSP, LocalSpace)
+	/* EmitEnter_I16(cState, LocalSpace) */
+	
+	EmitPush_R64(cState, RDI)
+	EmitPush_R64(cState, RSI)
+	EmitPush_R64(cState, RBX)
+	EmitPush_R64(cState, R13)
+	EmitPush_R64(cState, R14)
+	EmitPush_R64(cState, R15)
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -426,7 +441,16 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	/* Compile the body of the function */
 	CompileBlock(cState, FunctionToCompile->Body)
 	
-	EmitLeave(cState)
+	SetLabel(cState, ReturnLabel)
+	
+	EmitPop_R64(cState, R15)
+	EmitPop_R64(cState, R14)
+	EmitPop_R64(cState, R13)
+	EmitPop_R64(cState, RBX)
+	EmitPop_R64(cState, RSI)
+	EmitPop_R64(cState, RDI)
+	
+	EmitLeave(cState)	
 	EmitReturn(cState)
 }
 
@@ -496,8 +520,7 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 		Cast(cState, RAX, ReturnValueSize)
 	}
 	
-	EmitLeave(cState)
-	EmitReturn(cState)
+	EmitJump_Label(cState, cState->CurrentFunctionReturnLabel)
 }
 
 define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
@@ -695,9 +718,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
 	}
 	
-	
-	/* Todo: Smart logic to save/restore volatile portions of the register stack */
-	
 	i32 ParameterCount := CallNode->ParameterCount
 	i32 StackParameterCount := 0
 	i8 ExtraPadding := false
@@ -714,7 +734,9 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		ExtraPadding := true
 	}
 	
+	cState->RegisterStackIndex := 3
 	
+	i8 OldNoClobberCD89 := cState->NoClobberCD89
 	cState->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
 	
 	i8 ParameterRegister := RBX
@@ -743,16 +765,26 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		}
 	}
 
-	cState->NoClobberCD89 := false
+	cState->NoClobberCD89 := OldNoClobberCD89
 	
-	for (i32 ShadowSpaceIndex := 0, ShadowSpaceIndex < 4, ShadowSpaceIndex += 1) {
-		EmitPush_R64(cState, R8 + ShadowSpaceIndex)
+	if (OldNoClobberCD89) {
+		for (i32 ShadowSpaceIndex := 0, ShadowSpaceIndex < 4, ShadowSpaceIndex += 1) {
+			EmitPush_R64(cState, R8 + ShadowSpaceIndex)
+		}
 	}
 	
-	EmitCall_Label(cState, TargetFunction->LabelNumber)
+	if (cState->NoClobberA) {
+		EmitMove_R64_R64(cState, R12, RAX)
+	}
 	
-	for (i32 ReversedShadowSpaceIndex := 0, ReversedShadowSpaceIndex < 4, ReversedShadowSpaceIndex += 1) {
-		EmitPop_R64(cState, R11 - ReversedShadowSpaceIndex)
+	EmitSub_R64_I8(cState, RSP, 0x20) /* Shadown space */
+	EmitCall_Label(cState, TargetFunction->LabelNumber)
+	EmitAdd_R64_I8(cState, RSP, 0x20)
+	
+	if (OldNoClobberCD89) {
+		for (i32 ReversedShadowSpaceIndex := 0, ReversedShadowSpaceIndex < 4, ReversedShadowSpaceIndex += 1) {
+			EmitPop_R64(cState, R11 - ReversedShadowSpaceIndex)
+		}
 	}
 	
 	if (ExtraPadding) {
@@ -760,6 +792,12 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	}
 	
 	EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
+	
+	if (cState->NoClobberA) {
+		EmitMove_R64_R64(cState, RAX, R12)
+	}
+	
+	cState->RegisterStackIndex := RegisterStackIndex
 }
 
 define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
@@ -972,6 +1010,12 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		
 		CompileExpression(cState, LeftRegister, Left)
 		
+		i8 OldClobberA := cState->NoClobberA
+		
+		if (LeftRegister = RAX) {
+			cState->NoClobberA := true
+		}
+		
 		if (Operator = OPERATOR_AS) {
 			/* For 'As', just compile the left operand, cast it, and return */
 			Type* RightType := (Right->TrueNode) As Type*
@@ -1123,5 +1167,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			
 			PopRegisterStack(cState) /* Pop the right register */
 		}
+		
+		cState->NoClobberA := OldClobberA
 	}
 }

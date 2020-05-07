@@ -23,6 +23,17 @@ define i32 WLen(i16* WString) {
 	return Length
 }
 
+define i8* HeapString(i8* StringToCopy) {
+	i32 Length := ALen(StringToCopy)
+	i8* Buffer := Alloc(Length)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		Buffer[Index] := StringToCopy[Index]
+	}
+	
+	return Buffer
+}
+
 define i16 Lower(i16 Character) {
 	/* Gets a character as lowercase */
 	

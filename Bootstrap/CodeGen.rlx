@@ -667,6 +667,21 @@ define void EmitAdd_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 Sour
 	}
 }
 
+define void EmitAdd_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
+	EmitREXOpcodeModRM(cState, 0x83, MODE_RTOR, 0, TargetRegister, REX_W)
+	PushByte(cState, Number)
+}
+define void EmitAdd_R64_I32(CompilerState* cState, i8 TargetRegister, i32 Number) {
+	EmitREXOpcodeModRM(cState, 0x81, MODE_RTOR, 0, TargetRegister, REX_W)
+	PushI32(cState, Number)
+}
+define void EmitAdd_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number) {
+	i8 Size := GetNumberSize(Number)
+	
+	if (Size = 1) {EmitAdd_R64_I8(cState, TargetRegister, Number As i8)}
+	else if (Size <= 4) {EmitAdd_R64_I32(cState, TargetRegister, Number)}
+}
+
 /*
 ==========================================
 	Subs
@@ -702,6 +717,22 @@ define void EmitSub_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 Sour
 }
 
 
+define void EmitSub_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
+	EmitREXOpcodeModRM(cState, 0x83, MODE_RTOR, 5, TargetRegister, REX_W)
+	PushByte(cState, Number)
+}
+define void EmitSub_R64_I32(CompilerState* cState, i8 TargetRegister, i32 Number) {
+	EmitREXOpcodeModRM(cState, 0x81, MODE_RTOR, 5, TargetRegister, REX_W)
+	PushI32(cState, Number)
+}
+define void EmitSub_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number) {
+	i8 Size := GetNumberSize(Number)
+	
+	if (Size = 1) {EmitSub_R64_I8(cState, TargetRegister, Number As i8)}
+	else if (Size <= 4) {EmitSub_R64_I32(cState, TargetRegister, Number)}
+}
+
+
 define void EmitNeg_R8(CompilerState* cState, i8 TargetRegister) {
 	EmitREXOpcodeModRM(cState, 0xF6, MODE_RTOR, 3, TargetRegister, REX_BASE)
 }
@@ -721,7 +752,6 @@ define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
 	else if (Size = 4) {EmitNeg_R32(cState, TargetRegister)}
 	else if (Size = 8) {EmitNeg_R64(cState, TargetRegister)}
 }
-
 /*
 ==========================================
 	Mul/div

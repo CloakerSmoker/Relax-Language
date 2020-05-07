@@ -379,7 +379,7 @@ define Type* TryGetType(ParserState* pState, SafeWideString* TypeName, i8 Pointe
 		*/
 		
 		if (PointerDepth = 0) {
-			ErrorMessage[0] := "Incomplete types can only be used with pointers"
+			ErrorMessage[0] := HeapString("Incomplete types can only be used with pointers")
 			return 0 As Type*
 		}
 		else {
@@ -975,7 +975,7 @@ define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* R
 	
 	if (NextToken->Type = TOKEN_TYPE_EOF) {
 		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
-		ErrorMessage[0] := "Unexpected EOF"
+		ErrorMessage[0] := HeapString("Unexpected EOF")
 	}
 	
 	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
@@ -1123,13 +1123,21 @@ define Type* TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
 	/* Get (and return) a type (which might be incomplete) using the parsed info */
 	return TryGetType(pState, Name, PointerDepth, ErrorMessage)
 }
+
+declare ASTNode* TranslateTokenToNode(ParserState*, Token*, i8)
+
 define Type* ParseTypeName(ParserState* pState) {
 	i8* ErrorMessage := 0
+	i32 Frozen := FreezeParser(pState)
 	
 	Type* Result := TryParseTypeName(pState, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->pState, "Return type should be a struct type")
+		UnfreezeParser(pState, Frozen)
+		
+		Token* ErrorToken := ParserNextToken(pState)
+		
+		ASTError(TranslateTokenToNode(pState, ErrorToken, true), ErrorMessage)
 	}
 	
 	return Result
@@ -1205,6 +1213,9 @@ define void ParseProgram(ParserState* pState) {
 					}
 				}
 			}
+		}
+		else {
+			TokenizerError(pState->pState, "Unexpected token")
 		}
 	}
 }
@@ -1607,8 +1618,6 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
-			WriteCharacter('A')
-			
 			i8* ErrorMessage := 0
 			Type* PotentialType := TryParseTypeName(pState, &ErrorMessage)
 			
@@ -1617,33 +1626,18 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				i32 DefaultValueExpressionStart := FreezeParser(pState)
 				Token* PotentialName := ParserNextToken(pState)
 				
-				WriteCharacter('B')
-				
 				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
 					
-					WriteCharacter('C')
-					
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
-					PrintSafeString(NameString)
-					
-					WriteCharacter('D')
 					
 					VariableInfo* NewLocal := AllocateNewVariableInfo()
-					IWriteHexLine(NewLocal)
-					
-					WriteCharacter('E')
 					
 					NewLocal->Name := NameString
 					NewLocal->Type := PotentialType
 					NewLocal->IsGlobal := False
 					NewLocal->IsParameter := False
-					
-					WriteCharacter('F')
-					AWrite("NL: ")
-					PrintSafeString(NameString)
-					WriteNewLine()
 					
 					ParserAddLocal(pState, NewLocal, PotentialName)
 					
@@ -1781,7 +1775,7 @@ define ASTNode* ParseWhile(ParserState* pState) {
 }
 
 
-define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
+define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate, i8 ForErrorMessage) {
 	/* Translates some kind of token in an AST node which contains the actual version of the token */
 	
 	ASTNode* Result := 0
@@ -1806,6 +1800,9 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
 			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
 		}
+		else if (ForErrorMessage) {
+			Result := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, TokenToTranslate->Value, TYPE_NONE)
+		}
 		else {
 			VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
 			/* Using the found variable's type as the node type */
@@ -1819,11 +1816,14 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		return Result
 	}
 	
-	/* Otherwise, this has been called incorrectly, and is a bug */
+	if (ForErrorMessage) {
 	
-	AWrite("Unknown fuck ")
-	PrintToken(TokenToTranslate)
-	Exit(1)
+	}
+	else {
+		AWrite("Unknown fuck ")
+		PrintToken(TokenToTranslate)
+		Exit(1)
+	}
 }
 
 define ASTNode* ParseExpressionOperand(ParserState* pState) {
@@ -1892,7 +1892,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			
 			if !(Result) {
 				UnfreezeParser(pState, FrozenAfterIdentifier)
-				Result := TranslateTokenToNode(pState, NextToken)
+				Result := TranslateTokenToNode(pState, NextToken, false)
 			}
 		}
 	}
@@ -1920,7 +1920,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
 		/* A literal integer, just make a NODE_TYPE_INTEGER for it */
 		
-		Result := TranslateTokenToNode(pState, NextToken)
+		Result := TranslateTokenToNode(pState, NextToken, false)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
 		/* A prefix operator, parse an expression only containing operators of a higher precedence than the prefix operator */
