@@ -539,7 +539,11 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				Backtrack(pState)
 			}
 			
-			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
+			while (IsAlphaNumeric(NextCharacter)) {
+				if (TokenizerAtEnd(pState)) {
+					break
+				}
+				
 				NextCharacter := GetNextCharacter(pState)
 			}
 			

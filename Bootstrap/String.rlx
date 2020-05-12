@@ -137,7 +137,7 @@ define i8* IToA(i64 Number) {
 	}
 	
 	if (Number < 0) {
-		Sign := 1
+		Sign := true
 		Number := -Number
 	}
 	

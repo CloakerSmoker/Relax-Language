@@ -744,7 +744,7 @@ define void EmitNeg_R32(CompilerState* cState, i8 TargetRegister) {
 	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, TargetRegister, 0)
 }
 define void EmitNeg_R64(CompilerState* cState, i8 TargetRegister) {
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, 3, REX_W)
+	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, TargetRegister, REX_W)
 }
 define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
 	if (Size = 1) {EmitNeg_R8(cState, TargetRegister)}

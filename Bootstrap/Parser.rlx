@@ -880,11 +880,14 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	ResultNode->SourceFilePath := NameToken->SourceFilePath
 	ResultNode->LineNumber := NameToken->LineNumber
 	
-	/* Find the function which is being called. Todo: Allow incomplete functions */
+	/* Find the function which is being called. */
 	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
 	
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
+		
+		AWrite("Function definition not found.... crashing")
+		(0 as i8*)[0] := 30
 		
 		FunctionDefine* DummyFunction := Alloc(FunctionDefine.Size) As FunctionDefine*
 		DummyFunction->Name := Name
@@ -1042,6 +1045,9 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 	
 	if !(FoundVariable) {
 		/* If we still haven't found the variable, then it is undefined */
+		AWrite("Undefined variable.... crashing")
+		(0 as i8*)[0] := 90
+		
 		WriteNewLine()
 		PrintSafeString(VariableName)
 		WriteCharacter(':')
@@ -1158,6 +1164,8 @@ define void ParseProgram(ParserState* pState) {
 		i32 FrozenState := FreezeParser(pState)
 		Token* NextToken := ParserNextToken(pState)
 		
+		PrintToken(NextToken)
+		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
 			ParseAndAddDefine(pState)
 		}
@@ -1168,6 +1176,7 @@ define void ParseProgram(ParserState* pState) {
 			ParseAndAddDeclare(pState, IS_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
+			AWriteLine("Found struct")
 			ParseAndAddStruct(pState)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {

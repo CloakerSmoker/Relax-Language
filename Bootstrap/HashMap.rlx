@@ -24,15 +24,43 @@ define i64 HashString(SafeWideString* StringToHash) {
 		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
 	}
 	
+/* 	AWrite("Hash(")
+	PrintSafeString(StringToHash)
+	AWrite(") == ")
+	IWriteLine(Hash) */
+	
 	return Hash
 }
+define i64 HashMapGetIndex(i64 Hash, i32 Length) {
+	i64 Index := Hash % Length
+	
+	if (Index < 0) {
+		Index := -Index
+	}
+	
+	return 0
+}
+
+
 define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
-	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	/* 
+		Finds the last element in the linked list for Hash, and returns it
+		OR returns 0 when there is no element with Hash yet
+	*/
+	
+	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
+	
+/* 	AWrite("Map[")
+	IWrite(Hash)
+	AWrite("] == Elements[")
+	IWrite(Index)
+	AWriteLine("]") */
 	
 	HashMapElement* Node := (TargetMap->Elements)[Index]
+	HashMapElement* NoNode := false As HashMapElement*
 	
 	if !(Node) {
-		return false As HashMapElement*
+		return NoNode
 	}
 
 	while (Node->Hash != Hash) {
@@ -40,6 +68,7 @@ define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
 			return Node
 		}
 		
+		/* AWrite("->Next") */
 		Node := (Node->NextElement) As HashMapElement*
 		/* The cast is since types can't contain themselves yet */
 	}
@@ -51,6 +80,16 @@ define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) 
 	
 	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
 	
+/* 	IWrite(TargetMap)
+	AWrite(" ")
+	IWrite(Hash)
+	AWrite("			Getting ")
+	PrintSafeString(Key)
+	AWrite(" which lives in bucket ")
+	IWrite(Hash % (TargetMap->BufferMaxCount))
+	AWrite(" and element ")
+	IWriteLine(Result) */
+	
 	if (Result != 0) {
 		if (Result->Hash = Hash) {
 			return Result
@@ -61,7 +100,18 @@ define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) 
 }
 define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
 	i64 Hash := HashString(Key)
-	i64 Index := Hash % (TargetMap->BufferMaxCount)
+	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
+	
+/* 	IWrite(TargetMap)
+	AWrite(" ")
+	IWrite(Hash)
+	AWrite("			Inserting ")
+	IWrite(Value)
+	AWrite(" at ")
+	PrintSafeString(Key)
+	AWrite(" in bucket ")
+	IWrite(Index)
+	WriteCharacter(' ') */
 	
 	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
 	HashMapElement* NewElement := 0
@@ -71,6 +121,8 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 			No linked list exists for this index
 			Create one, and insert the head into the element list
 		*/
+		
+		/* AWriteLine("which does not exist") */
 		
 		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
 		NewElement->NextElement := 0
@@ -83,6 +135,8 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 			Create new element, and insert it into to the list
 		*/
 		
+		/* AWriteLine("which does contain the key") */
+		
 		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
 		NewElement->NextElement := TailElement->NextElement
 	
@@ -94,8 +148,10 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 			So just overwrite the values in it
 		*/
 		
+		/* AWriteLine("which already contains the key") */
+		
 		NewElement := TailElement
-		TailElement->NextElement := 0
+		/* TailElement->NextElement := 0 */
 	}
 	
 	NewElement->Hash := Hash
