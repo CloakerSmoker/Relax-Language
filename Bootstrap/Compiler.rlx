@@ -820,7 +820,15 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
 	CompileExpression(cState, ResultRegister, TargetAccess->Left)
-	EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+	
+	i16 FieldOffset := TargetField->Offset
+	
+	if (FieldOffset >= 112) {
+		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+	}
+	else {
+		EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+	}
 }
 
 define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
@@ -829,7 +837,14 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i8 ResultPointerRegister := PushRegisterStack(cState)
 	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
 	
-	EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	i16 FieldOffset := TargetField->Offset
+	
+	if (FieldOffset >= 112) {
+		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	}
+	else {
+		EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+	}
 	
 	PopRegisterStack(cState)
 }

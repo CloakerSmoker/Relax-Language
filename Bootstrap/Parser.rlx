@@ -717,7 +717,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		/* If this is an assignment do some extra type checking */
 		
-		i16 LeftNodeType := (Left->NodeType) As i16
+		i8 LeftNodeType := Left->NodeType
 		
 		if (LeftType->PointerDepth && LeftBaseType->IsStructType && RightType->PointerDepth && RightBaseType->Size = 8) {
 			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
@@ -1059,6 +1059,9 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 	return FoundVariable
 }
 
+
+declare i32 RoundTo(i32, i32)
+
 define i32 ParserAddVariable(HashMap* ToScope, VariableInfo* NewVariable, i32 Offset, Token* SourceToken) {
 	if (HashMapGetVariable(ToScope, NewVariable->Name)) {
 		/* If we already have this name in the hashmap, then it's a duplicate definition */
@@ -1080,17 +1083,11 @@ define i32 ParserAddVariable(HashMap* ToScope, VariableInfo* NewVariable, i32 Of
 		return 8
 	}
 	else {
-		i16 Remainder := NewVariableSize % 8
-		
-		i16 RoundedSize := NewVariableSize
-		
-		if (Remainder != 0) {
-			RoundedSize += 8 - Remainder
-		}
+		i16 RoundedSize := RoundTo(NewVariableSize, 8) As i16
 		
 		NewVariable->StackOffset += RoundedSize
 		
-		return RoundedSize
+		return RoundedSize + 8
 	}
 }
 define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal, Token* SourceToken) {
@@ -1163,8 +1160,6 @@ define void ParseProgram(ParserState* pState) {
 	loop {
 		i32 FrozenState := FreezeParser(pState)
 		Token* NextToken := ParserNextToken(pState)
-		
-		PrintToken(NextToken)
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
 			ParseAndAddDefine(pState)

@@ -599,7 +599,7 @@ define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8
 	
 	/* Extend the RelocationHelper's buffer to hold another relocation */
 	
-	Helper->Entries := ReAlloc((Helper->Entries) as void*, ((Helper->EntryCount) + 1) * 2) As i16*
+	Helper->Entries := ReAlloc(Helper->Entries, ((Helper->EntryCount) + 1) * 2) As i16*
 	
 	/* Add the new relocation to the Helper's buffer */
 	
@@ -615,6 +615,11 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
 		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
 		
+/* 		AWrite("	RelocationPages[")
+		IWrite(Index)
+		AWrite("] == ")
+		IWriteLine(NextPage) */
+		
 		if (NextPage->PageRVA = PageRVA) {
 			/* If a RelocationHelper already exists for this page, add the relocation to the found helper */
 			return AddRelocationToHelper(NextPage, OffsetInPage, Is64Bit)
@@ -629,7 +634,7 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	
 	/* And add it to ToBuilder's relocation helper array */
 	
-	ToBuilder->RelocationPages := ReAlloc((ToBuilder->RelocationPages) As void*, ((ToBuilder->RelocationPageCount) + 1) * 8) As RelocationHelper**
+	ToBuilder->RelocationPages := ReAlloc(ToBuilder->RelocationPages, ((ToBuilder->RelocationPageCount) + 1) * 8)
 	(ToBuilder->RelocationPages)[ToBuilder->RelocationPageCount] := NewHelper
 	ToBuilder->RelocationPageCount += 1
 	
@@ -641,7 +646,7 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
 	
-	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (RelocationBlockHeader.Size + 4)
+	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (RelocationBlockHeader.Size + 32)
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
 	
 	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
@@ -686,6 +691,9 @@ define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	
 	TargetBuilder->PE->BaseRelocationTableRVA := TargetBuilder->NextRVA
 	TargetBuilder->PE->BaseRelocationTableSize := RelocationSectionSize
+	
+/* 	AWrite("BaseReloc: ")
+	IWriteLine(TargetBuilder->PE->BaseRelocationTableRVA) */
 	
 	/* Write the .reloc section */
 	
@@ -953,6 +961,9 @@ define void FinalizeBuilder(PEBuilder* Builder) {
 	ExtendBuilder(Builder, FileSize)
 	
 	/* Update the SizeOf header fields with: */
+	
+/* 	AWrite("BaseReloc: ")
+	IWriteLine(Builder->PE->BaseRelocationTableRVA) */
 	
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
 	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
