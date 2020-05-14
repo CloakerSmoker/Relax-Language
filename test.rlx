@@ -1,0 +1,52 @@
+struct t {
+	i8 a,
+	i64 b,
+	i32 c
+}
+
+DllImport i64 GetProcessHeap() {Kernel32.dll, GetProcessHeap}
+DllImport void* HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
+
+
+struct CompilerState {
+	i64 pState,
+	
+	i64 Builder,
+	
+	i8* CodeBuffer,
+	i32 CodeBufferSize,
+	i32 Index,
+	
+	i32* CodeRelocations,
+	i32 CodeRelocationCount,
+	
+	i64 Labels,
+	i32 LabelCount,
+	i32 LabelBufferCapacity,
+	
+	i32 LabelIndex,
+	
+	i32 CurrentFunctionReturnLabel,
+	i32 CurrentLoopContinueLabel,
+	i32 CurrentLoopBreakLabel,
+	
+	i64 CurrentFunctionReturnType,
+	
+	i32 CurrentFunctionStringBufferOffset,
+	
+	i8 RegisterStackIndex,
+	
+	i8 NoClobberCD89,
+	i8 NoClobberA
+}
+
+
+define i64 Main() {
+	CompilerState C
+	
+	C.pState := 192
+	
+	i32 Test := 10
+	
+	return C.pState
+}

@@ -1,0 +1,27 @@
+DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
+DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
+
+i64 STDOUT := GetStdHandle(-11)
+
+define i32 Write(i16* WString) {
+	i32 BytesWritten := 0
+	i32 Index := 0
+	
+	while (WString[Index] != 0) {
+		i16 NextCharacter := WString[Index]
+		WriteFile(STDOUT, &NextCharacter, 1, &BytesWritten, 0)
+		Index += 1
+	}
+}
+define i32 Main() {
+	i64 ArgC := 0
+	i16* CommandLine := GetCommandLineW()
+	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
+	
+	Write(ArgV[1])
+	
+	return 0
+}
