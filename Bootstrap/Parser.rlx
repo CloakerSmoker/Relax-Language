@@ -508,6 +508,7 @@ define void ParserError(ParserState* pState, i8* ErrorMessage) {
 	TokenizerError(pState->pState, ErrorMessage)
 }
 define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
+	SwapOutputStream()
 	TextColor(Red)
 	AWriteLine(ErrorMessage)
 	
@@ -1171,7 +1172,6 @@ define void ParseProgram(ParserState* pState) {
 			ParseAndAddDeclare(pState, IS_IMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
-			AWriteLine("Found struct")
 			ParseAndAddStruct(pState)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {

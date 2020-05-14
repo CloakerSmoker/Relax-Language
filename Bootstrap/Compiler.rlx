@@ -221,7 +221,7 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
-define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
+define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
@@ -235,7 +235,7 @@ define void GetVariableAddress(CompilerState* cState, VariableInfo* TargetVariab
 		}
 	}
 }
-define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 ResultRegister) {
+define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
@@ -249,7 +249,7 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 				Any time this could be abused *should* be caught by type checking 
 			*/
 			
-			GetVariableAddress(cState, TargetVariable, ResultRegister)
+			CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 		}
 		else {
 			if (TargetVariable->StackOffset < 112) {
@@ -261,13 +261,12 @@ define void GetVariableValue(CompilerState* cState, VariableInfo* TargetVariable
 		}
 	}
 }
-define void SetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
+define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 8)
 		
-		/* Todo: Implement encodings for Move_RIX_RX so we don't have to waste a byte with Move_RIX_DISP8_RX */
-		EmitMove_RIX_DISP8_RX(cState, RBX, SourceRegister, 0, TargetVariable->Type->Size)
+		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetVariable->Type->Size)
 	}
 	else {
 		if (TargetVariable->StackOffset < 112) {
@@ -384,7 +383,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 		
 		/* And write the parameter register's value into the parameter's stack space */
-		SetVariableValue(cState, NextParameter, NextParameterRegister)
+		CompileSetVariableValue(cState, NextParameter, NextParameterRegister)
 	}
 	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
@@ -397,7 +396,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
-		SetVariableValue(cState, NextStackParameter, RAX)
+		CompileSetVariableValue(cState, NextStackParameter, RAX)
 	}
 	
 	if (IsMain) {
@@ -673,7 +672,7 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
 		VariableInfo* TargetVariable := (ExpressionToCompile->TrueNode) As VariableInfo*
 		
-		GetVariableValue(cState, TargetVariable, ResultRegister)
+		CompileGetVariableValue(cState, ResultRegister, TargetVariable)
 	}
 	else if (ExpressionType = NODE_TYPE_UNARY) {
 		UnaryExpression* UnaryNode := (ExpressionToCompile->TrueNode) As UnaryExpression*
@@ -876,7 +875,7 @@ define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode
 		EmitLea_R64_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
 		
 		if (IsSet) {
-			EmitMove_RIX_DISP8_RX(cState, ResultRegister, ValueRegister - 1, 0, IndexScale)
+			EmitMove_RIX_RX(cState, ResultRegister, ValueRegister - 1, IndexScale)
 		}
 	}
 	else {
@@ -906,7 +905,7 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 		if (OperandType = NODE_TYPE_VARIABLE) {
 			VariableInfo* OperandVariable := (Operand->TrueNode) As VariableInfo*
 			
-			GetVariableAddress(cState, OperandVariable, ResultRegister)
+			CompileGetVariableAddress(cState, ResultRegister, OperandVariable)
 		}
 		else if (OperandType = NODE_TYPE_STRUCT_ACCESS) {
 			StructAccessExpression* OperandStructAccess := (Operand->TrueNode) As StructAccessExpression*
@@ -936,10 +935,6 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 			/* 	Sincerely - mov r8, [some_pointer]; test r8b, r8b */
 			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, ExpressionToCompile->Operand->ValueType->Size)
 			EmitSetE_R8(cState, ResultRegister)
-			
-			if (ResultSize > 1) {
-				Cast(cState, ResultRegister, ResultSize)
-			}
 		}
 	}
 }
@@ -975,7 +970,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			}
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				SetVariableValue(cState, TargetVariable, ResultRegister)
+				CompileSetVariableValue(cState, TargetVariable, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
 				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
@@ -994,7 +989,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			/* Prelude to get old value of all valid left side expressions */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				GetVariableValue(cState, TargetVariable, ResultRegister)
+				CompileGetVariableValue(cState, ResultRegister, TargetVariable)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
 				CompileGetStructAccess(cState, ResultRegister, LeftAccess)
@@ -1015,7 +1010,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			/* Epilog to store the new value for each valid left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				SetVariableValue(cState, TargetVariable, ResultRegister)
+				CompileSetVariableValue(cState, TargetVariable, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
 				CompileSetStructAccess(cState, ResultRegister, LeftAccess)

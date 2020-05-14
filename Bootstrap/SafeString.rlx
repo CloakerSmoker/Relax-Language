@@ -62,9 +62,11 @@ define void PrintSafeString(SafeWideString* StringToPrint) {
 	
 	i32 CharactersWritten := 0
 	
-	WriteConsole(STDOUT, StringToPrint->Buffer, StringToPrint->Length, &CharactersWritten, 0)
-	
-	return CharactersWritten
+	for (i32 Index := 0, Index < (StringToPrint->Length), Index += 1) {
+		i16 NextCharacter := (StringToPrint->Buffer)[Index] 
+		
+		WriteFile(STDOUT, &NextCharacter, 1, &CharactersWritten, 0)
+	}
 }
 
 define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {

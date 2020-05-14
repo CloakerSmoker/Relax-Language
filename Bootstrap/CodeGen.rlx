@@ -536,6 +536,34 @@ define void EmitMove_RIX_DISP8_RX(CompilerState* cState, i8 DestinationRegister,
 	}
 }
 
+define void EmitMove_RI8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x88, MODE_PTOR, SourceRegister, DestinationRegister, REX_BASE)
+}
+define void EmitMove_RI16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitLegacySizePrefix(cState)
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, 0)
+}
+define void EmitMove_RI32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, 0)
+}
+define void EmitMove_RI64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
+	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, REX_W)
+}
+define void EmitMove_RIX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
+	if (Size = 1) {
+		EmitMove_RI8_R8(cState, DestinationRegister, SourceRegister)
+	}
+	else if (Size = 2) {
+		EmitMove_RI16_R16(cState, DestinationRegister, SourceRegister)
+	}
+	else if (Size = 4) {
+		EmitMove_RI32_R32(cState, DestinationRegister, SourceRegister)
+	}
+	else {
+		EmitMove_RI64_R64(cState, DestinationRegister, SourceRegister)
+	}
+}
+
 
 define void EmitMove_RIX_DISPX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
 	i8 DisplacementSize := GetNumberSize(Displacement As i64)

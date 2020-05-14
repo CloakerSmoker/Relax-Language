@@ -1,5 +1,6 @@
 DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
 DllImport i8 WriteConsole(i64, i16*, i32, i32*, i64) {Kernel32.dll, WriteConsoleW}
+DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
 DllImport i8 SetConsoleTextAttribute(i64, i16) {Kernel32.dll, SetConsoleTextAttribute}
 DllImport i8 ReadConsole(i64, void*, i32, i32*, void) {Kernel32.dll, ReadConsoleW}
 
@@ -7,86 +8,88 @@ i64 STDIN := GetStdHandle(-10)
 i64 STDOUT := GetStdHandle(-11)
 i64 STDERR := GetStdHandle(-12)
 
+define void SwapOutputStream() {
+	i64 Temp := STDOUT
+	STDOUT := STDERR
+	STDERR := Temp
+}
+define void WriteNewLine() {
+	i32 BytesWritten := 0
+	i16 NewLine := 0x0A0D
+	
+	WriteFile(STDOUT, &NewLine, 2, &BytesWritten, 0)
+}
+
 define i32 Write(i16* WString) {
-	i32 CharactersWritten := 0
+	i32 BytesWritten := 0
+	i32 Index := 0
 	
-	WriteConsole(STDOUT, WString, WLen(WString), &CharactersWritten, 0)
-	
-	return CharactersWritten
+	while (WString[Index] != 0) {
+		i16 NextCharacter := WString[Index]		
+		WriteFile(STDOUT, &NextCharacter, 1, &BytesWritten, 0)
+		Index += 1
+	}
 }
 define i32 WriteLine(i16* WString) {
-	i64 NewLine := 0x00000000000D000A
-	
 	i32 ReturnValue := Write(WString)
-	Write((&NewLine) As i16*)
+	WriteNewLine()
 	
 	return ReturnValue
 }
-define void WriteCharacter(i16 Character) {
-	i32 CharactersWritten := 0
+define void WriteCharacter(i8 Character) {
+	i32 BytesWritten := 0
 	
-	WriteConsole(STDOUT, &Character, 1, &CharactersWritten, 0)
-}
-
-define void WriteNewLine() {
-	i64 NewLine := 0x00000000000D000A
-	Write((&NewLine) As i16*)
+	WriteFile(STDOUT, &Character, 1, &BytesWritten, 0)
 }
 
 define i32 AWrite(i8* AString) {
-	i16* WString := AToW(AString, ALen(AString))
+	i32 BytesWritten := 0
 	
-	i32 Result := Write(WString)
+	WriteFile(STDOUT, AString As i8*, ALen(AString), &BytesWritten, 0)
 	
-	Free(WString As void*)
-	
-	return Result
+	return BytesWritten
 }
 
 define i32 AWriteLine(i8* AString) {
-	i16* WString := AToW(AString, ALen(AString))
+	AWrite(AString)
 	
-	i32 Result := WriteLine(WString)
-	
-	Free(WString As void*)
-	
-	return Result
+	WriteNewLine()
 }
 
 define i32 IWrite(i64 Number) {
-	i16* WString := IToW(Number)
+	i8* AString := IToA(Number)
 	
-	i32 Result := Write(WString)
+	i32 Result := AWrite(AString)
 
-	Free(WString As void*)
+	Free(AString)
 	
 	return Result
 }
 define i32 IWriteLine(i64 Number) {
-	i16* WString := IToW(Number)
+	i8* AString := IToA(Number)
 	
-	i32 Result := WriteLine(WString)
-
-	Free(WString As void*)
+	i32 Result := AWriteLine(AString)
+	
+	Free(AString)
 	
 	return Result
 }
 
 define i32 IWriteHex(i64 Number) {
-	i16* WString := IToWH(Number)
+	i8* AString := IToAH(Number)
 	
-	i32 Result := Write(WString)
+	i32 Result := AWrite(AString)
 
-	Free(WString As void*)
+	Free(AString)
 	
 	return Result
 }
 define i32 IWriteHexLine(i64 Number) {
-	i16* WString := IToWH(Number)
+	i8* AString := IToAH(Number)
 	
-	i32 Result := WriteLine(WString)
-
-	Free(WString As void*)
+	i32 Result := AWriteLine(AString)
+	
+	Free(AString)
 	
 	return Result
 }

@@ -248,6 +248,7 @@ define i8 TokenizerAtEnd(TokenizerState* pState) {
 }
 
 define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
+	SwapOutputStream()
 	TextColor(Red)
 	AWriteLine(Message)
 	
