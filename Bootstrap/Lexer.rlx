@@ -198,7 +198,9 @@ i8 KEYWORD_CONTINUE := 8
 i8 KEYWORD_BREAK := 9
 
 i8 KEYWORD_STRUCT := 10
-i8 KEYWORD_RETURN := 11
+i8 KEYWORD_UNION := 11
+
+i8 KEYWORD_RETURN := 12
 
 define i16 PeekNextCharacterRaw(TokenizerState* pState) {
 	return(pState->Source)[pState->SourceIndex]
@@ -406,7 +408,6 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				
 				continue
 			}
-			
 			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
 		}
@@ -688,6 +689,9 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	}
 	else if (SafeStringEqualsAString(PotentialKeyword, "return")) {
 		return KEYWORD_RETURN
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "union")) {
+		return KEYWORD_UNION
 	}
 	
 	return TOKEN_TYPE_NONE

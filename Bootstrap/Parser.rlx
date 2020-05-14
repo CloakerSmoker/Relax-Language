@@ -66,7 +66,33 @@ i8 NODE_TYPE_IDENTIFIER := 20
 */
 
 struct ASTNode {
-	void* TrueNode,
+	union {
+		void* TrueNode,
+		
+		UnaryExpression* UnaryNode,
+		BinaryExpression* BinaryNode,
+		CallExpression* CallNode,
+		StructAccessExpression* AccessNode,
+		
+		IfGroup* IfNode,
+		ForLoop* ForNode,
+		WhileLoop* WhileNode,
+		Block* LoopBody,
+		i8 IsContinue,
+		
+		FunctionDefine* DefineNode,
+		
+		ASTNode* ReturnExpression,
+		
+		ASTNode* ExpressionStatement,
+		
+		SafeWideString* StringValue,
+		VariableInfo* VariableValue,
+		i64 IntegerValue,
+		Type* TypeValue,
+		i32 StringOffsetValue
+	},
+	
 	Type* ValueType,
 	SafeWideString* SourceFilePath,
 	i32 LineNumber,
@@ -1241,9 +1267,17 @@ define void ParseAndAddStruct(ParserState* pState) {
 	/* Stores the total size of the struct */
 	i16 TotalSize := 0
 	
+	i8 InUnion := false
+	
 	loop {
 		/* Allocate a StructField for the next field */
 		StructField* NextField := Alloc(StructField.Size) As StructField*
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNION) && !InUnion) {
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
+			
+			InUnion := true
+		}
 		
 		/* Parse the type of the field */
 		NextField->ValueType := ParseTypeName(pState)
@@ -1252,37 +1286,40 @@ define void ParseAndAddStruct(ParserState* pState) {
 		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (FieldNameToken->Value) As SafeWideString*
 		
-		/* WriteCharacter('	')
-		PrintType(NextField->ValueType)
-		WriteCharacter(' ')
-		PrintSafeString(FieldName)
-		WriteNewLine() */
-		
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
 		i16 FieldSize := NextField->ValueType->Size
 		
 		NextField->Name := FieldName
 		
-		if (NextFieldOffset % FieldSize) {
+		if (NextFieldOffset % FieldSize && !InUnion) {
 			/* Pad the field to a multiple of its size */
 			NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
 		}
+		/* If we're in a union, don't change the NextFieldOffset so all union fields get overlapping offsets */
 		
 		NextField->Offset := NextFieldOffset
-		
-		NextFieldOffset += FieldSize
 		FieldCount += 1
+		
+		if !(InUnion) {
+			NextFieldOffset += FieldSize
+		}
+		
 		TotalSize := NextFieldOffset
+		
+		if (InUnion && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			InUnion := false
+			NextFieldOffset += 8
+			TotalSize := NextFieldOffset
+		}
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 			/* If the next token is not a ',' break the loop */
 			break
 		}
-	
 	}
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected open brace for struct body")
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
 	
 	/* Check if there's already a type with this name */
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
@@ -2016,7 +2053,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	i8 NodeType := NodeToPrint->NodeType
 	
 	if (NodeType = NODE_TYPE_UNARY) {
-		UnaryExpression* UnaryNode := (NodeToPrint->TrueNode) As UnaryExpression*
+		UnaryExpression* UnaryNode := NodeToPrint->UnaryNode
 		
 		WriteCharacter('(')
 		
@@ -2026,7 +2063,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteCharacter(')')
 	}
 	else if (NodeType = NODE_TYPE_BINARY) {
-		BinaryExpression* BinaryNode := (NodeToPrint->TrueNode) As BinaryExpression*
+		BinaryExpression* BinaryNode := NodeToPrint->BinaryNode
 		
 		if (BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET) {
 			PrintAST(BinaryNode->Left)
@@ -2045,7 +2082,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		}
 	}
 	else if (NodeType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := (NodeToPrint->TrueNode) As CallExpression*
+		CallExpression* CallNode := NodeToPrint->CallNode
 		
 		PrintSafeString(CallNode->TargetFunction->Name)
 		
@@ -2065,7 +2102,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteCharacter(')')
 	}
 	else if (NodeType = NODE_TYPE_DEFINE) {
-		FunctionDefine* DefineNode := (NodeToPrint->TrueNode) As FunctionDefine*
+		FunctionDefine* DefineNode := NodeToPrint->DefineNode
 		
 		if (DefineNode->IsImported) {
 			AWrite("DllImport ")
@@ -2171,7 +2208,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_LOOP) {
-		Block* LoopBody := (NodeToPrint->TrueNode) As Block*
+		Block* LoopBody := NodeToPrint->LoopBody
 		
 		AWrite("loop {")
 		WriteNewLine()
@@ -2187,7 +2224,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
-		if (NodeToPrint->TrueNode) {
+		if (NodeToPrint->IsContinue) {
 			AWrite("continue")
 		}
 		else {
@@ -2197,41 +2234,41 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_RETURN) {
-		ASTNode* ReturnExpression := (NodeToPrint->TrueNode) As ASTNode*
+		ASTNode* ReturnExpression := NodeToPrint->ReturnExpression
 		
 		AWrite("return ")
 		PrintAST(ReturnExpression)
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
-		ASTNode* ExpressionStatement := (NodeToPrint->TrueNode) As ASTNode*
+		ASTNode* ExpressionStatement := NodeToPrint->ExpressionStatement
 		
 		PrintAST(ExpressionStatement)
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_VARIABLE) {
-		VariableInfo* TargetVariable := (NodeToPrint->TrueNode) As VariableInfo*
+		VariableInfo* TargetVariable := NodeToPrint->VariableValue
 		
 		PrintSafeString(TargetVariable->Name)
 	}
 	else if (NodeType = NODE_TYPE_INTEGER) {
-		IWrite(NodeToPrint->TrueNode)
+		IWrite(NodeToPrint->IntegerValue)
 	}
 	else if (NodeType = NODE_TYPE_TYPE) {
-		PrintType((NodeToPrint->TrueNode) As Type*)
+		PrintType(NodeToPrint->TypeValue)
 	}
 	else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
-		StructAccessExpression* AccessNode := (NodeToPrint->TrueNode) As StructAccessExpression*
+		StructAccessExpression* AccessNode := NodeToPrint->AccessNode
 		
 		PrintAST(AccessNode->Left)
 		PrintOperator(AccessNode->Operator->Value)
 		PrintSafeString(AccessNode->TargetField->Name)
 	}
 	else if (NodeType = NODE_TYPE_IDENTIFIER) {
-		PrintSafeString((NodeToPrint->TrueNode) As SafeWideString*)
+		PrintSafeString(NodeToPrint->StringValue)
 	}
 	else if (NodeType = NODE_TYPE_IF) {
-		IfGroup* IfNode := (NodeToPrint->TrueNode) As IfGroup*
+		IfGroup* IfNode := NodeToPrint->IfNode
 		
 		AWrite("if ")
 		
@@ -2278,7 +2315,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		}
 	}
 	else if (NodeType = NODE_TYPE_FOR) {
-		ForLoop* ForNode := (NodeToPrint->TrueNode) As ForLoop*
+		ForLoop* ForNode := NodeToPrint->ForNode
 		
 		AWrite("for (")
 		
@@ -2303,7 +2340,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 		WriteNewLine()
 	}
 	else if (NodeType = NODE_TYPE_WHILE) {
-		WhileLoop* WhileNode := (NodeToPrint->TrueNode) As WhileLoop*
+		WhileLoop* WhileNode := NodeToPrint->WhileNode
 		
 		AWrite("while ")
 		PrintAST(WhileNode->Condition)
@@ -2324,7 +2361,7 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	}
 	else if (NodeType = NODE_TYPE_STRING) {
 		AWrite("(StringTable + ")
-		IWrite(NodeToPrint->TrueNode)
+		IWrite(NodeToPrint->StringOffsetValue)
 		WriteCharacter(')')
 	}
 }

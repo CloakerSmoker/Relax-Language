@@ -477,22 +477,22 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	i8 NodeType := NodeToCompile->NodeType
 	
 	if (NodeType = NODE_TYPE_RETURN) {
-		CompileReturn(cState, (NodeToCompile->TrueNode) As ASTNode*)
+		CompileReturn(cState, NodeToCompile->ReturnExpression)
 	}
 	else if (NodeType = NODE_TYPE_IF) {
-		CompileIf(cState, (NodeToCompile->TrueNode) As IfGroup*)
+		CompileIf(cState, NodeToCompile->IfNode)
 	}
 	else if (NodeType = NODE_TYPE_FOR) {
-		CompileFor(cState, (NodeToCompile->TrueNode) As ForLoop*)
+		CompileFor(cState, NodeToCompile->ForNode)
 	}
 	else if (NodeType = NODE_TYPE_LOOP) {
-		CompileLoop(cState, (NodeToCompile->TrueNode) As Block*)
+		CompileLoop(cState, NodeToCompile->LoopBody)
 	}
 	else if (NodeType = NODE_TYPE_WHILE) {
-		CompileWhile(cState, (NodeToCompile->TrueNode) As WhileLoop*)
+		CompileWhile(cState, NodeToCompile->WhileNode)
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
-		i8 IsContinue := (NodeToCompile->TrueNode) As i8
+		i8 IsContinue := NodeToCompile->IsContinue
 		
 		if (IsContinue) {
 			EmitJump_Label(cState, cState->CurrentLoopContinueLabel)
@@ -502,7 +502,7 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 		}
 	}
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
-		CompileExpression(cState, RAX, (NodeToCompile->TrueNode) As ASTNode*)
+		CompileExpression(cState, RAX, NodeToCompile->ExpressionStatement)
 	}
 }
 
@@ -667,37 +667,37 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	if (ExpressionType = NODE_TYPE_INTEGER) {
 		/* Simply move the integer being used into the result register */
 		
-		EmitMove_RX_IX(cState, ResultRegister, (ExpressionToCompile->TrueNode) As i64, ExpressionToCompile->ValueType->Size)
+		EmitMove_RX_IX(cState, ResultRegister, ExpressionToCompile->IntegerValue, ExpressionToCompile->ValueType->Size)
 	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
-		VariableInfo* TargetVariable := (ExpressionToCompile->TrueNode) As VariableInfo*
+		VariableInfo* TargetVariable := ExpressionToCompile->VariableValue
 		
 		CompileGetVariableValue(cState, ResultRegister, TargetVariable)
 	}
 	else if (ExpressionType = NODE_TYPE_UNARY) {
-		UnaryExpression* UnaryNode := (ExpressionToCompile->TrueNode) As UnaryExpression*
+		UnaryExpression* UnaryNode := ExpressionToCompile->UnaryNode
 	
 		CompileUnary(cState, ResultRegister, ResultType, UnaryNode)
 	}
 	else if (ExpressionType = NODE_TYPE_BINARY) {
 		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
 		
-		BinaryExpression* BinaryNode := (ExpressionToCompile->TrueNode) As BinaryExpression*
+		BinaryExpression* BinaryNode := ExpressionToCompile->BinaryNode
 		
 		CompileBinary(cState, ResultRegister, ResultType, BinaryNode)
 	}
 	else if (ExpressionType = NODE_TYPE_STRUCT_ACCESS) {
-		StructAccessExpression* AccessNode := (ExpressionToCompile->TrueNode) As StructAccessExpression*
+		StructAccessExpression* AccessNode := ExpressionToCompile->AccessNode
 		
 		CompileGetStructAccess(cState, ResultRegister, AccessNode)
 	}
 	else if (ExpressionType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := (ExpressionToCompile->TrueNode) As CallExpression*
+		CallExpression* CallNode := ExpressionToCompile->CallNode
 		
 		CompileCall(cState, ResultRegister, CallNode)
 	}
 	else if (ExpressionType = NODE_TYPE_STRING) {
-		i32 StringOffset := (ExpressionToCompile->TrueNode) As i32
+		i32 StringOffset := ExpressionToCompile->StringOffsetValue
 		
 		i32 RBPOffect := (cState->CurrentFunctionStringBufferOffset) - StringOffset
 		
@@ -903,17 +903,17 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 		i8 OperandType := Operand->NodeType
 		
 		if (OperandType = NODE_TYPE_VARIABLE) {
-			VariableInfo* OperandVariable := (Operand->TrueNode) As VariableInfo*
+			VariableInfo* OperandVariable := Operand->VariableValue
 			
 			CompileGetVariableAddress(cState, ResultRegister, OperandVariable)
 		}
 		else if (OperandType = NODE_TYPE_STRUCT_ACCESS) {
-			StructAccessExpression* OperandStructAccess := (Operand->TrueNode) As StructAccessExpression*
+			StructAccessExpression* OperandStructAccess := Operand->AccessNode
 			
 			CompileGetStructAccessPointer(cState, ResultRegister, OperandStructAccess)
 		}
 		else if (OperandType = NODE_TYPE_BINARY) {
-			BinaryExpression* OperandExpression := (Operand->TrueNode) As BinaryExpression*
+			BinaryExpression* OperandExpression := Operand->BinaryNode
 			
 			if (OperandExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
 				CompileGetArrayAccess(cState, ResultRegister, OperandExpression->Left, OperandExpression->Right, true)
@@ -958,9 +958,9 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		
 		i8 LeftType := (Left->NodeType) As i8
 		
-		VariableInfo* TargetVariable := (Left->TrueNode) As VariableInfo*
-		StructAccessExpression* LeftAccess := (Left->TrueNode) As StructAccessExpression*
-		BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
+		VariableInfo* TargetVariable := Left->VariableValue
+		StructAccessExpression* LeftAccess := Left->AccessNode
+		BinaryExpression* LeftExpression := Left->BinaryNode
 		
 		if (Operator = OPERATOR_COLON_EQUAL) {
 			CompileExpression(cState, ResultRegister, Right)
@@ -1036,7 +1036,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		
 		if (Operator = OPERATOR_AS) {
 			/* For 'As', just compile the left operand, cast it, and return */
-			Type* RightType := (Right->TrueNode) As Type*
+			Type* RightType := Right->TypeValue
 			
 			if (Left->NodeType != NODE_TYPE_INTEGER) {
 				/* Only emit cast instructions for values which aren't integers, since integer casts are done at compile time */
