@@ -887,9 +887,6 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
 		
-		AWrite("Function definition not found.... crashing")
-		(0 as i8*)[0] := 30
-		
 		FunctionDefine* DummyFunction := Alloc(FunctionDefine.Size) As FunctionDefine*
 		DummyFunction->Name := Name
 		

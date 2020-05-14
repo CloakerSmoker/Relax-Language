@@ -1,0 +1,33 @@
+#Include Memory.rlx
+#Include String.rlx
+#Include Console.rlx
+
+define i32 Main() {
+	IWrite(20 + 10)
+	WriteCharacter(',')
+	IWrite(20 - 10)
+	WriteCharacter(',')
+	IWrite(20 * 10)
+	WriteCharacter(',')
+	IWrite(20 / 10)
+	WriteCharacter(',')
+	IWrite(22 % 10)
+	WriteCharacter(',')
+	IWrite(20 & 30)
+	WriteCharacter(',')
+	IWrite(20 | 10)
+	WriteCharacter(',')
+	IWrite(20 ^ 10)
+	WriteCharacter(',')
+	IWrite(0 && 0)
+	IWrite(0 && 1)
+	IWrite(1 && 0)
+	IWrite(1 && 1)
+	WriteCharacter(',')
+	IWrite(0 || 0)
+	IWrite(0 || 1)
+	IWrite(1 || 0)
+	IWrite(1 || 1)
+	
+	return 0
+}

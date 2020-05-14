@@ -210,3 +210,38 @@ define i16* IToWH(i64 Number) {
 	
 	return WString
 }
+
+define i64 WToI(i16* WString) {
+	i64 Result := 0
+	i64 Negative := 0
+	
+	i16 FirstCharacter := WString[0]
+	
+	if (FirstCharacter = '-') {
+		Negative := 1
+		WString += 2
+		FirstCharacter := WString[0]
+	}
+	
+	if !(IsNumeric(FirstCharacter)) {
+		return 0
+	}
+	
+	i32 Length := WLen(WString)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i16 NextCharacter := WString[Index]
+		
+		if !(IsNumeric(NextCharacter)) {
+			Break
+		}
+		
+		Result := (Result * 10) + (NextCharacter - '0')
+	}
+	
+	if (Negative) {
+		Result := -Result
+	}
+	
+	return Result
+}
