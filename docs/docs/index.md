@@ -1,40 +1,36 @@
 # Relax
-A compiled programming language, implemented entirely in AHK
-
-You might notice that the name is a bit ironic, since writing this in AHK gave me absolutely 0 chances to just *relax*.
+A C-like compiled programming language.
+The original compiler was implemented in AutoHotkey, and is now implemented in Relax itself.
 
 ## Note
 
-Relax generates 64 bit machine code, and depends on certain features that only exist on 64 bit processors. This means that there is *no* 32 bit support.
+The Relax compiler generates 64 bit machine code, and depends on certain features that only exist on 64 bit processors. This means that there is *no* 32 bit support.
 
 I have no plans for adding 32 bit support, considering that 32 bit machine code is actually much more complex, and would need lots of special cases compared to 64 bit code.
 
-## FAQ
-##### Q: What the fuck, why, dear god, why?!
-
-A: ¯\\_(ツ)_/¯ (see "Why I Did This")
-
-##### Q: Wait, so this is an actual compiler?
-
-A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a file holding the compiled code.
-
-All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)
-
-For more info, see [how it all works](how-it-works)
-
-##### Q: What kind of files can it make?
-
-A: Code can be compiled into `.exe`, `.dll`, and `.ahk` files. All of which work as you'd expect, `.exe` files can be run directly, `.dll` files can be called with AHK's `DllCall` or with `LoadLibrary`/`GetProcAddress`, `.ahk` files can be `#Include`'d and called like any other function.
-
 ## How to use it
-See [this page](how-to-use-it) for the different ways Relax can be used.
+The Relax compiler is packaged along with each commit to the repo (as of [this](https://github.com/CloakerSmoker/Relax-Language/commit/bc91bd89ae900e0646a9e994d338537dc0bfa3ae) commit onwards) as the file `stable_version.exe`, and is ran as: `stable_version.exe [InputFile] [OutputExe]`
 
-## How to do most of the work:
-(I recommend you follow these in the order 1-2-3 if you already know a C-like language, and 2-1-3 otherwise)
+Any compilation errors will be written to stderr, with general info being written to stdout.
+
+<br>
+
+If you don't trust the pre-compiled version, you're sadly out of luck. The source code of the Relax compiler can no longer be compiled with the original (AHK) compiler, or older versions of the self-hosted compiler.
+
+Which means that in order to generate your own modern copy of `stable_version.exe`, you'd need to compile the last version of the compiler which was compatible with the original (AHK) compiler. Then from there, you'd need to compile each commit which adds a new feature to the language until you can compile the most recent version of the compiler.
+
+`stable_version.exe` has already done this for you, as it is the running copy of the 'most modern' version of the compiler.
+
+<br>
+
+The only guarantee in terms of what `stable_version.exe` can compile is that: 
+
+`stable_version.exe` ***must*** always be able to compile the version of the source code it shares a commit with (along with all the test programs).
+
+## How to write Relax code:
+Pretend it is C with a whole bunch of stuff `#define`'d into existence.
 
 For a quick(-ish) rundown of the syntax, and some quirks, see [the basic syntax page](basic-syntax.md).
-
-For a tutorial sort of thing, see [the tutorial page](tutorial.md).
 
 For a full writeup of the syntax, see [the full syntax page](full-syntax.md).
 
@@ -43,6 +39,10 @@ For a full writeup of the syntax, see [the full syntax page](full-syntax.md).
 I wanted the header for this on this page, but it's long enough that you'll need to go [to this page](how-it-works) to read that.
 
 ## Why I did this
+
+I have lots of time to waste, and when I started this project, my only goal was to finish it.
+
+#### Note: This next part is outdated, but is being kept since I still think it was insane to write the original compiler in AHK
 
 I feel like I need to defend myself here, mostly because I know it's 100% insane to use AHK for a project like this.
 

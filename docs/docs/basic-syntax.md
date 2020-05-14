@@ -1,11 +1,10 @@
 ## The basic syntax
-It's pretty much C, but with minor changes. Although many things are borrowed from C, this is *not* a C compiler, and does not have all the features C has.
 
-Mainly, it's missing structures, and arrays.
+It looks like C, it is written like C, but it *is not* C.
 
 #### Types
 
-Type names are changed to be more concise, and shorter.
+Instead of long historic names, Relax uses shortened type names:
 
 Integer types:
 
@@ -16,107 +15,117 @@ Integer types:
 | 32 bits   |`long`  | `i32`               |
 | 64 bits   |`long long`/`__int64`| `i64`  |
 
-Floating point types:
-
-| Precision | C Name | (LanguageName) Name |
-|-----------|--------|---------------------|
-| 32 bits   |`float` | `f32`               |
-| 64 bits   |`double`| `f64`               |
-
 Additionally, there is the `void` type, which is exactly what you'd expect it to be: a 64 bit integer (I can't remember why I made it this way).
 
-Of course, there are also pointer types, which follow C syntax of `TypeName*`. Pointer-pointer types are not implemented.
+Of course, there are also pointer types, which follow C syntax of `TypeName*`.
+
+Additionally, you can define a structure type with the `struct` keyword, which can then be pointed-to like any other type.
+
+#### Type checking
+
+Type checking is done in the parser, so globals/locals/functions/structs must (usually) be defined above where they are used.
+
+To avoid circular references being impossible to compile, the `declare` statement can be used to state a function's parameters/return type before defining it.
+
+Additionally, undefined types can be used as long as they only used in pointer types, and do not have and fields referenced.
 
 #### General Things
-String literals are supported, and are replaced with an `i8*` to the given string. This `i8*` will point into the stack, so **DO NOT** try to free this memory. You can alter it, but changing the size of it, or overrunning its length is ***VERY VERY BAD***.
+String literals are supported, and are replaced with an `i8*` to the given string. This `i8*` will point into the stack, so **DO NOT** try to free this memory. You can alter it, but poking at the memory around it is a terrible idea.
 
-If a function does not have a return in it, a `return 0` is implicitly added.
+<br>
 
-The magic entry-point function is named `Main`, and receives a `i64` parameter containing the number of command line arguments, along with a `void*` which is actually an array of `i16*` pointers to the individual command line arguments (Just like how in C you have `ArgC` and `ArgV`)
+If a function does not have a return in it, the return value is undefined. However, functions are not required to have a `return`, and will still run.
 
-`Main` should have a return type of `i32`, as the return value will be given to the Windows API `ExitProcess` function as the program's exit code.
+<br>
 
-Now's a good time to note: If you prefix the name of a variable or function with `__`, you are very likely to break something internal. The `__` prefix is reserved, and I will be *very unhappy* with you if you use it.
+The magic entry-point function is named `Main`, which is not expected to follow any prototype. This is to avoid having to include additional runtime code to support ArgV/ArgC. If a program requires ArgC/ArgV, this snippet will provide it:
+
+```py
+DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+define i32 Main() {
+	i64 ArgC := 0
+	i16* CommandLine := GetCommandLineW()
+	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
+    
+    ...
+}
+```
+
+The return value of `Main` is considered the program's exit code.
+
+<br>
+
+This is the list of reserved names:
+
+* `if`, `else`
+* `return`
+* `continue`, `break`
+* `struct`, `union`
+* `define`, `declare`, `dllimport` 
+* `for`, `while`, `loop`
+* `as`
 
 #### Assignment operators
 
-Most assignment operators act as you'd expect, except for `*=`. 
+The left side of each assignment operator can be any of the following:
 
-Since I really like the C syntax for pointers, but ***hate*** the C syntax to assign the value a pointer points to, the `*=` is used for assignment of a memory address to a new value. 
+* A variable, such as `A`
+* An array access, such as `String[Index]`
+* A struct access, such as `Something.Field` or `SomethingPointer->Field`
 
-For example `(PointerToAString + 90) *= 'H'` would set the character at `PointerToAString + 90` to be `H`.
+The assignment operators are:
 
-Since `*=` is taken, `/=` is not implemented to prevent confusion over only one of the two working like normal, `+=` and `-=` are the only shorthand assignment operators.
-
-Additionally, since floating point number support is half-baked (at best), `+=` and `-=` are not implemented for floating point numbers.
-
-So, that leaves us with the 4 assignment operators: `:=`, `*=`, `+=`, `-=`.
+* `:=` 
+* `+=`
+* `-=`
 
 #### Binary operators
 
-Another minor change is with the logical operators `&&` and `||`. 
-I can't think of a good way to generate code which will have these operators short-circuit, so they don't.
+Note: `&&` and `||` both short-circuit, `%` is modulo, `.` is local struct field access, `->` is pointer struct field access.
+`As` is explained further [here](#casting)
 
-Additionally, some operators are not implemented for floating point operands. This is mostly because I do floating point math with the (actually older than me) x87 FPU, and can't figure out the FPU instructions needed for some operators.
-
-These operators are: `%` (Modulo), `&&`, and `||`. (You'll get an error message when you try to use them on floating point operands)
-
-Bitwise operators are allowed on all data types, simply because I think it's dumb that they aren't in some languages. If you want to mangle the floating point number format, go for it.
-
-The full list of binary operators: `+`, `-`, `*`, `/`, `%` (Modulo), `=` (regular equality, there's no `==`), `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `&`, `|`, `^`
-
-Yes, I know there's no bit-shifts. If anyone besides me ever uses this language and wants bit-shifts, I'll implement them.
-
-##### Casting
-
-Casting between types is usually implicit, but if you want to explicitly cast between two obviously incompatible types, the `As` operator does it.
-The format is `Operand As TypeName`, just be careful with `Operand`, since `As` will take the closest thing on its left, so `1 + 2 As f32` would be parsed as `1 + (2 As f32)`.
-
-This funky word operator is because I honestly fear for my mental and physical health if I have to modify the expression parser to handle C style casting.
+* `+`, `-`
+* `*`, `/`, `%`
+* `=`, `!=`
+* `<`, `<=`, `>`, `>=`
+* `&`, `|`, `^`
+* `&&`, `||`
+* `.`, `->`
+* `as`
 
 #### Unary operators
 
-Unary operators also have some odd bits, mostly because I forgot to implement how they work with different types. (All data types are treated like integers with unary operators)
+Note: `&` is 'address of', and `*` is dereference, `-` is negation.
 
-So make sure not to have something like `-AFloatingPointNumber`, because that'll cause some problems. `0 - AFloatingPointNumber` works fine though.
-Oh, and `AFloatingPointNumber` with `++` or `--` will also cause some problems.
+* `&`, `*`
+* `-`, `!`
 
-`&` Functions as you'd expect in C, same with `*` (which requires a pointer type as the operand).
+`++` and `--` have been deliberately excluded, as they are a pain to parse.
 
-`++Variable` and `Variable++` also function as you'd expect, I made sure.
+#### Casting
 
-`++PointerVariable` is also implemented to increment `PointerVariable` by however big the value it points to is, ex:
-```c
-i64 SomeNumber := 99
-i64* PointerVariable := &SomeNumber
-++PointerVariable
-```
-Would increment `PointerVariable` by 8 
+Casting between types is usually implicit, but if you want to explicitly cast between two obviously incompatible types, the `As` operator does it.
+The format is `Operand As TypeName`.
 
 #### Array-access
 
 Array accesses are really just pointer syntax sugar, but god do they make things easier.
 
-`Pointer[Index]` will do the same operation as `*(Pointer + (SizeOfPointedToType(Pointer) * Index))`, except in ~3 instructions.
+`Pointer[Index]` will do the same operation as `*(Pointer + (SizeOfPointedToType(Pointer) * Index))`, with much less code generated.
 
 Instead of evaluating a bunch of expressions manually, the addition and multiplication steps are both done by the CPU directly, which should be a speed up.
 
-The actual instructions are
+#### Struct-access
 
-```
-lea rax, [PointerRegister + IndexRegister * TYPESIZE]
-mov ResultRegister, 0
-mov ResultRegister, TYPENAME PTR [rax]
-```
+Struct accesses are technically also syntax sugar, but allow for much higher level code.
 
-Where `TYPESIZE` is the size of each element in the array (1, 2, 4, or 8 bytes), and `TYPENAME` is the name of the type of each element.
+A struct access will automatically calculate the offset of a field inside of a structure, and encode that offset directly into an instruction.
+Additionally, since struct fields have names, cryptic code such as `*(SomeStruct + 8 As i8*)` can be written as `SomeStruct->Field`.
 
-The `mov ResultRegister, 0` is because depending on `TYPENAME`, the `mov ResultRegister, [rax]` might only move 1/2/4 bytes into the 8 byte register, which could leave garbage data in the top few bytes. But by zeroing the result register, we clear any garbage.
-
-For example, `mov rcx, BYTE PTR [rax]` would only set the low 1 byte of `rcx`, leaving the top 7 bytes unchanged.
+The operators `.` and `->` are mostly interchangeable, however, `.` only works for local structs, and `->` only works for pointers to structs.
 
 ## What next?
-
-For a tutorial sort of thing, see [the tutorial page](tutorial.md).
 
 For a full writeup of the syntax, see [the full syntax page](full-syntax.md).

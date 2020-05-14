@@ -2,6 +2,28 @@
 
 Top of page = most recent.
 
+## 1.0.0
+
+### Added
+
+* Support for structure types 
+* Support for function prototypes
+
+### Changed
+
+* The standard version of the compiler is now the self-compiled version
+* All pointer types are now compatible
+
+### Removed
+
+* Floating point types (for now)
+
+### Docs changes
+
+* All pages, changed to be correct with the new compiler.
+
+---
+
 ## 1.0.0-alpha.30
 
 ### Added

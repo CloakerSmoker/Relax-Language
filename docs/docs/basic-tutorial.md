@@ -12,12 +12,12 @@ Additionally, you can only use two variables when they have compatible types, so
 The way you decide what type a variable has is by 'declaring' the variable to be a certain type. In Relax you declare a variable to be a certain type by typing a 'type name' along with the variable name, for example:
 ```
 i64 MyVariable
-f32 MyOtherVariable
+i8 TestVariable
 ```
 Additionally, you can include an 'initial value' after the declaration, like
 ```
 i64 MyVariable := 99 + 20
-i32 MyOtherVariable := 10.5
+i32 MyOtherVariable := 10
 ```
 
 Variables only need to be declared once, however, you can change a variable's value as much as you like.

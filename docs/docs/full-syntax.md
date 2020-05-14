@@ -3,21 +3,37 @@
 ### Program
 The compiler expects input code to be a "program", a program is defined as a list of the following statements:
 
-* [Import statements](#import)
+* [Struct statements](#struct)
+* [Declare statements](#declare)
 * [DllImport statements](#dllimport)
 * [Define statements](#define)
 * [Global declarations](#global)
+* [Directives](#directive)
 
-### Import
-Import statements follow the format:
+### Directives
+Directives follow the format:
 ```
-Import ModuleName
+#Directive Parameter
 ```
-Where `ModuleName` is the name of a built in module. The current list of built in modules is:
 
-* [Memory](../module-memory)
-* [String](../module-string)
-* [Console](../module-console)
+* `Directive` is a directive name (`include` is the only one implemented)
+* `Parameter` is a parameter for the directive
+
+Directives are direct instructions for the compiler, and do not generate any code.
+
+The `include` directive will copy-paste the contents of another file into the position the directive is at.
+
+### Declare
+Declare statements follow the format:
+```
+Declare ReturnType FunctionName(ParameterTypeList)
+```
+
+* `ReturnType` is the [type](#types) that the function is expected to return.
+* `FunctionName` is the [name](#names) of the function.
+* `ParameterTypeList` is a list of comma-separated [types](#types), without any names, since the parameter names are not needed.
+
+Declare statements are use to tell the compiler what types `FunctionName` should be passed (and will return) before it has parsed the full definition of `FunctionName`
 
 ### DllImport
 DllImport statements follow the format:
@@ -45,10 +61,28 @@ Define ReturnType FunctionName(ParameterList) export {
 * `Body` is a list of [statements](#statements).
 * `Export` is optionally the word `export`, which will cause the function to be exported from the resulting file (if the file is a `.dll`)
 
+### Struct
+Struct statements follow the format:
+```
+struct StructName {
+    Type Name,
+    Type Name,
+    union {
+        Type Name,
+        Type Name
+    },
+    Type Name
+}
+```
+
+* `StructName` is the type name the struct type should have
+* `Type` is a [type name](#types) for the field
+* `Name` is a [name](#names) for the field
+
 ### Global
 Global declarations follow the same format as regular [declarations](#declarations).
 However, global declarations make variables that are [program](#program)-wide, and can be used from any function.
-Additionally, global declarations run just before `Main` is called (and ArgC/ArgV are set), making them a suitable method to run setup code.
+Additionally, global declarations run just before `Main` is run, making them a suitable method to run setup code.
 
 ### Statements
 Statements follow multiple different formats, depending on the type of statement.
@@ -157,15 +191,14 @@ If `Expression` does not call a function or set a variable, it will be eliminate
 Expressions follow many formats, examples:
 ```
 A := B + C
-(2 - E) / 2.5
+(2 - E) / 2
 9999 + *(G) % H
 ```
 
 * Any unquoted text inside an expression is treated as a variable.
 * Quoted text is treated as an `i8*` typed value.
 * Numbers are treated as the smallest possible type to hold them (ex: `58` would be an `i8`, `9999` would be an `i16`)
-* Operands of any given operator must be a someone-similar type (ex: `2.6 * SomePointer` is invalid).
-* Operators are evaluated according to precedence and associativity, which is defined in `Constants.ahk`.
+* Operators are evaluated according to precedence and associativity, which is defined in `Parser.rlx`.
 * Some operators may not be implemented for a given type
 * Some expressions may be used as booleans inside of [for loops](#for) or [if statements](#if). This is done by checking if the expressions results in `0` or not.
 
@@ -175,32 +208,7 @@ Something[SomethingElse]
 ```
 Where `Something` is an expression which results in a pointer-type, and `SomethingElse` results in an integer, which will be used as an index into `Something`.
 
-### Operator list
-
-##### Binary Operators
-
-| Category Name | Precedence | Associativity | Operators in category |
-|---------------|------------|---------------|-----------------------|
-| Assignment    | 0          | Right         | `:=`, `+=`, `-=`, `*=`|
-| Logic         | 1          | Right         | `&&`, `||`            |
-| Equality      | 2          | Left          | `!=`, `=`             |
-| Comparison    | 3          | Right         | `<`, `<=`, `>`, `>=`  |
-| Unused        | 4          |               |                       |
-| Addition      | 5          | Left          | `+`, `-`              |
-| Division      | 6          | Left          | `/`, `*`, `%`         |
-| Bitwise       | 7          | Left          | `&`, `|`, `^`         |
-| Module        | 8          | N/A           | `:`                   |
-
-##### Unary Operators
-| Operator | Prefix/Postfix |
-|----------|----------------|
-| `++`     | Both           |
-| `--`     | Both           |
-| `!`      | Prefix         |
-| `~`      | Prefix         |
-| `*`      | Prefix         |
-| `&`      | Prefix         |
-
+Operators are listed on [this page](../basic-syntax)
 
 ### Types
 
@@ -209,7 +217,6 @@ A type is simply a combination of a identifier, with any number of `*`s after it
 The base type names are 
 
 * `i8`, `i16`, `i32`, `i64`
-* `f32`, `f64`
 * `void`
 
 With pointer (and pointer-pointer) types for each, like:
