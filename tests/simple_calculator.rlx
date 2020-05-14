@@ -11,7 +11,7 @@ define i32 Main() {
 	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
 	
 	i64 Left := WToI(ArgV[1])
-	i64 Right := WToI(ArgV[3])	
+	i64 Right := WToI(ArgV[3])
 	
 	i8 Operator := ArgV[2][0] As i8
 	

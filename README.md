@@ -1,18 +1,44 @@
-# Bootstrap branch, aka dev with extra steps
+# Relax, a basic compiled programming language.
 
-Bootstrap is where I commit if I don't want to update the documentation.
+Note: The compiler is now implemented in Relax itself, it used to be implemented in AutoHotkey. Yes, I regret that.
 
-Bootstrap also happens to be where I'm doing all the work of bootstrapping the compiler.
+For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
 
-Bootstrap also happens to be the branch with all the cool features, since bootstrapping the compiler needs lots of syntax sugar.
+## A quick peek at some code
 
-Differences:
+```
+#Include Memory.rlx
+#Include String.rlx
+#Include Console.rlx
 
-* Bootstrap has struct types (and the `.` operator)
-* Bootstrap has full array access syntax support (Ex: `A[B + 10] := 9`, not just `return A[B + 10]`)
-* Bootstrap has many minor bugs fixed (which wasn't my smartest move, those fixes should be on master)
-* Bootstrap has true/false
-* Bootstrap has struct-pointer types (and the `->` operator)
-* Bootstrap has better built in functions (`Alloc`, `Free`, `ReAlloc`, `Exit`)
-* Bootstrap has the prototype self-compiling compiler, which is already a way better parser better than the original (even `A->B->C[D]` parses correctly)
-* I like bootstrap a lot more than master.
+DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+/* A simple calculator, depends on CommandLineToArgvW splitting the command line by spaces */
+
+define i32 Main() {
+	i64 ArgC := 0
+	i16* CommandLine := GetCommandLineW()
+	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
+	
+	i64 Left := WToI(ArgV[1])
+	i64 Right := WToI(ArgV[3])
+	
+	i8 Operator := ArgV[2][0] As i8
+	
+	if (Operator = '+') {
+		IWrite(Left + Right)
+	}
+	else if (Operator = '-') {
+		IWrite(Left - Right)
+	}
+	else if (Operator = '*') {
+		IWrite(Left * Right)
+	}
+	else if (Operator = '/') {
+		IWrite(Left / Right)
+	}
+	
+	return 0
+}
+```
