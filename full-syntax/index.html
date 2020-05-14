@@ -34,9 +34,11 @@
         var pageToc = [
           {title: "The full syntax description", url: "#_top", children: [
               {title: "Program", url: "#program" },
-              {title: "Import", url: "#import" },
+              {title: "Directives", url: "#directives" },
+              {title: "Declare", url: "#declare" },
               {title: "DllImport", url: "#dllimport" },
               {title: "Define", url: "#define" },
+              {title: "Struct", url: "#struct" },
               {title: "Global", url: "#global" },
               {title: "Statements", url: "#statements" },
               {title: "Declarations", url: "#declarations" },
@@ -47,7 +49,6 @@
               {title: "Return", url: "#return" },
               {title: "Expression-Statements", url: "#expression-statements" },
               {title: "Expression", url: "#expression" },
-              {title: "Operator list", url: "#operator-list" },
               {title: "Types", url: "#types" },
               {title: "Names", url: "#names" },
           ]},
@@ -87,10 +88,10 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
     </div>
     
     <div class="wm-article-nav">
-      <a href="../feature-list/" class="btn btn-xs btn-default pull-left">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-left">
         <i class="fa fa-chevron-left" aria-hidden="true"></i>
-        Previous</a><a href="../feature-list/" class="btn btn-xs btn-link">
-        List of Features
+        Previous</a><a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
       </a>
     </div>
     
@@ -102,22 +103,35 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <h3 id="program">Program</h3>
 <p>The compiler expects input code to be a "program", a program is defined as a list of the following statements:</p>
 <ul>
-<li><a href="#import">Import statements</a></li>
+<li><a href="#struct">Struct statements</a></li>
+<li><a href="#declare">Declare statements</a></li>
 <li><a href="#dllimport">DllImport statements</a></li>
 <li><a href="#define">Define statements</a></li>
 <li><a href="#global">Global declarations</a></li>
+<li><a href="#directive">Directives</a></li>
 </ul>
-<h3 id="import">Import</h3>
-<p>Import statements follow the format:</p>
-<pre><code>Import ModuleName
+<h3 id="directives">Directives</h3>
+<p>Directives follow the format:</p>
+<pre><code>#Directive Parameter
 </code></pre>
 
-<p>Where <code>ModuleName</code> is the name of a built in module. The current list of built in modules is:</p>
 <ul>
-<li><a href="../module-memory">Memory</a></li>
-<li><a href="../module-string">String</a></li>
-<li><a href="../module-console">Console</a></li>
+<li><code>Directive</code> is a directive name (<code>include</code> is the only one implemented)</li>
+<li><code>Parameter</code> is a parameter for the directive</li>
 </ul>
+<p>Directives are direct instructions for the compiler, and do not generate any code.</p>
+<p>The <code>include</code> directive will copy-paste the contents of another file into the position the directive is at.</p>
+<h3 id="declare">Declare</h3>
+<p>Declare statements follow the format:</p>
+<pre><code>Declare ReturnType FunctionName(ParameterTypeList)
+</code></pre>
+
+<ul>
+<li><code>ReturnType</code> is the <a href="#types">type</a> that the function is expected to return.</li>
+<li><code>FunctionName</code> is the <a href="#names">name</a> of the function.</li>
+<li><code>ParameterTypeList</code> is a list of comma-separated <a href="#types">types</a>, without any names, since the parameter names are not needed.</li>
+</ul>
+<p>Declare statements are use to tell the compiler what types <code>FunctionName</code> should be passed (and will return) before it has parsed the full definition of <code>FunctionName</code></p>
 <h3 id="dllimport">DllImport</h3>
 <p>DllImport statements follow the format:</p>
 <pre><code>DllImport ReturnType FunctionName(ParameterTypeList) {DllFileName.dll, FunctionNameInsideDLL}
@@ -144,10 +158,28 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <li><code>Body</code> is a list of <a href="#statements">statements</a>.</li>
 <li><code>Export</code> is optionally the word <code>export</code>, which will cause the function to be exported from the resulting file (if the file is a <code>.dll</code>)</li>
 </ul>
+<h3 id="struct">Struct</h3>
+<p>Struct statements follow the format:</p>
+<pre><code>struct StructName {
+    Type Name,
+    Type Name,
+    union {
+        Type Name,
+        Type Name
+    },
+    Type Name
+}
+</code></pre>
+
+<ul>
+<li><code>StructName</code> is the type name the struct type should have</li>
+<li><code>Type</code> is a <a href="#types">type name</a> for the field</li>
+<li><code>Name</code> is a <a href="#names">name</a> for the field</li>
+</ul>
 <h3 id="global">Global</h3>
 <p>Global declarations follow the same format as regular <a href="#declarations">declarations</a>.
 However, global declarations make variables that are <a href="#program">program</a>-wide, and can be used from any function.
-Additionally, global declarations run just before <code>Main</code> is called (and ArgC/ArgV are set), making them a suitable method to run setup code.</p>
+Additionally, global declarations run just before <code>Main</code> is run, making them a suitable method to run setup code.</p>
 <h3 id="statements">Statements</h3>
 <p>Statements follow multiple different formats, depending on the type of statement.</p>
 <ul>
@@ -242,7 +274,7 @@ Continue
 <h3 id="expression">Expression</h3>
 <p>Expressions follow many formats, examples:</p>
 <pre><code>A := B + C
-(2 - E) / 2.5
+(2 - E) / 2
 9999 + *(G) % H
 </code></pre>
 
@@ -250,8 +282,7 @@ Continue
 <li>Any unquoted text inside an expression is treated as a variable.</li>
 <li>Quoted text is treated as an <code>i8*</code> typed value.</li>
 <li>Numbers are treated as the smallest possible type to hold them (ex: <code>58</code> would be an <code>i8</code>, <code>9999</code> would be an <code>i16</code>)</li>
-<li>Operands of any given operator must be a someone-similar type (ex: <code>2.6 * SomePointer</code> is invalid).</li>
-<li>Operators are evaluated according to precedence and associativity, which is defined in <code>Constants.ahk</code>.</li>
+<li>Operators are evaluated according to precedence and associativity, which is defined in <code>Parser.rlx</code>.</li>
 <li>Some operators may not be implemented for a given type</li>
 <li>Some expressions may be used as booleans inside of <a href="#for">for loops</a> or <a href="#if">if statements</a>. This is done by checking if the expressions results in <code>0</code> or not.</li>
 </ul>
@@ -260,115 +291,12 @@ Continue
 </code></pre>
 
 <p>Where <code>Something</code> is an expression which results in a pointer-type, and <code>SomethingElse</code> results in an integer, which will be used as an index into <code>Something</code>.</p>
-<h3 id="operator-list">Operator list</h3>
-<h5 id="binary-operators">Binary Operators</h5>
-<table>
-<thead>
-<tr>
-<th>Category Name</th>
-<th>Precedence</th>
-<th>Associativity</th>
-<th>Operators in category</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Assignment</td>
-<td>0</td>
-<td>Right</td>
-<td><code>:=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code></td>
-</tr>
-<tr>
-<td>Logic</td>
-<td>1</td>
-<td>Right</td>
-<td><code>&amp;&amp;</code>, <code>||</code></td>
-</tr>
-<tr>
-<td>Equality</td>
-<td>2</td>
-<td>Left</td>
-<td><code>!=</code>, <code>=</code></td>
-</tr>
-<tr>
-<td>Comparison</td>
-<td>3</td>
-<td>Right</td>
-<td><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></td>
-</tr>
-<tr>
-<td>Unused</td>
-<td>4</td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>Addition</td>
-<td>5</td>
-<td>Left</td>
-<td><code>+</code>, <code>-</code></td>
-</tr>
-<tr>
-<td>Division</td>
-<td>6</td>
-<td>Left</td>
-<td><code>/</code>, <code>*</code>, <code>%</code></td>
-</tr>
-<tr>
-<td>Bitwise</td>
-<td>7</td>
-<td>Left</td>
-<td><code>&amp;</code>, <code>|</code>, <code>^</code></td>
-</tr>
-<tr>
-<td>Module</td>
-<td>8</td>
-<td>N/A</td>
-<td><code>:</code></td>
-</tr>
-</tbody>
-</table>
-<h5 id="unary-operators">Unary Operators</h5>
-<table>
-<thead>
-<tr>
-<th>Operator</th>
-<th>Prefix/Postfix</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>++</code></td>
-<td>Both</td>
-</tr>
-<tr>
-<td><code>--</code></td>
-<td>Both</td>
-</tr>
-<tr>
-<td><code>!</code></td>
-<td>Prefix</td>
-</tr>
-<tr>
-<td><code>~</code></td>
-<td>Prefix</td>
-</tr>
-<tr>
-<td><code>*</code></td>
-<td>Prefix</td>
-</tr>
-<tr>
-<td><code>&amp;</code></td>
-<td>Prefix</td>
-</tr>
-</tbody>
-</table>
+<p>Operators are listed on <a href="../basic-syntax">this page</a></p>
 <h3 id="types">Types</h3>
 <p>A type is simply a combination of a identifier, with any number of <code>*</code>s after it (each <code>*</code> increases the level of nested pointers)</p>
 <p>The base type names are </p>
 <ul>
 <li><code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code></li>
-<li><code>f32</code>, <code>f64</code></li>
 <li><code>void</code></li>
 </ul>
 <p>With pointer (and pointer-pointer) types for each, like:</p>
@@ -403,10 +331,10 @@ void*****************    - Pointer to a pointer to a pointer to a pointer to a p
     </div>
     
     <div class="wm-article-nav">
-      <a href="../feature-list/" class="btn btn-xs btn-default pull-left">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-left">
         <i class="fa fa-chevron-left" aria-hidden="true"></i>
-        Previous</a><a href="../feature-list/" class="btn btn-xs btn-link">
-        List of Features
+        Previous</a><a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
       </a>
     </div>
     

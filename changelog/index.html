@@ -33,6 +33,7 @@
         
         var pageToc = [
           {title: "Changelog", url: "#_top", children: [
+              {title: "1.0.0", url: "#100" },
               {title: "1.0.0-alpha.30", url: "#100-alpha30" },
               {title: "1.0.0-alpha.29", url: "#100-alpha29" },
               {title: "1.0.0-alpha.28 (And lower)", url: "#100-alpha28-and-lower" },
@@ -63,12 +64,12 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
   <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
     
     <div class="wm-article-nav pull-right">
-      <a href="../compile-to-ahk/" class="btn btn-xs btn-default pull-right">
+      <a href="../compiling-it/" class="btn btn-xs btn-default pull-right">
         Next
         <i class="fa fa-chevron-right" aria-hidden="true"></i>
       </a>
-      <a href="../compile-to-ahk/" class="btn btn-xs btn-link">
-        Compiling To AHK
+      <a href="../compiling-it/" class="btn btn-xs btn-link">
+        Compiling the compiler
       </a>
     </div>
     
@@ -86,13 +87,33 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 
     <h1 id="changelog">Changelog</h1>
 <p>Top of page = most recent.</p>
-<h2 id="100-alpha30">1.0.0-alpha.30</h2>
+<h2 id="100">1.0.0</h2>
 <h3 id="added">Added</h3>
+<ul>
+<li>Support for structure types </li>
+<li>Support for function prototypes</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>The standard version of the compiler is now the self-compiled version</li>
+<li>All pointer types are now compatible</li>
+</ul>
+<h3 id="removed">Removed</h3>
+<ul>
+<li>Floating point types (for now)</li>
+</ul>
+<h3 id="docs-changes">Docs changes</h3>
+<ul>
+<li>All pages, changed to be correct with the new compiler.</li>
+</ul>
+<hr />
+<h2 id="100-alpha30">1.0.0-alpha.30</h2>
+<h3 id="added_1">Added</h3>
 <ul>
 <li>Support for compiling to <code>.dll</code> files.</li>
 <li>Support for exporting functions through the <code>export</code> keyword (which is explained on <a href="../full-syntax#define">the syntax page</a>)</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="changed_1">Changed</h3>
 <ul>
 <li>Lots of operations to use slightly bigger operands, which are incredibly easier to read.</li>
 <li>All operations but function calls and register-stack dumps to not use the actual stack (which should increase speed).</li>
@@ -102,7 +123,7 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <li>Having identifiers named with the same names as operators (like <code>i32 Times := 0</code>) being converted into a <code>Tokens.OPERATOR</code> token (and not parsing correctly).</li>
 <li>Both types of comments not working, not <code>//</code> and <code>/* whatever */</code> should both work fine. </li>
 </ul>
-<h3 id="docs-changes">Docs changes</h3>
+<h3 id="docs-changes_1">Docs changes</h3>
 <ul>
 <li>Changed <a href="../how-to-use-it">how to use it</a> to not mention <code>Main.exe</code>, which has been removed since I can never remember to update it.</li>
 <li>Added <code>export</code> to the <a href="../full-syntax">full syntax page</a></li>
@@ -110,12 +131,12 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </ul>
 <hr />
 <h2 id="100-alpha29">1.0.0-alpha.29</h2>
-<h3 id="added_1">Added</h3>
+<h3 id="added_2">Added</h3>
 <ul>
 <li>Pointer-pointer types, allowing things like <code>i64**</code> or <code>void*******************</code>. (Maybe don't use that second one though)</li>
 <li>An array-access syntax for pointers which scales the index for you, so <code>ArgV[Index]</code> would be equal to <code>*(ArgV + (8 * Index))</code> and <code>ArrayOfI16s[Index]</code> would be equal to <code>*(ArrayOfI16s + (2 * Index))</code></li>
 </ul>
-<h3 id="changed_1">Changed</h3>
+<h3 id="changed_2">Changed</h3>
 <ul>
 <li>The <code>ArgV</code> parameter to <code>Main</code> to be of the type <code>i16**</code>.</li>
 <li>The version number</li>
@@ -132,7 +153,7 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <li>Modules which <code>Import</code> each other crashing the compiler.</li>
 <li>Regular AHK exceptions causing the compiler to print <code>"Fatal error, bailing out."</code> and exit without any context.</li>
 </ul>
-<h3 id="docs-changes_1">Docs Changes</h3>
+<h3 id="docs-changes_2">Docs Changes</h3>
 <ul>
 <li>Edited <a href="../basic-syntax">Basic Syntax</a> to remove the mention of not having pointer-pointer types.</li>
 <li>Added <a href="../basic-syntax#array-access">an explanation of array accesses</a> on the basic syntax page.</li>
@@ -155,12 +176,12 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
   <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
     
     <div class="wm-article-nav pull-right">
-      <a href="../compile-to-ahk/" class="btn btn-xs btn-default pull-right">
+      <a href="../compiling-it/" class="btn btn-xs btn-default pull-right">
         Next
         <i class="fa fa-chevron-right" aria-hidden="true"></i>
       </a>
-      <a href="../compile-to-ahk/" class="btn btn-xs btn-link">
-        Compiling To AHK
+      <a href="../compiling-it/" class="btn btn-xs btn-link">
+        Compiling the compiler
       </a>
     </div>
     

@@ -34,11 +34,14 @@
         var pageToc = [
           {title: "The basic syntax", url: "#_top", children: [
               {title: "Types", url: "#types" },
+              {title: "Type checking", url: "#type-checking" },
               {title: "General Things", url: "#general-things" },
               {title: "Assignment operators", url: "#assignment-operators" },
               {title: "Binary operators", url: "#binary-operators" },
               {title: "Unary operators", url: "#unary-operators" },
+              {title: "Casting", url: "#casting" },
               {title: "Array-access", url: "#array-access" },
+              {title: "Struct-access", url: "#struct-access" },
           ]},
           {title: "What next?", url: "#what-next", children: [
           ]},
@@ -90,10 +93,9 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
     
 
     <h2 id="the-basic-syntax">The basic syntax</h2>
-<p>It's pretty much C, but with minor changes. Although many things are borrowed from C, this is <em>not</em> a C compiler, and does not have all the features C has.</p>
-<p>Mainly, it's missing structures, and arrays.</p>
+<p>It looks like C, it is written like C, but it <em>is not</em> C.</p>
 <h4 id="types">Types</h4>
-<p>Type names are changed to be more concise, and shorter.</p>
+<p>Instead of long historic names, Relax uses shortened type names:</p>
 <p>Integer types:</p>
 <table>
 <thead>
@@ -126,83 +128,89 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </tr>
 </tbody>
 </table>
-<p>Floating point types:</p>
-<table>
-<thead>
-<tr>
-<th>Precision</th>
-<th>C Name</th>
-<th>(LanguageName) Name</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>32 bits</td>
-<td><code>float</code></td>
-<td><code>f32</code></td>
-</tr>
-<tr>
-<td>64 bits</td>
-<td><code>double</code></td>
-<td><code>f64</code></td>
-</tr>
-</tbody>
-</table>
 <p>Additionally, there is the <code>void</code> type, which is exactly what you'd expect it to be: a 64 bit integer (I can't remember why I made it this way).</p>
-<p>Of course, there are also pointer types, which follow C syntax of <code>TypeName*</code>. Pointer-pointer types are not implemented.</p>
+<p>Of course, there are also pointer types, which follow C syntax of <code>TypeName*</code>.</p>
+<p>Additionally, you can define a structure type with the <code>struct</code> keyword, which can then be pointed-to like any other type.</p>
+<h4 id="type-checking">Type checking</h4>
+<p>Type checking is done in the parser, so globals/locals/functions/structs must (usually) be defined above where they are used.</p>
+<p>To avoid circular references being impossible to compile, the <code>declare</code> statement can be used to state a function's parameters/return type before defining it.</p>
+<p>Additionally, undefined types can be used as long as they only used in pointer types, and do not have and fields referenced.</p>
 <h4 id="general-things">General Things</h4>
-<p>String literals are supported, and are replaced with an <code>i8*</code> to the given string. This <code>i8*</code> will point into the stack, so <strong>DO NOT</strong> try to free this memory. You can alter it, but changing the size of it, or overrunning its length is <strong><em>VERY VERY BAD</em></strong>.</p>
-<p>If a function does not have a return in it, a <code>return 0</code> is implicitly added.</p>
-<p>The magic entry-point function is named <code>Main</code>, and receives a <code>i64</code> parameter containing the number of command line arguments, along with a <code>void*</code> which is actually an array of <code>i16*</code> pointers to the individual command line arguments (Just like how in C you have <code>ArgC</code> and <code>ArgV</code>)</p>
-<p><code>Main</code> should have a return type of <code>i32</code>, as the return value will be given to the Windows API <code>ExitProcess</code> function as the program's exit code.</p>
-<p>Now's a good time to note: If you prefix the name of a variable or function with <code>__</code>, you are very likely to break something internal. The <code>__</code> prefix is reserved, and I will be <em>very unhappy</em> with you if you use it.</p>
-<h4 id="assignment-operators">Assignment operators</h4>
-<p>Most assignment operators act as you'd expect, except for <code>*=</code>. </p>
-<p>Since I really like the C syntax for pointers, but <strong><em>hate</em></strong> the C syntax to assign the value a pointer points to, the <code>*=</code> is used for assignment of a memory address to a new value. </p>
-<p>For example <code>(PointerToAString + 90) *= 'H'</code> would set the character at <code>PointerToAString + 90</code> to be <code>H</code>.</p>
-<p>Since <code>*=</code> is taken, <code>/=</code> is not implemented to prevent confusion over only one of the two working like normal, <code>+=</code> and <code>-=</code> are the only shorthand assignment operators.</p>
-<p>Additionally, since floating point number support is half-baked (at best), <code>+=</code> and <code>-=</code> are not implemented for floating point numbers.</p>
-<p>So, that leaves us with the 4 assignment operators: <code>:=</code>, <code>*=</code>, <code>+=</code>, <code>-=</code>.</p>
-<h4 id="binary-operators">Binary operators</h4>
-<p>Another minor change is with the logical operators <code>&amp;&amp;</code> and <code>||</code>. 
-I can't think of a good way to generate code which will have these operators short-circuit, so they don't.</p>
-<p>Additionally, some operators are not implemented for floating point operands. This is mostly because I do floating point math with the (actually older than me) x87 FPU, and can't figure out the FPU instructions needed for some operators.</p>
-<p>These operators are: <code>%</code> (Modulo), <code>&amp;&amp;</code>, and <code>||</code>. (You'll get an error message when you try to use them on floating point operands)</p>
-<p>Bitwise operators are allowed on all data types, simply because I think it's dumb that they aren't in some languages. If you want to mangle the floating point number format, go for it.</p>
-<p>The full list of binary operators: <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code> (Modulo), <code>=</code> (regular equality, there's no <code>==</code>), <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>&amp;</code>, <code>|</code>, <code>^</code></p>
-<p>Yes, I know there's no bit-shifts. If anyone besides me ever uses this language and wants bit-shifts, I'll implement them.</p>
-<h5 id="casting">Casting</h5>
-<p>Casting between types is usually implicit, but if you want to explicitly cast between two obviously incompatible types, the <code>As</code> operator does it.
-The format is <code>Operand As TypeName</code>, just be careful with <code>Operand</code>, since <code>As</code> will take the closest thing on its left, so <code>1 + 2 As f32</code> would be parsed as <code>1 + (2 As f32)</code>.</p>
-<p>This funky word operator is because I honestly fear for my mental and physical health if I have to modify the expression parser to handle C style casting.</p>
-<h4 id="unary-operators">Unary operators</h4>
-<p>Unary operators also have some odd bits, mostly because I forgot to implement how they work with different types. (All data types are treated like integers with unary operators)</p>
-<p>So make sure not to have something like <code>-AFloatingPointNumber</code>, because that'll cause some problems. <code>0 - AFloatingPointNumber</code> works fine though.
-Oh, and <code>AFloatingPointNumber</code> with <code>++</code> or <code>--</code> will also cause some problems.</p>
-<p><code>&amp;</code> Functions as you'd expect in C, same with <code>*</code> (which requires a pointer type as the operand).</p>
-<p><code>++Variable</code> and <code>Variable++</code> also function as you'd expect, I made sure.</p>
-<p><code>++PointerVariable</code> is also implemented to increment <code>PointerVariable</code> by however big the value it points to is, ex:</p>
-<pre><code class="c">i64 SomeNumber := 99
-i64* PointerVariable := &amp;SomeNumber
-++PointerVariable
+<p>String literals are supported, and are replaced with an <code>i8*</code> to the given string. This <code>i8*</code> will point into the stack, so <strong>DO NOT</strong> try to free this memory. You can alter it, but poking at the memory around it is a terrible idea.</p>
+<p><br></p>
+<p>If a function does not have a return in it, the return value is undefined. However, functions are not required to have a <code>return</code>, and will still run.</p>
+<p><br></p>
+<p>The magic entry-point function is named <code>Main</code>, which is not expected to follow any prototype. This is to avoid having to include additional runtime code to support ArgV/ArgC. If a program requires ArgC/ArgV, this snippet will provide it:</p>
+<pre><code class="py">DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+define i32 Main() {
+    i64 ArgC := 0
+    i16* CommandLine := GetCommandLineW()
+    i16** ArgV := CommandLineToArgvW(CommandLine, &amp;ArgC)
+
+    ...
+}
 </code></pre>
 
-<p>Would increment <code>PointerVariable</code> by 8 </p>
+<p>The return value of <code>Main</code> is considered the program's exit code.</p>
+<p><br></p>
+<p>This is the list of reserved names:</p>
+<ul>
+<li><code>if</code>, <code>else</code></li>
+<li><code>return</code></li>
+<li><code>continue</code>, <code>break</code></li>
+<li><code>struct</code>, <code>union</code></li>
+<li><code>define</code>, <code>declare</code>, <code>dllimport</code> </li>
+<li><code>for</code>, <code>while</code>, <code>loop</code></li>
+<li><code>as</code></li>
+</ul>
+<h4 id="assignment-operators">Assignment operators</h4>
+<p>The left side of each assignment operator can be any of the following:</p>
+<ul>
+<li>A variable, such as <code>A</code></li>
+<li>An array access, such as <code>String[Index]</code></li>
+<li>A struct access, such as <code>Something.Field</code> or <code>SomethingPointer-&gt;Field</code></li>
+</ul>
+<p>The assignment operators are:</p>
+<ul>
+<li><code>:=</code> </li>
+<li><code>+=</code></li>
+<li><code>-=</code></li>
+</ul>
+<h4 id="binary-operators">Binary operators</h4>
+<p>Note: <code>&amp;&amp;</code> and <code>||</code> both short-circuit, <code>%</code> is modulo, <code>.</code> is local struct field access, <code>-&gt;</code> is pointer struct field access.
+<code>As</code> is explained further <a href="#casting">here</a></p>
+<ul>
+<li><code>+</code>, <code>-</code></li>
+<li><code>*</code>, <code>/</code>, <code>%</code></li>
+<li><code>=</code>, <code>!=</code></li>
+<li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
+<li><code>&amp;</code>, <code>|</code>, <code>^</code></li>
+<li><code>&amp;&amp;</code>, <code>||</code></li>
+<li><code>.</code>, <code>-&gt;</code></li>
+<li><code>as</code></li>
+</ul>
+<h4 id="unary-operators">Unary operators</h4>
+<p>Note: <code>&amp;</code> is 'address of', and <code>*</code> is dereference, <code>-</code> is negation.</p>
+<ul>
+<li><code>&amp;</code>, <code>*</code></li>
+<li><code>-</code>, <code>!</code></li>
+</ul>
+<p><code>++</code> and <code>--</code> have been deliberately excluded, as they are a pain to parse.</p>
+<h4 id="casting">Casting</h4>
+<p>Casting between types is usually implicit, but if you want to explicitly cast between two obviously incompatible types, the <code>As</code> operator does it.
+The format is <code>Operand As TypeName</code>.</p>
 <h4 id="array-access">Array-access</h4>
 <p>Array accesses are really just pointer syntax sugar, but god do they make things easier.</p>
-<p><code>Pointer[Index]</code> will do the same operation as <code>*(Pointer + (SizeOfPointedToType(Pointer) * Index))</code>, except in ~3 instructions.</p>
+<p><code>Pointer[Index]</code> will do the same operation as <code>*(Pointer + (SizeOfPointedToType(Pointer) * Index))</code>, with much less code generated.</p>
 <p>Instead of evaluating a bunch of expressions manually, the addition and multiplication steps are both done by the CPU directly, which should be a speed up.</p>
-<p>The actual instructions are</p>
-<pre><code>lea rax, [PointerRegister + IndexRegister * TYPESIZE]
-mov ResultRegister, 0
-mov ResultRegister, TYPENAME PTR [rax]
-</code></pre>
-
-<p>Where <code>TYPESIZE</code> is the size of each element in the array (1, 2, 4, or 8 bytes), and <code>TYPENAME</code> is the name of the type of each element.</p>
-<p>The <code>mov ResultRegister, 0</code> is because depending on <code>TYPENAME</code>, the <code>mov ResultRegister, [rax]</code> might only move 1/2/4 bytes into the 8 byte register, which could leave garbage data in the top few bytes. But by zeroing the result register, we clear any garbage.</p>
-<p>For example, <code>mov rcx, BYTE PTR [rax]</code> would only set the low 1 byte of <code>rcx</code>, leaving the top 7 bytes unchanged.</p>
+<h4 id="struct-access">Struct-access</h4>
+<p>Struct accesses are technically also syntax sugar, but allow for much higher level code.</p>
+<p>A struct access will automatically calculate the offset of a field inside of a structure, and encode that offset directly into an instruction.
+Additionally, since struct fields have names, cryptic code such as <code>*(SomeStruct + 8 As i8*)</code> can be written as <code>SomeStruct-&gt;Field</code>.</p>
+<p>The operators <code>.</code> and <code>-&gt;</code> are mostly interchangeable, however, <code>.</code> only works for local structs, and <code>-&gt;</code> only works for pointers to structs.</p>
 <h2 id="what-next">What next?</h2>
-<p>For a tutorial sort of thing, see <a href="../tutorial/">the tutorial page</a>.</p>
 <p>For a full writeup of the syntax, see <a href="../full-syntax/">the full syntax page</a>.</p>
 
   <br>

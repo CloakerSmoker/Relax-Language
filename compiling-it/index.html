@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+  
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    
+    <link rel="shortcut icon" href="../img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+    <title>Compiling the compiler - Relax Docs</title>
+    <link href="../css/bootstrap-3.3.7.min.css" rel="stylesheet">
+    <link href="../css/font-awesome-4.7.0.css" rel="stylesheet">
+    <link href="../css/base.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/highlight.css">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
+
+    <script src="../js/jquery-3.2.1.min.js"></script>
+    <script src="../js/bootstrap-3.3.7.min.js"></script>
+    <script src="../js/highlight.pack.js"></script>
+    
+    <base target="_top">
+    <script>
+      var base_url = '..';
+      var is_top_frame = false;
+        
+        var pageToc = [
+          {title: "Compiling the compiler", url: "#_top", children: [
+              {title: "Rules", url: "#rules" },
+              {title: "How To", url: "#how-to" },
+          ]},
+        ];
+
+    </script>
+    <script src="../js/base.js"></script>
+      <script src="../search/main.js"></script> 
+</head>
+
+<body>
+<script>
+if (is_top_frame) { $('body').addClass('wm-top-page'); }
+</script>
+
+
+
+<div class="container-fluid wm-page-content">
+  <a name="_top"></a>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../changelog/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../changelog/" class="btn btn-xs btn-link">
+        Changelog
+      </a>
+    </div>
+    
+  </div>
+
+    
+
+    <h1 id="compiling-the-compiler">Compiling the compiler</h1>
+<p>This is the only page I have enjoyed (re)writing.</p>
+<h2 id="rules">Rules</h2>
+<ul>
+<li>1) DO NOT COMMIT UNTIL ALL TESTS PASS</li>
+<li>2) DO NOT COMMIT UNTIL ALL TESTS PASS</li>
+<li>3) DO NOT COMMIT UNTIL ALL TESTS PASS</li>
+<li>4) DO NOT COMMIT UNTIL YOU CAN COMPILE YOURSELF</li>
+</ul>
+<h2 id="how-to">How To</h2>
+<p>The <code>Main</code> function of the compiler is implemented in <code>Bain.rlx</code>, which includes all other components.
+The file is not named <code>Main.rlx</code> because that was taken by the version for the original (AHK) compiler, which had runtime code that no longer exists.</p>
+<p>So, to compile the compiler we run <code>stable_version.exe Bain.rlx output_name.exe</code>, simple enough, right? <strong><em>Wrong</em></strong>.</p>
+<h3 id="testing">Testing</h3>
+<p>Since the compiler has reached a stage where it can only be compiled with the previous version of itself, it is <strong><em>100% crucial</em></strong> that any version of the compiler can compile itself, otherwise the repo could get stranded where there are 0 versions of the compiler which can compile the source.</p>
+<p>I've made the testing process easy with some scripts through, so to actually compile the compiler, you run:</p>
+<pre><code>python test_boostrap.py
+</code></pre>
+
+<p>which will ensure the latest version of the source can:</p>
+<ul>
+<li>A) Be compiled with the previous version</li>
+<li>B) Compile itself correctly</li>
+<li>C) Compile a series of test programs correctly</li>
+</ul>
+<p>If any of these steps fail, <code>test_bootstrap.py</code> will error out. However, if none fail, the output will be written to <code>new_stable.exe</code>, which can then overwrite <code>stable.version.exe</code> and then be used to compile code which requires a new feature.</p>
+<p><br></p>
+<p>For example, to implement unions I followed these steps:</p>
+<ul>
+<li>1) Change <code>Lexer.rlx</code> and <code>Parser.rlx</code> to handle the <code>union</code> keyword, and correctly alter structure layouts based on the keyword.</li>
+<li>2) Run <code>test_bootstrap</code> to ensure that my changes did not break anything.</li>
+<li>3) Use <code>new_stable.exe</code> to test that I had implemented unions correctly.</li>
+<li>4) Overwrite <code>stable_version.exe</code> with <code>new_stable.exe</code>, which now supported the <code>union</code> keyword.</li>
+<li>5) Change <code>Parser.rlx</code> and <code>Compiler.rlx</code> to use unions for some things.</li>
+<li>6) Run <code>test_bootstrap</code> to ensure that using unions did not break anything.</li>
+<li>7) Replace <code>stable_version.exe</code> with <code>new_stable.exe</code> again, which resulted in: A version of <code>stable_version.exe</code> which supports the <code>union</code> keyword, along with using the <code>union</code> keyword in it's own implementation.</li>
+<li>8) Add tests for the <code>union</code> keyword, to ensure the implementation stays correct.</li>
+</ul>
+<p>Now that <code>stable_version.exe</code> can 100% certainly compile itself correctly, it is safe to make a commit.
+Just in case though, step 9 would be to run <code>test_compiler.py</code> on <code>stable_version.exe</code>, which just runs the <code>\tests</code> on the passed compiler, without having it recompile itself.</p>
+<p>Through these steps, a new language feature can be implemented almost seamlessly, and with minimal brain-meltage. </p>
+<p>This might be an incredibly roundabout way to implement new features in a bootstrapped compiler, but I legitimately am not smart enough to come up with another way.</p>
+
+  <br>
+    
+
+    
+    
+      
+    
+
+  <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
+    
+    <div class="wm-article-nav pull-right">
+      <a href="../dumb-errors/" class="btn btn-xs btn-default pull-right">
+        Next
+        <i class="fa fa-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a href="../dumb-errors/" class="btn btn-xs btn-link">
+        Dumb errors
+      </a>
+    </div>
+    
+    <div class="wm-article-nav">
+      <a href="../changelog/" class="btn btn-xs btn-default pull-left">
+        <i class="fa fa-chevron-left" aria-hidden="true"></i>
+        Previous</a><a href="../changelog/" class="btn btn-xs btn-link">
+        Changelog
+      </a>
+    </div>
+    
+  </div>
+
+    <br>
+</div>
+
+<footer class="col-md-12 wm-page-content">
+  <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a> using <a href="">Windmill Dark</a> theme by None (noraj).</p>
+</footer>
+
+</body>
+</html>

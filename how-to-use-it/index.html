@@ -32,10 +32,8 @@
       var is_top_frame = false;
         
         var pageToc = [
-          {title: "Main", url: "#_top", children: [
-              {title: "Programs", url: "#programs" },
+          {title: "How To", url: "#_top", children: [
               {title: "How to use it", url: "#how-to-use-it" },
-              {title: "Output-files", url: "#output-files" },
           ]},
         ];
 
@@ -62,16 +60,6 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 
   <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
     
-    <div class="wm-article-nav pull-right">
-      <a href="../module-console/" class="btn btn-xs btn-default pull-right">
-        Next
-        <i class="fa fa-chevron-right" aria-hidden="true"></i>
-      </a>
-      <a href="../module-console/" class="btn btn-xs btn-link">
-        The Console Module
-      </a>
-    </div>
-    
     <div class="wm-article-nav">
       <a href="../how-it-works/" class="btn btn-xs btn-default pull-left">
         <i class="fa fa-chevron-left" aria-hidden="true"></i>
@@ -84,100 +72,11 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 
     
 
-    <h2 id="main">Main</h2>
-<p><code>Main.ahk</code> contains pretty basic command line interface, which is used to compile Relax programs.</p>
-<h3 id="programs">Programs</h3>
-<p>A Relax program is described in a few different places, so I won't describe it again, but you should know that the unofficial <code>.rlx</code> file type can be used for Relax source files.</p>
-<p>This is not official in any way, and <code>Main</code> doesn't even check the extensions.</p>
+    <h2 id="how-to">How To</h2>
+<p><code>stable_version.exe</code> is the compiler executable, and is run as: <code>stable_version.exe [InputFile] [OutputExe]</code></p>
 <h3 id="how-to-use-it">How to use it</h3>
-<p><code>Main</code> takes the arguments:</p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Parameter</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>-i</code></td>
-<td>[InputFile]</td>
-<td>Read the source code to compile from the given path</td>
-</tr>
-<tr>
-<td><code>-o</code></td>
-<td>[OutputFile]</td>
-<td>See <a href="#output-files">output files</a>.</td>
-</tr>
-<tr>
-<td><code>--no-confirm</code></td>
-<td>N/A</td>
-<td>Stops a confirmation message and user input being required before <code>[InputFile]</code> is compiled.</td>
-</tr>
-<tr>
-<td><code>--no-overwrite-output-file</code></td>
-<td>N/A</td>
-<td>Causes <code>Main</code> to exit when <code>[OutputFile]</code> already exists. (for safety)</td>
-</tr>
-<tr>
-<td><code>--fast-exit</code></td>
-<td>N/A</td>
-<td>Skips asking the user to press <code>{Enter}</code> before <code>Main</code> closes.</td>
-</tr>
-<tr>
-<td><code>--silent</code></td>
-<td>N/A</td>
-<td>Skips all steps that require user input.</td>
-</tr>
-<tr>
-<td><code>--verbose</code></td>
-<td>N/A</td>
-<td>Prints a log of what the compiler is doing.</td>
-</tr>
-</tbody>
-</table>
-<p>Where <code>[InputFile]</code> and <code>[OutputFile]</code> must both be given.</p>
-<p>For example, compiling <code>Examples\SimpleConsoleProgram.rlx</code> with no extra confirmation message into <code>a.exe</code> with verbose mode enabled would be:</p>
-<pre><code>Main.ahk --no-confirm --verbose -i Examples\SimpleConsoleProgram.rlx -o a.exe
-</code></pre>
-
-<p>Or, to compile the example DLL and program which uses the DLL:</p>
-<pre><code>Main.ahk -i Examples\ExampleDll.rlx -o ExampleDll.dll
-Main.ahk -i Examples\ExampleDllCaller.rlx -o out.exe
-</code></pre>
-
-<p>Which can then be run with</p>
-<pre><code>out.exe
-</code></pre>
-
-<p>(Note: if you change the name of <code>ExampleDll.Dll</code>, you'll need to change the <code>DllImport</code> in <code>ExampleDllCaller.rlx</code> to import from the new name of the DLL)</p>
-<hr />
-<p>If there are any errors while compiling, they will be printed, and the compiler will abort.</p>
-<h3 id="output-files">Output-files</h3>
-<p>The <code>[OutputFile]</code> parameter decides where to write the output to, and which format the output will be in. The formats are as follows:</p>
-<table>
-<thead>
-<tr>
-<th>Format Extension</th>
-<th>Format description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>.ahk</code></td>
-<td>Will write the output code to <code>[OutputFile]</code> as a group of AHK functions, which can be <code>#Include</code>'d</td>
-</tr>
-<tr>
-<td><code>.exe</code></td>
-<td>Will write the output code to <code>[OutputFile]</code> as a <code>.exe</code> file, with an entry point of the user-defined <code>Main</code> function</td>
-</tr>
-<tr>
-<td><code>.dll</code></td>
-<td>Will write the output code to <code>[OutputFile]</code> as a <code>.dll</code> file, with each function with the <code>export</code> keyword as an exported function of the <code>.dll</code> file</td>
-</tr>
-</tbody>
-</table>
+<p>Run <code>stable_version.exe</code> with a UTF-8 encoded text (or <code>.rlx</code> file, the extension is unofficial, and not checked) as <code>[InputFile]</code> and a path to a <code>.exe</code> file as <code>[OutputFile]</code>. The compiler will run, report any errors, and write the output to <code>[OutputFile]</code></p>
+<p>Of course, writing the input file is a majority of the work.</p>
 
   <br>
     
@@ -188,16 +87,6 @@ Main.ahk -i Examples\ExampleDllCaller.rlx -o out.exe
     
 
   <div class="row wm-article-nav-buttons" role="navigation" aria-label="navigation">
-    
-    <div class="wm-article-nav pull-right">
-      <a href="../module-console/" class="btn btn-xs btn-default pull-right">
-        Next
-        <i class="fa fa-chevron-right" aria-hidden="true"></i>
-      </a>
-      <a href="../module-console/" class="btn btn-xs btn-link">
-        The Console Module
-      </a>
-    </div>
     
     <div class="wm-article-nav">
       <a href="../how-it-works/" class="btn btn-xs btn-default pull-left">

@@ -36,9 +36,8 @@
         var pageToc = [
           {title: "Relax", url: "#_top", children: [
               {title: "Note", url: "#note" },
-              {title: "FAQ", url: "#faq" },
               {title: "How to use it", url: "#how-to-use-it" },
-              {title: "How to do most of the work:", url: "#how-to-do-most-of-the-work" },
+              {title: "How to write Relax code:", url: "#how-to-write-relax-code" },
               {title: "How it works", url: "#how-it-works" },
               {title: "Why I did this", url: "#why-i-did-this" },
           ]},
@@ -107,25 +106,15 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="changelog/" class="wm-article-link wm-toc-text">Changelog</a>
 </li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="compile-to-ahk/" class="wm-article-link wm-toc-text">Compiling To AHK</a>
+        <li class="wm-toc-li wm-toc-lev1 "><a href="compiling-it/" class="wm-article-link wm-toc-text">Compiling the compiler</a>
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="dumb-errors/" class="wm-article-link wm-toc-text">Dumb errors</a>
-</li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="feature-list/" class="wm-article-link wm-toc-text">List of Features</a>
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="full-syntax/" class="wm-article-link wm-toc-text">Full syntax</a>
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="how-it-works/" class="wm-article-link wm-toc-text">How it works</a>
 </li>
         <li class="wm-toc-li wm-toc-lev1 "><a href="how-to-use-it/" class="wm-article-link wm-toc-text">How to use it</a>
-</li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="module-console/" class="wm-article-link wm-toc-text">The Console Module</a>
-</li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="module-memory/" class="wm-article-link wm-toc-text">The Memory Module</a>
-</li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="module-string/" class="wm-article-link wm-toc-text">The String Module</a>
-</li>
-        <li class="wm-toc-li wm-toc-lev1 "><a href="tutorial/" class="wm-article-link wm-toc-text">Tutorial</a>
 </li>
   </ul>
 </nav>
@@ -161,30 +150,30 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
     
 
     <h1 id="relax">Relax</h1>
-<p>A compiled programming language, implemented entirely in AHK</p>
-<p>You might notice that the name is a bit ironic, since writing this in AHK gave me absolutely 0 chances to just <em>relax</em>.</p>
+<p>A C-like compiled programming language.
+The original compiler was implemented in AutoHotkey, and is now implemented in Relax itself.</p>
 <h2 id="note">Note</h2>
-<p>Relax generates 64 bit machine code, and depends on certain features that only exist on 64 bit processors. This means that there is <em>no</em> 32 bit support.</p>
+<p>The Relax compiler generates 64 bit machine code, and depends on certain features that only exist on 64 bit processors. This means that there is <em>no</em> 32 bit support.</p>
 <p>I have no plans for adding 32 bit support, considering that 32 bit machine code is actually much more complex, and would need lots of special cases compared to 64 bit code.</p>
-<h2 id="faq">FAQ</h2>
-<h5 id="q-what-the-fuck-why-dear-god-why">Q: What the fuck, why, dear god, why?!</h5>
-<p>A: ¯\<em>(ツ)</em>/¯ (see "Why I Did This")</p>
-<h5 id="q-wait-so-this-is-an-actual-compiler">Q: Wait, so this is an actual compiler?</h5>
-<p>A: Yes, this script takes source code as input, tokenizes it, parses the tokens, optimizes the code a little bit, generates machine code for the parsed/optimized code, and finally builds a file holding the compiled code.</p>
-<p>All without any outside tools. Every step is personally written by me. (Which probably isn't a good thing, but hey, I'm still proud of it)</p>
-<p>For more info, see <a href="how-it-works">how it all works</a></p>
-<h5 id="q-what-kind-of-files-can-it-make">Q: What kind of files can it make?</h5>
-<p>A: Code can be compiled into <code>.exe</code>, <code>.dll</code>, and <code>.ahk</code> files. All of which work as you'd expect, <code>.exe</code> files can be run directly, <code>.dll</code> files can be called with AHK's <code>DllCall</code> or with <code>LoadLibrary</code>/<code>GetProcAddress</code>, <code>.ahk</code> files can be <code>#Include</code>'d and called like any other function.</p>
 <h2 id="how-to-use-it">How to use it</h2>
-<p>See <a href="how-to-use-it">this page</a> for the different ways Relax can be used.</p>
-<h2 id="how-to-do-most-of-the-work">How to do most of the work:</h2>
-<p>(I recommend you follow these in the order 1-2-3 if you already know a C-like language, and 2-1-3 otherwise)</p>
+<p>The Relax compiler is packaged along with each commit to the repo (as of <a href="https://github.com/CloakerSmoker/Relax-Language/commit/bc91bd89ae900e0646a9e994d338537dc0bfa3ae">this</a> commit onwards) as the file <code>stable_version.exe</code>, and is ran as: <code>stable_version.exe [InputFile] [OutputExe]</code></p>
+<p>Any compilation errors will be written to stderr, with general info being written to stdout.</p>
+<p><br></p>
+<p>If you don't trust the pre-compiled version, you're sadly out of luck. The source code of the Relax compiler can no longer be compiled with the original (AHK) compiler, or older versions of the self-hosted compiler.</p>
+<p>Which means that in order to generate your own modern copy of <code>stable_version.exe</code>, you'd need to compile the last version of the compiler which was compatible with the original (AHK) compiler. Then from there, you'd need to compile each commit which adds a new feature to the language until you can compile the most recent version of the compiler.</p>
+<p><code>stable_version.exe</code> has already done this for you, as it is the running copy of the 'most modern' version of the compiler.</p>
+<p><br></p>
+<p>The only guarantee in terms of what <code>stable_version.exe</code> can compile is that: </p>
+<p><code>stable_version.exe</code> <strong><em>must</em></strong> always be able to compile the version of the source code it shares a commit with (along with all the test programs).</p>
+<h2 id="how-to-write-relax-code">How to write Relax code:</h2>
+<p>Pretend it is C with a whole bunch of stuff <code>#define</code>'d into existence.</p>
 <p>For a quick(-ish) rundown of the syntax, and some quirks, see <a href="basic-syntax/">the basic syntax page</a>.</p>
-<p>For a tutorial sort of thing, see <a href="tutorial/">the tutorial page</a>.</p>
 <p>For a full writeup of the syntax, see <a href="full-syntax/">the full syntax page</a>.</p>
 <h2 id="how-it-works">How it works</h2>
 <p>I wanted the header for this on this page, but it's long enough that you'll need to go <a href="how-it-works">to this page</a> to read that.</p>
 <h2 id="why-i-did-this">Why I did this</h2>
+<p>I have lots of time to waste, and when I started this project, my only goal was to finish it.</p>
+<h4 id="note-this-next-part-is-outdated-but-is-being-kept-since-i-still-think-it-was-insane-to-write-the-original-compiler-in-ahk">Note: This next part is outdated, but is being kept since I still think it was insane to write the original compiler in AHK</h4>
 <p>I feel like I need to defend myself here, mostly because I know it's 100% insane to use AHK for a project like this.</p>
 <p>AHK was the first language I ever really mastered, and I got used to how everything works, and all of the quirks. </p>
 <p>Because of this, when I decided I wanted to write a toy language, I didn't think of doing it in a "real" language since I already had a language that you can easily (and quickly) prototype things in right in front of me.</p>
@@ -232,5 +221,5 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 </html>
 <!--
 MkDocs version : 1.0.4
-Build Date UTC : 2020-02-12 19:12:18
+Build Date UTC : 2020-05-14 19:38:14
 -->

@@ -37,19 +37,13 @@
               {title: "Lexer", url: "#lexer" },
           ]},
           {title: "Parser", url: "#parser", children: [
-              {title: "Expressions", url: "#expressions" },
-          ]},
-          {title: "Optimizer", url: "#optimizer", children: [
           ]},
           {title: "Compiler", url: "#compiler", children: [
-              {title: "Type Checking", url: "#type-checking" },
               {title: "Strings And Other Stuff", url: "#strings-and-other-stuff" },
           ]},
           {title: "CodeGen", url: "#codegen", children: [
           ]},
           {title: "PEBuilder", url: "#pebuilder", children: [
-          ]},
-          {title: "ToAHK", url: "#toahk", children: [
           ]},
         ];
 
@@ -103,22 +97,19 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <ul>
 <li><a href="#lexer">Lexer</a></li>
 <li><a href="#parser">Parser</a></li>
-<li><a href="#optimizer">Optimizer</a></li>
 <li><a href="#compiler">Compiler</a></li>
 <li><a href="#codegen">CodeGen</a></li>
-<li><a href="#pebuilder">PEBuilder</a>/<a href="#toahk">ToAHK</a></li>
+<li><a href="#pebuilder">PEBuilder</a></li>
 </ul>
 <h3 id="a-quick-rundown">A quick rundown</h3>
 <ul>
 <li>The lexer takes source code, makes it into an array of tokens.</li>
 <li>The parser takes an array of tokens, builds it into a tree that represents the code.</li>
-<li>The optimizer takes that tree, and removes useless bits.</li>
-<li>The compiler takes that optimized tree, and converts it into CPU instructions.</li>
-<li>CodeGen takes the CPU instructions that the compiler is trying to generate, but assembles them into raw machine code.</li>
+<li>The compiler takes that tree, and converts it into CPU instructions.</li>
+<li>CodeGen takes the CPU instructions that the compiler is trying to generate, and assembles them into raw machine code.</li>
 <li>PEBuilder packs the raw machine code into a <code>.exe</code> file.</li>
-<li>ToAHK packs the raw machine code into a <code>.ahk</code> file with helper functions to call the code.</li>
 </ul>
-<p>Simple enough, right? ((((it only took me 6000+ lines to do))))</p>
+<p>Simple enough, right? (It only took thousands of line to implement)</p>
 <h3 id="lexer">Lexer</h3>
 <p>The lexer is used to transform plain text like <code>define i32 Main</code> or <code>i32 test := 99 + 2</code> into an array of "tokens".</p>
 <p>A token is like a word, and is the smallest unit that the entire compiler uses. Tokens also have different types.</p>
@@ -132,21 +123,21 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <li><em>Is</em> alphanumeric</li>
 </ul>
 <p>And now that the lexer has found an alphanumeric character, it will continue to consume all alphanumeric characters after the first.</p>
-<p>So, <code>32</code> would also be consumed, and added to the <code>t</code> token, however, <code></code> is not alphanumeric, and would be the end of the <code>t</code> token.</p>
-<p>Next, to figure out the type of the token, the lexer checks if it is in the list of keywords (found in <code>Constants.ahk</code>), and since it is not a keyword, the token is created with the type <code>Tokens.IDENTIFIER</code>, and a value of <code>i32</code>.</p>
+<p>So, <code>32</code> would also be consumed, and added to the <code>t</code> token, however, "<code></code>" is not alphanumeric, and would be the end of the <code>t</code> token.</p>
+<p>Next, to figure out the type of the token, the lexer checks if it is in the list of keywords (found in <code>Lexer.rlx</code>, <code>LookupKeyword</code>), and since it is not a keyword, the token is created with the type <code>TOKEN_TYPE_IDENTIFER</code>, and a value of <code>i32</code>.</p>
 <p>This would repeat for <code>test</code>, giving us the two tokens:</p>
-<pre><code class="json">[{Value: &quot;i32&quot;, Type: Tokens.IDENTIFIER}, {Value: &quot;test&quot;, Type: Tokens.IDENTIFIER}]
+<pre><code class="json">[{Value: &quot;i32&quot;, Type: TOKEN_TYPE_IDENTIFER}, {Value: &quot;test&quot;, Type: TOKEN_TYPE_IDENTIFER}]
 </code></pre>
 
-<p>Now, the lexer would see the character <code>:</code>, and <code>:</code> is defined as the first character of an operator (in <code>Constants.ahk</code>'s <code>CharacterTokens.Operators</code>).</p>
+<p>Now, the lexer would see the character <code>:</code>, and <code>:</code> is defined as the first character of an operator (in <code>Lexer.rlx</code>'s <code>GetNextToken</code>).</p>
 <p>Since <code>:</code> is an operator (or part of an operator), the lexer will now:</p>
 <ul>
 <li>Check if the next character is part of any operators (In this case the next character is <code>=</code>, which is part of <code>:=</code>)</li>
 <li>Gather all characters that are part of the operator which matches the next character (<code>:=</code> only has two characters, so this step is already done)</li>
-<li>Create a token of the <code>Tokens.OPERATOR</code> type, with the value of the found operator (<code>Tokens.COLON_EQUAL</code> in this case)</li>
+<li>Create a token of the <code>TOKEN_TYPE_OPERATOR</code> type, with the value of the found operator (<code>OPERATOR_COLON_EQUAL</code> in this case)</li>
 </ul>
 <p>Now we've got:</p>
-<pre><code class="json">[{Value: &quot;i32&quot;, Type: Tokens.IDENTIFIER}, {Value: &quot;test&quot;, Type: Tokens.IDENTIFIER}, {Value: &quot;:=&quot;, Type: Tokens.OPERATOR}]
+<pre><code class="json">[{Value: &quot;i32&quot;, Type: TOKEN_TYPE_IDENTIFER}, {Value: &quot;test&quot;, Type: TOKEN_TYPE_IDENTIFER}, {Value: OPERATOR_COLON_EQUAL, Type: TOKEN_TYPE_OPERATOR}]
 </code></pre>
 
 <p>And the next character is <code>9</code>, which the lexer would see is:</p>
@@ -157,279 +148,62 @@ if (is_top_frame) { $('body').addClass('wm-top-page'); }
 <li>Not a new line</li>
 <li><em>Is</em> a digit</li>
 </ul>
-<p>Now, the lexer will gather all digits following the first, getting us <code>99</code>, and create a <code>Tokens.INTEGER</code> token, with the value <code>99</code>. (If the lexer found the character <code>.</code> inside the number, the token type would be <code>Tokens.DOUBLE</code>)</p>
+<p>Now, the lexer will gather all digits following the first, getting us <code>99</code>, and create a <code>TOKEN_TYPE_INTEGER</code> token, with the value <code>99</code>.</p>
 <p>Now, applying these same rules to the rest of the string, we get the following array of tokens for the output:</p>
 <pre><code class="json">[
-    {Value: &quot;i32&quot;, Type: Tokens.IDENTIFIER}, 
-    {Value: &quot;test&quot;, Type: Tokens.IDENTIFIER}, 
-    {Value: &quot;:=&quot;, Type: Tokens.OPERATOR},
-    {Value: 99, Type: Tokens.INTEGER},
-    {Value: &quot;+&quot;, Type: Tokens.OPERATOR},
-    {Value: 2, Type: Tokens.INTEGER}
+    {Value: &quot;i32&quot;, Type: TOKEN_TYPE_IDENTIFER}, 
+    {Value: &quot;test&quot;, Type: TOKEN_TYPE_IDENTIFER}, 
+    {Value: OPERATOR_COLON_EQUAL, Type: TOKEN_TYPE_OPERATOR},
+    {Value: 99, Type: TOKEN_TYPE_INTEGER},
+    {Value: OPERATOR_PLUS, Type: TOKEN_TYPE_OPERATOR},
+    {Value: 2, Type: TOKEN_TYPE_INTEGER}
 ]
 </code></pre>
 
 <hr />
-<p>One thing that I haven't mentioned is that all token actually contain a bit more data.</p>
-<p>Each <code>Token</code> object contains a <code>Context</code> object, which stores: </p>
+<p>One thing that I haven't mentioned is that all tokens actually contain a bit more data.</p>
 <ul>
-<li>The source code that the token was extracted from</li>
-<li>Where in the source code the token was extracted from</li>
+<li>A pointer to the name of the file the token is from</li>
+<li>A pointer to their source text</li>
+<li>What line the token is on</li>
+<li>Where the token is in that line/how long it is</li>
 </ul>
-<p><code>Context</code> objects are used to display errors by taking <code>Context.End - Context.Start</code>, and appending that many <code>^</code> characters to the <code>-</code> line, which is drawn by appending <code>Context.Start - LineStart</code> <code>-</code> characters.</p>
+<p>All of this data is used to provide better error printouts</p>
 <hr />
-<p>And that's all the lexer really does. Of course, there's many-many more token types than I mentioned, and the lexer also has cases for hex/binary/octal literals, which are given the type <code>Tokens.INTEGER</code>.</p>
+<p>And that's all the lexer really does. Of course, there's many-many more token types than I mentioned, and the lexer also supports hex literals, which are given the type <code>TOKEN_TYPE_IDENTIFER</code>.</p>
 <h2 id="parser">Parser</h2>
 <p>The parser takes the array of tokens which the lexer outputs, and builds an abstract syntax tree out of the tokens.</p>
 <p><br/></p>
 <p>And abstract syntax tree (AST) is a how a given program is represented, in this case, each "leaf" of the AST is either a <code>Token</code> object (which the lexer outputs) or a <code>ASTNode</code> object.</p>
 <p>For example, the AST of <code>1 + 2</code> would be:</p>
 <pre><code class="json">{
-    Type: ASTNodeTypes.BINARY,
+    Type: NODE_TYPE_BINARY,
     Left: {
-        Type: Tokens.INTEGER,
+        Type: NODE_TYPE_INTEGER,
         Value: 1
     }
     Operator: {
-        Type: Tokens.OPERATOR,
-        Value: &quot;+&quot;
+        Type: TOKEN_TYPE_OPERATOR,
+        Value: OPERATOR_PLUS
     }
     Right: {
-        Type: Tokens.INTEGER,
+        Type: NODE_TYPE_INTEGER,
         Value: 2
     }
 }
 </code></pre>
 
 <p>This concept is the same throughout the entire parser, you have an AST node, which has other AST nodes inside of it, which can represent any part of a program.</p>
-<p>Additionally, most AST nodes (that are single lines, like all expressions) also have <code>Context</code> properties, which are built using the <code>Context</code> of each token the node is mad up of.</p>
+<p>Additionally, AST nodes also contain the same context data as tokens for accurate error reporting.</p>
 <p>The hard part is actually building the AST.</p>
-<hr />
-<p>To build the AST, the parser starts with <code>Parser.ParseProgram</code>, which uses the array of tokens from the lexer (passed in <code>Parser.__New</code>), and calls <code>Parser.ParseProgramStatement</code> until the parser has processed all of the given tokens.</p>
-<p><code>.ParseProgramStatement</code> looks at the next token to be parsed, and does a few different things based on <em>what</em> the next token is:</p>
-<ul>
-<li>When the next token is a <code>Tokens.KEYWORD</code> and has the value <code>Keywords.DEFINE</code>, then the parser will call <code>Parser.ParseDefine</code></li>
-<li>When the next token is a <code>Tokens.KEYWORD</code> and has the value <code>Keywords.DLLIMPORT</code>, then the parser will call <code>Parser.ParseDllImport</code></li>
-<li>When the next token is a <code>Tokens.KEYWORD</code> and has the value <code>Keywords.IMPORT</code>, then the parser will add the following token to a running list of imported modules.</li>
-<li>When the next token is a <code>Tokens.IDENTIFIER</code> and is a valid type name, then the parser will call <code>Parser.ParseDeclaration</code></li>
-<li>If none of the earlier cases were met, the parser will throw an error.</li>
-</ul>
-<p>In cases 1, 2, and 4, the parser branches off to a different function, which will try to match the stream of tokens to a format.</p>
-<p>Each of these formats can be found in <a href="../full-syntax">the full syntax description</a>, but as a quick example, here's the <code>DllImport</code> format:</p>
-<pre><code>DllImport i32 FunctionName(i32, i32) {DllFileName.dll, FunctionNameInDLL}
-</code></pre>
-
-<p>Which is the token type pattern of:</p>
-<pre><code>DllImport       i32                FunctionName       (                  i32                ,             i32                )                   {                    DllFileName        .           dll                ,             FunctionNameInDLL  }
-Tokens.KEYWORD, Tokens.IDENTIFIER, Tokens.IDENTIFIER, Tokens.LEFT_PAREN, Tokens.IDENTIFIER, Tokens.COMMA, Tokens.IDENTIFIER, Tokens.RIGHT_PAREN, Tokens.LEFT_BRACKET, Tokens.IDENTIFIER, Tokens.DOT, Tokens.IDENTIFIER, Tokens.COMMA, Tokens.IDENTIFIER, Tokens.RIGHT_BRACKET
-</code></pre>
-
-<p>And when a <code>DllImport</code> statement does not match this pattern, then there is a syntax error. </p>
-<p>The entire parser follows this general idea, you have a token type pattern associated with an AST node type, and when the token stream matches that pattern, then it can be consumed and built into an AST node. When the token stream only partially matches the pattern, then there is a syntax error.</p>
-<p>For example, </p>
-<pre><code>DllImport i32 123() {Fn.doo, &quot;hello world&quot;}
-</code></pre>
-
-<p>Does not match the <code>Tokens.IDENTIFIER</code> rule for <code>FunctionName</code>, since <code>123</code> is a <code>Tokens.INTEGER</code>.
-Then <code>"hello world"</code> does not match the <code>Tokens.IDENTIFER</code> rule for <code>DllFileName</code>.</p>
-<p>Both of these are syntax errors, and will be detected by the parser.</p>
-<hr />
-<p>Now, for something a bit more advanced, we'll mode on to the <code>Define</code> statement, which follows the </p>
-<pre><code>Define ReturnType FunctionName(ParameterList) {
-    Body
-}
-</code></pre>
-
-<p>pattern (and is handled by <code>.ParseDefine</code>).</p>
-<p>Since everything but <code>Body</code> was already defined in the last example, we'll jump straight to that.</p>
-<p>After everything up to <code>{</code> has been parsed, the parser calls into <code>.ParseBlock</code>, which consumes the <code>{</code> token, and calls <code>.ParseStatement</code> until it reaches a <code>}</code> token.</p>
-<p>Now, looking into <code>.ParseStatement</code>, you can see it has three branches:</p>
-<ul>
-<li>When the next token is a keyword, call into <code>.ParseKeywordStatement</code></li>
-<li>When the next token is an identifier, and a valid type name, call into <code>.ParseDeclaration</code></li>
-<li>Else, call into <code>.ParseExpressionStatement</code></li>
-</ul>
-<p>I'm only going to talk about the first and third options, since <code>.ParseDeclaration</code> doesn't do much, and is pretty much the same kind of matching as <code>DllImport</code>.</p>
-<p>So, <code>.ParseKeywordStatement</code> is for when we've already matched a <code>Tokens.KEYWORD</code> type token, so by switching on the <code>Value</code> of that token, we can figure out which kind of statement is starting.</p>
-<p>The statement types and actions are:</p>
-<ul>
-<li>For a Keywords.RETURN, return a <code>return</code> AST node, which returns the value given by <code>.ParseExpressionStatement</code> (which I'll get to later)</li>
-<li>For a Keywords.IF, return the result of <code>.ParseIf</code></li>
-<li>For a Keywords.ELSE, throw an error, since any <code>else if</code>/<code>else</code> statements are parsed by <code>.ParseIf</code></li>
-<li>For a Keywords.FOR, return the result of <code>.ParseFor</code></li>
-<li>For a Keywords.CONTINUE or Keywords.BREAk, return a <code>ContinueBreak</code> node, with the keyword used ("continue" or "break")</li>
-<li>If none of these have matched, then throw an error.</li>
-</ul>
-<p>I'm just going to go through the Keywords.IF case, since it uses all of the capabilities that the other cases use, and will explain everything you need to know.</p>
-<p>So, now we're inside of <code>.ParseIf</code>, and this first think we do is build an <code>if</code> AST node using <code>.ParseExpression</code> and <code>.ParseBlock</code>.</p>
-<p>You might notice that we already called <code>.ParseBlock</code> back in <code>.ParseDefine</code>, and that is a key part of the parser.</p>
-<p>This parser is a "recursive descent parser" (which sounds super cool), which means that through recursive function calls, the call stack itself takes the shape of the AST as we parse the program.</p>
-<p>For example:</p>
-<pre><code>define i32 abc() {
-    if (1) {
-        return 8
-    }
-}
-</code></pre>
-
-<p>Would have the call stack (bottom = first call, top = most recent call)</p>
-<pre><code>.ParseExpression (Handles the 8 after return)
-.ParseKeywordStatement (Handles return)
-.ParseBlock (Handles {} after the if)
-.ParseIf (Handles the if)
-.ParseBlock (Handles {} after abc)
-.ParseDefine (Handles the define)
-.ParseProgram
-</code></pre>
-
-<p>and the AST is</p>
-<pre><code class="json">{
-    Type: &quot;Program&quot;,
-    Functions: [
-        {
-            Type: &quot;Define&quot;,
-            Body: [
-                {
-                    Type: &quot;If&quot;,
-                    Body: [
-                        {
-                            Type: &quot;Return&quot;,
-                            Value: 8
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-</code></pre>
-
-<p>Which means that by using the result of a <code>.ParseXXXXX</code> method inside of another <code>.ParseXXXXX</code> method to build a new AST node, we can summon a properly structured AST out of thin air.</p>
-<p>Which is pretty neat.</p>
-<p><br/></p>
-<p>Now, back to <code>.ParseIf</code>.</p>
-<p>The template is </p>
-<pre><code>if Expression {
-    Body
-}
-else if Expression {
-    Body
-}
-else Expression {
-    Body
-}
-</code></pre>
-
-<p>Where: </p>
-<ul>
-<li><code>if Expression</code> only occurs once, at the start of this "chain" of statements</li>
-<li><code>else if Expression</code> can be repeated as many times as you'd like</li>
-<li><code>else</code> can only occur once, at the end of the chain</li>
-</ul>
-<p>Each <code>Expression</code> is parsed by <code>.ParseExpression</code>, which we'll get into next, and each <code>Body</code> is parsed with <code>.ParseBlock</code>.</p>
-<p>And since the results of these <code>.ParseXXXX</code> calls are being used to build a bigger AST node, we are taking advantage of the recursive descent parser again to build AST nodes.</p>
-<hr />
-<p>Now, this is how all statements are parsed, first they match a token type pattern, and then they contain other AST nodes that make up the statements themselves.</p>
-<p>The only exception to this style is expressions, since they do not fit a set token type pattern, and are much more unpredictable.</p>
-<hr />
-<h4 id="expressions">Expressions</h4>
-<p>The parser does not use recursive descent to parse expressions, so it's worth separating the two part.</p>
-<p>Instead, the parser uses the "shunting yard algorithm", which sounds much less cool than recursive descent, but is an <em>incredible</em> technique.</p>
-<hr />
-<p>I actually don't understand the shunting yard algorithm enough to explain it fully, but the general idea is:</p>
-<ul>
-<li>At the start of parsing an expression, set up an "Operator" stack, and an "Operand" stack.</li>
-<li>Iterate through each token of the expression, and:</li>
-<li>When you find data (Like a number, string, or variable), push it onto the "Operand" stack and continue the loop.</li>
-<li>(This is not part of the standard algorithm) When you find '(', call <code>.ParseGrouping</code> to parse the grouping, and push it onto the "Operand" stack.</li>
-<li>When you find an operator, go through the "Operator" stack, and check the "Precedence" of the current operator against the one on the top of the stack.</li>
-<li>If the operator on the top of the stack has higher precedence than the current operator (meaning that you should check if it should be evaluated before the current operator)</li>
-<li>Then pop two operands off the "Operand" stack, and build an AST node with (PoppedOperand1, PoppedOperator, PoppedOperand2), and push it onto the "Operand" stack</li>
-<li>Continue this for the entire "Operator" stack, until you find an operator with lower precedence than the current operator, or the "Operator" stack is empty</li>
-<li>Finally, push the current operator onto the "Operator" stack</li>
-<li>Once all tokens are consumed, loop through any operators left in the "Operator" stack, and pop two operands from the "Operand" stack for each, then push them back onto the "Operand" stack.</li>
-<li>Return <code>OperandStack[1]</code></li>
-</ul>
-<p>So, for example, <code>1 * 2 + 3</code> would be parsed with the following steps:</p>
-<p>Start with <code>1</code>, it's data, so we'll push it onto the operand stack</p>
-<pre><code>OperandStack = [1]
-OperatorStack = []
-</code></pre>
-
-<p>Next we have <code>*</code>, which is an operator, and since the operator stack is empty, all we do is push it onto the operator stack</p>
-<pre><code>OperandStack = [1]
-OperatorStack = [&quot;*&quot;]
-</code></pre>
-
-<p>Next up is <code>2</code>, which is data again</p>
-<pre><code class="js">OperandStack = [1, 2]
-OperatorStack = [&quot;*&quot;]
-</code></pre>
-
-<p>And now we've got <code>+</code>, which is an operator, and since the operator stack has something in it, we need to check <code>+</code>'s precedence against <code>*</code>'s precedence.
-Now, <code>+</code> has a precedence of 5, and <code>*</code> has a precedence of <code>6</code>, which means that <code>*</code> needs to be evaluated before <code>+</code>.
-So, we'll pop two operands off of the operand stack, and combine <code>1, *, 2</code> into a single <code>Binary</code> AST node, and push that onto the operand stack.
-Finally, we push <code>+</code> onto the operator stack.</p>
-<pre><code class="js">OperandStack = [{Type: ASTNodeTypes.BINARY, Left: 1, Operator: &quot;*&quot;, Right: 2}]
-OperatorStack = [&quot;+&quot;]
-</code></pre>
-
-<p>Next is <code>3</code>, which is data, so it goes onto the operand stack, leaving us with:</p>
-<pre><code class="js">OperandStack = [{Type: ASTNodeTypes.BINARY, Left: 1, Operator: &quot;*&quot;, Right: 2}, 3]
-OperatorStack = [&quot;+&quot;]
-</code></pre>
-
-<p>And before we return a result, we go through the operator stack one last time, and build AST nodes for each operator left on the stack.</p>
-<p>So, we pop <code>+</code> off the operator stack, pop <code>3</code> and <code>{Type: ASTNodeTypes.BINARY, Left: 1, Operator: "*", Right: 2}</code> off of the operand stack, and build the AST node:</p>
-<pre><code class="js">{Type: ASTNodeTypes.BINARY, Left: {Type: ASTNodeTypes.BINARY, Left: 1, Operator: &quot;*&quot;, Right: 2}, Operator: &quot;+&quot;, Right: 3}
-</code></pre>
-
-<p>And push it onto the operand stack. Then finally, we return <code>OperandStack[1]</code>, which is that same AST node we just built, giving us </p>
-<pre><code class="js">{
-    Type: ASTNodeTypes.BINARY,
-    Left: 
-    {
-        Type: ASTNodeTypes.BINARY, 
-        Left: 1, 
-        Operator: &quot;*&quot;, 
-        Right: 2
-    }, 
-    Operator: &quot;+&quot;,
-    Right: 3
-}
-</code></pre>
-
-<p>Aka <code>(1 * 2) + 3</code></p>
-<hr />
-<p>And that's the parser, a little oversimplified, but I think it gets the general design across well enough.</p>
-<p>If you're interested in either of the parsing techniques used, google them, there's load of good articles and graphics explaining them better than I can.</p>
-<h2 id="optimizer">Optimizer</h2>
-<p>The optimizer takes the resulting AST from the parser, and walks it, replacing AST nodes with slightly optimized versions of themselves.</p>
-<p>The "walking" is done by recursively visiting each branch of an AST node, so a binary expression would have the <code>"Left"</code> and <code>"Right"</code> branches optimized before the binary expression itself is optimized.</p>
-<p>Most of the optimizer depends on <code>.IsConstant</code>, and <code>.ExpressionHasSideEffects</code>, which are both used to determine if an expression is a candidate for being optimized or removed entirely.</p>
-<p>And AST node which contains an <code>ASTNodeTypes.EXPRESSION</code> is optimized by calling <code>.Optimize%ExpressionType%</code>, which:</p>
-<ul>
-<li>For unary expressions, nothing. I do not optimize unary expressions, mostly because only ~2 of the unary operators don't have side-effects.</li>
-<li>For binary expressions, I optimize both sides, and if both sides are constant values (ex: 1 and 2), then I manually evaluate the expression, and build a token containing the new result.</li>
-<li>For grouping, I optimize all sub-expressions, and then remove any which do not have side-effects. (for example, <code>(1, 2 + 3)</code> would become <code>1</code>, since <code>2 + 3</code> has no side-effects, and only wastes space)</li>
-<li>Function calls are not optimized, since I got lazy while writing the optimizer.</li>
-</ul>
-<p>Additionally, some statements are optimized:</p>
-<ul>
-<li>For if statements, if an <code>else if</code> has a constant condition which is false, the entire <code>else if</code> is eliminated, and when an <code>else if</code> has a constant true condition, all <code>else if</code>s after are eliminated.</li>
-<li>Expression statements are totally eliminated if they do not have side-effects, for example, <code>1 + 2</code> alone on a line would be eliminated.</li>
-</ul>
-<p>And that's the optimizer. It's very basic, and I wish I'd written more for it, but I was reaching max-burnout while writing it.</p>
+<p>I'm not going to go into how the AST is built, due to that being a better topic for a book, not documentation.</p>
 <h2 id="compiler">Compiler</h2>
-<p>The compiler takes the optimized AST from the optimizer, and walks it, calling into <code>CodeGen</code> to generate machine code for each AST node it visits.</p>
-<p>The AST walking is done in the same way as the optimizer, with each AST node calling <code>.Compile</code> for any leaves it has.</p>
-<p>Statements are compiled in mostly-similar ways, with a condition being compiled, then tested, and a conditional jump to either the next statement in a chain, or out of the current statement, or more specifically:</p>
+<p>The compiler takes the AST from the parser, and walks it, calling into <code>CodeGen.rlx</code> to generate machine code for each AST node it visits.</p>
+<p>The AST is walked by recursively enumerating each branch of the tree, with each different branch type having a different function which will enumerate any branches it has.</p>
+<p>Statements are compiled in mostly-similar ways, with a condition being compiled, then tested, and a conditional jump to either the next statement in a chain, or out of the current statement. More specifically:</p>
 <ul>
 <li>If statements are compiled by compiling the condition expression, testing it with <code>result != 0</code>, and conditionally jumping into the <code>Body</code> for the statement. After the body, a <code>jmp</code> to the end of the statement stops any other branches from running. If the <code>!= 0</code> test fails, it <code>jmp</code>s to the next condition and body to be checked.</li>
 <li>For loops are compiled with the initialization step first, then a label to jump back to, then the condition (and a jump out of the loop when the condition is false), and then the loop body. After the body is the step expression, and a jump back to the start of the loop.</li>
-<li>Break/Continue are compiled by jumping either out of the current loop, or the end of the current loop, using the <code>.CurrentForLoop</code> property which holds a label name for the current for loop.</li>
-<li>Return statements are compiled by jumping to a special label for the current function (<code>__Return</code> then the number of functions compiled before this one) which is placed at the end of the function</li>
-<li>Function definitions are compiled with a label in the format <code>__Define__FunctionName</code> which can be used to call the function via a relative offset. Then the entire function body is compiled, and postlude code is generated to clean up the stack, and then return from the function.</li>
 </ul>
 <hr />
 <p>Expressions are a little less label/<code>jmp</code> intensive, but more complex to understand.</p>
@@ -440,230 +214,29 @@ OperatorStack = [&quot;+&quot;]
 <li>When we compile a function call, we should pop as many operands as the function takes as parameters, and then push the return value onto the stack.</li>
 </ul>
 <p>As long as all generated code to evaluate expressions follows these rules, you can always trust an expression to leave its result on the stack.</p>
-<p>If this promise of operands/results is every broken, then there has been a code mis-generation, and something is wrong. However, since it isn't broken, expressions can be compiled into a series of very basic instructions.</p>
-<hr />
-<p>So, let's walk through code generation for <code>1 + (2 * A)</code>.</p>
-<p>The very first step is to push <code>1</code> onto the stack, since the first <code>+</code> requires two operands, both of which will need to be on the stack according to our evaluation rules from above.</p>
-<p>The AST walking for this is actually</p>
-<pre><code>.Compile(Expression.Left)
-.Compile(Expression.Right)
-</code></pre>
-
-<p>Where a token is compiled down to a simple</p>
-<pre><code>push 1
-</code></pre>
-
-<p>Now that <code>Expression.Left</code> is compiled, we need to compiled <code>Expression.Right</code>, which happens to be another <code>ASTNodeTypes.BINARY</code>, so we'll do the same thing again:</p>
-<pre><code>.Compile(Expression.Left)
-</code></pre>
-
-<p>Will generate</p>
-<pre><code>push 2
-</code></pre>
-
-<p>And then </p>
-<pre><code>.Compile(Expression.Left)
-</code></pre>
-
-<p>Will generate</p>
-<pre><code>push [r15 + (0 * 8)]
-</code></pre>
-
-<p>(<code>0 * 8</code> since <code>A</code> is the 0th variable, and <code>R15</code> always holds a pointer to the local variables in a given function)</p>
-<p>Now to compile <code>*</code>, we'll pop two operands off the stack, into <code>RBX</code> and then <code>RAX</code></p>
-<pre><code>pop RBX
-pop RAX
-</code></pre>
-
-<p>So, <code>RAX = ResultOf(Expression.Left)</code> and <code>RBX = ResultOf(Expression.Right)</code>, which means we're ready to generate code to do the first operation (<code>*</code>)</p>
-<pre><code>imul RAX, RBX
-</code></pre>
-
-<p>And in order to follow the rule of pushing our result back onto the stack for another expression, we finish with</p>
-<pre><code>push RAX
-</code></pre>
-
-<p>Which gives us this (see below) code to evaluate the expression <code>(2 * A)</code></p>
-<pre><code>push 1
-push 2
-push [r15 + (0 * 8)]
-pop RBX
-pop RAX
-add RAX, RBX
-push RAX
-</code></pre>
-
-<p><br/>
-<br/></p>
-<p>Once the CPU finishes the <code>push RAX</code> instruction, the stack will be laid out as so:</p>
-<pre><code>[1, ResultOf(&quot;2 * A&quot;)]
-</code></pre>
-
-<p>Which you might notice are the two operands for <code>1 + (2 * A)</code>, so now all we need to do to compile the <code>+</code> operator is</p>
-<pre><code>pop RBX
-pop RAX
-</code></pre>
-
-<p>To load the two operands, and then</p>
-<pre><code>add RAX, RBX
-</code></pre>
-
-<p>to do the operation, and finally</p>
-<pre><code>push RAX
-</code></pre>
-
-<p>to store the result.</p>
-<p><br/></p>
-<p>Now we're left with the final generated code of:</p>
-<pre><code class="asm">push 1                ; The result of the token '1'
-
-push 2                ; The result of the token '2'
-push [r15 + (0 * 8)]  ; The result of the token 'A'
-
-pop RBX               ; Right operand, the result of the last expression evaluated ('A' in this case)
-pop RAX               ; Left operand, the result of the 2nd to last expression evaluated ('2' in this case)
-imul RAX, RBX
-push RAX              ; Stores the result of (Left * Right) as the result of the last expression evaluated
-
-pop RBX               ; Right operand, result of the last expression evaluated ('2 * A' in this case)
-pop RAX               ; Left operand, result of the 2nd to last expression evaluated ('1' in this case)
-add RAX, RBX
-push RAX              ; Stores the result of `(Left + Right)` as the result of the last expression evaluated
-</code></pre>
-
-<hr />
-<p>And a quick example with a unary operator instead, <code>1 + !2</code>:</p>
-<p><code>.Compile(Expression.Left)</code> Generates:</p>
-<pre><code>push 1
-</code></pre>
-
-<p><code>.Compile(Expression.Right)</code> Generates code to evaluate <code>!2</code>, which in itself runs <code>.Compile(UnaryExpression.Operand)</code>, generating the code:</p>
-<pre><code>push 2
-</code></pre>
-
-<p>And then evaluating the operand with</p>
-<pre><code>pop RAX
-not RAX
-push RAX
-</code></pre>
-
-<p>And now we've got both the operands on the stack, so we generate code for <code>+</code>:</p>
-<pre><code>pop RBX
-pop RAX
-add RAX, RBX
-push RAX
-</code></pre>
-
-<p>Which leaves us with</p>
-<pre><code>push 1
-
-push 2
-
-pop RAX
-not RAX
-push RAX
-
-pop RBX
-pop RAX
-add RAX, RBX
-push RAX
-</code></pre>
-
-<hr />
-<p>So, thanks to these expression evaluation rules, all that's needed to add an new operator is to add it to <code>CodeGen</code>, and implement it enough that it will use <code>RAX</code> and <code>RBX</code> as operands, and <code>push</code> a result onto the stack.</p>
-<hr />
-<p>Now, you might notice that this generates some pretty bad code, with lots of stack usage, which is bad for speed and code size.</p>
-<p>To get around this, I lied I little bit during these examples.</p>
-<p>The generated code doesn't actually use the CPU stack, instead it uses the registers <code>[RCX, RDX, R8, R9, R10, R11, R12, R13]</code> as a fake stack, which the compiler will automatically keep track of what parts are being used.</p>
-<p>This eliminates lots of the extra <code>push</code> and <code>pop</code>-ing, since our <code>1 + (2 * A)</code> example would be generated as</p>
-<pre><code class="asm">mov RCX, 1              ; Push register stack, store value into new top of stack
-
-mov RDX, 2              ; Same as above 
-mov R8, [r15 + (0 * 8)] ; Same as above
-
-imul RDX, R8            ; Pop register stack twice, multiply popped registers, store result into the top of stack
-add RCX, RDX            ; Same as above, just with multiplication.
-</code></pre>
-
-<p>Of course, this optimization isn't perfect, and extra instructions are still generated, but this reduces the bloat a lot, and by keeping operands in registers, it also improves speed.</p>
-<h4 id="type-checking">Type Checking</h4>
-<p>Type checking is done as a bit of an afterthought, but the general idea is that each <code>.CompileXXXX</code> method will return the type of the value which it has pushed onto the stack.</p>
-<p>And by using the returned type, we can check if it is compatible with the types of other components of a given AST node.</p>
-<p>For example, to compile a binary expression, we have the code:</p>
-<pre><code>LeftType := this.Compile(Expression.Left)
-RightType := this.Compile(Expression.Right)
-</code></pre>
-
-<p>And then later on, we have:</p>
-<pre><code>ResultType := this.Typing.ResultType(LeftType, RightType)
-</code></pre>
-
-<p>And when there is no result type for that combination of operand types, and exception is thrown.</p>
-<p>For example</p>
-<pre><code>&quot;Abc&quot; * 2.5
-</code></pre>
-
-<p>Would have <code>LeftType</code> = <code>i8*</code>, and <code>RightType</code> = <code>f64</code>. Which are two obviously incompatible types.</p>
-<p><br/></p>
-<p>However, if we have two operands that are similar types, but not the exact same type, there can be an implicit cast, for example:</p>
-<pre><code>1 * 2.5
-</code></pre>
-
-<p>Would have <code>LeftType</code> = <code>i8</code>, and <code>RightType</code> = <code>f64</code>. However, since both types are numeric, and floating pointer numbers are considered more precise, the compiler would get <code>ResultType</code> = <code>f64</code>.</p>
-<p>And to ensure that both operands are <em>actually</em> compatible, and not just theoretically compatible, each <code>.CompileXXXXXExpression</code> will include calls to <code>this.Cast(RightType, ResultType)</code> and <code>this.Cast(LeftType, ResultType)</code>.</p>
-<p><code>.Cast</code> takes the current type of the value on top of the stack, and the desired type, and converts them via the <code>.Cast_FirstTypeName_SecondTypeName</code> methods.</p>
-<p>So, in this case, first <code>2.5</code> would be cast to <code>f64</code> (which requires no extra code to be generated, since it is already that type), and then <code>1</code> would be cast to <code>f64</code>.</p>
-<p>For casting to/from floating point numbers, the instructions <code>FILD</code>/<code>FSTP</code> and <code>FLD</code>/<code>FISTP</code> instructions are used, which </p>
-<ul>
-<li>For <code>FILD</code>/<code>FSTP</code>: loads an integer into an FPU register as a floating point number, and then writes that integer back as a floating point number</li>
-<li>For <code>FLD</code>/<code>FISTP</code>: loads a floating point number into an FPU register, and then writes that float back as an integer</li>
-</ul>
-<p>The only other casts are integer size conversions, which are done by the <code>CBWE</code>, <code>CWDE</code>, <code>CDQE</code> instructions, aka:</p>
-<ul>
-<li>Convert byte to word (i8 -&gt; i16)</li>
-<li>Convert word to double word (i16 -&gt; i32)</li>
-<li>Convert double word to quad word (i32 -&gt; i64)</li>
-</ul>
-<hr />
-<p>Type checking is also done for function calls and return values through checking if each parameter is of the correct type while compiling each parameter, and for return types, it is done when compiling <code>return</code> statements.</p>
-<p><br/></p>
+<p>If this promise of operands/results is every broken, then there has been a code misgeneration, and something is wrong. However, since it isn't broken, expressions can be compiled into a series of very basic instructions.</p>
 <h4 id="strings-and-other-stuff">Strings And Other Stuff</h4>
-<p>The compiler handles strings by allocating <code>StrLen(String) + 1</code> bytes much of stack space for each string, and encodes string literals into 64 bit integers, which when pushed onto the stack, will build the correctly ordered string.</p>
-<p>Actual references to strings are replaced by references to the hidden local variables <code>__String__Full Text Of The String</code>, which is then set to a pointer into the stack where the string was pushed.</p>
-<p>So, <code>"Hello world"</code> is compiled into a series of instructions like</p>
-<pre><code>mov rax, 0  
-push rax  
-mov rax, 217478657420656D  
-push rax  
-mov rax, 6F73207265746E45
-push rax
-</code></pre>
-
-<p>(Note, that's not actually "Hello World", I just copied that out of a random example <code>.exe</code>)</p>
+<p>The compiler handles strings by allocating <code>StrLen(String) + 1</code> bytes much of stack space for each string, and encodes string literals into 64 bit integers, which when stored in the stack, will build the correctly ordered string.</p>
+<p>When a string is used, it is replaced with a pointer into the stack where the string was written.</p>
 <hr />
-<p>Parameters are treated exactly the same as locals, and all variables can be addressed using a "SIB" (See CodeGen for what that means), which allows getting/setting variables with minimum boilerplate.</p>
+<p>Parameters are treated exactly the same as locals.</p>
 <hr />
 <p>Function calls are a bit of a mess. Since the register stack uses some of the parameter registers, first the register stack has to be saved, and then the parameter registers have to be 0'd, and finally, the parameters can be compiled and moved into the parameter registers.</p>
 <hr />
-<p>When a function never has a <code>return</code> statement compiled, the return value is automatically set to 0.</p>
+<p>When a function never has a <code>return</code> statement compiled, it will automatically return with an undefined result.</p>
 <p>This is the only difference for omitting <code>return</code>, since the code to return from a function is automatically generated at the end of a function either way.</p>
 <hr />
 <p>Signed numbers are the only kind of numbers, unsigned operations require entirely different instructions for operations, which is why I don't plan on adding unsigned types.</p>
 <h2 id="codegen">CodeGen</h2>
 <p>This one will be shorter, I promise.</p>
 <p>CodeGen is a class which generates the correct bytes for lots of common AMD64 instructions, and automatically handles linking labels and jumps for you.</p>
-<p>This is done by storing an internal array of bytes, which contains assembled instructions, with objects pushed onto the array when <code>CodeGen</code> does not have enough information at the time to link the given label to an address. Additionally, <code>CodeGen</code> pushes objects for pointers to global variables, and pointers to functions imported from Dll files.</p>
-<p><code>CodeGen</code> doesn't actually process these extra objects, but keeps them intact until either the "second stage" linkers in <code>PEBuilder</code> or <code>ToAHK</code> can link the code to actual pointers.</p>
+<p>CodeGen keeps a buffer containing the array of assembled code, along with buffers for book keeping info such as labels and fixups, which are applied before the code is written to the output file.</p>
 <p>The backbone of CodeGen is just a few methods:</p>
 <ul>
-<li><code>.REX(REXBits)</code> Which will build a "REX prefix" for an instruction, which will promote the instruction to use 64 bit registers and data, along with giving it access to the new GPRs R8-R15.</li>
-<li><code>.REXOpcode(OpcodeBytes, REXParts)</code> Which will build a REX prefix, and then write an opcode.</li>
-<li><code>.REXOpcodeMod(OpcodeBytes, DestRegister, SourceRegister, Options)</code> Which will build a REX prefix, write the opcode, and then write a "ModRM" byte, which controls the operands, and operand types of an instruction.</li>
-<li><code>.REXOpcodeModSIB(Opcode, Register, SIB, Options)</code> Which will build a REX prefix, opcode, and ModRM byte which uses the SIB addressing mode. SIB stands for (S)cale (I)ndex (B)ase, which allows you to have address calculations like <code>FinalAddress = GetRegisterValue(SIB.Base) + (GetRegisterValue(SIB.Index) * SIB.Scale)</code>, which are very useful for indexing the local table, global table, and import table.</li>
-<li><code>.NumberSizeOf(Number)</code> Which returns the minimum number of bits needed to store the given number (used for instruction selection).</li>
-<li><code>.SplitIntoBytes32(Number)</code> Which splits a 32 bit number into bytes, and stores it big-endian (like the processor expects).</li>
-<li><code>.SplitIntoBytes64(Number)</code> Same as above, but with a 64 bit number.</li>
-<li><code>.Link()</code> Which will resolve all labels, and return the partially linked code for a second stage linker.</li>
+<li><code>EmitREX(DestinationRegister, SourceRegister, ExtraREX)</code> Which will build a "REX prefix" for an instruction, which will promote the instruction to use 64 bit registers and data, along with giving it access to the new GPRs R8-R15.</li>
+<li><code>EmitREXOpcodeModRM(Opcode, Mode, DestinationRegister, SourceRegister, ExtraREX)</code> Which will build a REX prefix, write the opcode, and then write a "ModRM" byte, which controls the operands, and operand types of an instruction.</li>
+<li><code>EmitREXOpcodeModRMSIB(Opcode, Mode, DestinationRegister, Scale, IndexRegister, BaseRegister, ExtraREX)</code> Which will build a REX prefix, opcode, and ModRM byte which uses the SIB addressing mode. SIB stands for (S)cale (I)ndex (B)ase, which allows you to have address calculations like <code>FinalAddress = GetRegisterValue(SIB.Base) + (GetRegisterValue(SIB.Index) * SIB.Scale)</code>, which are very useful for indexing arrays.</li>
+<li><code>ResolveAllLabels</code> Which will resolve all labels, and return the linked code.</li>
 </ul>
 <h2 id="pebuilder">PEBuilder</h2>
 <p>A class that handles all the dirty work of building <code>.exe</code> files.</p>
@@ -675,38 +248,6 @@ push rax
 <p>I do not bother with ordinal values.</p>
 <p>Once the loader reads the hint-name table, each entry in the 2nd array is overwritten with a pointer to the function it originally imported, which <code>PEBuilder</code> links code to jump into.</p>
 <p>The <code>.reloc</code> section handles what should happen when the file can't be loaded at the specified base address, and contains pointers to every location inside of the code which references a static address. So, every use of a global variable, and every use of an import function, gets an entry in the <code>.reloc</code> section.</p>
-<hr />
-<p>If you're wondering, the default section layout (which you can't change) is:</p>
-<table>
-<thead>
-<tr>
-<th>Section Name</th>
-<th>What it's for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>.data</code></td>
-<td>Holds global variables</td>
-</tr>
-<tr>
-<td><code>.text</code></td>
-<td>Holds compiled code, and the program entry point</td>
-</tr>
-<tr>
-<td><code>.idata</code></td>
-<td>Holds the IAT, hint-name table, import file/name strings</td>
-</tr>
-<tr>
-<td><code>.reloc</code></td>
-<td>Holds the relocation info</td>
-</tr>
-</tbody>
-</table>
-<h2 id="toahk">ToAHK</h2>
-<p>A single function, which just dumps a program as a bunch of AHK functions</p>
-<p>It pretends to be the windows loader via some boilerplate, and pretends to be <code>PEBuilder</code> in the same boilerplate, by linking global pointers and imported function pointers.</p>
-<p>There's really not much to say about it.</p>
 
   <br>
     
