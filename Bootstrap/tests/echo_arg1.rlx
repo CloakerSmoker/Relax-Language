@@ -11,7 +11,7 @@ define i32 Write(i16* WString) {
 	i32 Index := 0
 	
 	while (WString[Index] != 0) {
-		i16 NextCharacter := WString[Index]		
+		i16 NextCharacter := WString[Index]
 		WriteFile(STDOUT, &NextCharacter, 1, &BytesWritten, 0)
 		Index += 1
 	}

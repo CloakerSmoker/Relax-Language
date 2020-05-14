@@ -5,7 +5,13 @@ import subprocess
 from shutil import copyfile
 from shutil import rmtree
 from shutil import move
+from colorama import init, Fore, Back, Style
 
+# Tests if argv[1] is capable of (correctly) compiling all of the test programs
+#  by compiling each test with argv[1], running the output files, and checking the 
+#   outputs against known-correct outputs
+
+init(autoreset=True)
 path_join = os.path.join
 argv = sys.argv
 
@@ -14,7 +20,6 @@ if len(argv) != 2:
     sys.exit(1)
 
 compiler_path = path.abspath(argv[1])
-#compiler_path = r'C:\Users\Connor\Desktop\Valite\Bootstrap\please1.exe'
 cwd = os.getcwd()
 
 tests_dir = path_join(cwd, 'tests')
@@ -42,7 +47,7 @@ for test_path in os.listdir(tests_dir):
     stderr_text = compile_result.stderr.decode('UTF-8')
 
     if compile_result.returncode != 1 or len(stderr_text) != 0:
-        print(f'Test {file_name} failed to compile with exit code {compile_result.returncode} and stderr "{stderr_text}""')
+        print(f'{Fore.RED}Test {file_name} failed to compile with exit code {compile_result.returncode} and stderr "{stderr_text}""', file=sys.stderr)
         continue
 
     test_number = 1
@@ -56,13 +61,23 @@ for test_path in os.listdir(tests_dir):
         stderr_text = test_result.stderr.decode('UTF-8')
 
         if test_result.returncode != 0 or len(stderr_text) != 0:
-            print(f'Test {file_name}[{test_number}] failed to run with exit code {test_result.returncode} and stderr {stderr_text}')
+            if stderr_text:
+                stderr_text = 'and stderr ' + stderr_text
+            
+            print(f'    {Fore.RED}Test {file_name}[{test_number}] failed to run with exit code {hex(test_result.returncode)} {stderr_text}', file=sys.stderr)
         elif stdout_text != test_output:
-            print(f'Test {file_name}[{test_number}] failed to produce correct output, expected {test_output}, got {stdout_text}')
+            print(f'    {Fore.RED}Test {file_name}[{test_number}] failed to produce correct output, expected {test_output}, got {stdout_text}', file=sys.stderr)
         else:
             tests_passed += 1
         
         test_number += 1
 
     os.remove(binary_file)
-    print(f'Test {file_name} {tests_passed}/{len(inputs_outputs)} passed.')
+    
+    test_count = len(inputs_outputs)
+    foreground = Fore.LIGHTRED_EX
+
+    if tests_passed == test_count:
+        foreground = Fore.LIGHTGREEN_EX
+
+    print(f'Test {file_name} {foreground}{tests_passed}/{len(inputs_outputs)}{Fore.WHITE} passed.')

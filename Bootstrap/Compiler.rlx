@@ -823,10 +823,10 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	i16 FieldOffset := TargetField->Offset
 	
 	if (FieldOffset >= 112) {
-		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
 	}
 	else {
-		EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, TargetField->Offset, TargetFieldSize)
+		EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
 	}
 }
 
@@ -839,10 +839,10 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i16 FieldOffset := TargetField->Offset
 	
 	if (FieldOffset >= 112) {
-		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
 	}
 	else {
-		EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, TargetField->Offset, TargetField->ValueType->Size)
+		EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
 	}
 	
 	PopRegisterStack(cState)

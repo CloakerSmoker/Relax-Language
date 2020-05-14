@@ -1,0 +1,48 @@
+DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+#Include Memory.rlx
+#Include String.rlx
+#Include Console.rlx
+
+struct Test {
+	i8 A,
+	i8 B,
+	i64 C,
+	i32 D,
+	i32 E
+}
+
+define i32 Main() {
+	i64 ArgC := 0
+	i16* CommandLine := GetCommandLineW()
+	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
+	
+	Test* T := Alloc(Test.Size)
+	
+	T->C := WToI(ArgV[1])
+	
+	T->A := WToI(ArgV[2]) As i8
+	
+	i64 Dummy := 64
+	
+	IWrite(T->C)
+	WriteCharacter(' ')
+	IWrite(T->A)
+	
+	
+	WriteCharacter(',')
+	
+	Test A
+	
+	A.B := T->A
+	A.D := T->C
+	
+	i64 DummyTwo := 90
+	
+	IWrite(A.B)
+	WriteCharacter(' ')
+	IWrite(A.D)
+	
+	return 0
+}
