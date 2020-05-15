@@ -47,7 +47,7 @@ for test_path in os.listdir(tests_dir):
     stderr_text = compile_result.stderr.decode('UTF-8')
 
     if compile_result.returncode != 1 or len(stderr_text) != 0:
-        print(f'{Fore.RED}Test {file_name} failed to compile with exit code {compile_result.returncode} and stderr "{stderr_text}""', file=sys.stderr)
+        print(f'{Fore.RED}Test {file_name} failed to compile with exit code {hex(compile_result.returncode)} and stderr "{stderr_text}""', file=sys.stderr)
         continue
 
     test_number = 1

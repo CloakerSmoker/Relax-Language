@@ -1,5 +1,9 @@
 struct Token {
-	void* Value,
+	union {
+		void* Value,
+		SafeWideString* StringValue
+	},
+	
 	i16* Source,
 	SafeWideString* SourceFilePath,
 	i32 LineNumber,
@@ -128,6 +132,7 @@ i8 TOKEN_TYPE_INTEGER := 3
 i8 TOKEN_TYPE_STRING := 4
 i8 TOKEN_TYPE_PUNCTUATION := 5
 i8 TOKEN_TYPE_KEYWORD := 6
+i8 TOKEN_TYPE_DEBUG_CHARACTER := 7
 
 
 i8 OPERATOR_FIRST_ASSIGNMENT := 0
@@ -249,28 +254,30 @@ define i8 TokenizerAtEnd(TokenizerState* pState) {
 	return (pState->SourceIndex) > (pState->SourceLength)
 }
 
-define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
+define void Error(Token* AtToken, i8* Message) {
 	SwapOutputStream()
 	TextColor(Red)
 	AWriteLine(Message)
 	
-	AWrite("In: ")
-	PrintSafeString(AtToken->SourceFilePath)
-	WriteNewLine()
+	if (AtToken->SourceFilePath != 0) {
+		AWrite("In: ")
+		TextColor(White)
+		PrintSafeString(AtToken->SourceFilePath)
+		TextColor(Red)
+		WriteNewLine()
+	}
+	
+	if (AtToken->LineNumber != 0) {
+		AWrite("On Line: ")
+		TextColor(White)
+		IWriteLine(AtToken->LineNumber)
+		TextColor(Red)
+	}
 	
 	AWrite("At: ")
 	ResetColors()
 	
 	PrintToken(AtToken)
-	
-	/* SafeWideString SourcePrintoutHelper
-	
-	SourcePrintoutHelper.Buffer := (tState->Source) + (((AtToken->PositionInSource) - 8) * 2)
-	SourcePrintoutHelper.Length := (AtToken->LengthInSource) + 8
-	
-	PrintSafeString(&SourcePrintoutHelper)
-	WriteNewLine()
-	WriteNewLine() */
 	
 	Exit(1)
 }
@@ -278,7 +285,7 @@ define void Error(TokenizerState* tState, Token* AtToken, i8* Message) {
 define void TokenizerError(TokenizerState* tState, i8* Message) {
 	Backtrack(tState)
 	
-	Error(tState, (tState->Tokens)[(tState->TokenIndex) - 1], Message)
+	Error(tState->Tokens[tState->TokenIndex - 1], Message)
 }
 
 
@@ -364,14 +371,15 @@ define Token* _GetNextToken(TokenizerState* pState) {
 		if (NextCharacter = ''') {
 			/* If the next character is an open single quote, then consume a single character as an integer */
 			
-			NextCharacter := GetNextCharacterRaw(pState)
+			i8 NextNextCharacter := GetNextCharacterRaw(pState)
 			
 			if (GetNextCharacter(pState) != ''') {
 				/* And make sure there's a close single quote */
+				MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
 				TokenizerError(pState, "Expected close single quote for character constant")
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, NextCharacter)
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, NextNextCharacter)
 		}
 		else if (NextCharacter = '=') {
 			/* Manually compare for all of the operators */
@@ -402,6 +410,7 @@ define Token* _GetNextToken(TokenizerState* pState) {
 					}
 					
 					if (TokenizerAtEnd(pState)) {
+						MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
 						TokenizerError(pState, "Expected closing comment character")
 					}
 				}
@@ -478,6 +487,7 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			}
 			
 			if (TokenizerAtEnd(pState)) {
+				MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
 				TokenizerError(pState, "Expected close quote before EOF")
 			}
 			
@@ -644,8 +654,8 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			continue
 		}
 		
-		WriteCharacter(NextCharacter)
-		TokenizerError(pState, " - Unexpected character")
+		MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+		TokenizerError(pState, "Unexpected character")
 	}
 	
 	return MakeToken(pState, pState->SourceLength, TOKEN_TYPE_EOF, 0)
@@ -700,55 +710,32 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 define void PrintToken(Token* TokenToPrint) {
 	/* Debug prints a token */
 	
-	AWrite("Type: ")
-	IWriteLine(TokenToPrint->Type)
-	
-	AWrite("Value")
-	
 	if (TokenToPrint->Type = TOKEN_TYPE_IDENTIFER) {
-		AWrite(" (S): ")
-		
 		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
-		
-		WriteNewLine()
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_STRING) {
-		AWrite(" (S): ")
-		
 		WriteCharacter('"')
 		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
 		WriteCharacter('"')
-		
-		WriteNewLine()
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_OPERATOR) {
-		AWrite(" (O): ")
-		
 		PrintOperator(TokenToPrint->Value)
-		WriteNewLine()
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_PUNCTUATION) {
-		AWrite(" (P): ")
-		
 		PrintPunctuation(TokenToPrint->Value)
-		WriteNewLine()
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_KEYWORD) {
-		AWrite(" (K): ")
-		
 		PrintKeyword(TokenToPrint->Value)
-		WriteNewLine()
+	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_EOF) {
+		AWrite("<EOF>")
+	}
+	else if (TokenToPrint->Type = TOKEN_TYPE_DEBUG_CHARACTER) {
+		WriteCharacter(TokenToPrint->Value As i8)
 	}
 	else {
-		AWrite(": ")
-		IWriteLine(TokenToPrint->Value)
+		IWrite(TokenToPrint->Value)
 	}
-	
-	AWrite("Position: ")
-	IWriteLine(TokenToPrint->PositionInSource)
-	
-	AWrite("Length: ")
-	IWriteLine(TokenToPrint->LengthInSource)
 }
 
 define void PrintOperator(i8 Operator) {
@@ -920,5 +907,8 @@ define void PrintKeyword(i8 Keyword) {
 	}
 	else if (Keyword = KEYWORD_RETURN) {
 		AWrite("return")
+	}
+	else if (Keyword = KEYWORD_UNION) {
+		AWrite("union")
 	}
 }

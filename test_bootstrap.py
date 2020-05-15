@@ -24,7 +24,7 @@ compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_ou
 stderr_text = compile_result.stderr.decode('UTF-8')
 
 if compile_result.returncode != 1 or len(stderr_text) != 0:
-    print(f'{Fore.LIGHTRED_EX}Compile error:\n{stderr_text}', file=sys.stderr)
+    print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}', file=sys.stderr)
     sys.exit(1)
 
 test_script = path_join(cwd, 'test_compiler.py')

@@ -562,6 +562,15 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	
 	Exit(1)
 }
+
+declare ASTNode* TranslateTokenToNode(ParserState*, Token*, i8)
+
+define void ASTErrorFromToken(ParserState* pState, Token* FromToken, i8* ErrorMessage) {
+	ASTNode* FakeNode := TranslateTokenToNode(pState, FromToken, true)
+
+	ASTError(FakeNode, ErrorMessage)
+}
+
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	TextColor(Red | Green)
 	AWriteLine(WarnMessage)
@@ -1006,7 +1015,8 @@ define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* R
 	}
 	
 	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
-		ErrorMessage[0] := Reason
+		/* Warning: This is technically a memory leak */
+		ErrorMessage[0] := HeapString(Reason)
 	}
 	
 	return NextToken
@@ -1051,8 +1061,10 @@ define ParserState* ParserStart(TokenizerState* pState) {
 	return P
 }
 
-define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableName) {
+define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	/* Finds a variable, prioritizing locals over globals */
+	
+	SafeWideString* VariableName := NameToken->StringValue
 	
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
 	VariableInfo* FoundVariable := 0
@@ -1069,13 +1081,8 @@ define VariableInfo* FindVariable(ParserState* pState, SafeWideString* VariableN
 	
 	if !(FoundVariable) {
 		/* If we still haven't found the variable, then it is undefined */
-		AWrite("Undefined variable.... crashing")
-		(0 as i8*)[0] := 90
 		
-		WriteNewLine()
-		PrintSafeString(VariableName)
-		WriteCharacter(':')
-		TokenizerError(pState->pState, "Undefined variable")
+		ASTErrorFromToken(pState, NameToken, "Undefined variable")
 	}
 	
 	/* Variable has to have been found at some point for this to be reached */
@@ -1138,6 +1145,11 @@ define Type* TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
 	
 	/* Find the base type name */
 	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
+	
+	if *(ErrorMessage) {
+		return 0
+	}
+	
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
 	i8 PointerDepth := 0
@@ -1164,7 +1176,7 @@ define Type* ParseTypeName(ParserState* pState) {
 		
 		Token* ErrorToken := ParserNextToken(pState)
 		
-		ASTError(TranslateTokenToNode(pState, ErrorToken, true), ErrorMessage)
+		Error(ErrorToken, ErrorMessage)
 	}
 	
 	return Result
@@ -1333,7 +1345,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 		if !(FoundType->IsIncomplete) {
 			/* If the type we found isn't incomplete, then error out */
 			
-			TokenizerError(pState->pState, "Duplicate type definition")
+			ASTErrorFromToken(pState, NameToken, "Duplicate type definition")
 		}
 		
 		/* Otherwise, update the found type with the info we just parsed */
@@ -1362,11 +1374,7 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
 		
 		if (FoundFunction->HasFullDefinition) {
-			ASTNode* FakeNode := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, Name, TYPE_NONE)
-			FakeNode->SourceFilePath := NameToken->SourceFilePath
-			FakeNode->LineNumber := NameToken->LineNumber
-			
-			ASTError(FakeNode, "Duplicate definition")
+			ASTErrorFromToken(pState, NameToken, "Duplicate function definition")
 		}
 		
 		/* Todo: Free old version of NewDefine which has already had some stuff allocated */
@@ -1397,7 +1405,7 @@ define Block* ParseBlock(ParserState* pState) {
 	/* Parses and builds a block of statements */
 	
 	/* Consume the { */
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
+	Token* OpenBrace := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
 	
 	/* Set up a buffer for the statements */
 	i16 StatementBufferSize := 8
@@ -1424,7 +1432,7 @@ define Block* ParseBlock(ParserState* pState) {
 				break
 			}
 			else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
-				TokenizerError(pState->pState, "Expected close brace for block")
+				Error(OpenBrace, "Expected close brace for block")
 			}
 		}
 	}
@@ -1440,7 +1448,7 @@ define Block* ParseBlock(ParserState* pState) {
 define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	Token* OpenParen := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
 	i8 ParameterCount := 0
 	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
@@ -1471,7 +1479,7 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 		}
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			TokenizerError(pState->pState, "Expected closing paren for parameter list")
+			Error(OpenParen, "Expected closing paren for parameter list")
 		}
 	}
 	
@@ -1842,7 +1850,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 			Result := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, TokenToTranslate->Value, TYPE_NONE)
 		}
 		else {
-			VariableInfo* FoundVariable := FindVariable(pState, (TokenToTranslate->Value) As SafeWideString*)
+			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
 			/* Using the found variable's type as the node type */
 			
 			Result := AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)		
@@ -1854,10 +1862,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		return Result
 	}
 	
-	if (ForErrorMessage) {
-	
-	}
-	else {
+	if !(ForErrorMessage) {
 		AWrite("Unknown fuck ")
 		PrintToken(TokenToTranslate)
 		Exit(1)
@@ -1876,7 +1881,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		Result := ParseExpression(pState, 0)
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			TokenizerError(pState->pState, "Expected closing paren")
+			Error(NextToken, "Expected closing paren")
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
@@ -1898,7 +1903,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
 				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-					TokenizerError(pState->pState, "Expected closing paren for function call")
+					Error(NextToken, "Expected closing paren for function call")
 				}
 			}
 			
@@ -1938,7 +1943,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		FunctionDefine* CurrentFunction := pState->CurrentFunction
 		
 		if !(CurrentFunction) {
-			TokenizerError(pState->pState, "Strings can only be used inside functions")
+			Error(NextToken, "Strings can only be used inside functions.")
 		}
 		
 		SafeWideString* StringText := (NextToken->Value) As SafeWideString*
@@ -1970,7 +1975,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else {
 		/* Else, this token isn't something we expected here, so error out */
 		
-		TokenizerError(pState->pState, "Unexpected token in expression")
+		Error(NextToken, "Unexpected token in expression")
 	}
 	
 	/* Free the copy of NextToken */
