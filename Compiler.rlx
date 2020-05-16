@@ -142,7 +142,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
 		i32 PageRVA := (C.Builder->NextRVA) + (NextRelocationOffset / 0x1000)
 		i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
 		
-		AddRelocation(C.Builder, PageRVA, OffsetInPage, true)
+		/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
+		
+		AddRelocation(C.Builder, PageRVA, OffsetInPage, false)
 	}
 	
 	FinalizeBuilder(C.Builder)
@@ -223,8 +225,8 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 8)
+		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 4)
 	}
 	else {
 		if (TargetVariable->StackOffset < 112) {
@@ -237,8 +239,8 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 }
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 8)
+		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 4)
 		
 		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetVariable->Type->Size)
 	}
@@ -263,8 +265,8 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 }
 define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R64_I64(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 8)
+		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		AddCodeRelocation(cState, (cState->Index) - 4)
 		
 		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetVariable->Type->Size)
 	}
@@ -471,6 +473,11 @@ declare void CompileFor(CompilerState*, ForLoop*)
 declare void CompileLoop(CompilerState*, Block*)
 declare void CompileWhile(CompilerState*, WhileLoop*)
 
+declare void CompileUnary(CompilerState*, i8, Type*, UnaryExpression*, i8)
+declare void CompileBinary(CompilerState*, i8, Type*, BinaryExpression*, i8)
+declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
+declare void CompileCall(CompilerState*, i8, CallExpression*)
+
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
@@ -522,6 +529,65 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	EmitJump_Label(cState, cState->CurrentFunctionReturnLabel)
 }
 
+define i8 IsComparison(Token* OperatorToken) {
+	i8 Operator := OperatorToken->Value As i8
+	return (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) || (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) 
+}
+
+define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression, i32 JumpToLabel) {
+	/* Checks ConditionExpression for being false, and jumps to JumpToLabel if it is 
+		This might seem a bit backwards, but loops/if statements all check for false, and jump out (or to the next branch)
+		 depending on their conditions being false, which eliminates lots of extra jumping
+	*/
+	
+	i8 ConditionType := ConditionExpression->NodeType
+	
+	BinaryExpression* BinaryNode := ConditionExpression->BinaryNode
+	UnaryExpression* UnaryNode := ConditionExpression->UnaryNode
+	
+	if (ConditionType = NODE_TYPE_BINARY && IsComparison(BinaryNode->Operator)) {
+		/* Compile the expression without a result being stored into RAX, since we use the value in EFLAGS */
+		CompileBinary(cState, RAX, ConditionExpression->ValueType, BinaryNode, true)
+		
+		i8 Operator := BinaryNode->Operator->Value As i8
+		
+		/* Use inverted conditions to decide if this branch had a false condition, and to jump past it or not */
+		
+		if (Operator = OPERATOR_EQUAL) {
+			EmitJNZ_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_BANG_EQUAL) {
+			EmitJEZ_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_LESS) {
+			EmitJGE_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_LESS_EQAUL) {
+			EmitJGT_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_GREATER) {
+			EmitJLE_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_GREATER_EQAUL) {
+			EmitJLT_Label(cState, JumpToLabel)
+		}
+		else if (Operator = OPERATOR_LOGICAL_AND || OPERATOR_LOGICAL_OR) {
+			EmitJEZ_Label(cState, JumpToLabel)
+		}
+	}
+	else if (ConditionType = NODE_TYPE_UNARY && (UnaryNode->Operator->Value As i8) = OPERATOR_BANG) {
+		CompileUnary(cState, RAX, ConditionExpression->ValueType, UnaryNode, true)
+		EmitJNZ_Label(cState, JumpToLabel)
+	}
+	else {
+		/* In this case, the expression is not conditional, and we will need to check the result for being 0 or not */
+		
+		CompileExpression(cState, RAX, ConditionExpression)
+		EmitTest_RX_RX(cState, RAX, RAX, ConditionExpression->ValueType->Size)
+		EmitJEZ_Label(cState, JumpToLabel)
+	}
+}
+
 define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 	i32 BranchCount := IfToCompile->BranchCount
 	i32 HasElse := (IfToCompile->ElseBranch) != 0
@@ -535,15 +601,8 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 		SetLabel(cState, NextBranch)
 		NextBranch := NextLabel(cState)
 		
-		ASTNode* ThisBranchCondition := (IfToCompile->Conditions)[BranchIndex]
-		
-		CompileExpression(cState, ConditionResultRegister, ThisBranchCondition)
-		
-		EmitTest_RX_RX(cState, ConditionResultRegister, ConditionResultRegister, ThisBranchCondition->ValueType->Size)
-		
-		EmitJEZ_Label(cState, NextBranch)
-		
-		CompileBlock(cState, (IfToCompile->Bodies)[BranchIndex])
+		CompileCondition(cState, IfToCompile->Conditions[BranchIndex], NextBranch)
+		CompileBlock(cState, IfToCompile->Bodies[BranchIndex])
 		
 		if (HasElse || (BranchIndex != (BranchCount - 1))) {
 			/* Only emit a jump to the end label if: We have an 'else', or we are not the last branch 
@@ -578,23 +637,14 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	
 	SetLabel(cState, StartLabel)
 	
-	CompileExpression(cState, RAX, ForToCompile->Condition)
-	
-	EmitTest_RX_RX(cState, RAX, RAX, ForToCompile->Condition->ValueType->Size)
-	EmitJEZ_Label(cState, EndLabel)
+	CompileCondition(cState, ForToCompile->Condition, EndLabel)
 	
 	/* Prelude stuff done, condition is checked, so now we can compile the body */
 	
 	cState->CurrentLoopContinueLabel := ContinueLabel
 	cState->CurrentLoopBreakLabel := EndLabel
 	
-	Block* ForBody := ForToCompile->Body
-	
-	for (i32 BodyIndex := 0, BodyIndex < (ForBody->StatementCount), BodyIndex += 1) {
-		ASTNode* NextStatement := (ForBody->Statements)[BodyIndex]
-		
-		Compile(cState, NextStatement)
-	}
+	CompileBlock(cState, ForToCompile->Body)
 	
 	SetLabel(cState, ContinueLabel) /* On continue (or after the body ends naturally) execute the step, and jump to the condition check */
 	CompileExpression(cState, RAX, ForToCompile->Step)
@@ -640,10 +690,7 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	
 	SetLabel(cState, StartLabel)
 	
-	CompileExpression(cState, RDI, WhileToCompile->Condition)
-	EmitTest_RX_RX(cState, RDI, RDI, WhileToCompile->Condition->ValueType->Size)
-	EmitJEZ_Label(cState, EndLabel)
-	
+	CompileCondition(cState, WhileToCompile->Condition, EndLabel)
 	CompileBlock(cState, WhileToCompile->Body)
 	
 	EmitJump_Label(cState, StartLabel)
@@ -652,11 +699,6 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	cState->CurrentLoopContinueLabel := OldContinueLabel
 	cState->CurrentLoopBreakLabel := OldBreakLabel
 }
-
-declare void CompileUnary(CompilerState*, i8, Type*, UnaryExpression*)
-declare void CompileBinary(CompilerState*, i8, Type*, BinaryExpression*)
-declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
-declare void CompileCall(CompilerState*, i8, CallExpression*)
 
 define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
@@ -667,7 +709,21 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	if (ExpressionType = NODE_TYPE_INTEGER) {
 		/* Simply move the integer being used into the result register */
 		
-		EmitMove_RX_IX(cState, ResultRegister, ExpressionToCompile->IntegerValue, ExpressionToCompile->ValueType->Size)
+		i8 ResultSize := ResultType->Size
+		i64 IntegerValue := ExpressionToCompile->IntegerValue
+		
+		if (IntegerValue = 0) {
+			EmitXor_RX_RX(cState, ResultRegister, ResultRegister, 4)
+		}
+		else {
+			i8 IntegerSize := GetNumberSize(IntegerValue)
+			
+			if (ResultSize >= 4 && IntegerSize <= 4) {
+				ResultSize := 4
+			}
+			
+			EmitMove_RX_IX(cState, ResultRegister, IntegerValue, ResultSize)
+		}
 	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
 		VariableInfo* TargetVariable := ExpressionToCompile->VariableValue
@@ -677,14 +733,14 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	else if (ExpressionType = NODE_TYPE_UNARY) {
 		UnaryExpression* UnaryNode := ExpressionToCompile->UnaryNode
 	
-		CompileUnary(cState, ResultRegister, ResultType, UnaryNode)
+		CompileUnary(cState, ResultRegister, ResultType, UnaryNode, false)
 	}
 	else if (ExpressionType = NODE_TYPE_BINARY) {
 		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
 		
 		BinaryExpression* BinaryNode := ExpressionToCompile->BinaryNode
 		
-		CompileBinary(cState, ResultRegister, ResultType, BinaryNode)
+		CompileBinary(cState, ResultRegister, ResultType, BinaryNode, false)
 	}
 	else if (ExpressionType = NODE_TYPE_STRUCT_ACCESS) {
 		StructAccessExpression* AccessNode := ExpressionToCompile->AccessNode
@@ -823,7 +879,12 @@ define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegist
 	i16 TargetFieldSize := TargetField->ValueType->Size
 	
 	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
-	EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, TargetField->Offset)
+	
+	i32 FieldOffset := TargetField->Offset
+	
+	if (FieldOffset != 0) {
+		EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, FieldOffset)
+	}
 }
 
 define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
@@ -834,7 +895,10 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
 	
-	if (FieldOffset >= 112) {
+	if (FieldOffset = 0 && ResultRegister != R13) {
+		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
+	}
+	else if (FieldOffset >= 112) {
 		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
 	}
 	else {
@@ -851,7 +915,15 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	
 	CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
 	
-	if (FieldOffset >= 112) {
+	if (FieldOffset = 0 && ResultPointerRegister != R13) {
+		/* 
+			Fuck x86_64. WHY would R13 be used as the magic "use RIP-relative" flag?
+			Was it not enough to use R12 for SIB encodings? Why couldn't this shit have been put into another prefix byte?
+		*/
+		
+		EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetField->ValueType->Size)
+	}
+	else if (FieldOffset >= 112) {
 		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
 	}
 	else {
@@ -905,7 +977,7 @@ define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTN
 	CompileArrayAccess(cState, ResultRegister, Pointer, Index, ValueRegister + 1, false)
 }
 
-define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile) {
+define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a unary operator and operand */
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
@@ -947,12 +1019,16 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 			/* ALWAYS 100% ENSURE THAT YOU AREN'T DOING OPERATIONS WITH THE WRONG SIZE, RESULTSIZE CAN'T ALWAYS BE TRUSTED */
 			/* 	Sincerely - mov r8, [some_pointer]; test r8b, r8b */
 			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, ExpressionToCompile->Operand->ValueType->Size)
-			EmitSetE_R8(cState, ResultRegister)
+			
+			if !(DiscardResult) {
+				/* If the caller uses the FLAGS register, it doesn't need a 'true' result, and can just use what's in the FLAGS register */
+				EmitSetE_R8(cState, ResultRegister)
+			}
 		}
 	}
 }
 
-define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile) {
+define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
 	ASTNode* Left := ExpressionToCompile->Left
@@ -1061,7 +1137,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			i32 End := NextLabel(cState)
 			
 			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, ResultSize)
-			EmitSetNE_R8(cState, ResultRegister)
+			
+			if !(DiscardResult) {
+				EmitSetNE_R8(cState, ResultRegister)
+			}
 			
 			if (Operator = OPERATOR_LOGICAL_AND) {
 				EmitJEZ_Label(cState, End)
@@ -1071,34 +1150,68 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			}
 			
 			CompileExpression(cState, LeftRegister, Right)
-				
+			
 			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, ResultSize)
-			EmitSetNE_R8(cState, ResultRegister)
+			
+			if !(DiscardResult) {
+				EmitSetNE_R8(cState, ResultRegister)
+			}
 			
 			SetLabel(cState, End)
 		
-			if (ResultSize > 1) {
+			if (!DiscardResult && ResultSize > 1) {
 				Cast(cState, ResultRegister, ResultSize)
 			}
 		}
 		else {
-			/* Allocate a new register for the right operand */
-			
-			i8 RightRegister := PushRegisterStack(cState)
-			CompileExpression(cState, RightRegister, Right)
-			
-			i8 IsComparison := (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
+			i8 IsComparison := IsComparison(ExpressionToCompile->Operator)
 			
 			if (IsComparison) {
 				ResultSize := GetBinaryResultType(0 As ParserState*, Left->ValueType, Right->ValueType)->Size
 			}
 			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
-			if (RightSize < ResultSize) {
-				Cast(cState, RightRegister, RightSize)
-			}
 			if (LeftSize < ResultSize) {
 				Cast(cState, LeftRegister, LeftSize)
+			}
+			
+			i8 IsPlusMinus := (Operator = OPERATOR_PLUS || Operator = OPERATOR_MINUS)
+			
+			if (IsPlusMinus && Right->NodeType = NODE_TYPE_INTEGER) {
+				/* Since some instructions for simple operations have encodings for sign-extended immediates 
+					We can check for an operator+operand combo which can be optimized into a single instruction
+				*/
+				
+				i64 RightInteger := Right->IntegerValue
+				
+				i8 OperandSize := GetNumberSize(RightInteger)
+				
+				if (OperandSize <= 4) {
+					/* There are no imm64 encodings, only imm8 and imm32 */
+					
+					if (Operator = OPERATOR_PLUS) {
+						EmitAdd_R64_IX(cState, ResultRegister, RightInteger As i32)
+					}
+					else if (Operator = OPERATOR_MINUS) {
+						EmitSub_R64_IX(cState, ResultRegister, RightInteger As i32)
+					}
+					
+					/* When we optimized this expression, we need to return early to skip it being
+						compiled like normal
+					*/
+					
+					cState->NoClobberA := OldClobberA
+					return 0
+				}
+			}
+			
+			/* Allocate a new register for the right operand */
+			
+			i8 RightRegister := PushRegisterStack(cState)
+			CompileExpression(cState, RightRegister, Right)
+			
+			if (RightSize < ResultSize) {
+				Cast(cState, RightRegister, RightSize)
 			}
 			
 			if (IsComparison) {
@@ -1107,7 +1220,14 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			
 			/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
 			
-			if (Operator = OPERATOR_PLUS) {
+			if (DiscardResult) {
+				/* Since comparison expressions can technically store a result in the FLAGS register, sometimes
+					 a comparison can have the "real" result discarded, and the caller can just use FLAGS.
+					So, this is a dummy branch to prevent code from being generated to grab the result of an
+					 expression out of FLAGS.
+				*/
+			}
+			else if (Operator = OPERATOR_PLUS) {
 				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
 			else if (Operator = OPERATOR_MINUS) {

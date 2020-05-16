@@ -29,14 +29,14 @@ for i in range(0, recursion_count):
 
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
 
-    if i != 0:
-        os.remove(safe_compiler)
-
     stderr_text = compile_result.stderr.decode('UTF-8')
 
     if compile_result.returncode != 1 or len(stderr_text) != 0:
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
+    
+    if i != 0:
+        os.remove(safe_compiler)
 
     test_script = path_join(cwd, 'test_compiler.py')
     test_command = f'python {test_script} {compiler_output}'
@@ -46,7 +46,7 @@ for i in range(0, recursion_count):
 
     if len(stderr_text):
         print(f'{Fore.LIGHTRED_EX}Output file iteration {i + 1} failed 1+ test:\n{stderr_text}', file=sys.stderr)
-        os.remove(compiler_output)
+        #os.remove(compiler_output)
         sys.exit(1)
     
     print(f'{Fore.LIGHTGREEN_EX}Output file iteration {i + 1} passed all tests.')

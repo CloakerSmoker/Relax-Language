@@ -287,15 +287,36 @@ define void EmitJump_Label(CompilerState* cState, i32 LabelNumber) {
 	PushByte(cState, 0xE9)
 	UseLabel(cState, LabelNumber)
 }
-define void EmitJEZ_Label(CompilerState* cState, i32 LabelNumber) {
+
+define void EmitJXX_Label(CompilerState* cState, i32 LabelNumber, i8 Opcode) {
 	PushByte(cState, 0x0F)
-	PushByte(cState, 0x84)
+	PushByte(cState, Opcode)
 	UseLabel(cState, LabelNumber)
 }
+define void EmitJEZ_Label(CompilerState* cState, i32 LabelNumber) {
+/* 	PushByte(cState, 0x0F)
+	PushByte(cState, 0x84)
+	UseLabel(cState, LabelNumber) */
+	EmitJXX_Label(cState, LabelNumber, 0x84)
+}
 define void EmitJNZ_Label(CompilerState* cState, i32 LabelNumber) {
-	PushByte(cState, 0x0F)
+/* 	PushByte(cState, 0x0F)
 	PushByte(cState, 0x85)
-	UseLabel(cState, LabelNumber)
+	UseLabel(cState, LabelNumber) */
+	EmitJXX_Label(cState, LabelNumber, 0x85)
+}
+
+define void EmitJGT_Label(CompilerState* cState, i32 LabelNumber) {
+	EmitJXX_Label(cState, LabelNumber, 0x8F)
+}
+define void EmitJGE_Label(CompilerState* cState, i32 LabelNumber) {
+	EmitJXX_Label(cState, LabelNumber, 0x8D)
+}
+define void EmitJLT_Label(CompilerState* cState, i32 LabelNumber) {
+	EmitJXX_Label(cState, LabelNumber, 0x8C)
+}
+define void EmitJLE_Label(CompilerState* cState, i32 LabelNumber) {
+	EmitJXX_Label(cState, LabelNumber, 0x8E)
 }
 
 /*
