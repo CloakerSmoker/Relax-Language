@@ -805,11 +805,24 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	cState->RegisterStackIndex := RegisterStackIndex
 }
 
+declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpression*)
+
+define void CompileStructAccessLeft(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	ASTNode* Left := TargetAccess->Left
+	
+	if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS && TargetAccess->Operator->Value = OPERATOR_DOT) {
+		CompileGetStructAccessPointer(cState, ResultRegister, Left->AccessNode)
+	}
+	else {
+		CompileExpression(cState, ResultRegister, Left)
+	}
+}
+
 define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
 	i16 TargetFieldSize := TargetField->ValueType->Size
 	
-	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
 	EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, TargetField->Offset)
 }
 
@@ -817,10 +830,9 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	StructField* TargetField := TargetAccess->TargetField
 	i16 TargetFieldSize := TargetField->ValueType->Size
 	
-	/* CompileExpression will always result in a struct pointer, even for local structs (in order for this to be shorter) */
-	CompileExpression(cState, ResultRegister, TargetAccess->Left)
+	i32 FieldOffset := TargetField->Offset
 	
-	i16 FieldOffset := TargetField->Offset
+	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
 	
 	if (FieldOffset >= 112) {
 		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
@@ -834,9 +846,10 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	StructField* TargetField := TargetAccess->TargetField
 	
 	i8 ResultPointerRegister := PushRegisterStack(cState)
-	CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
 	
-	i16 FieldOffset := TargetField->Offset
+	i32 FieldOffset := TargetField->Offset
+	
+	CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
 	
 	if (FieldOffset >= 112) {
 		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)

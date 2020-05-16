@@ -10,15 +10,14 @@ define i16* AToW(i8* AString, i32 Length) {
 	return NewBuffer
 }
 
+/* generics when? */
 define i32 ALen(i8* AString) {
-	for (i32 Length := 0, AString[Length] != 0, Length += 1) {
-	}
+	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
 	
 	return Length
 }
 define i32 WLen(i16* WString) {
-	for (i32 Length := 0, WString[Length] != 0, Length += 1) {
-	}
+	for (i32 Length := 0, WString[Length] != 0, Length += 1) {}
 	
 	return Length
 }
