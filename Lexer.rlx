@@ -167,7 +167,6 @@ i8 OPERATOR_FIRST_COMPARISON := 14
 i8 OPERATOR_LAST_COMPARISON := 19
 
 
-
 i8 OPERATOR_AND := 20
 i8 OPERATOR_OR := 21
 
@@ -176,6 +175,9 @@ i8 OPERATOR_AS := 23
 
 i8 OPERATOR_OPEN_BRACKET := 24
 i8 OPERATOR_XOR := 25
+
+i8 OPERATOR_TILDE_GREATER := 26
+
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
@@ -395,6 +397,9 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			}
 			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+		}
+		else if (NextCharacter = '~' && NextCharacterMatches(pState, '>')) {
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
 		}
 		else if (NextCharacter = '*') {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
@@ -774,6 +779,10 @@ define void PrintOperator(i8 Operator) {
 	}
 	else if (Operator = OPERATOR_MINUS_GREATER) {
 		FirstCharacter := '-'
+		SecondCharacter := '>'
+	}
+	else if (Operator = OPERATOR_TILDE_GREATER) {
+		FirstCharacter := '~'
 		SecondCharacter := '>'
 	}
 	else if (Operator = OPERATOR_LOGICAL_AND) {

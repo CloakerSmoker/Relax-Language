@@ -888,6 +888,10 @@ define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegist
 }
 
 define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+	if (TargetAccess->Operator->Value = OPERATOR_TILDE_GREATER) {
+		return CompileGetStructAccessPointer(cState, ResultRegister, TargetAccess)
+	}
+	
 	StructField* TargetField := TargetAccess->TargetField
 	i16 TargetFieldSize := TargetField->ValueType->Size
 	
@@ -1167,7 +1171,16 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			i8 IsComparison := IsComparison(ExpressionToCompile->Operator)
 			
 			if (IsComparison) {
-				ResultSize := GetBinaryResultType(0 As ParserState*, Left->ValueType, Right->ValueType)->Size
+				i8* ErrorMessage := 0
+				
+				Type* TrueResultType := TryGetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, &ErrorMessage)
+				
+				if !(ErrorMessage) {
+					ResultSize := TrueResultType->Size
+				}
+				else {
+					ResultSize := 8
+				}
 			}
 			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */

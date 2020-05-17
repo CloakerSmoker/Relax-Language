@@ -267,7 +267,7 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
 		return 11
 	}
-	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 		return 12
 	}
 }
@@ -634,7 +634,7 @@ define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* Vari
 ==========================================
 */
 
-define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* RightType) {
+define Type* TryGetBinaryResultType(ParserState* pState, Type* LeftType, Type* RightType, i8** ErrorMessage) {
 	/* Decides the result of a binary expression with the given operand types */
 	
 	TypeInfo* LeftBaseType := LeftType->TrueType
@@ -643,7 +643,7 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 	if (LeftType->PointerDepth && RightType->PointerDepth) {
 		/* If we are dealing with two pointer types, something's wrong */
 		
-		TokenizerError(pState->pState, "Operations involving two pointers are disallowed.")
+		ErrorMessage := HeapString("Operations involving two pointers are disallowed.")
 	}
 	else if (LeftType->PointerDepth) {
 		/* Eles if the left side is a pointer */
@@ -651,7 +651,7 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 		if (RightBaseType->IsStructType) {
 			/* And the right type is a.. struct? Then something's real funky */
 			
-			TokenizerError(pState->pState, "Invalid operation types1.")
+			ErrorMessage := HeapString("Invalid operation types1.")
 		}
 		
 		/* Otherwise, right type is a normal type, so return the pointer type */
@@ -661,7 +661,7 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 		/* Same as above, just in the opposite direction */
 		
 		if (LeftBaseType->IsStructType) {
-			TokenizerError(pState->pState, "Invalid operation types2.")
+			ErrorMessage := HeapString("Invalid operation types2.")
 		}
 		
 		return RightType
@@ -669,7 +669,7 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 	else {
 		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
 			/* If both types are structs, then something even more funky is going on */
-			TokenizerError(pState->pState, "Invalid operation types3.")
+			ErrorMessage := HeapString("Invalid operation types3.")
 		}
 		
 		/* Otherwise, two normal types, just pick the bigger of the two */
@@ -680,6 +680,18 @@ define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* Righ
 			return RightType
 		}
 	}
+}
+
+define Type* GetBinaryResultType(ParserState* pState, Type* LeftType, Type* RightType) {
+	i8* ErrorMessage := 0
+	
+	Type* Result := TryGetBinaryResultType(pState, LeftType, RightType, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->pState, ErrorMessage)
+	}
+	
+	return Result
 }
 
 define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
@@ -706,12 +718,12 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		
 		ResultType := RightType
 	}
-	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
 		
 		if !(LeftBaseType->IsStructType) {
 			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
-			ErrorMessage := "Left side operand of '.' and '->' must be of a struct/struct pointer type"
+			ErrorMessage := "Left side operand of '.' and '->'/'~>' must be of a struct/struct pointer type"
 		}
 		else if (LeftBaseType->IsIncomplete) {
 			/* Ensure the left type is not incomplete (otherwise we don't know what the result type would be) */
@@ -719,14 +731,14 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		}
 		else if (Right->NodeType != NODE_TYPE_IDENTIFIER) {
 			/* If the right operand isn't an identifier(/NODE_TYPE_VARIABLE) then it is not what we need */
-			ErrorMessage := "Right side operand of of '.' and '->' must be an identifiers"
+			ErrorMessage := "Right side operand of of '.' and '->'/'~>' must be an identifiers"
 		}
 		else if (LeftType->PointerDepth != 0 && Operator = OPERATOR_DOT) {
-			ErrorMessage := "Struct pointer fields can only be accessed with the '->' operator."
+			ErrorMessage := "Struct pointer fields can only be accessed with the '->'/'~>' operators."
 		}
 		else {
 			/* Get the right side text */
-			SafeWideString* RightText := (Right->TrueNode) As SafeWideString*
+			SafeWideString* RightText := Right->StringValue
 			
 			/* And look up the struct field with that name */
 			HashMapElement* FoundStructField := HashMapGetValue(LeftType->TrueType->StructTypeFields, RightText)
@@ -743,8 +755,14 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 				NewAccess->Operator := OperatorToken
 				NewAccess->TargetField := TargetField
 				
+				ResultType := TargetField->ValueType
+				
+				if (Operator = OPERATOR_TILDE_GREATER) {
+					ResultType := IncrementPointerType(pState, ResultType)
+				}
+				
 				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
-				return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, TargetField->ValueType)
+				return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, ResultType)
 			}
 			else {
 				/* If we didn't find a field with that name, then error out */
@@ -780,6 +798,9 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			}
 			
 			ResultType := LeftType
+		}
+		else if (LeftNodeType = NODE_TYPE_STRUCT_ACCESS && Left->AccessNode->Operator->Value = OPERATOR_TILDE_GREATER) {
+			ErrorMessage := "Left side operand of ':=' can not be a '~>` access."
 		}
 		else if (LeftNodeType != NODE_TYPE_VARIABLE && LeftNodeType != NODE_TYPE_STRUCT_ACCESS) {
 			i8* LeftHasWrongType := "Left side of ':=' must be a variable or struct/array access."
@@ -2033,7 +2054,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 		}
-		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER) {
+		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, pState->EmptyType)

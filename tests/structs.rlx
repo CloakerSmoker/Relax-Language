@@ -44,5 +44,13 @@ define i32 Main() {
 	WriteCharacter(' ')
 	IWrite(A.D)
 	
+	WriteCharacter(',')
+	IWrite(&T->C = T~>C)
+	
+	Test* Q := &A
+	
+	IWrite(Q~>A = A~>A)
+	IWrite(Q~>A = T~>A)
+	
 	return 0
 }
