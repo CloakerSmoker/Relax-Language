@@ -272,6 +272,52 @@ define void EmitREXOpcodeModRMSIB(CompilerState* cState, i8 Opcode, i8 Mode, i8 
 	EmitSIB(cState, Scale, ClampRegisterNumber(IndexRegister), ClampRegisterNumber(BaseRegister))
 }
 
+struct InstructionInfo {
+	i8 HasTwoByteOpcode,
+	i8 OpcodeOne,
+	i8 OpcodeTwo,
+	i8 ByteOpcodeOne,
+	i8 ByteOpcodeTwo,
+	i8 Mode,
+	i8 REX,
+	i8 Size
+}
+
+define void EmitInstruction(CompilerState* cState, InstructionInfo* Instruction, i8 DestinationRegister, i8 SourceRegister) {
+	i8 OpcodeOne := Instruction->OpcodeOne
+	i8 OpcodeTwo := Instruction->OpcodeTwo
+	i8 REX := Instruction->REX
+	
+	if (Instruction->Size = 1) {
+		OpcodeOne := Instruction->ByteOpcodeOne
+		OpcodeTwo := Instruction->ByteOpcodeTwo
+		REX := REX | REX_BASE
+	}
+	else if (Instruction->Size = 2) {
+		EmitLegacySizePrefix(cState)
+	}
+	else if (Instruction->Size = 8) {
+		REX := REX | REX_W
+	}
+	
+	if (Instruction->HasTwoByteOpcode) {
+		EmitREXBigOpcodeModRM(cState, OpcodeOne, OpcodeTwo, Instruction->Mode, DestinationRegister, SourceRegister, REX)
+	}
+	else {
+		EmitREXOpcodeModRM(cState, OpcodeOne, Instruction->Mode, DestinationRegister, SourceRegister, REX)
+	}
+}
+
+define void EmitBasicInstruction(CompilerState* cState, InstructionInfo* Instruction, i8 DestinationRegister, i8 SourceRegister) {
+	/* Helper to clear commonly unused flags which might have an old value from the stack */
+	
+	Instruction->HasTwoByteOpcode := false
+	Instruction->REX := 0
+	Instruction->ByteOpcodeOne := Instruction->OpcodeOne - 1
+	
+	EmitInstruction(cState, Instruction, DestinationRegister, SourceRegister)
+}
+
 /*
 ==========================================
 	Jumps
@@ -294,15 +340,9 @@ define void EmitJXX_Label(CompilerState* cState, i32 LabelNumber, i8 Opcode) {
 	UseLabel(cState, LabelNumber)
 }
 define void EmitJEZ_Label(CompilerState* cState, i32 LabelNumber) {
-/* 	PushByte(cState, 0x0F)
-	PushByte(cState, 0x84)
-	UseLabel(cState, LabelNumber) */
 	EmitJXX_Label(cState, LabelNumber, 0x84)
 }
 define void EmitJNZ_Label(CompilerState* cState, i32 LabelNumber) {
-/* 	PushByte(cState, 0x0F)
-	PushByte(cState, 0x85)
-	UseLabel(cState, LabelNumber) */
 	EmitJXX_Label(cState, LabelNumber, 0x85)
 }
 
@@ -367,222 +407,96 @@ define void EmitMove_RX_IX(CompilerState* cState, i8 RegisterNumber, i64 NumberT
 	else if (Size = 8) {EmitMove_R64_I64(cState, RegisterNumber, NumberToMove)}
 }
 
-
-define void EmitMove_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x8A, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitMove_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitMove_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
 define void EmitMove_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
 	EmitREXOpcodeModRM(cState, 0x8B, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 define void EmitMove_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitMove_R8_R8(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 2) {
-		EmitMove_R16_R16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitMove_R32_R32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitMove_R64_R64(cState, DestinationRegister, SourceRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x8B
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
-
-define void EmitMove_R64_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0xBE, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
-define void EmitMove_R64_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0xBF, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
-define void EmitMove_R64_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x63, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitMove_R64_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	if (Size = 1) {
-		EmitMove_R64_R8(cState, DestinationRegister, SourceRegister)
+		EmitREXBigOpcodeModRM(cState, 0x0F, 0xBE, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 	}
 	else if (Size = 2) {
-		EmitMove_R64_R16(cState, DestinationRegister, SourceRegister)
+		EmitREXBigOpcodeModRM(cState, 0x0F, 0xBF, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 	}
 	else if (Size = 4) {
-		EmitMove_R64_R32(cState, DestinationRegister, SourceRegister)
+		EmitREXOpcodeModRM(cState, 0x63, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 	}
 	else {
-		EmitMove_R64_R64(cState, DestinationRegister, SourceRegister)
+		EmitMove_RX_RX(cState, DestinationRegister, SourceRegister, 8)
 	}
 }
 
-
-define void EmitMove_R8_RI8_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8A, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, REX_BASE)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_R16_RI16_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, 0)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_R32_RI32_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, 0)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_R64_RI64_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP32, DestinationRegister, SourceRegister, REX_W)
-	PushI32(cState, Displacement)
-}
 define void EmitMove_RX_RIX_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
-	if (Size = 1) {
-		EmitMove_R8_RI8_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 2) {
-		EmitMove_R16_RI16_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 4) {
-		EmitMove_R32_RI32_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else {
-		EmitMove_R64_RI64_DISP32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x8B
+	I.Mode := MODE_PTOR_DISP32
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	
+	PushI32(cState, Displacement)
 }
 
-
-define void EmitMove_R8_RI8_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8A, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_BASE)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_R16_RI16_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, 0)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_R32_RI32_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, 0)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_R64_RI64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_W)
-	PushByte(cState, Displacement)
-}
 define void EmitMove_RX_RIX_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
-	if (Size = 1) {
-		EmitMove_R8_RI8_DISP8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 2) {
-		EmitMove_R16_RI16_DISP8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 4) {
-		EmitMove_R32_RI32_DISP8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else {
-		EmitMove_R64_RI64_DISP8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x8B
+	I.Mode := MODE_PTOR_DISP8
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	
+	PushByte(cState, Displacement)
 }
 
 /* Move [register + displacement], register */
 
 /* Flipped operands due to MR encoding */
 
-define void EmitMove_RI8_DISP32_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x88, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, REX_BASE)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_RI16_DISP32_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, 0)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_RI32_DISP32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, 0)
-	PushI32(cState, Displacement)
-}
-define void EmitMove_RI64_DISP32_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP32, SourceRegister, DestinationRegister, REX_W)
-	PushI32(cState, Displacement)
-}
 define void EmitMove_RIX_DISP32_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
-	if (Size = 1) {
-		EmitMove_RI8_DISP32_R8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 2) {
-		EmitMove_RI16_DISP32_R16(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 4) {
-		EmitMove_RI32_DISP32_R32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else {
-		EmitMove_RI64_DISP32_R64(cState, DestinationRegister, SourceRegister, Displacement)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x89
+	I.Mode := MODE_PTOR_DISP32
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	
+	PushI32(cState, Displacement)
 }
 
 /* Flipped operands due to MR encoding */
 
-define void EmitMove_RI8_DISP8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x88, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, REX_BASE)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_RI16_DISP8_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, 0)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_RI32_DISP8_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, 0)
-	PushByte(cState, Displacement)
-}
-define void EmitMove_RI64_DISP8_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR_DISP8, SourceRegister, DestinationRegister, REX_W)
-	PushByte(cState, Displacement)
-}
 define void EmitMove_RIX_DISP8_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
-	if (Size = 1) {
-		EmitMove_RI8_DISP8_R8(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 2) {
-		EmitMove_RI16_DISP8_R16(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else if (Size = 4) {
-		EmitMove_RI32_DISP8_R32(cState, DestinationRegister, SourceRegister, Displacement)
-	}
-	else {
-		EmitMove_RI64_DISP8_R64(cState, DestinationRegister, SourceRegister, Displacement)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x89
+	I.Mode := MODE_PTOR_DISP8
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	
+	PushI8(cState, Displacement)
 }
 
-define void EmitMove_RI8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x88, MODE_PTOR, SourceRegister, DestinationRegister, REX_BASE)
-}
-define void EmitMove_RI16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, 0)
-}
-define void EmitMove_RI32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, 0)
-}
-define void EmitMove_RI64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x89, MODE_PTOR, SourceRegister, DestinationRegister, REX_W)
-}
 define void EmitMove_RIX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitMove_RI8_R8(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 2) {
-		EmitMove_RI16_R16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitMove_RI32_R32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitMove_RI64_R64(cState, DestinationRegister, SourceRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x89
+	I.Mode := MODE_PTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
 }
 
 
@@ -597,26 +511,22 @@ define void EmitMove_RIX_DISPX_RX(CompilerState* cState, i8 DestinationRegister,
 	}
 }
 
-
-define void EmitMove_R8_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
-	EmitREXOpcodeModRMSIB(cState, 0x8A, MODE_PTOR, DestinationRegister, 1, IndexRegister, BaseRegister, REX_BASE)
-}
-define void EmitMove_R16_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 2, IndexRegister, BaseRegister, 0)
-}
-define void EmitMove_R32_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
-	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 4, IndexRegister, BaseRegister, 0)
-}
-define void EmitMove_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 IndexRegister, i8 BaseRegister) {
-	EmitREXOpcodeModRMSIB(cState, 0x8B, MODE_PTOR, DestinationRegister, 8, IndexRegister, BaseRegister, REX_W)
-}
-
 define void EmitMove_RX_SIB(CompilerState* cState, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
-	if (Scale = 1) {EmitMove_R8_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
-	else if (Scale = 2) {EmitMove_R16_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
-	else if (Scale = 4) {EmitMove_R32_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
-	else if (Scale = 8) {EmitMove_R64_SIB(cState, DestinationRegister, IndexRegister, BaseRegister)}
+	i8 Opcode := 0x8B
+	i8 REX := 0
+	
+	if (Scale = 1) {
+		Opcode := 0x8A 
+		REX := REX_BASE
+	}
+	else if (Scale = 2) {
+		EmitLegacySizePrefix(cState)
+	}
+	else if (Scale = 8) {
+		REX := REX_W
+	}
+	
+	EmitREXOpcodeModRMSIB(cState, Opcode, MODE_PTOR, DestinationRegister, Scale, IndexRegister, BaseRegister, REX)
 }
 
 /*
@@ -624,33 +534,14 @@ define void EmitMove_RX_SIB(CompilerState* cState, i8 DestinationRegister, i8 Sc
 	Deref moves
 ==========================================
 */
-
-define void EmitMove_R8_RI8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x8A, MODE_PTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitMove_R16_RI16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitMove_R32_RI32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitMove_R64_RI64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x8B, MODE_PTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitMove_RX_RIX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitMove_R8_RI8(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 2) {
-		EmitMove_R16_RI16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitMove_R32_RI32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitMove_R64_RI64(cState, DestinationRegister, SourceRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x8B
+	I.Mode := MODE_PTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
 /*
@@ -687,33 +578,14 @@ define void EmitLea_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 Sc
 	Adds
 ==========================================
 */
-
-define void EmitAdd_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x03, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
-define void EmitAdd_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x03, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitAdd_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x03, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitAdd_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x02, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
 define void EmitAdd_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitAdd_R8_R8(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 2) {
-		EmitAdd_R16_R16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitAdd_R32_R32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitAdd_R64_R64(cState, DestinationRegister, SourceRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x03
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
 define void EmitAdd_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
@@ -736,33 +608,14 @@ define void EmitAdd_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 	Subs
 ==========================================
 */
-
-define void EmitSub_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x2B, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
-define void EmitSub_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x2B, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitSub_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x2B, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitSub_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x2A, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
 define void EmitSub_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitSub_R8_R8(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 2) {
-		EmitSub_R16_R16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitSub_R32_R32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitSub_R64_R64(cState, DestinationRegister, SourceRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x2B
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
 
@@ -782,24 +635,14 @@ define void EmitSub_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 }
 
 
-define void EmitNeg_R8(CompilerState* cState, i8 TargetRegister) {
-	EmitREXOpcodeModRM(cState, 0xF6, MODE_RTOR, 3, TargetRegister, REX_BASE)
-}
-define void EmitNeg_R16(CompilerState* cState, i8 TargetRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, TargetRegister, 0)
-}
-define void EmitNeg_R32(CompilerState* cState, i8 TargetRegister) {
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, TargetRegister, 0)
-}
-define void EmitNeg_R64(CompilerState* cState, i8 TargetRegister) {
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 3, TargetRegister, REX_W)
-}
 define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
-	if (Size = 1) {EmitNeg_R8(cState, TargetRegister)}
-	else if (Size = 2) {EmitNeg_R16(cState, TargetRegister)}
-	else if (Size = 4) {EmitNeg_R32(cState, TargetRegister)}
-	else if (Size = 8) {EmitNeg_R64(cState, TargetRegister)}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xF7
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 3, TargetRegister) 
 }
 /*
 ==========================================
@@ -807,73 +650,35 @@ define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
 ==========================================
 */
 
-define void EmitIMul_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
-define void EmitIMul_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitIMul_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0xAF, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
 define void EmitIMul_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		AWriteLine("Bad size passed to EmitIMul_RX_RX")
-	}
-	else if (Size = 2) {
-		EmitIMul_R16_R16(cState, DestinationRegister, SourceRegister)
-	}
-	else if (Size = 4) {
-		EmitIMul_R32_R32(cState, DestinationRegister, SourceRegister)
-	}
-	else {
-		EmitIMul_R64_R64(cState, DestinationRegister, SourceRegister)
-	}
-}
-
-
-define void EmitIMul_AL_R8(CompilerState* cState, i8 SourceRegister) {
-	/* Opcode entension 5 */
+	InstructionInfo I
 	
-	EmitREXOpcodeModRM(cState, 0x2A, MODE_RTOR, 5, SourceRegister, 0)
+	I.HasTwoByteOpcode := true
+	I.OpcodeOne := 0x0F
+	I.OpcodeTwo := 0xAF
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
 
-define void EmitCWD(CompilerState* cState) {
-	EmitLegacySizePrefix(cState)
-	PushByte(cState, 0x99)
-}
-define void EmitCDQ(CompilerState* cState) {
-	PushByte(cState, 0x99)
-}
-define void EmitCQO(CompilerState* cState) {
-	PushByte(cState, REX_BASE | REX_W)
-	PushByte(cState, 0x99)
-}
 define void EmitCXX(CompilerState* cState, i8 Size) {
-	if (Size = 1) {AWriteLine("Bad size passed to EmitCXX")}
-	else if (Size = 2) {EmitCWD(cState)}
-	else if (Size = 4) {EmitCDQ(cState)}
-	else if (Size = 8) {EmitCQO(cState)}
+	if (Size = 2) {EmitLegacySizePrefix(cState)}
+	else if (Size = 8) {PushByte(cState, REX_BASE | REX_W)}
+	
+	PushByte(cState, 0x99)
 }
 
 
-define void EmitIDiv_RAX_R16(CompilerState* cState, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, 0)
-}
-define void EmitIDiv_RAX_R32(CompilerState* cState, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, 0)
-}
-define void EmitIDiv_RAX_R64(CompilerState* cState, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0xF7, MODE_RTOR, 7, SourceRegister, REX_W)
-}
 define void EmitIDiv_RAX_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {AWriteLine("Bad size passed to EmitIDiv_RAX_RX")}
-	else if (Size = 2) {EmitIDiv_RAX_R16(cState, SourceRegister)}
-	else if (Size = 4) {EmitIDiv_RAX_R32(cState, SourceRegister)}
-	else if (Size = 8) {EmitIDiv_RAX_R64(cState, SourceRegister)}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xF7
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 7, SourceRegister) 
 }
 
 /*
@@ -897,12 +702,6 @@ define void EmitPop_R64(CompilerState* cState, i8 RegisterNumber) {
 ==========================================
 */
 
-define void EmitEnter_I16(CompilerState* cState, i16 ReserveBytes) {
-	PushByte(cState, 0xC8)
-	PushI16(cState, ReserveBytes)
-	PushByte(cState, 0)
-}
-
 define void EmitLeave(CompilerState* cState) {
 	PushByte(cState, 0xC9)
 }
@@ -922,61 +721,24 @@ define void EmitCall_Label(CompilerState* cState, i32 LabelNumber) {
 ==========================================
 */
 
-define void EmitTest_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x84, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitTest_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x85, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitTest_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x85, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitTest_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x85, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitTest_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitTest_R8_R8(cState, SourceRegister, DestinationRegister)
-	}
-	else if (Size = 2) {
-		EmitTest_R16_R16(cState, SourceRegister, DestinationRegister)
-	}
-	else if (Size = 4) {
-		EmitTest_R32_R32(cState, SourceRegister, DestinationRegister)
-	}
-	else {
-		EmitTest_R64_R64(cState, SourceRegister, DestinationRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x85
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
-
-define void EmitCmp_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x38, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitCmp_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitCmp_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitCmp_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x39, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitCmp_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	if (Size = 1) {
-		EmitCmp_R8_R8(cState, SourceRegister, DestinationRegister)
-	}
-	else if (Size = 2) {
-		EmitCmp_R16_R16(cState, SourceRegister, DestinationRegister)
-	}
-	else if (Size = 4) {
-		EmitCmp_R32_R32(cState, SourceRegister, DestinationRegister)
-	}
-	else {
-		EmitCmp_R64_R64(cState, SourceRegister, DestinationRegister)
-	}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x39
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
 }
 
 /*
@@ -985,67 +747,34 @@ define void EmitCmp_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 Sour
 ==========================================
 */
 
-/* Flipped operands due to MR encoding */
-define void EmitAnd_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x20, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitAnd_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x21, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitAnd_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x21, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitAnd_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x21, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitAnd_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	if (Size = 1) {EmitAnd_R8_R8(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 2) {EmitAnd_R16_R16(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 4) {EmitAnd_R32_R32(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 8) {EmitAnd_R64_R64(cState, DestinationRegister, SourceRegister)}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x21
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
-
-define void EmitOr_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x08, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitOr_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x09, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitOr_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x09, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitOr_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x09, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitOr_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	if (Size = 1) {EmitOr_R8_R8(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 2) {EmitOr_R16_R16(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 4) {EmitOr_R32_R32(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 8) {EmitOr_R64_R64(cState, DestinationRegister, SourceRegister)}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x09
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
-
-define void EmitXor_R8_R8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x30, MODE_RTOR, DestinationRegister, SourceRegister, REX_BASE)
-}
-define void EmitXor_R16_R16(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitLegacySizePrefix(cState)
-	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitXor_R32_R32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, 0)
-}
-define void EmitXor_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister) {
-	EmitREXOpcodeModRM(cState, 0x31, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
-}
 define void EmitXor_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	if (Size = 1) {EmitXor_R8_R8(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 2) {EmitXor_R16_R16(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 4) {EmitXor_R32_R32(cState, DestinationRegister, SourceRegister)}
-	else if (Size = 8) {EmitXor_R64_R64(cState, DestinationRegister, SourceRegister)}
+	InstructionInfo I
+	
+	I.OpcodeOne := 0x31
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
 }
 
 define void R8NeedsREX(i8 RegisterNumber) {

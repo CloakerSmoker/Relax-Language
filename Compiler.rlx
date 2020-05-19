@@ -431,10 +431,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			i32 ThisChunkOffset := StringBufferOffset + ((ChunkCount - 1 - ChunkIndex) * 8)
 			
 			if (ThisChunkOffset < 112) {
-				EmitMove_RI64_DISP8_R64(cState, RBP, RAX, -(ThisChunkOffset + 8) As i8)
+				EmitMove_RIX_DISP8_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i8, 8)
 			}
 			else {
-				EmitMove_RI64_DISP32_R64(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32)
+				EmitMove_RIX_DISP32_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32, 8)
 			}
 		}
 	}
@@ -1249,7 +1249,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			else if (Operator = OPERATOR_STAR) {
 				if (ResultType->Size = 1) {
 					/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
-					EmitIMul_R16_R16(cState, LeftRegister, RightRegister)
+					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, 2)
 					Cast(cState, LeftRegister, 1)
 				}
 				else {	
@@ -1269,8 +1269,8 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 					/* Handle 8 bit division through a 16 bit operation, which will have a result casted down 
 						(8 bit IDIV uses AL/AH, which CodeGen isn't set up to encode)
 					*/
-					EmitCWD(cState)
-					EmitIDiv_RAX_R16(cState, RightRegister)
+					EmitCXX(cState, 2)
+					EmitIDiv_RAX_RX(cState, RightRegister, 2)
 				}
 				else {
 					EmitCXX(cState, ResultSize)
