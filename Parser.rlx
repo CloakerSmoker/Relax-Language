@@ -8,9 +8,9 @@ struct TypeInfo {
 	SafeWideString* Name,
 	HashMap* StructTypeFields,
 	i16 Size,
-	i8 Flags,
 	i8 IsStructType,
-	i8 IsIncomplete
+	i8 IsIncomplete,
+	i8 IsBits
 }
 
 struct Type {
@@ -22,7 +22,9 @@ struct Type {
 struct StructField {
 	SafeWideString* Name,
 	i16 Offset,
-	Type* ValueType
+	Type* ValueType,
+	i8 IsBits,
+	i8 BitsEnd
 }
 
 /*
@@ -58,59 +60,6 @@ i8 NODE_TYPE_STRING := 17
 i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
 i8 NODE_TYPE_STRUCT_ACCESS := 19
 i8 NODE_TYPE_IDENTIFIER := 20
-
-/*
-==========================================
-	AST Node definition + alloc/free helpers
-==========================================
-*/
-
-struct ASTNode {
-	union {
-		void* TrueNode,
-		
-		UnaryExpression* UnaryNode,
-		BinaryExpression* BinaryNode,
-		CallExpression* CallNode,
-		StructAccessExpression* AccessNode,
-		
-		IfGroup* IfNode,
-		ForLoop* ForNode,
-		WhileLoop* WhileNode,
-		Block* LoopBody,
-		i8 IsContinue,
-		
-		FunctionDefine* DefineNode,
-		
-		ASTNode* ReturnExpression,
-		
-		ASTNode* ExpressionStatement,
-		
-		SafeWideString* StringValue,
-		VariableInfo* VariableValue,
-		i64 IntegerValue,
-		Type* TypeValue,
-		i32 StringOffsetValue
-	},
-	
-	Type* ValueType,
-	SafeWideString* SourceFilePath,
-	i32 LineNumber,
-	i8 NodeType
-}
-
-define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type* NewNodeValueType) {
-	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
-	
-	NewNode->NodeType := NewNodeType
-	NewNode->TrueNode := NewNodeTrueNode
-	NewNode->ValueType := NewNodeValueType
-	
-	return NewNode
-}
-define void FreeASTNode(ASTNode* NodeToFree) {
-	Free(NodeToFree As void*)
-}
 
 /*
 ==========================================
@@ -221,6 +170,72 @@ struct ParserState {
 
 /*
 ==========================================
+	AST Node definition + alloc/free helpers
+==========================================
+*/
+
+struct ASTNode {
+	union {
+		void* TrueNode,
+		
+		UnaryExpression* UnaryNode,
+		BinaryExpression* BinaryNode,
+		CallExpression* CallNode,
+		StructAccessExpression* AccessNode,
+		
+		IfGroup* IfNode,
+		ForLoop* ForNode,
+		WhileLoop* WhileNode,
+		Block* LoopBody,
+		i8 IsContinue,
+		
+		FunctionDefine* DefineNode,
+		
+		ASTNode* ReturnExpression,
+		
+		ASTNode* ExpressionStatement,
+		
+		SafeWideString* StringValue,
+		VariableInfo* VariableValue,
+		i64 IntegerValue,
+		Type* TypeValue,
+		i32 StringOffsetValue
+	},
+	
+	Type* ValueType,
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	i8 NodeType,
+	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
+}
+
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type* NewNodeValueType) {
+	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
+	
+	BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
+	StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
+	
+	i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
+	
+	i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
+	
+	if (IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
+		NewNode->IsStorageValue := true
+	}
+	
+	NewNode->NodeType := NewNodeType
+	NewNode->TrueNode := NewNodeTrueNode
+	NewNode->ValueType := NewNodeValueType
+	
+	return NewNode
+}
+define void FreeASTNode(ASTNode* NodeToFree) {
+	Free(NodeToFree As void*)
+}
+
+
+/*
+==========================================
 	Expression parser constant lookup functions
 ==========================================
 */
@@ -261,6 +276,9 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 		return 8
 	}
+	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+		return 8
+	}
 	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
 		return 9
 	}
@@ -299,7 +317,7 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_BANG) {
 		return 10
 	}
-	else if (Operator = OPERATOR_MINUS) {
+	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
 		return 10
 	}
 	
@@ -323,16 +341,7 @@ Type* TYPE_NONE := 0
 i8 TYPE_REGULAR := 0
 i8 TYPE_STRUCT := 1
 i8 TYPE_INCOMPLETE := 2
-
-define void UpdateTypeFlags(TypeInfo* TargetType) {
-	if (TargetType->Flags & TYPE_STRUCT) {
-		TargetType->IsStructType := True
-	}
-	
-	if (TargetType->Flags & TYPE_INCOMPLETE) {
-		TargetType->IsIncomplete := True
-	}
-}
+i8 TYPE_BITS := 4
 
 define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
@@ -343,9 +352,18 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	NewType->Name := Name
 	NewType->StructTypeFields := Fields
 	NewType->Size := Size
-	NewType->Flags := Flags
+
+	if (Flags & TYPE_STRUCT) {
+		NewType->IsStructType := True
+	}
 	
-	UpdateTypeFlags(NewType)
+	if (Flags & TYPE_INCOMPLETE) {
+		NewType->IsIncomplete := True
+	}
+	
+	if (Flags & TYPE_BITS) {
+		NewType->IsBits := True
+	}
 	
 	/* AWrite("Adding ")
 	PrintSafeString(Name)
@@ -718,10 +736,23 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		
 		ResultType := RightType
 	}
+	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+		if (RightBaseType->IsStructType || RightType->PointerDepth) {
+			ErrorMessage := "Right side operand of '<<'/'>>' must be an integer."
+		}
+		else if (LeftType->PointerDepth = 0 && LeftBaseType->IsStructType) {
+			ErrorMessage := "Left side operator of '<<'/'>>' must not be a local struct."
+		}
+		else if (RightType->Size < 1) {
+			ErrorMessage := "Right side operand of '<<'/'>>' must be 8 bits."
+		}
+		
+		ResultType := LeftType
+	}
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
 		
-		if !(LeftBaseType->IsStructType) {
+		if !(LeftBaseType->IsStructType || (LeftBaseType->IsBits && Operator = OPERATOR_DOT)) {
 			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
 			ErrorMessage := "Left side operand of '.' and '->'/'~>' must be of a struct/struct pointer type"
 		}
@@ -799,25 +830,8 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			
 			ResultType := LeftType
 		}
-		else if (LeftNodeType = NODE_TYPE_STRUCT_ACCESS && Left->AccessNode->Operator->Value = OPERATOR_TILDE_GREATER) {
-			ErrorMessage := "Left side operand of ':=' can not be a '~>` access."
-		}
-		else if (LeftNodeType != NODE_TYPE_VARIABLE && LeftNodeType != NODE_TYPE_STRUCT_ACCESS) {
-			i8* LeftHasWrongType := "Left side of ':=' must be a variable or struct/array access."
-			
-			if (LeftNodeType = NODE_TYPE_BINARY) {
-				BinaryExpression* LeftExpression := (Left->TrueNode) As BinaryExpression*
-				
-				if (LeftExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
-					ResultType := LeftType
-				}
-				else {
-					ErrorMessage := LeftHasWrongType
-				}
-			}
-			else {
-				ErrorMessage := LeftHasWrongType
-			}
+		else if !(Left->IsStorageValue) {
+			ErrorMessage := "Left side of ':=' must be a storage value"
 		}
 		else {
 			/* Otherwise, the result type is the right type */
@@ -897,21 +911,8 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 		ResultType := MakeType(pState->i8, 0)
 	}
 	else if (Operator = OPERATOR_AND) {
-		i8 OperandType := (Operand->NodeType) As i8
-		
-		if (OperandType != NODE_TYPE_VARIABLE && OperandType != NODE_TYPE_STRUCT_ACCESS) {
-			i8* BadOperandTypeMessage := "Operand of the '&' operator must be a variable."
-			
-			if (OperandType = NODE_TYPE_BINARY) {
-				BinaryExpression* OperandExpression := (Operand->TrueNode) As BinaryExpression*
-				
-				if (OperandExpression->Operator->Value != OPERATOR_OPEN_BRACKET) {
-					TokenizerError(pState->pState, BadOperandTypeMessage)
-				}
-			}
-			else {
-				TokenizerError(pState->pState, BadOperandTypeMessage)
-			}
+		if !(Operand->IsStorageValue) {
+			ASTError(Operand, "Operand of the '&' operator must be a storage value.")
 		}
 		
 		ResultType := IncrementPointerType(pState, ResultType)
@@ -993,7 +994,7 @@ define Token* ParserNextToken(ParserState* pState) {
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	/* Compares two tokens using type/value */
 	
-	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING) {
+	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING || TokenType = TOKEN_TYPE_INTEGER) {
 		/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
 		
 		if (TokenToTest->Type = TokenType) {
@@ -1212,6 +1213,7 @@ i8 IS_IMPORT := 1
 declare void ParseAndAddDefine(ParserState*)
 declare void ParseAndAddDeclare(ParserState*, i8)
 declare void ParseAndAddStruct(ParserState*)
+declare void ParseAndAddBits(ParserState*)
 declare ASTNode* ParseExpression(ParserState*, i8)
 
 define void ParseProgram(ParserState* pState) {
@@ -1232,6 +1234,9 @@ define void ParseProgram(ParserState* pState) {
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 			ParseAndAddStruct(pState)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
+			ParseAndAddBits(pState)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
@@ -1393,6 +1398,118 @@ define void ParseAndAddStruct(ParserState* pState) {
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
 		AddType(pState, Name, Fields, TotalSize, TYPE_STRUCT)
+	}
+}
+
+define void ParseAndAddBits(ParserState* pState) {
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected name for bits type.")
+	SafeWideString* BitsName := NameToken->Value As SafeWideString*
+	
+	Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
+	
+	i32 BeforeType := FreezeParser(pState)
+	Type* BackingType := ParseTypeName(pState)
+	
+	if (BackingType->TrueType->IsStructType || BackingType->PointerDepth) {
+		UnfreezeParser(pState, BeforeType)
+		
+		Error(ParserNextToken(pState), "Bits backing type must be a plain integer type.")
+	}
+	
+	i8 BackingTypeSize := BackingType->Size As i8
+	
+	AWrite("FUCKCJLKASDJLKAS ")
+	IWriteLine(BackingTypeSize)
+	
+	i8 BackingTypeSizeBits := BackingTypeSize * 8
+	
+	/* Creates a hashmap for the bit fields */
+	HashMap* Fields := NewHashMap()
+	i16 FieldCount := 0
+	
+	/* Stores where the next field will be */
+	i16 NextFieldOffset := 0
+	
+	/* Stores the total size of the bits (in bits, obviously) */
+	i16 TotalSize := 0
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
+	
+	loop {
+		StructField* NextField := Alloc(StructField.Size) As StructField*
+		
+		Token* OpenBracket := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
+		
+		i8 StartIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field start index.")->Value As i8
+		i8 EndIndex := StartIndex + 1
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+			EndIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field end index.")->Value As i8
+		}
+		
+		i8 FieldSize := EndIndex - StartIndex
+		
+		if (FieldSize < 0 || FieldSize > BackingTypeSizeBits) {
+			Error(OpenBracket, "Field size can not be negative, or bigger than the backing type.")
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected close bracket for bit field range.")
+		
+		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected bit field name.")->Value
+		
+		NextField->Name := FieldName
+		NextField->IsBits := BackingTypeSize
+		NextField->Offset := StartIndex
+		NextField->BitsEnd := EndIndex
+		
+		if (FieldSize < 8) {
+			NextField->ValueType := MakeType(pState->i8, 0)
+		}
+		else if (FieldSize < 16) {
+			NextField->ValueType := MakeType(pState->i16, 0)
+		}
+		else if (FieldSize < 32) {
+			NextField->ValueType := MakeType(pState->i32, 0)
+		}
+		else {
+			NextField->ValueType := MakeType(pState->i64, 0)
+		}
+		
+		HashMapAddValue(Fields, FieldName, NextField As void)
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			/* If the next token is not a ',' break the loop */
+			break
+		}
+	}
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for bits body.")
+	
+	/* Check if there's already a type with this name */
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, BitsName)
+	TypeInfo* FoundType := 0
+	
+	if (FoundElement) {
+		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
+		
+		FoundType := (FoundElement->Value) As TypeInfo*
+		
+		if !(FoundType->IsIncomplete) {
+			/* If the type we found isn't incomplete, then error out */
+			
+			ASTErrorFromToken(pState, NameToken, "Duplicate type definition")
+		}
+		
+		/* Otherwise, update the found type with the info we just parsed */
+		FoundType->StructTypeFields := Fields
+		FoundType->Size := BackingTypeSize
+		FoundType->IsStructType := false
+		FoundType->IsBits := true
+		FoundType->IsIncomplete := false /* And set that it is no longer incomplete */
+	}
+	else {
+		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
+		AddType(pState, BitsName, Fields, BackingTypeSize, TYPE_BITS)
 	}
 }
 

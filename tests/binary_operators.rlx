@@ -28,6 +28,16 @@ define i32 Main() {
 	IWrite(0 || 1)
 	IWrite(1 || 0)
 	IWrite(1 || 1)
+	WriteCharacter(',')
+	IWrite(1 << 20)
+	WriteCharacter(',')
+	IWrite(1 << 20 >> 20)
+	WriteCharacter(',')
+	
+	/* Todo: Write unary_operators.rlx and move these into that file */
+	IWrite(~0)
+	WriteCharacter(',')
+	IWrite(~90 + 1)
 	
 	return 0
 }

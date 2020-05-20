@@ -899,16 +899,33 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
 	
-	if (FieldOffset = 0 && ResultRegister != R13) {
-		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
-	}
-	else if (FieldOffset >= 112) {
-		EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+	if (TargetField->IsBits) {
+		/* EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize) */
+		
+		i8 FieldIndex := FieldOffset As i8
+		i8 ShiftLeftBy := (TargetFieldSize * 8) As i8 - TargetField->BitsEnd
+		i8 ShiftRightBy := ShiftLeftBy + FieldIndex
+		
+		if (ShiftLeftBy) { 
+			EmitSAL_RX_I8(cState, ResultRegister, ShiftLeftBy, TargetFieldSize)
+		}
+		
+		EmitSAR_RX_I8(cState, ResultRegister, ShiftRightBy, TargetFieldSize)
 	}
 	else {
-		EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+		if (FieldOffset = 0 && ResultRegister != R13) {
+			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
+		}
+		else if (FieldOffset >= 112) {
+			EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+		}
+		else {
+			EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+		}
 	}
 }
+
+declare void CompileSetArrayAccess(CompilerState*, i8, ASTNode*, ASTNode*, i8)
 
 define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
@@ -916,22 +933,68 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i8 ResultPointerRegister := PushRegisterStack(cState)
 	
 	i32 FieldOffset := TargetField->Offset
+	i16 TargetFieldSize := TargetField->ValueType->Size
 	
-	CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
-	
-	if (FieldOffset = 0 && ResultPointerRegister != R13) {
-		/* 
-			Fuck x86_64. WHY would R13 be used as the magic "use RIP-relative" flag?
-			Was it not enough to use R12 for SIB encodings? Why couldn't this shit have been put into another prefix byte?
-		*/
+	if (TargetField->IsBits) {
+		CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
 		
-		EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetField->ValueType->Size)
-	}
-	else if (FieldOffset >= 112) {
-		EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+		/* EmitMove_RX_RIX(cState, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) */
+		
+		TargetFieldSize := TargetField->IsBits
+		
+		i8 FieldIndex := FieldOffset As i8
+		i32 FieldSize := (TargetField->IsBits * 8)
+		i32 ShiftLeftBy := FieldSize - (TargetField->BitsEnd - FieldIndex)
+		i32 ShiftRightBy := FieldSize - (TargetField->BitsEnd)
+		
+		EmitMove_RX_RX(cState, RDI, ResultPointerRegister, TargetFieldSize)
+		EmitSAL_RX_I8(cState, RDI, ShiftRightBy, TargetFieldSize)
+		EmitSAR_RX_I8(cState, RDI, ShiftRightBy + FieldIndex, TargetFieldSize)
+		EmitNot_RX(cState, RDI, TargetFieldSize)
+		EmitAnd_RX_RX(cState, ResultPointerRegister, RDI, TargetFieldSize)
+		
+		IWriteLine(TargetField->IsBits)
+		IWriteLine(FieldIndex)
+		IWriteLine(ShiftLeftBy)
+		IWriteLine(ShiftRightBy)
+		
+		if (ShiftLeftBy) { 
+			EmitSAL_RX_I8(cState, ValueRegister, ShiftLeftBy As i32, TargetFieldSize)
+		}
+		
+		EmitSAR_RX_I8(cState, ValueRegister, ShiftRightBy As i32, TargetFieldSize)
+		EmitOr_RX_RX(cState, ResultPointerRegister, ValueRegister, TargetFieldSize)
+		
+		ASTNode* Left := TargetAccess->Left
+		i8 LeftNodeType := Left->NodeType
+		
+		if (LeftNodeType = NODE_TYPE_VARIABLE) {
+			CompileSetVariableValue(cState, Left->VariableValue, ResultPointerRegister)
+		}
+		else if (LeftNodeType = NODE_TYPE_STRUCT_ACCESS) {
+			CompileSetStructAccess(cState, ResultPointerRegister, Left->AccessNode)
+		}
+		else if (LeftNodeType = NODE_TYPE_BINARY) {
+			CompileSetArrayAccess(cState, ValueRegister, Left->BinaryNode->Left, Left->BinaryNode->Right, ResultPointerRegister)
+		}
 	}
 	else {
-		EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+		CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
+		
+		if (FieldOffset = 0 && ResultPointerRegister != R13) {
+			/* 
+				Fuck x86_64. WHY would R13 be used as the magic "use RIP-relative" flag?
+				Was it not enough to use R12 for SIB encodings? Why couldn't this shit have been put into another prefix byte?
+			*/
+			
+			EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetField->ValueType->Size)
+		}
+		else if (FieldOffset >= 112) {
+			EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+		}
+		else {
+			EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+		}
 	}
 	
 	PopRegisterStack(cState)
@@ -1018,6 +1081,9 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 		}
 		else if (Operator = OPERATOR_MINUS) {
 			EmitNeg_RX(cState, ResultRegister, ResultSize)
+		}
+		else if (Operator = OPERATOR_TILDE) {
+			EmitNot_RX(cState, ResultRegister, ResultSize)
 		}
 		else if (Operator = OPERATOR_BANG) {
 			/* ALWAYS 100% ENSURE THAT YOU AREN'T DOING OPERATIONS WITH THE WRONG SIZE, RESULTSIZE CAN'T ALWAYS BE TRUSTED */
@@ -1165,6 +1231,34 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		
 			if (!DiscardResult && ResultSize > 1) {
 				Cast(cState, ResultRegister, ResultSize)
+			}
+		}
+		else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+			i8 LeftWasRCX := LeftRegister = RCX
+			
+			if (LeftWasRCX) {
+				LeftRegister := PushRegisterStack(cState)
+				EmitMove_RX_RX(cState, LeftRegister, RCX, ResultSize)
+			}
+			else if (cState->NoClobberCD89) {
+				EmitPush_R64(cState, RCX)
+			}
+			
+			CompileExpression(cState, RCX, Right)
+			
+			if (Operator = OPERATOR_LESS_LESS) {
+				EmitSHL_RX_CL(cState, LeftRegister, ResultSize)
+			}
+			else if (Operator = OPERATOR_GREATER_GREATER) {
+				EmitSHR_RX_CL(cState, LeftRegister, ResultSize)
+			}
+			
+			if (LeftWasRCX) {
+				EmitMove_RX_RX(cState, RCX, LeftRegister, ResultSize)
+				PopRegisterStack(cState)
+			}
+			else if (cState->NoClobberCD89) {
+				EmitPop_R64(cState, RCX)
 			}
 		}
 		else {

@@ -178,6 +178,10 @@ i8 OPERATOR_XOR := 25
 
 i8 OPERATOR_TILDE_GREATER := 26
 
+i8 OPERATOR_LESS_LESS := 27
+i8 OPERATOR_GREATER_GREATER := 28
+i8 OPERATOR_TILDE := 29
+
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
@@ -206,8 +210,9 @@ i8 KEYWORD_BREAK := 9
 
 i8 KEYWORD_STRUCT := 10
 i8 KEYWORD_UNION := 11
+i8 KEYWORD_BITS := 12
 
-i8 KEYWORD_RETURN := 12
+i8 KEYWORD_RETURN := 13
 
 define i16 PeekNextCharacterRaw(TokenizerState* pState) {
 	return(pState->Source)[pState->SourceIndex]
@@ -398,8 +403,12 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
 		}
-		else if (NextCharacter = '~' && NextCharacterMatches(pState, '>')) {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
+		else if (NextCharacter = '~') {
+			if (NextCharacterMatches(pState, '>')) {
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
+			}
+			
+			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE)
 		}
 		else if (NextCharacter = '*') {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
@@ -432,9 +441,17 @@ define Token* _GetNextToken(TokenizerState* pState) {
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
 		}
 		else if (NextCharacter = '<') {
+			if (NextCharacterMatches(pState, '<')) {
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS_LESS)
+			}
+			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
 		}
 		else if (NextCharacter = '>') {
+			if (NextCharacterMatches(pState, '>')) {
+				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER_GREATER)
+			}
+			
 			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
 		}
 		else if (NextCharacter = '^') {
@@ -708,6 +725,9 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	else if (SafeStringEqualsAString(PotentialKeyword, "union")) {
 		return KEYWORD_UNION
 	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "bits")) {
+		return KEYWORD_BITS
+	}
 	
 	return TOKEN_TYPE_NONE
 }
@@ -797,6 +817,14 @@ define void PrintOperator(i8 Operator) {
 		FirstCharacter := 'a'
 		SecondCharacter := 's'
 	}
+	else if (Operator = OPERATOR_LESS_LESS) {
+		FirstCharacter := '<'
+		SecondCharacter := '<'
+	}
+	else if (Operator = OPERATOR_GREATER_GREATER) {
+		FirstCharacter := '>'
+		SecondCharacter := '>'
+	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
 		FirstCharacter := '['
 	}
@@ -841,6 +869,9 @@ define void PrintOperator(i8 Operator) {
 	}
 	else if (Operator = OPERATOR_COLON) {
 		FirstCharacter := ':'
+	}
+	else if (Operator = OPERATOR_TILDE) {
+		FirstCharacter := '~'
 	}
 	
 	if (FirstCharacter) {
@@ -919,5 +950,8 @@ define void PrintKeyword(i8 Keyword) {
 	}
 	else if (Keyword = KEYWORD_UNION) {
 		AWrite("union")
+	}
+	else if (Keyword = KEYWORD_BITS) {
+		AWrite("bits")
 	}
 }

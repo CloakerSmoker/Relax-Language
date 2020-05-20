@@ -681,6 +681,51 @@ define void EmitIDiv_RAX_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(cState, &I, 7, SourceRegister) 
 }
 
+define void EmitSAL_RX_I8(CompilerState* cState, i8 TargetRegister, i8 ShiftCount, i8 Size) {
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xC1
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 4, TargetRegister)
+	
+	PushByte(cState, ShiftCount)
+}
+
+define void EmitSAR_RX_I8(CompilerState* cState, i8 TargetRegister, i8 ShiftCount, i8 Size) {
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xC1
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 5, TargetRegister)
+	
+	PushByte(cState, ShiftCount)
+}
+
+define void EmitSHL_RX_CL(CompilerState* cState, i8 TargetRegister, i8 Size) {
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xD3
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 4, TargetRegister)
+}
+
+define void EmitSHR_RX_CL(CompilerState* cState, i8 TargetRegister, i8 Size) {
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xD3
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 5, TargetRegister)
+}
+
+
 /*
 ==========================================
 	Push/Pop
@@ -775,6 +820,16 @@ define void EmitXor_RX_RX(CompilerState* cState, i8 SourceRegister, i8 Destinati
 	I.Size := Size
 	
 	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+}
+
+define void EmitNot_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
+	InstructionInfo I
+	
+	I.OpcodeOne := 0xF7
+	I.Mode := MODE_RTOR
+	I.Size := Size
+	
+	EmitBasicInstruction(cState, &I, 2, SourceRegister) 
 }
 
 define void R8NeedsREX(i8 RegisterNumber) {
