@@ -897,22 +897,30 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	i32 FieldOffset := TargetField->Offset
 	
-	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
-	
-	if (TargetField->IsBits) {
+	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
+		CompileExpression(cState, ResultRegister, TargetAccess->Left)
 		/* EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize) */
 		
-		i8 FieldIndex := FieldOffset As i8
-		i8 ShiftLeftBy := (TargetFieldSize * 8) As i8 - TargetField->BitsEnd
-		i8 ShiftRightBy := ShiftLeftBy + FieldIndex
+		TargetFieldSize := FieldOffset
 		
-		if (ShiftLeftBy) { 
+		i32 FieldSize := (TargetFieldSize * 8) - 1
+		i8 ShiftLeftBy := FieldSize - TargetField->BitEndIndex
+		i8 ShiftRightBy := ShiftLeftBy + TargetField->BitStartIndex
+		
+		if (ShiftLeftBy < 0) {
+			ShiftRightBy := -ShiftLeftBy
+		}
+		else if (ShiftLeftBy) { 
 			EmitSAL_RX_I8(cState, ResultRegister, ShiftLeftBy, TargetFieldSize)
 		}
 		
-		EmitSAR_RX_I8(cState, ResultRegister, ShiftRightBy, TargetFieldSize)
+		if (ShiftRightBy) {
+			EmitSAR_RX_I8(cState, ResultRegister, ShiftRightBy, TargetFieldSize)
+		}
 	}
 	else {
+		CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
+		
 		if (FieldOffset = 0 && ResultRegister != R13) {
 			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
 		}
@@ -935,28 +943,31 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i32 FieldOffset := TargetField->Offset
 	i16 TargetFieldSize := TargetField->ValueType->Size
 	
-	if (TargetField->IsBits) {
+	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
 		
 		/* EmitMove_RX_RIX(cState, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) */
 		
-		TargetFieldSize := TargetField->IsBits
+		TargetFieldSize := TargetField->Offset
 		
-		i8 FieldIndex := FieldOffset As i8
-		i32 FieldSize := (TargetField->IsBits * 8)
-		i32 ShiftLeftBy := FieldSize - (TargetField->BitsEnd - FieldIndex)
-		i32 ShiftRightBy := FieldSize - (TargetField->BitsEnd)
+		i8 StartIndex := TargetField->BitStartIndex
+		i8 EndIndex := TargetField->BitEndIndex
 		
-		EmitMove_RX_RX(cState, RDI, ResultPointerRegister, TargetFieldSize)
-		EmitSAL_RX_I8(cState, RDI, ShiftRightBy, TargetFieldSize)
-		EmitSAR_RX_I8(cState, RDI, ShiftRightBy + FieldIndex, TargetFieldSize)
-		EmitNot_RX(cState, RDI, TargetFieldSize)
+		i32 FieldSize := (TargetFieldSize * 8) - 1
+		i8 ShiftLeftBy := FieldSize - (EndIndex - StartIndex)
+		i8 ShiftRightBy := FieldSize - EndIndex
+		
+		i64 PartialMask := ((1 As i64) << (EndIndex + 1)) - 1
+		
+		if (EndIndex = 63) {
+			/* Since 1<<64 is undefined, the result of INT64_MAX needs to be hard coded */
+			PartialMask := 0xFFFFFFFFFFFFFFFF
+		}
+		
+		i64 Mask := ~(PartialMask >> StartIndex << StartIndex)
+		
+		EmitMove_RX_IX(cState, RDI, Mask, TargetFieldSize)
 		EmitAnd_RX_RX(cState, ResultPointerRegister, RDI, TargetFieldSize)
-		
-		IWriteLine(TargetField->IsBits)
-		IWriteLine(FieldIndex)
-		IWriteLine(ShiftLeftBy)
-		IWriteLine(ShiftRightBy)
 		
 		if (ShiftLeftBy) { 
 			EmitSAL_RX_I8(cState, ValueRegister, ShiftLeftBy As i32, TargetFieldSize)

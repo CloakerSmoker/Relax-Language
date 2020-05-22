@@ -23,8 +23,8 @@ struct StructField {
 	SafeWideString* Name,
 	i16 Offset,
 	Type* ValueType,
-	i8 IsBits,
-	i8 BitsEnd
+	i8 BitStartIndex,
+	i8 BitEndIndex
 }
 
 /*
@@ -1417,10 +1417,6 @@ define void ParseAndAddBits(ParserState* pState) {
 	}
 	
 	i8 BackingTypeSize := BackingType->Size As i8
-	
-	AWrite("FUCKCJLKASDJLKAS ")
-	IWriteLine(BackingTypeSize)
-	
 	i8 BackingTypeSizeBits := BackingTypeSize * 8
 	
 	/* Creates a hashmap for the bit fields */
@@ -1441,7 +1437,7 @@ define void ParseAndAddBits(ParserState* pState) {
 		Token* OpenBracket := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
 		
 		i8 StartIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field start index.")->Value As i8
-		i8 EndIndex := StartIndex + 1
+		i8 EndIndex := StartIndex
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 			EndIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field end index.")->Value As i8
@@ -1458,17 +1454,17 @@ define void ParseAndAddBits(ParserState* pState) {
 		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected bit field name.")->Value
 		
 		NextField->Name := FieldName
-		NextField->IsBits := BackingTypeSize
-		NextField->Offset := StartIndex
-		NextField->BitsEnd := EndIndex
+		NextField->Offset := BackingTypeSize
+		NextField->BitStartIndex := StartIndex
+		NextField->BitEndIndex := EndIndex
 		
-		if (FieldSize < 8) {
+		if (FieldSize <= 8) {
 			NextField->ValueType := MakeType(pState->i8, 0)
 		}
-		else if (FieldSize < 16) {
+		else if (FieldSize <= 16) {
 			NextField->ValueType := MakeType(pState->i16, 0)
 		}
-		else if (FieldSize < 32) {
+		else if (FieldSize <= 32) {
 			NextField->ValueType := MakeType(pState->i32, 0)
 		}
 		else {
