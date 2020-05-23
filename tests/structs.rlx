@@ -13,6 +13,16 @@ struct Test {
 	i32 E
 }
 
+struct Test2 unaligned {
+	i8 A,
+	i64 B
+}
+
+struct Test3 {
+	i8 A,
+	i64 B
+}
+
 define i32 Main() {
 	i64 ArgC := 0
 	i16* CommandLine := GetCommandLineW()
@@ -51,6 +61,16 @@ define i32 Main() {
 	
 	IWrite(Q~>A = A~>A)
 	IWrite(Q~>A = T~>A)
+	
+	WriteCharacter(',')
+	
+	Test2 V
+	
+	IWrite(V~>B % 8)
+	
+	Test3 W
+	
+	IWrite(W~>B % 8)
 	
 	return 0
 }

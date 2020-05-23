@@ -1,0 +1,40 @@
+DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
+DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
+
+#Include Memory.rlx
+#Include String.rlx
+#Include Console.rlx
+
+bits Example As i32 {
+	[0:10] test,
+	[20:25] test2,
+	[0:31] test3
+}
+
+bits Example2 As i64 {
+	[0:31] low_32,
+	[32:63] high_32
+}
+
+define i32 Main() {
+/* 	i64 ArgC := 0
+	i16* CommandLine := GetCommandLineW()
+	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC) */
+	
+	Example E := 0
+	
+	E.test := 90
+	E.test2 := 20
+	E.test3 := 0
+	
+	IWrite(E)
+	WriteCharacter(',')
+	
+	Example2 E2 := 0x4000000090009000
+	
+	IWriteHex(E2.low_32)
+	WriteCharacter(',')
+	IWriteHex(E2.high_32)
+	
+	return E
+}

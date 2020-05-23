@@ -211,8 +211,9 @@ i8 KEYWORD_BREAK := 9
 i8 KEYWORD_STRUCT := 10
 i8 KEYWORD_UNION := 11
 i8 KEYWORD_BITS := 12
+i8 KEYWORD_UNALIGNED := 13
 
-i8 KEYWORD_RETURN := 13
+i8 KEYWORD_RETURN := 14
 
 define i16 PeekNextCharacterRaw(TokenizerState* pState) {
 	return(pState->Source)[pState->SourceIndex]
@@ -728,6 +729,9 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	else if (SafeStringEqualsAString(PotentialKeyword, "bits")) {
 		return KEYWORD_BITS
 	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "unaligned")) {
+		return KEYWORD_UNALIGNED
+	}
 	
 	return TOKEN_TYPE_NONE
 }
@@ -953,5 +957,8 @@ define void PrintKeyword(i8 Keyword) {
 	}
 	else if (Keyword = KEYWORD_BITS) {
 		AWrite("bits")
+	}
+	else if (Keyword = KEYWORD_UNALIGNED) {
+		AWrite("unaligned")
 	}
 }

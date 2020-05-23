@@ -1295,6 +1295,8 @@ define void ParseAndAddStruct(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
+	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
+	
 	/* Consumes the opening '{' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
@@ -1337,7 +1339,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 		if (NextField->ValueType->PointerDepth = 0 && NextField->ValueType->TrueType->IsStructType) {
 			/* Dummy branch */
 		}
-		else if (InUnion) {
+		else if (InUnion || IsUnaligned) {
 			/* Dummy branch */
 		}
 		else if (NextFieldOffset % FieldSize) {
