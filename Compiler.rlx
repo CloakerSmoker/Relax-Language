@@ -17,7 +17,7 @@ struct CompilerState {
 	PEBuilder* Builder,
 	ELFBuilder* ELF,
 	
-	i64 GlobalOffset,
+	i64 GlobalBase,
 	
 	i8* CodeBuffer,
 	i32 CodeBufferSize,
@@ -45,7 +45,7 @@ struct CompilerState {
 	i8 NoClobberCD89,
 	i8 NoClobberA,
 	
-	i8 ELFTarget
+	i8 OutputELF
 }
 
 /*
@@ -81,10 +81,12 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	if (OutputELF) {
 		C.ELF := BuildELFBuilder()
+		C.GlobalBase := DEFAULT_IMAGE_BASE + 64
 	}
 	else {
 		C.Builder := BuildBuilder()
 		C.Builder->ImportFixupBase := C.CodeBuffer
+		C.GlobalBase := DEFAULT_IMAGE_BASE + C.Builder->NextRVA
 	}
 	
 	i32 MainOffset := 0
@@ -144,9 +146,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		AddDataSection(C.ELF, C.pState->GlobalOffset)
 		AddCodeSection(C.ELF, C.CodeBuffer, C.CodeBufferSize)
 		
-		FinalizeBuilder(C.ELF, MainOffset)
+		FinalizeELFBuilder(C.ELF, MainOffset)
 		
-		WriteBuilder(C.ELF, OutputFilePath)
+		WriteELFBuilder(C.ELF, OutputFilePath)
 	}
 	else {
 		AddData(C.Builder, C.pState->GlobalOffset)
@@ -242,7 +244,7 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 	}
 	else {
@@ -256,7 +258,7 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 }
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
 		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetVariable->Type->Size)
@@ -282,7 +284,7 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 }
 define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, DEFAULT_IMAGE_BASE + (cState->Builder->NextRVA) + (TargetVariable->StackOffset))
+		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
 		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetVariable->Type->Size)
@@ -786,7 +788,10 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
-	if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
+	if (CallNode->IsSysCall) {
+		/* Dummy branch */
+	}
+	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
 	}
 	
@@ -794,8 +799,16 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	i32 StackParameterCount := 0
 	i8 ExtraPadding := false
 	
-	if (ParameterCount > 4) {
-		StackParameterCount := ParameterCount - 4
+	i8 USE_SYSTEMV := cState->OutputELF
+	
+	i8 REGISTER_PARAMETER_COUNT := 4
+	
+	if (USE_SYSTEMV) {
+		REGISTER_PARAMETER_COUNT := 6
+	}
+	
+	if (ParameterCount > REGISTER_PARAMETER_COUNT) {
+		StackParameterCount := ParameterCount - REGISTER_PARAMETER_COUNT
 	}
 	
 	i8 RegisterStackIndex := cState->RegisterStackIndex
@@ -822,25 +835,49 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	
 	i8 ParameterRegister := RBX
 	
+	i8 IS_SYSCALL := CallNode->IsSysCall
+	
 	if (ParameterCount != 0) {
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
-			VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
+			if !(IS_SYSCALL) {
+				VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
+			}
+			
 			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
 			
 			i8 ThisParameterRegister := ParameterRegister
 			
-			if (ParameterIndex = 3) {ThisParameterRegister := R9}
-			else if (ParameterIndex = 2) {ThisParameterRegister := R8}
-			else if (ParameterIndex = 1) {ThisParameterRegister := RDX}
-			else if (ParameterIndex = 0) {ThisParameterRegister := RCX}
+			if (IS_SYSCALL) {
+				if (ParameterIndex = 6) {ThisParameterRegister := R9}
+				else if (ParameterIndex = 5) {ThisParameterRegister := R8}
+				else if (ParameterIndex = 4) {ThisParameterRegister := RCX}
+				else if (ParameterIndex = 3) {ThisParameterRegister := RDX}
+				else if (ParameterIndex = 2) {ThisParameterRegister := RSI}
+				else if (ParameterIndex = 1) {ThisParameterRegister := RDI}
+				else if (ParameterIndex = 0) {ThisParameterRegister := RAX}
+			}
+			else if (USE_SYSTEMV) {
+				if (ParameterIndex = 5) {ThisParameterRegister := R9}
+				else if (ParameterIndex = 4) {ThisParameterRegister := R8}
+				else if (ParameterIndex = 3) {ThisParameterRegister := RCX}
+				else if (ParameterIndex = 2) {ThisParameterRegister := RDX}
+				else if (ParameterIndex = 1) {ThisParameterRegister := RSI}
+				else if (ParameterIndex = 0) {ThisParameterRegister := RDI}
+			}
+			else {
+				if (ParameterIndex = 3) {ThisParameterRegister := R9}
+				else if (ParameterIndex = 2) {ThisParameterRegister := R8}
+				else if (ParameterIndex = 1) {ThisParameterRegister := RDX}
+				else if (ParameterIndex = 0) {ThisParameterRegister := RCX}
+			}
 			
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
-			if (NextParameterValue->ValueType->Size < NextParameter->Type->Size) {
+			if (IS_SYSCALL || NextParameterValue->ValueType->Size < NextParameter->Type->Size) {
 				Cast(cState, ThisParameterRegister, NextParameterValue->ValueType->Size)
 			}
 			
-			if (ParameterIndex >= 4) {
+			if (ParameterIndex >= REGISTER_PARAMETER_COUNT) {
 				EmitPush_R64(cState, ThisParameterRegister)
 			}
 		}
@@ -852,9 +889,17 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitMove_R64_R64(cState, R12, RAX)
 	} */
 	
-	EmitSub_R64_I8(cState, RSP, 0x20) /* Shadown space */
-	EmitCall_Label(cState, TargetFunction->LabelNumber)
-	EmitAdd_R64_I8(cState, RSP, 0x20)
+	if (IS_SYSCALL) {
+		EmitSysCall(cState)
+	}
+	else if (USE_SYSTEMV) {
+		EmitCall_Label(cState, TargetFunction->LabelNumber)
+	}
+	else {
+		EmitSub_R64_I8(cState, RSP, 0x20) /* Shadown space */
+		EmitCall_Label(cState, TargetFunction->LabelNumber)
+		EmitAdd_R64_I8(cState, RSP, 0x20)
+	}
 	
 	if (OldNoClobberCD89) {
 		EmitPop_R64(cState, RCX)
@@ -869,8 +914,9 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitPop_R64(cState, RBX)
 	}
 	
-	EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
-	
+	if !(IS_SYSCALL) {
+		EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
+	}
 /* 	if (cState->NoClobberA) {
 		EmitMove_R64_R64(cState, RAX, R12)
 	} */

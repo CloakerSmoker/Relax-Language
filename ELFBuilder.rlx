@@ -1,27 +1,3 @@
-DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
-DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
-DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
-DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
-
-
-
-#Include Memory.rlx
-/* DllImport i64 CreateFile(i16*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileW} */
-DllImport i64 CreateFileA(i8*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileA}
-DllImport i32 GetFileSize(i64, void) {Kernel32.dll, GetFileSize}
-DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
-DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
-
-define void Exit(i32 ExitCode) {
-	TerminateProcess(GetCurrentProcess(), ExitCode)
-}
-
-define i32 ALen(i8* AString) {
-	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
-	
-	return Length
-}
-
 struct ELFHeader unaligned {
 	i32 Magic,
 	i8 Bitness,
@@ -68,13 +44,13 @@ struct ELFProgramHeader {
 	i64 Alignment
 }
 
-i32 SECTION_EXECUTE := 1
-i32 SECTION_WRITE := 2
-i32 SECTION_READ := 4
+i32 ELF_SECTION_EXECUTE := 1
+i32 ELF_SECTION_WRITE := 2
+i32 ELF_SECTION_READ := 4
 
-i32 SECTION_DATA := 0x01
-i32 SECTION_STRING_TABLE := 0x03
-i32 SECTION_NODATA := 0x08
+i32 ELF_SECTION_DATA := 0x01
+i32 ELF_SECTION_STRING_TABLE := 0x03
+i32 ELF_SECTION_NODATA := 0x08
 
 i64 SECTION_FLAGS_WRITE := 0x01
 i64 SECTION_FLAGS_ALLOC := 0x02
@@ -127,7 +103,7 @@ struct ELFBuilder {
 i8 ABI_SYSTEMV := 0x00
 i16 FILETYPE_EXEC := 0x02
 i16 FILETYPE_DYN := 0x03
-i16 MACHINE_AMD64 := 0x3E
+i16 ELF_MACHINE_AMD64 := 0x3E
 
 define void WriteELFHeader(void* IntoBuffer) {
 	ELFHeader* NewHeader := IntoBuffer As ELFHeader*
@@ -139,7 +115,7 @@ define void WriteELFHeader(void* IntoBuffer) {
 	NewHeader->TargetABI := ABI_SYSTEMV
 	NewHeader->ABIVersion := 0 /* Unused? */
 	NewHeader->FileType := FILETYPE_EXEC /* An executable file */
-	NewHeader->MachineType := MACHINE_AMD64
+	NewHeader->MachineType := ELF_MACHINE_AMD64
 	NewHeader->ELFVersion := 1 /* Use original version of ELF */
 	NewHeader->HeaderSize := 64 /* 64 bytes of headers */
 	NewHeader->ProgramHeadersSize := ELFProgramHeader.Size
@@ -206,7 +182,7 @@ define void AddCodeSection(ELFBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength)
 	
 	ELFSectionHeader* TextSection := AppendSection(ToBuilder, ".text")
 	
-	TextSection->SectionType := SECTION_DATA
+	TextSection->SectionType := ELF_SECTION_DATA
 	TextSection->SectionFlags := SECTION_FLAGS_ALLOC | SECTION_FLAGS_EXEC
 	TextSection->Alignment := 0x01
 	TextSection->FileSize := CodeLength
@@ -226,7 +202,7 @@ define void AddDataSection(ELFBuilder* ToBuilder, i32 ReserveBytes) {
 	
 	ELFSectionHeader* DataSection := AppendSection(ToBuilder, ".bss")
 	
-	DataSection->SectionType := SECTION_NODATA
+	DataSection->SectionType := ELF_SECTION_NODATA
 	DataSection->SectionFlags := SECTION_FLAGS_ALLOC | SECTION_FLAGS_WRITE
 	DataSection->Alignment := 0x01
 	DataSection->FileSize := 0
@@ -280,7 +256,7 @@ define ELFBuilder* BuildELFBuilder() {
 	ELFSectionHeader* StringSection := AppendSectionHeader(NewBuilder)
 	NewBuilder->StringSection := StringSection
 	
-	StringSection->SectionType := SECTION_STRING_TABLE
+	StringSection->SectionType := ELF_SECTION_STRING_TABLE
 	StringSection->Alignment := 0x01
 	
 	NewBuilder->StringBuffer := Alloc(8)
@@ -290,8 +266,6 @@ define ELFBuilder* BuildELFBuilder() {
 	
 	return NewBuilder
 }
-
-i64 DEFAULT_IMAGE_BASE := 0x40000000
 
 define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	i32 ProgramHeadersSize := TargetBuilder->ELF->ProgramHeaderEntryCount * ELFProgramHeader.Size
@@ -391,9 +365,7 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	}
 }
 
-declare void WriteELFBuilder(ELFBuilder*, i8*)
-
-define i32 Main() {
+/* define i32 Main() {
 	ELFBuilder* E := BuildELFBuilder()
 	
 	void* C := Alloc(20)
@@ -408,19 +380,22 @@ define i32 Main() {
 	WriteELFBuilder(E, "out.elf")
 	
 	return 0
-}
+} */
 
-define void WriteELFBuilder(ELFBuilder* Builder, i8* ToFile) {
+define void WriteELFBuilder(ELFBuilder* Builder, i16* ToFile) {
 	i32 GENERIC_WRITE := 0x40000000
 	i8 FILE_SHARE_READ := 1
 	i8 FILE_SHARE_WRITE := 2
 	i8 CREATE_ALWAYS := 2
 	i16 FILE_ATTRIBUTE_NORMAL := 128
 	
-	i64 OutputFileHandle := CreateFileA(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
+	i64 OutputFileHandle := CreateFileW(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
 	
 	if (OutputFileHandle = -1) {
-		Exit(GetLastError())
+		AWrite("Could not open output file: error code ")
+		IWriteLine(GetLastError())
+		AWriteLine("Aborting")
+		Exit(1)
 	}
 	
 	i32 BytesWritten := 0
@@ -428,8 +403,15 @@ define void WriteELFBuilder(ELFBuilder* Builder, i8* ToFile) {
 	i8 Result := WriteFile(OutputFileHandle, Builder->Buffer, Builder->BufferSize, &BytesWritten, 0)
 	
 	if (Result = 0 || (BytesWritten != (Builder->BufferSize))) {
-		Exit(GetLastError())
+		AWrite("Error writing output file: ")
+		IWriteLine(GetLastError())
+		AWriteLine("Aborting")
+		Exit(1)
 	}
+	
+	AWrite("Done writing output file, ")
+	IWrite(BytesWritten)
+	AWriteLine(" bytes written.")
 	
 	CloseHandle(OutputFileHandle)
 }

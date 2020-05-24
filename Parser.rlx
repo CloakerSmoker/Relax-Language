@@ -136,7 +136,8 @@ struct FunctionDefine {
 struct CallExpression {
 	FunctionDefine* TargetFunction,
 	ASTNode** Parameters,
-	i32 ParameterCount
+	i32 ParameterCount,
+	i8 IsSysCall
 }
 
 struct ParserState {
@@ -942,28 +943,28 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	ResultNode->LineNumber := NameToken->LineNumber
 	
 	/* Find the function which is being called. */
-	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
-	
-	if !(FoundFunction) {
-		/* And if the function was not found, then error out */
-		
-		FunctionDefine* DummyFunction := Alloc(FunctionDefine.Size) As FunctionDefine*
-		DummyFunction->Name := Name
-		
-		Result->TargetFunction := DummyFunction /* Dummy function needs to be created since PrintAST uses it to print the callee name */
-		
-		ASTError(ResultNode, "Function definition not found.")
+	if (SafeStringEqualsAString(NameToken->Value, "syscall")) {
+		Result->IsSysCall := true
+		ResultNode->ValueType := MakeType(pState->i64, 0)
 	}
-	
-	/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
-	FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
-	
-	Result->TargetFunction := FoundDefine
-	ResultNode->ValueType := FoundDefine->ReturnType
-	
-	/* And verify the parameter counts match */
-	if (FoundDefine->ParameterCount != ParameterCount) {
-		ASTError(ResultNode, "Wrong number of parameters passed to function.")
+	else {
+		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+		if !(FoundFunction) {
+			/* And if the function was not found, then error out */
+			
+			Error(NameToken, "Function definition not found.")
+		}
+		
+		/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
+		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+		
+		Result->TargetFunction := FoundDefine
+		ResultNode->ValueType := FoundDefine->ReturnType
+		
+		/* And verify the parameter counts match */
+		if (FoundDefine->ParameterCount != ParameterCount) {
+			ASTError(ResultNode, "Wrong number of parameters passed to function.")
+		}
 	}
 	
 	return ResultNode
@@ -2242,7 +2243,12 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	else if (NodeType = NODE_TYPE_CALL) {
 		CallExpression* CallNode := NodeToPrint->CallNode
 		
-		PrintSafeString(CallNode->TargetFunction->Name)
+		if (CallNode->IsSysCall) {
+			AWrite("syscall")
+		}
+		else {
+			PrintSafeString(CallNode->TargetFunction->Name)
+		}
 		
 		WriteCharacter('(')
 		
