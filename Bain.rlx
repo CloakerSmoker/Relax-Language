@@ -92,6 +92,12 @@ define i32 Main() {
 		Exit(1)
 	}
 	
+	i8 OutputELF := false
+	
+	if (ArgC = 4 && ArgV[3][0] = "e") {
+		OutputELF := true
+	}
+	
 	i16* InputFilePath := ArgV[1]
 	i16* OutputFilePath := ArgV[2]
 	
@@ -109,5 +115,5 @@ define i32 Main() {
 	SourcePath.Length := WLen(InputFilePath)
 	
 	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength))
-	CompilerStart(P, OutputFilePath)
+	CompilerStart(P, OutputFilePath, OutputELF)
 }

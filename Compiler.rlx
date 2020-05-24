@@ -15,6 +15,9 @@ struct CompilerState {
 	ParserState* pState,
 	
 	PEBuilder* Builder,
+	ELFBuilder* ELF,
+	
+	i64 GlobalOffset,
 	
 	i8* CodeBuffer,
 	i32 CodeBufferSize,
@@ -40,7 +43,9 @@ struct CompilerState {
 	i8 RegisterStackIndex,
 	
 	i8 NoClobberCD89,
-	i8 NoClobberA
+	i8 NoClobberA,
+	
+	i8 ELFTarget
 }
 
 /*
@@ -54,10 +59,11 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
-define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
+define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF) {
 	CompilerState C
 	
 	C.pState := pState
+	C.OutputELF := OutputELF
 	
 	C.CodeBufferSize := 200
 	C.CodeBuffer := Alloc(200) As i8*
@@ -73,8 +79,13 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
 	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
-	C.Builder := BuildBuilder()
-	C.Builder->ImportFixupBase := C.CodeBuffer
+	if (OutputELF) {
+		C.ELF := BuildELFBuilder()
+	}
+	else {
+		C.Builder := BuildBuilder()
+		C.Builder->ImportFixupBase := C.CodeBuffer
+	}
 	
 	i32 MainOffset := 0
 	i8 FoundMain := false
@@ -129,28 +140,34 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath) {
 	AWrite("global bytes ")
 	IWriteLine(C.pState->GlobalOffset)
 	
-	AddData(C.Builder, C.pState->GlobalOffset)
-	
-	AddImport(C.Builder, AToS("Kernel32"), AToS("ExitProcess"), 0)
-	AddImport(C.Builder, AToS("Kernel32"), AToS("LocalFree"), 0)
-	
-	AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize, MainOffset)
-	
-	for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
-		i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
+	if (OutputELF) {
+		AddDataSection(C.ELF, C.pState->GlobalOffset)
+		AddCodeSection(C.ELF, C.CodeBuffer, C.CodeBufferSize)
 		
-		i32 PageRVA := (C.Builder->NextRVA) + (NextRelocationOffset / 0x1000)
-		i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
+		FinalizeBuilder(C.ELF, MainOffset)
 		
-		/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
-		
-		AddRelocation(C.Builder, PageRVA, OffsetInPage, false)
+		WriteBuilder(C.ELF, OutputFilePath)
 	}
-	
-	FinalizeBuilder(C.Builder)
-	
-	WriteBuilder(C.Builder, OutputFilePath)
-	
+	else {
+		AddData(C.Builder, C.pState->GlobalOffset)
+		
+		i64 TextRVA := AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize, MainOffset)
+		
+		for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
+			i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
+			
+			i32 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
+			i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
+			
+			/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
+			
+			AddRelocation(C.Builder, PageRVA, OffsetInPage, false)
+		}
+		
+		FinalizeBuilder(C.Builder)
+		
+		WriteBuilder(C.Builder, OutputFilePath)
+	}
 }
 
 define i8 StackIndexToRegister(i8 Index) {

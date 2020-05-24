@@ -561,7 +561,7 @@ define void AddData(PEBuilder* ToBuilder, i32 DataSize) {
 
 declare void FinalizeImports(PEBuilder*)
 
-define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 EntryPointOffset) {
+define i64 AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 EntryPointOffset) {
 	/* Sets .text to hold CodeLength bytes of code inside of CodeBytes */
 	
 	/* Builds .idata first */
@@ -577,6 +577,8 @@ define void AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 Ent
 	ToBuilder->PE->SizeOfCode := CodeLength
 	ToBuilder->PE->AddressOfEntryPoint := RVA + EntryPointOffset
 	ToBuilder->PE->BaseOfCode := RVA
+	
+	return RVA
 }
 
 /*

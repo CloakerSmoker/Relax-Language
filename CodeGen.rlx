@@ -760,6 +760,11 @@ define void EmitCall_Label(CompilerState* cState, i32 LabelNumber) {
 	UseLabel(cState, LabelNumber)
 }
 
+define void EmitSysCall(CompilerState* cState) {
+	PushByte(cState, 0x0F)
+	PushByte(cState, 0x05)
+}
+
 /*
 ==========================================
 	Logic
