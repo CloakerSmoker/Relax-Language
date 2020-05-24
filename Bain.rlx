@@ -115,6 +115,6 @@ define i32 Main() {
 	SourcePath.Buffer := InputFilePath
 	SourcePath.Length := WLen(InputFilePath)
 	
-	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength))
+	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength), OutputELF)
 	CompilerStart(P, OutputFilePath, OutputELF)
 }

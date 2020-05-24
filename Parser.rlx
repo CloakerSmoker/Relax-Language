@@ -61,6 +61,8 @@ i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a lite
 i8 NODE_TYPE_STRUCT_ACCESS := 19
 i8 NODE_TYPE_IDENTIFIER := 20
 
+i8 NODE_TYPE_BLOCK := 21
+
 /*
 ==========================================
 	True AST node types
@@ -166,7 +168,8 @@ struct ParserState {
 	i16 GlobalCount,
 	i16 TypeCount,
 	
-	i8 InLoop
+	i8 InLoop,
+	i8 OutputELF
 }
 
 /*
@@ -188,6 +191,7 @@ struct ASTNode {
 		ForLoop* ForNode,
 		WhileLoop* WhileNode,
 		Block* LoopBody,
+		Block* BlockBody,
 		i8 IsContinue,
 		
 		FunctionDefine* DefineNode,
@@ -1062,7 +1066,7 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 declare void ParseProgram(ParserState*)
 declare void CompilerStart(ParserState*)
 
-define ParserState* ParserStart(TokenizerState* pState) {
+define ParserState* ParserStart(TokenizerState* pState, i8 OutputELF) {
 	/* Initializes pState and parses a program */
 	
 	ParserState* P := Alloc(ParserState.Size) As ParserState*
@@ -1079,6 +1083,8 @@ define ParserState* ParserStart(TokenizerState* pState) {
 	
 	P->Types := NewHashMap()
 	P->TypeCount := 0
+	
+	P->OutputELF := OutputELF
 	
 	CreateDefaultTypes(P)
 	
@@ -1737,6 +1743,29 @@ declare ASTNode* ParseIf(ParserState*)
 declare ASTNode* ParseFor(ParserState*)
 declare ASTNode* ParseWhile(ParserState*)
 
+define void ConsumeAndIgnoreBlock(ParserState* pState) {
+	/* Used for linux/windows statements */
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+	
+	i32 Depth := 1
+	
+	loop {
+		Token* Next := ParserNextToken(pState)
+		
+		if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			Depth -= 1
+		}
+		else if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			Depth += 1
+		}
+		
+		if (Depth = 0) {
+			break
+		}
+	}
+}
+
 define ASTNode* ParseStatement(ParserState* pState) {
 	/* Parses a single statement */
 	
@@ -1758,6 +1787,24 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			
 			if !(pState->InLoop) {
 				ASTError(Result, "Continue/Break must be inside loops")
+			}
+		}
+		else if (NextKeyword = KEYWORD_WINDOWS) {
+			if !(pState->OutputELF) {
+				Result := AllocateNewASTNode(NODE_TYPE_BLOCK, ParseBlock(pState), TYPE_NONE)
+			}
+			else {
+				ConsumeAndIgnoreBlock(pState)
+				Result := AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+			}
+		}
+		else if (NextKeyword = KEYWORD_LINUX) {
+			if (pState->OutputELF) {
+				Result := AllocateNewASTNode(NODE_TYPE_BLOCK, ParseBlock(pState), TYPE_NONE)
+			}
+			else {
+				ConsumeAndIgnoreBlock(pState)
+				Result := AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
 			}
 		}
 		else if (NextKeyword = KEYWORD_RETURN) {
@@ -1999,6 +2046,12 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
 			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "windows")) {
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, !pState->OutputELF, MakeType(pState->i32, 0))
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "linux")) {
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, pState->OutputELF, MakeType(pState->i32, 0))
 		}
 		else if (ForErrorMessage) {
 			Result := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, TokenToTranslate->Value, TYPE_NONE)

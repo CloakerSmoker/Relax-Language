@@ -215,6 +215,9 @@ i8 KEYWORD_UNALIGNED := 13
 
 i8 KEYWORD_RETURN := 14
 
+i8 KEYWORD_WINDOWS := 15
+i8 KEYWORD_LINUX := 16
+
 define i16 PeekNextCharacterRaw(TokenizerState* pState) {
 	return(pState->Source)[pState->SourceIndex]
 }
@@ -732,6 +735,12 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	else if (SafeStringEqualsAString(PotentialKeyword, "unaligned")) {
 		return KEYWORD_UNALIGNED
 	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "windows")) {
+		return KEYWORD_WINDOWS
+	}
+	else if (SafeStringEqualsAString(PotentialKeyword, "linux")) {
+		return KEYWORD_LINUX
+	}
 	
 	return TOKEN_TYPE_NONE
 }
@@ -960,5 +969,11 @@ define void PrintKeyword(i8 Keyword) {
 	}
 	else if (Keyword = KEYWORD_UNALIGNED) {
 		AWrite("unaligned")
+	}
+	else if (Keyword = KEYWORD_LINUX) {
+		AWrite("linux")
+	}
+	else if (Keyword = KEYWORD_WINDOWS) {
+		AWrite("windows")
 	}
 }

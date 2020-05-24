@@ -197,7 +197,7 @@ define void AddDataSection(ELFBuilder* ToBuilder, i32 ReserveBytes) {
 	LoadData->SegmentType := SEGMENT_TYPE_LOAD
 	LoadData->Flags := SEGMENT_READ | SEGMENT_WRITE
 	LoadData->Alignment := 0x01
-	LoadData->FileSize := 0
+	LoadData->FileSize := ReserveBytes
 	LoadData->MemorySize := ReserveBytes
 	
 	ELFSectionHeader* DataSection := AppendSection(ToBuilder, ".bss")
@@ -205,7 +205,7 @@ define void AddDataSection(ELFBuilder* ToBuilder, i32 ReserveBytes) {
 	DataSection->SectionType := ELF_SECTION_NODATA
 	DataSection->SectionFlags := SECTION_FLAGS_ALLOC | SECTION_FLAGS_WRITE
 	DataSection->Alignment := 0x01
-	DataSection->FileSize := 0
+	DataSection->FileSize := ReserveBytes
 	
 	ToBuilder->DataProgramHeader := LoadData
 	ToBuilder->DataSectionHeader := DataSection
@@ -246,7 +246,7 @@ define ELFBuilder* BuildELFBuilder() {
 	NewBuilder->LoadPHDR := LoadPHDR
 	
 	LoadPHDR->SegmentType := SEGMENT_TYPE_LOAD
-	LoadPHDR->Flags := SEGMENT_READ
+	LoadPHDR->Flags := SEGMENT_READ | SEGMENT_WRITE
 	LoadPHDR->Alignment := 0x01
 	LoadPHDR->FileOffset := 0x00
 	LoadPHDR->VirtualAddress := 0x00
@@ -308,7 +308,6 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	/* Update the ELF header to contain the program/section header offsets, and entrypoint */
 	TargetBuilder->ELF->ProgramHeadersOffset := ProgramHeadersOffset
 	TargetBuilder->ELF->SectionHeadersOffset := SectionHeadersOffset
-	TargetBuilder->ELF->EntryPoint := DEFAULT_IMAGE_BASE + CodeOffset + MainOffset
 	
 	TargetBuilder->PHDR->FileOffset := ProgramHeadersOffset
 	TargetBuilder->PHDR->VirtualAddress := ProgramHeadersOffset
@@ -323,10 +322,10 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	i8* CodeBufferBytes := TargetBuilder->CodeBuffer
 	
 	if (TargetBuilder->DataProgramHeader) {
-		/* Update the data segment/section */
+		/* Update the data segment/section. Todo: If 1kb of globals are used, push the code segment down another page */
 		TargetBuilder->DataProgramHeader->FileOffset := DataOffset
-		TargetBuilder->DataProgramHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset
-		TargetBuilder->DataSectionHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset
+		TargetBuilder->DataProgramHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset + 0x1000
+		TargetBuilder->DataSectionHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset + 0x1000
 	}
 	
 	/* Update the segments to use the imagebase, otherwise they'd be mapped into address 0 */
@@ -335,13 +334,14 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	TargetBuilder->StringSection->VirtualAddress += DEFAULT_IMAGE_BASE
 	
 	/* Update the code segment + section with the code file offset, and entrypoint */
-	i64 EntryPoint := DEFAULT_IMAGE_BASE + CodeOffset
+	i64 CodeBase := DEFAULT_IMAGE_BASE + 0x2000 + CodeOffset
+	i64 EntryPoint := CodeBase + MainOffset
 	
 	TargetBuilder->ELF->EntryPoint := EntryPoint
 	TargetBuilder->CodeProgramHeader->FileOffset := CodeOffset
-	TargetBuilder->CodeProgramHeader->VirtualAddress := EntryPoint
+	TargetBuilder->CodeProgramHeader->VirtualAddress := CodeBase
 	TargetBuilder->CodeSectionHeader->FileOffset := CodeOffset
-	TargetBuilder->CodeSectionHeader->VirtualAddress := EntryPoint
+	TargetBuilder->CodeSectionHeader->VirtualAddress := CodeBase
 	
 	for (i32 Index := 0, Index < ProgramHeaderCount, Index += 1) {
 		i8* NextProgramHeader := TargetBuilder->ProgramHeaders[Index] As i8*

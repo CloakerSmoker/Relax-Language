@@ -79,9 +79,12 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
+	i64 CODE_BASE := 0x3000
+	
 	if (OutputELF) {
 		C.ELF := BuildELFBuilder()
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 64
+		CODE_BASE := pState->GlobalOffset + 234
 	}
 	else {
 		C.Builder := BuildBuilder()
@@ -101,13 +104,15 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				IWriteHex(0x3000 + C.Index)
+				IWriteHex(CODE_BASE + C.Index)
 				AWrite(": ")
 				PrintSafeString(NextFunction->Name)
 				WriteNewLine()
 				
 				if (NextFunction->IsImported) {
-					CompileImportStub(&C, NextFunction)
+					if !(OutputELF) {
+						CompileImportStub(&C, NextFunction)
+					}
 				}
 				else if !(NextFunction->HasFullDefinition) {
 					ASTNode* FakeNode := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, NextFunction->Name, TYPE_NONE)
@@ -530,6 +535,9 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
 		CompileExpression(cState, RAX, NodeToCompile->ExpressionStatement)
 	}
+	else if (NodeType = NODE_TYPE_BLOCK) {
+		CompileBlock(cState, NodeToCompile->BlockBody)
+	}
 }
 
 define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
@@ -790,6 +798,9 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	
 	if (CallNode->IsSysCall) {
 		/* Dummy branch */
+	}
+	else if (cState->OutputELF && TargetFunction->IsImported) {
+		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Calls to DllImported functions are not allowed when compiling to .elf")
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
@@ -1195,6 +1206,8 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		StructAccessExpression* LeftAccess := Left->AccessNode
 		BinaryExpression* LeftExpression := Left->BinaryNode
 		
+		i8 WorkRegister := PushRegisterStack(cState)
+		
 		if (Operator = OPERATOR_COLON_EQUAL) {
 			CompileExpression(cState, ResultRegister, Right)
 			
@@ -1209,14 +1222,14 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
-				CompileSetArrayAccess(cState, RSI, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+				CompileSetArrayAccess(cState, RBX, LeftExpression->Left, LeftExpression->Right, ResultRegister)
 			}
 		}
 		else {				
-			CompileExpression(cState, RSI, Right)
+			CompileExpression(cState, WorkRegister, Right)
 			
 			if (RightSize < LeftSize) {
-				Cast(cState, RSI, RightSize)
+				Cast(cState, WorkRegister, RightSize)
 			}
 			
 			/* Prelude to get old value of all valid left side expressions */
@@ -1234,10 +1247,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			/* Actual operator implementation */
 			
 			if (Operator = OPERATOR_PLUS_EQUAL) {
-				EmitAdd_RX_RX(cState, ResultRegister, RSI, ResultSize)
+				EmitAdd_RX_RX(cState, ResultRegister, WorkRegister, ResultSize)
 			}
 			else if (Operator = OPERATOR_MINUS_EQUAL) {
-				EmitSub_RX_RX(cState, ResultRegister, RSI, ResultSize)
+				EmitSub_RX_RX(cState, ResultRegister, WorkRegister, ResultSize)
 			}
 			
 			/* Epilog to store the new value for each valid left side */
@@ -1249,9 +1262,11 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
-				CompileSetArrayAccess(cState, RSI, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+				CompileSetArrayAccess(cState, WorkRegister, LeftExpression->Left, LeftExpression->Right, ResultRegister)
 			}
 		}
+		
+		PopRegisterStack(cState)
 	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
 		CompileGetArrayAccess(cState, ResultRegister, Left, Right, false)
