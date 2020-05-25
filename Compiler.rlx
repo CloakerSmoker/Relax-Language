@@ -346,18 +346,24 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
 	/* Assume 4 register parameters, and 0 stack parameters */
-	i8 RegisterParameterCount := 4
+	i8 MAX_REGISTER_PARAMETERS := 4
+	
+	if (cState->OutputELF) {
+		MAX_REGISTER_PARAMETERS := 6
+	}
+	
+	i8 RegisterParameterCount := MAX_REGISTER_PARAMETERS
 	i16 StackParameterCount := 0
 	
-	if (FunctionToCompile->ParameterCount < 4) {
+	if (FunctionToCompile->ParameterCount < MAX_REGISTER_PARAMETERS) {
 		/* If there are less than 4 parameters, then the number of register parameters is just the number of parameters */
 		
 		RegisterParameterCount := (FunctionToCompile->ParameterCount) As i8
 	}
-	else if (FunctionToCompile->ParameterCount >= 5) {
+	else if (FunctionToCompile->ParameterCount > MAX_REGISTER_PARAMETERS) {
 		/* Else if there are 5+ parameters, the stack parameter count is (TotalParamCount - 4) */
 		
-		StackParameterCount := (FunctionToCompile->ParameterCount) - 4
+		StackParameterCount := (FunctionToCompile->ParameterCount) - MAX_REGISTER_PARAMETERS
 		
 		/* Also, store RSP in RBX for extracting the stack parameters with smaller offsets */
 		EmitMove_R64_R64(cState, RBX, RSP)
@@ -388,8 +394,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitSub_R64_IX(cState, RSP, LocalSpace)
 	/* EmitEnter_I16(cState, LocalSpace) */
 	
-	EmitPush_R64(cState, RDI)
-	EmitPush_R64(cState, RSI)
 	EmitPush_R64(cState, RBX)
 	EmitPush_R64(cState, R13)
 	EmitPush_R64(cState, R14)
@@ -402,10 +406,22 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		VariableInfo* NextParameter := (FunctionToCompile->Parameters)[RegisterParameterIndex]
 		
 		/* And which register it is in (RCX/RDX/R8/R9) */
-		i8 NextParameterRegister := RegisterParameterIndex + 1
+		i8 NextParameterRegister := 0
 		
-		if (NextParameterRegister > 2) {
-			NextParameterRegister += 5
+		if (cState->OutputELF) {
+			if (RegisterParameterIndex = 5) {NextParameterRegister := R9}
+			else if (RegisterParameterIndex = 4) {NextParameterRegister := R8}
+			else if (RegisterParameterIndex = 3) {NextParameterRegister := RCX}
+			else if (RegisterParameterIndex = 2) {NextParameterRegister := RDX}
+			else if (RegisterParameterIndex = 1) {NextParameterRegister := RSI}
+			else if (RegisterParameterIndex = 0) {NextParameterRegister := RDI}
+		}
+		else {
+			NextParameterRegister := RegisterParameterIndex + 1
+			
+			if (NextParameterRegister > 2) {
+				NextParameterRegister += 5
+			}
 		}
 		
 		/* And write the parameter register's value into the parameter's stack space */
@@ -472,8 +488,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitPop_R64(cState, R14)
 	EmitPop_R64(cState, R13)
 	EmitPop_R64(cState, RBX)
-	EmitPop_R64(cState, RSI)
-	EmitPop_R64(cState, RDI)
 	
 	EmitLeave(cState)	
 	EmitReturn(cState)
