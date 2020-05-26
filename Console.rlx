@@ -4,6 +4,7 @@ DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
 DllImport i8 SetConsoleTextAttribute(i64, i16) {Kernel32.dll, SetConsoleTextAttribute}
 DllImport i8 ReadConsole(i64, void*, i32, i32*, void) {Kernel32.dll, ReadConsoleW}
 
+
 define i64 GetStdHandle(i32 HandleNumber) {
 	windows {
 		return _GetStdHandle(HandleNumber)
@@ -157,7 +158,7 @@ define void SetColor(i8 Foreground, i8 Background) {
 		WriteANSIEscape(Foreground, Background)
 	}
 	windows {
-		Background := Background * 10 As i8
+		Background := Background << 4
 		
 		SetConsoleTextAttribute(STDOUT, Foreground | Background)
 	}

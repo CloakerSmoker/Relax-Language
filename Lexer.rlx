@@ -649,7 +649,7 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				(IncludePath->Buffer)[EndIndex] := 0 /* Insert a null terminator into the source */
 				
 				i32 IncludeFileSize := 0
-				i16* IncludeFileText := OpenAndRead(IncludePath->Buffer, &IncludeFileSize)
+				i16* IncludeFileText := OpenAndRead(WToA(IncludePath->Buffer), &IncludeFileSize)
 				
 				(IncludePath->Buffer)[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				

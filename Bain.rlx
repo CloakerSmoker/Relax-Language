@@ -11,23 +11,23 @@ define void Exit(i32 ExitCode) {
 #Include SafeString.rlx
 #Include HashMap.rlx
 
-declare i16* OpenAndRead(i16*, i32*)
+declare i16* OpenAndRead(i8*, i32*)
 
 #Include Lexer.rlx
 #Include Parser.rlx
 
 DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
 DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
+DllImport i64 CreateFile(i8*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileA}
 
 #Include PEBuilder.rlx
 #Include ELFBuilder.rlx
 #Include Compiler.rlx
 
-DllImport i64 CreateFile(i16*, i32, i32, void*, i32, i32, i64) {Kernel32.dll, CreateFileW}
 DllImport i32 GetFileSize(i64, void) {Kernel32.dll, GetFileSize}
 DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
 
-define i16* OpenAndRead(i16* FilePath, i32* OutFileSize) {
+define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	i64 GENERIC_READ := 0x80000000
 	i8 FILE_SHARE_READ := 1
 	i8 FILE_SHARE_WRITE := 2
@@ -39,7 +39,7 @@ define i16* OpenAndRead(i16* FilePath, i32* OutFileSize) {
 	if (FileHandle = -1) {
 		SwapOutputStream()
 		AWrite("Could not open file: ")
-		WriteLine(FilePath)
+		AWriteLine(FilePath)
 		
 		AWrite("Error code: ")
 		IWriteLine(GetLastError())
@@ -62,7 +62,7 @@ define i16* OpenAndRead(i16* FilePath, i32* OutFileSize) {
 	if (!(ReadFileSuccess) || ReadFileBytesRead != FileSize) {
 		SwapOutputStream()
 		AWrite("Could not read file: ")
-		WriteLine(FilePath)
+		AWriteLine(FilePath)
 		
 		AWrite("Error code: ")
 		IWriteLine(GetLastError())
@@ -79,34 +79,49 @@ define i16* OpenAndRead(i16* FilePath, i32* OutFileSize) {
 	return Source
 }
 
-DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
-DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
-
-define i32 Main() {
-	i64 ArgC := 0
-	i16* CommandLine := GetCommandLineW()
-	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
-	
-	if (ArgC < 3) {
-		SwapOutputStream()
-		AWriteLine("No input+output file, aborting")
-		Exit(1)
-	}
+define i32 Main(i64 ArgC, i8** ArgV) {	
+	GetArgs(&ArgC, &ArgV) /* NOP on Linux */
 	
 	i8 OutputELF := false
+	i8* InputFilePath := 0
+	i8* OutputFilePath := 0
 	
-	if (ArgC = 4) {
-		OutputELF := true
+	for (i32 Index := 0, Index < ArgC, Index += 1) {
+		i8* NextArg := ArgV[Index]
+		
+		if (StringEquals(NextArg, "--elf")) {
+			OutputELF := true
+		}
+		else if (StringEquals(NextArg, "--pe")) {
+			OutputELF := false
+		}
+		else if (StringEquals(NextArg, "-i")) {			
+			Index += 1
+			InputFilePath := ArgV[Index]
+			
+			AWrite("Input File: ")
+			AWriteLine(InputFilePath)
+		}
+		else if (StringEquals(NextArg, "-o")) {
+			Index += 1
+			OutputFilePath := ArgV[Index]
+		
+			AWrite("Output File: ")
+			AWriteLine(OutputFilePath)
+		}
 	}
-	
-	i16* InputFilePath := ArgV[1]
-	i16* OutputFilePath := ArgV[2]
-	
-	AWrite("Input File: ")
-	WriteLine(InputFilePath)
-	
-	AWrite("Output File: ")
-	WriteLine(OutputFilePath)
+
+	if !(InputFilePath && OutputFilePath) {
+		if (ArgC = 3) {
+			InputFilePath := ArgV[1]
+			OutputFilePath := ArgV[2]
+		}
+		else {
+			SwapOutputStream()
+			AWriteLine("No input+output file, aborting")
+			Exit(1)
+		}
+	}
 	
 	i32 SourceLength := 0
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)

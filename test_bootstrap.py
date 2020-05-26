@@ -24,7 +24,7 @@ if len(sys.argv) == 2:
 safe_compiler = path_join(cwd, 'stable_version.exe')
 
 for i in range(0, recursion_count):
-    compile_command = f'{safe_compiler} Bain.rlx testing{i}.exe'
+    compile_command = f'{safe_compiler} -i Bain.rlx -o testing{i}.exe'
     compiler_output = path_join(cwd, f'testing{i}.exe')
 
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)

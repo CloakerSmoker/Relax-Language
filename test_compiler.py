@@ -40,7 +40,7 @@ for test_path in os.listdir(tests_dir):
 
     source_file = path_join(tests_dir, f'{file_name}.rlx')
     binary_file = path_join(tests_dir, f'{file_name}.exe')
-    compile_command = f'{compiler_path} "{source_file}" "{binary_file}"'
+    compile_command = f'{compiler_path} -i "{source_file}" -o "{binary_file}"'
 
     # Compiler is ran in the main/current dir so `#Include` can use regular paths
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)

@@ -345,25 +345,28 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
+	i8 USE_SYSTEMV := cState->OutputELF
+	
 	/* Assume 4 register parameters, and 0 stack parameters */
 	i8 MAX_REGISTER_PARAMETERS := 4
 	
-	if (cState->OutputELF) {
+	if (USE_SYSTEMV) {
 		MAX_REGISTER_PARAMETERS := 6
 	}
 	
+	i8 ParameterCount := FunctionToCompile->ParameterCount
 	i8 RegisterParameterCount := MAX_REGISTER_PARAMETERS
 	i16 StackParameterCount := 0
 	
-	if (FunctionToCompile->ParameterCount < MAX_REGISTER_PARAMETERS) {
+	if (ParameterCount < MAX_REGISTER_PARAMETERS) {
 		/* If there are less than 4 parameters, then the number of register parameters is just the number of parameters */
 		
-		RegisterParameterCount := (FunctionToCompile->ParameterCount) As i8
+		RegisterParameterCount := ParameterCount
 	}
-	else if (FunctionToCompile->ParameterCount > MAX_REGISTER_PARAMETERS) {
+	else if (ParameterCount > MAX_REGISTER_PARAMETERS) {
 		/* Else if there are 5+ parameters, the stack parameter count is (TotalParamCount - 4) */
 		
-		StackParameterCount := (FunctionToCompile->ParameterCount) - MAX_REGISTER_PARAMETERS
+		StackParameterCount := ParameterCount - MAX_REGISTER_PARAMETERS
 		
 		/* Also, store RSP in RBX for extracting the stack parameters with smaller offsets */
 		EmitMove_R64_R64(cState, RBX, RSP)
@@ -391,6 +394,21 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	EmitPush_R64(cState, RBP)
 	EmitMove_R64_R64(cState, RBP, RSP)
+	
+	if (IsMain && USE_SYSTEMV && ParameterCount <= 2) {
+		/* When compiling main for SystemV, load the first two parameter registers (if they exist) 
+			With ArgC and ArgV loaded from the stack since:
+				RBP + 0 = ArgC
+				RBP + 1..ArgC = ArgV
+			so mov rdi, [rsp+8] will get argc, and
+			lea rsi, [rsp+16] will get argv
+			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
+		*/
+		
+		EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
+		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
+	}
+	
 	EmitSub_R64_IX(cState, RSP, LocalSpace)
 	/* EmitEnter_I16(cState, LocalSpace) */
 	
@@ -489,8 +507,16 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitPop_R64(cState, R13)
 	EmitPop_R64(cState, RBX)
 	
-	EmitLeave(cState)	
-	EmitReturn(cState)
+	EmitLeave(cState)
+	
+	if (IsMain && USE_SYSTEMV) {
+		EmitMove_R64_R64(cState, RDI, RAX)
+		EmitMove_R32_I32(cState, RAX, 60)
+		EmitSysCall(cState)
+	}
+	else {
+		EmitReturn(cState)
+	}
 }
 
 declare void Compile(CompilerState*, ASTNode*)
