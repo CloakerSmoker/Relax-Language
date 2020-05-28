@@ -1,6 +1,3 @@
-DllImport i16* GetCommandLineW() {Kernel32.dll, GetCommandLineW}
-DllImport i16** CommandLineToArgvW(i16*, i64*) {Shell32.dll, CommandLineToArgvW}
-
 #Include Memory.rlx
 #Include String.rlx
 #Include Console.rlx
@@ -25,11 +22,8 @@ struct outer {
 	i64 ob
 }
 
-define i64 Main() {
-	i64 ArgC := 0
-	i16* CommandLine := GetCommandLineW()
-	i16** ArgV := CommandLineToArgvW(CommandLine, &ArgC)
-	
+define i64 Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
 	
 	outer test
 	
