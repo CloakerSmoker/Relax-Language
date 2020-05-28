@@ -180,3 +180,55 @@ define i16* ReadLine(i32 MaxLength) {
 		return Buffer
 	}
 }
+
+/* Basic command line to argv parser since CommandLineToArgvW has no ascii version, and ArgV needs to be ASCII  */
+define void ParseCommandLine(i8* CommandLine, i64* ArgC, i8*** ArgV) {
+	i32 Length := ALen(CommandLine)
+	i32 ArgCount := 0
+	i8** Args := Alloc(32 * 8) /* 32 max params */
+	
+	i32 CurrentArgStart := 0
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 NextCharacter := CommandLine[Index]
+		
+		if (NextCharacter = ' ') {
+			Args[ArgCount] := CommandLine + CurrentArgStart
+			ArgCount += 1
+			
+			CommandLine[Index] := 0
+			
+			while (CommandLine[Index + 1] = ' ') {
+				Index += 1
+			}
+			
+			CurrentArgStart := Index + 1
+		}
+		else if (NextCharacter = '"') {
+			CurrentArgStart += 1
+			CommandLine[Index] := 0
+			
+			while (CommandLine[Index] != '"') {
+				Index += 1
+			}
+			
+			CommandLine[Index] := 0
+		}
+	}
+	
+	Args[ArgCount] := CommandLine + CurrentArgStart
+	ArgCount += 1
+	
+	ArgC[0] := ArgCount
+	ArgV[0] := Args
+}
+
+DllImport i8* GetCommandLineA() {Kernel32.dll, GetCommandLineA}
+
+define void GetArgs(i64* ArgC, i8*** ArgV) {
+	/* Since this is a NOP on Linux, main can be pretty simple */
+	
+	windows {
+		ParseCommandLine(GetCommandLineA(), ArgC, ArgV)
+	}
+}

@@ -382,36 +382,36 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	return 0
 } */
 
-define void WriteELFBuilder(ELFBuilder* Builder, i16* ToFile) {
-	i32 GENERIC_WRITE := 0x40000000
+define void WriteELFBuilder(PEBuilder* Builder, i16* ToFile) {
+/* 	i32 GENERIC_WRITE := 0x40000000
 	i8 FILE_SHARE_READ := 1
 	i8 FILE_SHARE_WRITE := 2
 	i8 CREATE_ALWAYS := 2
 	i16 FILE_ATTRIBUTE_NORMAL := 128
 	
-	i64 OutputFileHandle := CreateFile(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
+	i64 OutputFileHandle := CreateFile(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0) */
+	i64 OutputFileHandle := FileOpen(ToFile, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
 	
-	if (OutputFileHandle = -1) {
-		AWrite("Could not open output file: error code ")
-		IWriteLine(GetLastError())
+	
+	if (OutputFileHandle < 0) {
+		AWrite("Could not open output file, error code: ")
+		IWriteLine(FileGetError(OutputFileHandle))
 		AWriteLine("Aborting")
 		Exit(1)
 	}
 	
-	i32 BytesWritten := 0
+	i32 Result := FileWrite(OutputFileHandle, Builder->Buffer, Builder->BufferSize)
 	
-	i8 Result := WriteFile(OutputFileHandle, Builder->Buffer, Builder->BufferSize, &BytesWritten, 0)
-	
-	if (Result = 0 || (BytesWritten != (Builder->BufferSize))) {
+	if (Result < 0) {
 		AWrite("Error writing output file: ")
-		IWriteLine(GetLastError())
+		IWriteLine(FileGetError(Result))
 		AWriteLine("Aborting")
 		Exit(1)
 	}
 	
 	AWrite("Done writing output file, ")
-	IWrite(BytesWritten)
+	IWrite(Builder->BufferSize)
 	AWriteLine(" bytes written.")
 	
-	CloseHandle(OutputFileHandle)
+	FileClose(OutputFileHandle)
 }

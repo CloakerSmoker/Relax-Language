@@ -564,7 +564,11 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	if (BadNode->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		PrintSafeString(BadNode->SourceFilePath)
+		
+		/* Note: This *should* call PrintSafeString, but source file paths are i8* stored in a SafeWideString* here 
+			Todo: Fix this
+		*/
+		AWrite(BadNode->SourceFilePath->Buffer)
 		TextColor(Red)
 		WriteNewLine()
 	}
@@ -601,7 +605,7 @@ define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	if (BadNode->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		PrintSafeString(BadNode->SourceFilePath)
+		AWrite(BadNode->SourceFilePath->Buffer)
 		TextColor(Red | Green)
 		WriteNewLine()
 	}
@@ -953,6 +957,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	}
 	else {
 		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+		
 		if !(FoundFunction) {
 			/* And if the function was not found, then error out */
 			
@@ -967,7 +972,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		
 		/* And verify the parameter counts match */
 		if (FoundDefine->ParameterCount != ParameterCount) {
-			ASTError(ResultNode, "Wrong number of parameters passed to function.")
+			Error(NameToken, "Wrong number of parameters passed to function.")
 		}
 	}
 	
