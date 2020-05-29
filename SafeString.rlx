@@ -29,7 +29,7 @@ define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
 	i32 Index := 0
 	
 	loop {
-		i16 Left := Lower((StringOne->Buffer)[Index])
+		i16 Left := Lower(StringOne->Buffer[Index])
 		i16 Right := Lower(StringTwo[Index])
 		
 		if (Index >= StringOne->Length) {

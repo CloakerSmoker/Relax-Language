@@ -2,6 +2,7 @@ import sys
 import os
 import os.path as path
 import subprocess
+import platform
 from shutil import copyfile
 from shutil import rmtree
 from shutil import move
@@ -14,6 +15,22 @@ from colorama import init, Fore, Back, Style
 init(autoreset=True)
 path_join = os.path.join
 argv = sys.argv
+
+running_on = platform.system()
+
+compile_command_format = '{} -i "{}" -o "{}'
+platform_extension = 'exe'
+run_command_format = '{}.{} {}'
+
+if running_on == 'Linux':
+    compile_command_format = f'./{compile_command_format}.elf" --elf'
+    platform_extension = 'elf'
+    run_command_format = f'./{run_command_format}'
+elif running_on == 'Windows':
+    compile_command_format += '.exe"'
+else:
+    print('Unsupported platform.', file=sys.stderr)
+    sys.exit(1)
 
 if len(argv) != 2:
     print('Expected path to compiler executable to test.')
@@ -39,8 +56,9 @@ for test_path in os.listdir(tests_dir):
         inputs_outputs = [line.split(':') for line in f.read().splitlines()]
 
     source_file = path_join(tests_dir, f'{file_name}.rlx')
-    binary_file = path_join(tests_dir, f'{file_name}.exe')
-    compile_command = f'{compiler_path} -i "{source_file}" -o "{binary_file}"'
+    binary_file = path_join(tests_dir, f'{file_name}')
+    compile_command = compile_command_format.format(compiler_path, source_file, binary_file)
+    #f'{compiler_path} -i "{source_file}" -o "{binary_file}" {compiler_extra}'
 
     # Compiler is ran in the main/current dir so `#Include` can use regular paths
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
@@ -54,7 +72,8 @@ for test_path in os.listdir(tests_dir):
     tests_passed = 0
 
     for test_input, test_output in inputs_outputs:
-        test_run_command = f'{binary_file} {test_input.strip()}'
+        test_run_command = run_command_format.format(binary_file, platform_extension, test_input.strip())
+        #f'{binary_file} {test_input.strip()}'
 
         test_result = subprocess.run(test_run_command, cwd=tests_dir, shell=True, capture_output=True)
         stdout_text = test_result.stdout.decode('UTF-8')
@@ -72,7 +91,7 @@ for test_path in os.listdir(tests_dir):
         
         test_number += 1
 
-    os.remove(binary_file)
+    os.remove(f'{binary_file}.{platform_extension}')
     
     test_count = len(inputs_outputs)
     foreground = Fore.LIGHTRED_EX
