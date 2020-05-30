@@ -74,7 +74,13 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 define i32 Main(i64 ArgC, i8** ArgV) {	
 	GetArgs(&ArgC, &ArgV) /* NOP on Linux */
 	
-	i8 OutputELF := false
+	windows {
+		i8 OutputELF := false
+	}
+	linux {
+		i8 OutputELF := true
+	}
+	
 	i8* InputFilePath := 0
 	i8* OutputFilePath := 0
 	

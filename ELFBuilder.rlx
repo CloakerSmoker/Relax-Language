@@ -238,7 +238,7 @@ define ELFBuilder* BuildELFBuilder() {
 	
 	PHDR->SegmentType := 0x00000006 /* PT_PHDR */
 	PHDR->Flags := SEGMENT_READ
-	PHDR->Alignment := 0x08
+	PHDR->Alignment := 0x01
 	PHDR->FileOffset := 0x40
 	PHDR->VirtualAddress := 0x40
 	
@@ -289,9 +289,9 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	TargetBuilder->ELF->ProgramHeadersSize := ELFProgramHeader.Size
 	TargetBuilder->ELF->SectionHeadersSize := ELFSectionHeader.Size
 	
-	/* Update the segment which contains the entire file */
-	TargetBuilder->LoadPHDR->FileSize := FinalSize
-	TargetBuilder->LoadPHDR->MemorySize := FinalSize
+	/* Update the segment which contains the program headers */
+	TargetBuilder->LoadPHDR->FileSize := PHDRSize
+	TargetBuilder->LoadPHDR->MemorySize := PHDRSize
 	
 	ReAllocELFBuffer(TargetBuilder, FinalSize)
 	
@@ -311,6 +311,8 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	
 	TargetBuilder->PHDR->FileOffset := ProgramHeadersOffset
 	TargetBuilder->PHDR->VirtualAddress := ProgramHeadersOffset
+	TargetBuilder->LoadPHDR->FileOffset := ProgramHeadersOffset
+	TargetBuilder->LoadPHDR->VirtualAddress := ProgramHeadersOffset
 	TargetBuilder->StringSection->FileOffset := StringsOffset
 	
 	/* Copy the bytes of all the program/section headers into the ELF buffer after the ELF header
