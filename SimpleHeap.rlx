@@ -52,7 +52,8 @@ define void* SimpleHeapAlloc(i32 Size) {
 define void SimpleHeapCopyClear(i8* From, i8* To, i32 Size) {
 	for (i32 Index := 0, Index < Size, Index += 1) {
 		To[Index] := From[Index]
-		From[Index] := 'R'
+		/* Todo: Put this back in, once you figure out who's using ReAlloc'd memory
+		From[Index] := 'R' */
 	}
 }
 

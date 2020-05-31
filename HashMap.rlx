@@ -1,7 +1,7 @@
 struct HashMapElement {
 	i64 Hash,
 	void Value,
-	void* NextElement
+	HashMapElement* NextElement
 }
 
 struct HashMap {
@@ -20,14 +20,19 @@ define HashMap* NewHashMap() {
 define i64 HashString(SafeWideString* StringToHash) {
 	i64 Hash := 5281
 	
+ 	AWrite("Hash(")
+	IWrite(StringToHash->Buffer)
+	AWrite(", ")
+	IWrite(StringToHash->Length)
+	AWrite(", ")
+	PrintSafeString(StringToHash)
+	AWrite(") == ")
+	
 	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
 		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
 	}
 	
-/* 	AWrite("Hash(")
-	PrintSafeString(StringToHash)
-	AWrite(") == ")
-	IWriteLine(Hash) */
+	IWriteLine(Hash)
 	
 	return Hash
 }
@@ -50,12 +55,6 @@ define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
 	
 	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
 	
-/* 	AWrite("Map[")
-	IWrite(Hash)
-	AWrite("] == Elements[")
-	IWrite(Index)
-	AWriteLine("]") */
-	
 	HashMapElement* Node := (TargetMap->Elements)[Index]
 	HashMapElement* NoNode := false As HashMapElement*
 	
@@ -68,9 +67,7 @@ define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
 			return Node
 		}
 		
-		/* AWrite("->Next") */
-		Node := (Node->NextElement) As HashMapElement*
-		/* The cast is since types can't contain themselves yet */
+		Node := Node->NextElement
 	}
 	
 	return Node
@@ -79,16 +76,6 @@ define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) 
 	i64 Hash := HashString(Key)
 	
 	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
-	
-/* 	IWrite(TargetMap)
-	AWrite(" ")
-	IWrite(Hash)
-	AWrite("			Getting ")
-	PrintSafeString(Key)
-	AWrite(" which lives in bucket ")
-	IWrite(Hash % (TargetMap->BufferMaxCount))
-	AWrite(" and element ")
-	IWriteLine(Result) */
 	
 	if (Result != 0) {
 		if (Result->Hash = Hash) {
@@ -101,17 +88,6 @@ define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) 
 define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
 	i64 Hash := HashString(Key)
 	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
-	
-/* 	IWrite(TargetMap)
-	AWrite(" ")
-	IWrite(Hash)
-	AWrite("			Inserting ")
-	IWrite(Value)
-	AWrite(" at ")
-	PrintSafeString(Key)
-	AWrite(" in bucket ")
-	IWrite(Index)
-	WriteCharacter(' ') */
 	
 	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
 	HashMapElement* NewElement := 0
@@ -127,7 +103,7 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
 		NewElement->NextElement := 0
 		
-		(TargetMap->Elements)[Index] := NewElement
+		TargetMap->Elements[Index] := NewElement
 	}
 	else if (TailElement->Hash != Hash) {
 		/* else if TailElement->Hash != Hash:

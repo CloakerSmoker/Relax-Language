@@ -49,15 +49,15 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	void* FileBuffer := Alloc(FileSize)
 	
-	i8 ReadFileSuccess := FileRead(FileHandle, FileBuffer, FileSize)
+	i64 ReadResult := FileRead(FileHandle, FileBuffer, FileSize)
 	
-	if (ReadFileSuccess < 0) {
+	if (ReadResult < 0) {
 		SwapOutputStream()
 		AWrite("Could not read file: ")
 		AWriteLine(FilePath)
 		
 		AWrite("Error code: ")
-		IWriteLine(FileGetError(ReadFileSuccess))
+		IWriteLine(FileGetError(ReadResult))
 		
 		AWriteLine("Aborting")
 		Exit(1)
