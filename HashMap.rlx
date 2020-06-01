@@ -20,19 +20,19 @@ define HashMap* NewHashMap() {
 define i64 HashString(SafeWideString* StringToHash) {
 	i64 Hash := 5281
 	
- 	AWrite("Hash(")
+/*  	AWrite("Hash(")
 	IWrite(StringToHash->Buffer)
 	AWrite(", ")
 	IWrite(StringToHash->Length)
 	AWrite(", ")
 	PrintSafeString(StringToHash)
-	AWrite(") == ")
+	AWrite(") == ") */
 	
 	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
 		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
 	}
 	
-	IWriteLine(Hash)
+/* 	IWriteLine(Hash) */
 	
 	return Hash
 }
