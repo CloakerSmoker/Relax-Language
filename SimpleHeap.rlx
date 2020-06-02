@@ -46,9 +46,10 @@ define void* SimpleHeapAlloc(i64 Size) {
 		SimpleHeapGrow()
 	}
 	
-	ProcessHeap->NextOffset += Size
+	Result[0] := Size
+	ProcessHeap->NextOffset += Size + 8
 	
-	return Result
+	return Result + 8
 }
 
 define void SimpleHeapCopyClear(i8* From, i8* To, i64 Size) {
@@ -60,11 +61,7 @@ define void SimpleHeapCopyClear(i8* From, i8* To, i64 Size) {
 	IWrite(Size)
 	AWriteLine("]") */
 	
-	if (From = ProcessHeap->End || To = ProcessHeap->End) {
-		Exit(999999)
-	}
-	
-	for (i64 Index := 0, Index < Size, Index += 1) {
+	for (i64 Index := 0, Index <= Size, Index += 1) {
 		To[Index] := From[Index]
 		/* Todo: Put this back in, once you figure out who's using ReAlloc'd memory
 		From[Index] := 'R' */
@@ -72,7 +69,13 @@ define void SimpleHeapCopyClear(i8* From, i8* To, i64 Size) {
 }
 
 define void* SimpleHeapReAlloc(void* Memory, i64 NewSize) {
-	void* NewMemory := SimpleHeapAlloc(NewSize + 0x50)
+	i64 OldSize := (Memory - 8)[0]
+	
+	if (OldSize > NewSize) {
+		return Memory
+	}
+	
+	void* NewMemory := SimpleHeapAlloc(NewSize)
 	
 /* 	AWrite("SHRA ")
 	IWriteHex(Memory)
@@ -82,7 +85,7 @@ define void* SimpleHeapReAlloc(void* Memory, i64 NewSize) {
 	IWrite(NewSize)
 	AWriteLine("]") */
 	
-	SimpleHeapCopyClear(Memory, NewMemory, NewSize)
+	SimpleHeapCopyClear(Memory, NewMemory, OldSize)
 	
 	return NewMemory
 }

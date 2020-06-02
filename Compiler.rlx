@@ -83,7 +83,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	if (OutputELF) {
 		C.ELF := BuildELFBuilder()
-		C.GlobalBase := DEFAULT_IMAGE_BASE + 64
+		C.GlobalBase := DEFAULT_IMAGE_BASE + 64 + 0x1000
 		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
 	}
 	else {
