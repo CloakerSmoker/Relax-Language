@@ -121,7 +121,7 @@ define void FileGetError(i64 Result) {
 		return GetLastError()
 	}
 	linux {
-		return Result
+		return -Result + 1
 	}
 }
 define i32 FileDelete(i8* FilePath) {

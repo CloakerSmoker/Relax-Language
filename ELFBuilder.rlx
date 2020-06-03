@@ -384,7 +384,7 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	return 0
 } */
 
-define void WriteELFBuilder(PEBuilder* Builder, i16* ToFile) {
+define void WriteELFBuilder(ELFBuilder* Builder, i16* ToFile) {
 /* 	i32 GENERIC_WRITE := 0x40000000
 	i8 FILE_SHARE_READ := 1
 	i8 FILE_SHARE_WRITE := 2

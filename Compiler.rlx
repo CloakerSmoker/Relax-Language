@@ -65,8 +65,8 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	C.pState := pState
 	C.OutputELF := OutputELF
 	
-	C.CodeBufferSize := 200
-	C.CodeBuffer := Alloc(200) As i8*
+	C.CodeBufferSize := 0x10000
+	C.CodeBuffer := Alloc(0x10000) As i8*
 	C.Index := 0
 	
 	C.CodeRelocations := Alloc(8) As i64*
@@ -149,7 +149,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	if (OutputELF) {
 		AddDataSection(C.ELF, C.pState->GlobalOffset)
-		AddCodeSection(C.ELF, C.CodeBuffer, C.CodeBufferSize)
+		AddCodeSection(C.ELF, C.CodeBuffer, C.Index)
 		
 		FinalizeELFBuilder(C.ELF, MainOffset)
 		
@@ -158,7 +158,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	else {
 		AddData(C.Builder, C.pState->GlobalOffset)
 		
-		i64 TextRVA := AddCode(C.Builder, C.CodeBuffer, C.CodeBufferSize, MainOffset)
+		i64 TextRVA := AddCode(C.Builder, C.CodeBuffer, C.Index, MainOffset)
 		
 		for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
 			i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
@@ -224,8 +224,8 @@ define i8 PopRegisterStack(CompilerState* cState) {
 }
 
 define void EnsureCodeBufferSize(CompilerState* cState) {
-	if ((cState->Index + 0x10) >= (cState->CodeBufferSize)) {
-		cState->CodeBufferSize += 0x100
+	if ((cState->Index + 0x100) >= (cState->CodeBufferSize)) {
+		cState->CodeBufferSize += 0x5000
 		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
 		cState->Builder->ImportFixupBase := cState->CodeBuffer
 	}
@@ -356,15 +356,15 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	i8 ParameterCount := FunctionToCompile->ParameterCount
 	i8 RegisterParameterCount := MAX_REGISTER_PARAMETERS
-	i16 StackParameterCount := 0
+	i8 StackParameterCount := 0
 	
 	if (ParameterCount < MAX_REGISTER_PARAMETERS) {
-		/* If there are less than 4 parameters, then the number of register parameters is just the number of parameters */
+		/* If there are less than 4/6 parameters, then the number of register parameters is just the number of parameters */
 		
 		RegisterParameterCount := ParameterCount
 	}
 	else if (ParameterCount > MAX_REGISTER_PARAMETERS) {
-		/* Else if there are 5+ parameters, the stack parameter count is (TotalParamCount - 4) */
+		/* Else if there are 5/7+ parameters, the stack parameter count is (TotalParamCount - MAX_REGISTER_PARAMETERS) */
 		
 		StackParameterCount := ParameterCount - MAX_REGISTER_PARAMETERS
 		
@@ -426,7 +426,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		/* And which register it is in (RCX/RDX/R8/R9) */
 		i8 NextParameterRegister := 0
 		
-		if (cState->OutputELF) {
+		if (USE_SYSTEMV) {
 			if (RegisterParameterIndex = 5) {NextParameterRegister := R9}
 			else if (RegisterParameterIndex = 4) {NextParameterRegister := R8}
 			else if (RegisterParameterIndex = 3) {NextParameterRegister := RCX}
@@ -446,14 +446,21 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextParameter, NextParameterRegister)
 	}
 	
+	i8 StackParameterOffset := 0x28
+	
+	if (USE_SYSTEMV) {
+		/* SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address */
+		StackParameterOffset := 0x08
+	}
+	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
 		/* For each stack parameter */
 		
 		/* Get the VariableInfo structure for the parameter */
-		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + 4]
+		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + MAX_REGISTER_PARAMETERS]
 		
 		/* Load RAX with the parameter's value (using RBX as a base) */
-		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, 0x28 + (StackParameterIndex * 8), NextStackParameter->Type->Size)
+		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, StackParameterOffset + (StackParameterIndex * 8), NextStackParameter->Type->Size)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
