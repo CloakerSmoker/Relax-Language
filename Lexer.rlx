@@ -52,7 +52,7 @@ define void EnsureTokenCapacity(TokenizerState* tState) {
 	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
 		tState->TokenCapacity += 300
 		
-		tState->Tokens := ReAlloc((tState->Tokens) As void*, 8 * (tState->TokenCapacity)) As Token**
+		tState->Tokens := ReAlloc(tState->Tokens, 8 * (tState->TokenCapacity)) As Token**
 	}
 }
 
@@ -273,7 +273,7 @@ define void Error(Token* AtToken, i8* Message) {
 	if (AtToken->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		PrintSafeString(AtToken->SourceFilePath)
+		AWrite(AtToken->SourceFilePath)
 		TextColor(Red)
 		WriteNewLine()
 	}

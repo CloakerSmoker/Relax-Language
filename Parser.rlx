@@ -153,13 +153,20 @@ struct ParserState {
 	
 	HashMap* Types,
 	
-	/* In order to prevent recreating the standard types, they are just stored in the parser state */
+	/* Builtin types, actually added to the type list in CreateDefaultTypes */
+	
 	TypeInfo* i8,
 	TypeInfo* i16,
 	TypeInfo* i32,
 	TypeInfo* i64,
 	TypeInfo* void,
 	
+	/* In order to prevent recreating the standard types, they are just stored in the parser state */
+	
+	Type* i8Type,
+	Type* i16Type,
+	Type* i32Type,
+	Type* i64Type,
 	Type* EmptyType,
 	
 	FunctionDefine* CurrentFunction,
@@ -408,6 +415,12 @@ define void CreateDefaultTypes(ParserState* pState) {
 	pState->i64 := AddType(pState, AToS("i64"), 0, 8, TYPE_REGULAR)
 	pState->void := AddType(pState, AToS("void"), 0, 8, TYPE_REGULAR)
 	
+	/* Create actual Type structs for each standard type to avoid repeatedly allocating them */
+	pState->i8Type := MakeType(pState->i8, 0)
+	pState->i16Type := MakeType(pState->i16, 0)
+	pState->i32Type := MakeType(pState->i32, 0)
+	pState->i64Type := MakeType(pState->i64, 0)
+	
 	pState->EmptyType := MakeType(pState->void, 0)
 }
 
@@ -534,12 +547,12 @@ define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
 	if (NumberToCheck & 0x7FFFFFFF80000000) {
 		/* If any of the upper 33 bits are set, then it's an i64 */
 		
-		return MakeType(pState->i64, 0)
+		return pState->i64Type
 	}
 	else {
 		/* Smallest type for a number is i32 for the sake of sanity (10 * 300 = 300, not 44) */
 		
-		return MakeType(pState->i32, 0)
+		return pState->i32Type
 	}
 }
 
@@ -551,11 +564,6 @@ define Type* GetNumberType(ParserState* pState, i64 NumberToCheck) {
 
 declare void PrintAST(ASTNode*)
 
-define void ParserError(ParserState* pState, i8* ErrorMessage) {
-	/* Helper for raising an error from the parser */
-	
-	TokenizerError(pState->pState, ErrorMessage)
-}
 define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	SwapOutputStream()
 	TextColor(Red)
@@ -860,7 +868,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		}
 	}
 	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
-		ResultType := MakeType(pState->i8, 0)
+		ResultType := pState->i8Type
 	}
 	else {
 		/* Otherwise, just follow standard binary typing rules */
@@ -917,9 +925,13 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 	Result->Operand := Operand
 	
 	if (Operator = OPERATOR_BANG) {
-		ResultType := MakeType(pState->i8, 0)
+		ResultType := pState->i8Type
 	}
 	else if (Operator = OPERATOR_AND) {
+		/* if (Operand->Type = NODE_TYPE_IDENTIFIER) {
+			
+		} */
+		
 		if !(Operand->IsStorageValue) {
 			ASTError(Operand, "Operand of the '&' operator must be a storage value.")
 		}
@@ -953,7 +965,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	/* Find the function which is being called. */
 	if (SafeStringEqualsAString(NameToken->Value, "syscall")) {
 		Result->IsSysCall := true
-		ResultNode->ValueType := MakeType(pState->i64, 0)
+		ResultNode->ValueType := pState->i64Type
 	}
 	else {
 		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
@@ -1473,16 +1485,16 @@ define void ParseAndAddBits(ParserState* pState) {
 		NextField->BitEndIndex := EndIndex
 		
 		if (FieldSize <= 8) {
-			NextField->ValueType := MakeType(pState->i8, 0)
+			NextField->ValueType := pState->i8Type
 		}
 		else if (FieldSize <= 16) {
-			NextField->ValueType := MakeType(pState->i16, 0)
+			NextField->ValueType := pState->i16Type
 		}
 		else if (FieldSize <= 32) {
-			NextField->ValueType := MakeType(pState->i32, 0)
+			NextField->ValueType := pState->i32Type
 		}
 		else {
-			NextField->ValueType := MakeType(pState->i64, 0)
+			NextField->ValueType := pState->i64Type
 		}
 		
 		HashMapAddValue(Fields, FieldName, NextField As void)
@@ -1927,7 +1939,7 @@ define ASTNode* ParseIf(ParserState* pState) {
 	i32 BranchIndex := 0
 	
 	loop {
-		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_IF) || BranchIndex = 0) {
+		if (BranchIndex = 0 || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {
 			if (BranchCapacity <= BranchIndex) {
 				BranchCapacity += 10
 			
@@ -1935,8 +1947,8 @@ define ASTNode* ParseIf(ParserState* pState) {
 				NewIf->Bodies := ReAlloc(NewIf->Bodies, BranchCapacity * 8)
 			}
 			
-			(NewIf->Conditions)[BranchIndex] := ParseExpression(pState, 0)
-			(NewIf->Bodies)[BranchIndex] := ParseBlock(pState)
+			NewIf->Conditions[BranchIndex] := ParseExpression(pState, 0)
+			NewIf->Bodies[BranchIndex] := ParseBlock(pState)
 		
 			BranchIndex += 1
 
@@ -2046,26 +2058,32 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
 		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
 		
+		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, pState->i32Type)
+		
 		if (SafeStringEqualsAString(TokenToTranslate->Value, "true")) {
-			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 1, MakeType(pState->i32, 0))
+			Result->IntegerValue := 1
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
-			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
+			Result->IntegerValue := 0
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "windows")) {
-			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, !pState->OutputELF, MakeType(pState->i32, 0))
+			Result->IntegerValue := !pState->OutputELF
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "linux")) {
-			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, pState->OutputELF, MakeType(pState->i32, 0))
+			Result->IntegerValue := pState->OutputELF
 		}
 		else if (ForErrorMessage) {
-			Result := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, TokenToTranslate->Value, TYPE_NONE)
+			Result->NodeType := NODE_TYPE_IDENTIFIER
+			Result->StringValue := TokenToTranslate->Value
 		}
 		else {
 			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
 			/* Using the found variable's type as the node type */
 			
-			Result := AllocateNewASTNode(NODE_TYPE_VARIABLE, FoundVariable As void*, FoundVariable->Type)		
+			Result->NodeType := NODE_TYPE_VARIABLE
+			Result->IsStorageValue := true
+			Result->VariableValue := FoundVariable
+			Result->ValueType := FoundVariable->Type
 		}
 		
 		Result->SourceFilePath := TokenToTranslate->SourceFilePath
@@ -2075,9 +2093,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	}
 	
 	if !(ForErrorMessage) {
-		AWrite("Unknown fuck ")
-		PrintToken(TokenToTranslate)
-		Exit(1)
+		Error(TokenToTranslate, "Unexpected token")
 	}
 }
 
@@ -2139,7 +2155,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 					
 					if (KeyName != 0 && (!ErrorMessage)) {
 						if (SafeStringEqualsAString(KeyName, "Size")) {
-							Result := AllocateNewASTNode(NODE_TYPE_INTEGER, LeftType->Size, MakeType(pState->i16, 0))
+							Result := AllocateNewASTNode(NODE_TYPE_INTEGER, LeftType->Size, pState->i16Type)
 						}
 					}
 				}
@@ -2158,16 +2174,16 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			Error(NextToken, "Strings can only be used inside functions.")
 		}
 		
-		SafeWideString* StringText := (NextToken->Value) As SafeWideString*
+		SafeWideString* StringText := NextToken->StringValue
 		
 		i32 Offset := CurrentFunction->StringBufferSize
-		i32 NewSize := Offset + (StringText->Length) + 1
+		i32 NewSize := Offset + StringText->Length + 1
 		
 		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
 		CurrentFunction->StringBufferSize := NewSize
 		
 		for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-			(CurrentFunction->StringBuffer)[Offset + Index] := (StringText->Buffer)[Index]
+			CurrentFunction->StringBuffer[Offset + Index] := StringText->Buffer[Index]
 		}
 		
 		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(pState->i8, 1))
