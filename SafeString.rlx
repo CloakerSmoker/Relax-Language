@@ -84,7 +84,7 @@ define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
 	i32 Length := StringToReadFrom->Length
 	
 	for (i32 Index := 0, Index <= Length, Index += 1) {
-		i16 NextCharacter := WString[Index]
+		i16 NextCharacter := Lower(WString[Index])
 		
 		if !(IsHex(NextCharacter)) {
 			Break
@@ -94,23 +94,8 @@ define i64 SafeStringHexToI64(SafeWideString* StringToReadFrom, i8* Success) {
 			NextCharacter -= '0'
 		}
 		else {
-			if (NextCharacter = 'a' || NextCharacter = 'A') {
-				NextCharacter := 10
-			}
-			else if (NextCharacter = 'b' || NextCharacter = 'B') {
-				NextCharacter := 11
-			}
-			else if (NextCharacter = 'c' || NextCharacter = 'C') {
-				NextCharacter := 12
-			}
-			else if (NextCharacter = 'd' || NextCharacter = 'D') {
-				NextCharacter := 13
-			}
-			else if (NextCharacter = 'e' || NextCharacter = 'E') {
-				NextCharacter := 14
-			}
-			else if (NextCharacter = 'f' || NextCharacter = 'F') {
-				NextCharacter := 15
+			if (NextCharacter >= 'a' && NextCharacter <= 'f') {
+				NextCharacter -= 'a' - 10
 			}
 		}
 		

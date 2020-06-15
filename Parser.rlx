@@ -138,7 +138,6 @@ struct WhileLoop {
 
 struct FunctionDefine {
 	SafeWideString* Name,
-	Block* Body,
 	
 	i16 ParameterCount,
 	VariableInfo** Parameters,
@@ -147,18 +146,25 @@ struct FunctionDefine {
 	Type ReturnType,
 	
 	i8 IsImported,
-	SafeWideString* ImportFileName,
-	SafeWideString* ImportFunctionName,
+	
+	union {
+		Block* Body,
+		SafeWideString* ImportFileName
+	},
+	union {
+		i8* StringBuffer,
+		SafeWideString* ImportFunctionName
+	},
 	
 	i16 LocalOffset,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
-	
-	i8* StringBuffer,
 	i32 StringBufferSize,
 	
 	SafeWideString* SourceFilePath,
-	i32 LineNumber
+	i32 LineNumber,
+	
+	i32 CallCount
 }
 
 struct CallExpression {
@@ -966,6 +972,8 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		
 		/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
 		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+		
+		FoundDefine->CallCount += 1
 		
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
@@ -2203,9 +2211,6 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		
 		Error(NextToken, "Unexpected token in expression")
 	}
-	
-	/* Free the copy of NextToken */
-	FreeToken(NextToken)
 	
 	return Result
 }

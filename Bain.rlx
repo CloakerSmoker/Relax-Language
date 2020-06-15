@@ -83,6 +83,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i8* InputFilePath := 0
 	i8* OutputFilePath := 0
+	i8 DumpFunctionBytes := true
 	
 	for (i32 Index := 0, Index < ArgC, Index += 1) {
 		i8* NextArg := ArgV[Index]
@@ -92,6 +93,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 		else if (StringEquals(NextArg, "--pe")) {
 			OutputELF := false
+		}
+		else if (StringEquals(NextArg, "--function-bytes") || StringEquals(NextArg, "-fb")) {
+			DumpFunctionBytes := true
 		}
 		else if (StringEquals(NextArg, "-i")) {			
 			Index += 1
@@ -129,5 +133,5 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	SourcePath.Length := WLen(InputFilePath)
 	
 	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength), OutputELF)
-	CompilerStart(P, OutputFilePath, OutputELF)
+	CompilerStart(P, OutputFilePath, OutputELF, DumpFunctionBytes)
 }

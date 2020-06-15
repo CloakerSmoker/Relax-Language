@@ -58,50 +58,6 @@ i16 PE_HEADER_SIZE := 0xF0
 
 i16 SECTION_HEADER_SIZE := 0x28
 
-define void WriteDOSStub(void* IntoBuffer) {
-	/* Writes the DOS stub code into the given buffer */
-	
-	IntoBuffer[0] := 0xCD09B4000EBA1F0E
-	
-	/* Rewrite the first byte since the sign bit gets dropped at some point */
-	(IntoBuffer As i8*)[0] := 0xCD
-	
-	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
-	IntoBuffer[1] := 0x685421CD4C01B821
-	IntoBuffer[2] := 0x72676F7270207369
-	IntoBuffer[3] := 0x6F6E6E6163206D61
-	IntoBuffer[4] := 0x6E75722065622074
-	IntoBuffer[5] := 0x20534F44206E6920
-	IntoBuffer[6] := 0x0000242E65646F6D
-}
-
-define void WriteDOSHeader(void* IntoBuffer) {
-	/* Writes the DOS MZ header into the given buffer */
-	
-	MZHeader* NewHeader := IntoBuffer As MZHeader*
-	
-	/* Some of this is probably wrong, but who's going to check? */
-	NewHeader->MagicM := 'M'
-	NewHeader->MagicZ := 'Z'
-	NewHeader->BytesInLastPage := 0x90
-	NewHeader->PageCount := 3
-	NewHeader->RelocationCount := 0
-	NewHeader->HeaderParagraphCount := 4
-	NewHeader->MinimumExtraParagraphCount := 0
-	NewHeader->MaximumExtraParagraphCount := 0xFFFF As i16
-	NewHeader->StartingSS := 0
-	NewHeader->StartingSP := 0xB8
-	NewHeader->Checksum := 0
-	NewHeader->StartingIP := 0
-	NewHeader->StartingCS := 0
-	NewHeader->RelocationTableOffset := 0x40
-	NewHeader->OverlayNumber := 0
-	NewHeader->PEHeaderOffset := PE_MAGIC_OFFSET
-	
-	WriteDOSStub(IntoBuffer + MZ_HEADER_SIZE)
-	
-}
-
 struct COFFHeader {
 	i16 MachineType,
 	i16 NumberOfSections,
@@ -229,7 +185,42 @@ i32 DEFAULT_RESERVE := 0x00100000
 i32 DEFAULT_COMMIT := 0x8000
 
 define void WritePEHeader(void* IntoBuffer) {
-	/* Writes all the standard COFF/PE header values into the given buffer */
+	/* Writes all the standard MZ/COFF/PE header values into the given buffer */
+	
+	MZHeader* NewHeader := IntoBuffer As MZHeader*
+	/* Write the DOS MZ header first */
+	
+	/* Some of this is probably wrong, but who's going to check? */
+	NewHeader->MagicM := 'M'
+	NewHeader->MagicZ := 'Z'
+	NewHeader->BytesInLastPage := 0x90
+	NewHeader->PageCount := 3
+	NewHeader->RelocationCount := 0
+	NewHeader->HeaderParagraphCount := 4
+	NewHeader->MinimumExtraParagraphCount := 0
+	NewHeader->MaximumExtraParagraphCount := 0xFFFF As i16
+	NewHeader->StartingSS := 0
+	NewHeader->StartingSP := 0xB8
+	NewHeader->Checksum := 0
+	NewHeader->StartingIP := 0
+	NewHeader->StartingCS := 0
+	NewHeader->RelocationTableOffset := 0x40
+	NewHeader->OverlayNumber := 0
+	NewHeader->PEHeaderOffset := PE_MAGIC_OFFSET
+	
+	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
+	
+	void* StubBuffer := IntoBuffer + MZ_HEADER_SIZE
+	
+	StubBuffer[0] := 0xCD09B4000EBA1F0E
+	StubBuffer[1] := 0x685421CD4C01B821
+	StubBuffer[2] := 0x72676F7270207369
+	StubBuffer[3] := 0x6F6E6E6163206D61
+	StubBuffer[4] := 0x6E75722065622074
+	StubBuffer[5] := 0x20534F44206E6920
+	StubBuffer[6] := 0x0000242E65646F6D
+	
+	/* Now write the actual COFF+PE header */
 	
 	i8* MagicString := (IntoBuffer + PE_MAGIC_OFFSET) As i8*
 	
@@ -438,22 +429,15 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 	BuilderToReAlloc->BufferSize := NewSize
 }
 
-define void* AllocatePEBuffer() {
-	/* Allocates enough memory for all of the PE headers (including our 4 section headers) */
-	
-	return Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
-}
-
 define PEBuilder* BuildBuilder() {
 	/* Allocates a PEBuilder and sets all of the headers, along with writing the section headers */
 	
 	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
 	
-	NewBuilder->Buffer := AllocatePEBuffer()
+	NewBuilder->Buffer := Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
 	
 	/* Now we've got enough memory for the headers, so we can start writing them */
 	
-	WriteDOSHeader(NewBuilder->Buffer)
 	WritePEHeader(NewBuilder->Buffer)
 	
 	/* Now we've got the headers written, so we can store pointers to each in the builder */
@@ -970,49 +954,4 @@ define void FinalizeBuilder(PEBuilder* Builder) {
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
 	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
 	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
-}
-
-define void WriteBuilder(PEBuilder* Builder, i16* ToFile) {
-/* 	i32 GENERIC_WRITE := 0x40000000
-	i8 FILE_SHARE_READ := 1
-	i8 FILE_SHARE_WRITE := 2
-	i8 CREATE_ALWAYS := 2
-	i16 FILE_ATTRIBUTE_NORMAL := 128
-	
-	i64 OutputFileHandle := CreateFile(ToFile, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0) */
-	i64 OutputFileHandle := FileOpen(ToFile, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
-	
-	
-	if (OutputFileHandle < 0) {
-		AWrite("Could not open output file, error code: ")
-		IWriteLine(FileGetError(OutputFileHandle))
-		AWriteLine("Aborting")
-		Exit(1)
-	}
-	
-	i32 Result := FileWrite(OutputFileHandle, Builder->Buffer, Builder->BufferSize)
-	
-	if (Result < 0) {
-		AWrite("Error writing output file: ")
-		IWriteLine(FileGetError(Result))
-		AWriteLine("Aborting")
-		Exit(1)
-	}
-	
-	AWrite("Done writing output file, ")
-	IWrite(Builder->BufferSize)
-	AWriteLine(" bytes written.")
-	
-	FileClose(OutputFileHandle)
-}
-
-declare void PrintByteHex(i8)
-
-define void PrintBuilder(PEBuilder* Builder) {
-	i8* BufferAsBytes := (Builder->Buffer) As i8*
-	
-	for (i32 Index := 0, Index < Builder->BufferSize, Index += 1) {
-		PrintByteHex(BufferAsBytes[Index])
-		WriteCharacter(' ')
-	}
 }

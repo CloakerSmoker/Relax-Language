@@ -59,7 +59,7 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
-define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF) {
+define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF, i8 DumpFunctionBytes) {
 	CompilerState C
 	
 	C.pState := pState
@@ -103,11 +103,12 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 			
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+				i32 FunctionOffset := C.Index
 				
-				IWriteHex(CODE_BASE + C.Index)
-				AWrite(": ")
-				PrintSafeString(NextFunction->Name)
-				WriteNewLine()
+				if (DumpFunctionBytes) {
+					IWriteHex(CODE_BASE + FunctionOffset)
+					AWrite(" - ")
+				}
 				
 				if (NextFunction->IsImported) {
 					if !(OutputELF) {
@@ -129,7 +130,20 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 						MainOffset := C.Index
 					}
 					
-					CompileFunction(&C, NextFunction, IsMain)
+					if (IsMain || NextFunction->CallCount != 0) {
+						CompileFunction(&C, NextFunction, IsMain)
+					}
+				}
+				
+				if (DumpFunctionBytes) {
+					IWrite(C.Index - FunctionOffset)
+					
+					AWrite("	(")
+					IWrite(NextFunction->CallCount)
+					AWrite(")	")
+					
+					PrintSafeString(NextFunction->Name)
+					WriteNewLine()
 				}
 				
 				/* Update the current element to be the next element in the linked list */
@@ -144,8 +158,32 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	ResolveAllLabels(&C)
 	
-	AWrite("global bytes ")
-	IWriteLine(C.pState->GlobalOffset)
+	if (DumpFunctionBytes) {
+		TextColor(Blue)
+		
+		AWrite("	Globals use ")
+		IWrite(C.pState->GlobalOffset)
+		AWriteLine(" bytes")
+		
+		WriteCharacter('	')
+		IWrite(C.Index)
+		AWriteLine(" total bytes of code generated.")
+		WriteCharacter('	')
+	}
+	
+	/* Actual compiling is done, time to build the output file */
+	
+	i64 OutputFileHandle := FileOpen(OutputFilePath, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
+	
+	if (OutputFileHandle < 0) {
+		AWrite("Could not open output file, error code: ")
+		IWriteLine(FileGetError(OutputFileHandle))
+		AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	i32 Result := 0
+	i32 BytesWritten := 0
 	
 	if (OutputELF) {
 		AddDataSection(C.ELF, C.pState->GlobalOffset)
@@ -153,7 +191,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		
 		FinalizeELFBuilder(C.ELF, MainOffset)
 		
-		WriteELFBuilder(C.ELF, OutputFilePath)
+		/* WriteELFBuilder(C.ELF, OutputFilePath) */
+		Result := FileWrite(OutputFileHandle, C.ELF->Buffer, C.ELF->BufferSize)
+		BytesWritten := C.ELF->BufferSize
 	}
 	else {
 		AddData(C.Builder, C.pState->GlobalOffset)
@@ -173,8 +213,23 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		
 		FinalizeBuilder(C.Builder)
 		
-		WriteBuilder(C.Builder, OutputFilePath)
+		/* WriteBuilder(C.Builder, OutputFilePath) */
+		Result := FileWrite(OutputFileHandle, C.Builder->Buffer, C.Builder->BufferSize)
+		BytesWritten := C.Builder->BufferSize
 	}
+	
+	if (Result < 0) {
+		AWrite("Error writing output file: ")
+		IWriteLine(FileGetError(Result))
+		AWriteLine("Aborting")
+		Exit(1)
+	}
+	
+	AWrite("Done writing output file, ")
+	IWrite(BytesWritten)
+	AWriteLine(" bytes written.")
+	
+	FileClose(OutputFileHandle)
 }
 
 define i8 StackIndexToRegister(i8 Index) {
@@ -416,10 +471,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitSub_R64_IX(cState, RSP, LocalSpace)
 	/* EmitEnter_I16(cState, LocalSpace) */
 	
-	EmitPush_R64(cState, RBX)
+/* 	EmitPush_R64(cState, RBX)
 	EmitPush_R64(cState, R13)
 	EmitPush_R64(cState, R14)
-	EmitPush_R64(cState, R15)
+	EmitPush_R64(cState, R15) */
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -450,7 +505,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextParameter, NextParameterRegister)
 	}
 	
-	i8 StackParameterOffset := 0x28
+	i8 StackParameterOffset := 0x8
 	
 	if (USE_SYSTEMV) {
 		/* SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address */
@@ -513,10 +568,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	SetLabel(cState, ReturnLabel)
 	
-	EmitPop_R64(cState, R15)
+/* 	EmitPop_R64(cState, R15)
 	EmitPop_R64(cState, R14)
 	EmitPop_R64(cState, R13)
-	EmitPop_R64(cState, RBX)
+	EmitPop_R64(cState, RBX) */
 	
 	EmitLeave(cState)
 	
@@ -604,7 +659,10 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 		Cast(cState, RAX, ReturnValueSize)
 	}
 	
-	EmitJump_Label(cState, cState->CurrentFunctionReturnLabel)
+	EmitLeave(cState)
+	EmitReturn(cState)
+	
+	/* EmitJump_Label(cState, cState->CurrentFunctionReturnLabel) */
 }
 
 define i8 IsComparison(Token* OperatorToken) {
@@ -959,7 +1017,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	if (IS_SYSCALL) {
 		EmitSysCall(cState)
 	}
-	else if (USE_SYSTEMV) {
+	else if (USE_SYSTEMV || !TargetFunction->IsImported) {
 		EmitCall_Label(cState, TargetFunction->LabelNumber)
 	}
 	else {
@@ -981,7 +1039,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitPop_R64(cState, RBX)
 	}
 	
-	if !(IS_SYSCALL) {
+	if (ResultRegister != RAX) {
 		EmitMove_R64_RX(cState, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType))
 	}
 /* 	if (cState->NoClobberA) {

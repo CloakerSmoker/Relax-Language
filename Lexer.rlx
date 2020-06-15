@@ -48,16 +48,14 @@ define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source,
 	return NewState
 }
 
-define void EnsureTokenCapacity(TokenizerState* tState) {
+define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i16 LengthInSource, i8 Type) {
+	/* Ensure the token buffer has space for another token */
+	
 	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
 		tState->TokenCapacity += 300
 		
 		tState->Tokens := ReAlloc(tState->Tokens, 8 * (tState->TokenCapacity)) As Token**
 	}
-}
-
-define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i16 LengthInSource, i8 Type) {
-	EnsureTokenCapacity(tState) /* Ensure the token buffer(s) have space for another token */
 	
 	i32 Index := tState->MaxTokenIndex
 	
@@ -93,36 +91,6 @@ define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
 
 	return NewSafeString As void*
 }
-
-define Token* AllocateNewToken() {
-	return Alloc(Token.Size) As Token*
-}
-define void FreeToken(Token* TokenToFree) {
-	return 0
-	/*
-	if (TokenToFree->Type = TOKEN_TYPE_IDENTIFER || TokenToFree->Type = TOKEN_TYPE_STRING) {
-		FreeSafeString((TokenToFree->Value) As SafeWideString*)
-	}
-	
-	Free(TokenToFree As void*)*/
-}
-define void FreeTokenOnly(Token* TokenToFree) {
-	return 0
-	/*Free(TokenToFree As void*)*/
-}
-
-/*define Token* MakeToken(TokenizerState* tState, i16 PositionInSource, i8 Type, void* Value) {
-	Writes the passed token info into tState->CurrentToken
-	
-	Token* OutputToken := tState->CurrentToken
-
-	OutputToken->PositionInSource := PositionInSource
-	OutputToken->LengthInSource := (tState->SourceIndex) - PositionInSource
-	OutputToken->Type := Type
-	OutputToken->Value := Value
-	
-	return OutputToken
-}*/
 
 i8 TOKEN_TYPE_EOF := 0
 i8 TOKEN_TYPE_NONE := 100
@@ -218,9 +186,6 @@ i8 KEYWORD_RETURN := 14
 i8 KEYWORD_WINDOWS := 15
 i8 KEYWORD_LINUX := 16
 
-define i16 PeekNextCharacterRaw(TokenizerState* pState) {
-	return(pState->Source)[pState->SourceIndex]
-}
 define i16 PeekNextCharacter(TokenizerState* pState) {
 	return Lower((pState->Source)[pState->SourceIndex])
 }
@@ -246,7 +211,7 @@ define i16 GetNextCharacter(TokenizerState* pState) {
 	return NextCharacter
 }
 define i16 GetNextCharacterRaw(TokenizerState* pState) {
-	i16 Result := PeekNextCharacterRaw(pState)
+	i16 Result := (pState->Source)[pState->SourceIndex]
 	
 	GetNextCharacter(pState)
 	
@@ -299,25 +264,7 @@ define void TokenizerError(TokenizerState* tState, i8* Message) {
 	Error(tState->Tokens[tState->TokenIndex - 1], Message)
 }
 
-
-declare Token* _GetNextToken(TokenizerState*)
-
-define Token* GetNextToken(TokenizerState* tState) {
-	Token* Result := _GetNextToken(tState)
-	
-	if (Result <= 30000) {
-		AWriteLine("Null or low token")
-		IWriteLine(tState->SourceIndex)
-		IWriteLine(tState->TokenIndex)
-		AWriteLine("Prior token: ")
-		PrintToken((tState->Tokens)[(tState->TokenIndex) - 1])
-		Exit(1)
-	}
-	
-	return Result
-}
-
-define Token* _GetNextToken(TokenizerState* pState) {
+define Token* GetNextToken(TokenizerState* pState) {
 	/* Gathers a single token, and sets/returns CurrentToken */
 	
 	i32 Index := pState->TokenIndex
@@ -674,14 +621,14 @@ define Token* _GetNextToken(TokenizerState* pState) {
 				return GetNextToken(pState)
 			}
 		}
-		
-		if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
+		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
 			/* Ignore null characters and whitespace */
 			continue
 		}
-		
-		MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-		TokenizerError(pState, "Unexpected character")
+		else {
+			MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+			TokenizerError(pState, "Unexpected character")
+		}
 	}
 	
 	return MakeToken(pState, pState->SourceLength, TOKEN_TYPE_EOF, 0)
@@ -779,10 +726,24 @@ define void PrintToken(Token* TokenToPrint) {
 define void PrintOperator(i8 Operator) {
 	/* Prints an operator in the worst way possible */
 	
-	i8 FirstCharacter := 0
-	i8 SecondCharacter := 0
+/* 	i8 FirstCharacter := 0
+	i8 SecondCharacter := 0 */
 	
-	if (Operator = OPERATOR_COLON_EQUAL) {
+	/* Note: this way is betterworse than the commented out version, since it depends on the operator numbers not changing, but improves code size by a lot */
+	i8* Operators := ":= += -= *= +  -  *  /  %  .  -> !  && || =  != <  <= >  >= &  |  :  As [  ^  ~> << >> ~  "
+	
+	i8* ThisOperator := Operators + (Operator * 3)
+	
+	if (ThisOperator[1] = ' ') {
+		ThisOperator[1] := 0
+	}
+	else {
+		ThisOperator[2] := 0
+	}
+	
+	AWrite(ThisOperator)
+	
+/* 	if (Operator = OPERATOR_COLON_EQUAL) {
 		FirstCharacter := ':'
 		SecondCharacter := '='
 	}
@@ -892,15 +853,17 @@ define void PrintOperator(i8 Operator) {
 	}
 	if (SecondCharacter) {
 		WriteCharacter(SecondCharacter)
-	}
+	} */
 }
 
 define void PrintPunctuation(i8 Punctuation) {
 	/* Prints a punctuation token in the worst way possible */
 	
-	i8 Character := 0
+	/* i8 Character := 0 */
 	
-	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
+	WriteCharacter("(){}],"[Punctuation])
+	
+/* 	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
 		Character := '('
 	}
 	else if (Punctuation = PUNCTUATION_CLOSE_PAREN) {
@@ -919,7 +882,7 @@ define void PrintPunctuation(i8 Punctuation) {
 		Character := ','
 	}
 	
-	WriteCharacter(Character)
+	WriteCharacter(Character) */
 }
 
 define void PrintKeyword(i8 Keyword) {
