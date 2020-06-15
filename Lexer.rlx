@@ -273,7 +273,7 @@ define void Error(Token* AtToken, i8* Message) {
 	if (AtToken->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		AWrite(AtToken->SourceFilePath)
+		PrintSafeString(AtToken->SourceFilePath)
 		TextColor(Red)
 		WriteNewLine()
 	}

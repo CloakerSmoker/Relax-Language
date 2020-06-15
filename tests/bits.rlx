@@ -12,6 +12,10 @@ bits Example2 As i64 {
 	[0:31] low_32,
 	[32:63] high_32
 }
+bits Example3 As i64 {
+	[0:47] a_pointer,
+	[48:63] a_tag
+}
 
 define i32 Main() {
 	Example E := 0
@@ -28,6 +32,19 @@ define i32 Main() {
 	IWriteHex(E2.low_32)
 	WriteCharacter(',')
 	IWriteHex(E2.high_32)
+	
+	Example3 E3 := 0
+	i64 Test := 52893
+	
+	E3.a_pointer := &Test
+	E3.a_tag := 30
+	
+	WriteCharacter(',')
+	IWrite(E3.a_pointer = &Test)
+	
+	Test := 9000
+	
+	IWrite(*(E3.a_pointer As i64*) = Test)
 	
 	return E
 }

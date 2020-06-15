@@ -3,6 +3,7 @@ import os
 import os.path as path
 import subprocess
 import platform
+import time
 from shutil import copyfile
 from shutil import rmtree
 from shutil import move
@@ -90,12 +91,15 @@ for test_path in os.listdir(tests_dir):
             tests_passed += 1
         
         test_number += 1
-    
+
     test_count = len(inputs_outputs)
     foreground = Fore.LIGHTRED_EX
 
     if tests_passed == test_count:
-        os.remove(f'{binary_file}.{platform_extension}')
+        try:
+            os.remove(f'{binary_file}.{platform_extension}')
+        except:
+            pass
         foreground = Fore.LIGHTGREEN_EX
 
     print(f'Test {file_name} {foreground}{tests_passed}/{len(inputs_outputs)}{Fore.WHITE} passed.')

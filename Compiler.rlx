@@ -36,7 +36,7 @@ struct CompilerState {
 	i32 CurrentLoopContinueLabel,
 	i32 CurrentLoopBreakLabel,
 	
-	Type* CurrentFunctionReturnType,
+	Type CurrentFunctionReturnType,
 	
 	i32 CurrentFunctionStringBufferOffset,
 	
@@ -262,14 +262,16 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 	}
 }
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
+	i16 TargetSize := GetTypeSize(TargetVariable->Type)
+	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
-		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetVariable->Type->Size)
+		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetSize)
 	}
 	else {
-		if (TargetVariable->Type->PointerDepth = 0 && TargetVariable->Type->TrueType->IsStructType) {
+		if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
 			/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
 				So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
 				Any time this could be abused *should* be caught by type checking 
@@ -279,27 +281,29 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		}
 		else {
 			if (TargetVariable->StackOffset < 112) {
-				EmitMove_RX_RIX_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+				EmitMove_RX_RIX_DISP8(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetSize)
 			}
 			else {
-				EmitMove_RX_RIX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+				EmitMove_RX_RIX_DISP32(cState, ResultRegister, RBP, -(TargetVariable->StackOffset + 8), TargetSize)
 			}
 		}
 	}
 }
 define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
+	i16 TargetSize := GetTypeSize(TargetVariable->Type)
+	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
-		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetVariable->Type->Size)
+		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetSize)
 	}
 	else {
 		if (TargetVariable->StackOffset < 112) {
-			EmitMove_RIX_DISP8_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+			EmitMove_RIX_DISP8_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetSize)
 		}
 		else {
-			EmitMove_RIX_DISP32_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetVariable->Type->Size)
+			EmitMove_RIX_DISP32_RX(cState, RBP, SourceRegister, -(TargetVariable->StackOffset + 8), TargetSize)
 		}
 	}
 }
@@ -450,7 +454,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	if (USE_SYSTEMV) {
 		/* SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address */
-		StackParameterOffset := 0x08
+		StackParameterOffset := 0x8
 	}
 	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
@@ -460,7 +464,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + MAX_REGISTER_PARAMETERS]
 		
 		/* Load RAX with the parameter's value (using RBX as a base) */
-		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, StackParameterOffset + (StackParameterIndex * 8), NextStackParameter->Type->Size)
+		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, StackParameterOffset + (StackParameterIndex * 8), GetTypeSize(NextStackParameter->Type))
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
@@ -544,8 +548,8 @@ declare void CompileFor(CompilerState*, ForLoop*)
 declare void CompileLoop(CompilerState*, Block*)
 declare void CompileWhile(CompilerState*, WhileLoop*)
 
-declare void CompileUnary(CompilerState*, i8, Type*, UnaryExpression*, i8)
-declare void CompileBinary(CompilerState*, i8, Type*, BinaryExpression*, i8)
+declare void CompileUnary(CompilerState*, i8, Type, UnaryExpression*, i8)
+declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
 declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
 declare void CompileCall(CompilerState*, i8, CallExpression*)
 
@@ -593,8 +597,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	/* Compile the expression to return */
 	CompileExpression(cState, RAX, ReturnExpression)
 	
-	i16 ReturnValueSize := ReturnExpression->ValueType->Size
-	i16 ReturnTypeSize := cState->CurrentFunctionReturnType->Size
+	i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
+	i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunctionReturnType)
 	
 	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
 		Cast(cState, RAX, ReturnValueSize)
@@ -657,7 +661,7 @@ define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression
 		/* In this case, the expression is not conditional, and we will need to check the result for being 0 or not */
 		
 		CompileExpression(cState, RAX, ConditionExpression)
-		EmitTest_RX_RX(cState, RAX, RAX, ConditionExpression->ValueType->Size)
+		EmitTest_RX_RX(cState, RAX, RAX, GetTypeSize(ConditionExpression->ValueType))
 		EmitJEZ_Label(cState, JumpToLabel)
 	}
 }
@@ -778,12 +782,12 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	/* Compiles some kind of expression */
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
-	Type* ResultType := ExpressionToCompile->ValueType
+	Type ResultType := ExpressionToCompile->ValueType
 	
 	if (ExpressionType = NODE_TYPE_INTEGER) {
 		/* Simply move the integer being used into the result register */
 		
-		i8 ResultSize := ResultType->Size
+		i8 ResultSize := GetTypeSize(ResultType)
 		i64 IntegerValue := ExpressionToCompile->IntegerValue
 		
 		if (IntegerValue = 0) {
@@ -897,8 +901,11 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	
 	if (ParameterCount != 0) {
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
+			i16 ExpectedSize := 8
+			
 			if !(IS_SYSCALL) {
 				VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
+				ExpectedSize := GetTypeSize(NextParameter->Type)
 			}
 			
 			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
@@ -931,8 +938,10 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
-			if (IS_SYSCALL || NextParameterValue->ValueType->Size < NextParameter->Type->Size) {
-				Cast(cState, ThisParameterRegister, NextParameterValue->ValueType->Size)
+			i16 ActualSize := GetTypeSize(NextParameterValue->ValueType)
+			
+			if (ActualSize < ExpectedSize) {
+				Cast(cState, ThisParameterRegister, ActualSize)
 			}
 			
 			if (ParameterIndex >= REGISTER_PARAMETER_COUNT) {
@@ -973,7 +982,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	}
 	
 	if !(IS_SYSCALL) {
-		EmitMove_R64_RX(cState, ResultRegister, RAX, TargetFunction->ReturnType->Size)
+		EmitMove_R64_RX(cState, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType))
 	}
 /* 	if (cState->NoClobberA) {
 		EmitMove_R64_R64(cState, RAX, R12)
@@ -997,7 +1006,7 @@ define void CompileStructAccessLeft(CompilerState* cState, i8 ResultRegister, St
 
 define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
-	i16 TargetFieldSize := TargetField->ValueType->Size
+	i16 TargetFieldSize := GetTypeSize(TargetField->ValueType)
 	
 	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
 	
@@ -1014,7 +1023,7 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	}
 	
 	StructField* TargetField := TargetAccess->TargetField
-	i16 TargetFieldSize := TargetField->ValueType->Size
+	i16 TargetFieldSize := GetTypeSize(TargetField->ValueType)
 	
 	i32 FieldOffset := TargetField->Offset
 	
@@ -1062,7 +1071,7 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	i8 ResultPointerRegister := PushRegisterStack(cState)
 	
 	i32 FieldOffset := TargetField->Offset
-	i16 TargetFieldSize := TargetField->ValueType->Size
+	i16 TargetFieldSize := GetTypeSize(TargetField->ValueType)
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
@@ -1078,7 +1087,7 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 		i8 ShiftLeftBy := FieldSize - (EndIndex - StartIndex)
 		i8 ShiftRightBy := FieldSize - EndIndex
 		
-		i64 PartialMask := ((1 As i64) << (EndIndex + 1)) - 1
+		i64 PartialMask := ((1 As i64) << ((EndIndex + 1) As i8)) - 1
 		
 		if (EndIndex = 63) {
 			/* Since 1<<64 is undefined, the result of INT64_MAX needs to be hard coded */
@@ -1113,19 +1122,21 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	else {
 		CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
 		
+		i16 TargetSize := GetTypeSize(TargetField->ValueType)
+		
 		if (FieldOffset = 0 && ResultPointerRegister != R13) {
 			/* 
 				Fuck x86_64. WHY would R13 be used as the magic "use RIP-relative" flag?
 				Was it not enough to use R12 for SIB encodings? Why couldn't this shit have been put into another prefix byte?
 			*/
 			
-			EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetField->ValueType->Size)
+			EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetSize)
 		}
 		else if (FieldOffset >= 112) {
-			EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+			EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetSize)
 		}
 		else {
-			EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetField->ValueType->Size)
+			EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetSize)
 		}
 	}
 	
@@ -1139,18 +1150,21 @@ define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode
 	i8 IndexRegister := PushRegisterStack(cState)
 	CompileExpression(cState, IndexRegister, Index)
 	
-	i32 IndexSize := Index->ValueType->Size
+	i32 IndexSize := GetTypeSize(Index->ValueType)
 	
 	if (IndexSize < 4) {
 		Cast(cState, IndexRegister, IndexSize)
 	}
 	
-	Type* PointerType := Pointer->ValueType
+	Type PointerType := Pointer->ValueType
 	
 	i8 IndexScale := 8
 	
-	if (PointerType->PointerDepth = 1) {
-		IndexScale := (PointerType->TrueType->Size) As i8
+	TypeInfo* PointerBase := GetBaseType(PointerType)
+	i16 PointerDepth := GetPointerDepth(PointerType)
+	
+	if (PointerDepth = 1) {
+		IndexScale := (PointerBase->Size) As i8
 	}
 	
 	i8 IsSet := (ValueRegister != 0)
@@ -1176,11 +1190,11 @@ define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTN
 	CompileArrayAccess(cState, ResultRegister, Pointer, Index, ValueRegister + 1, false)
 }
 
-define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultType, UnaryExpression* ExpressionToCompile, i8 DiscardResult) {
+define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type ResultType, UnaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a unary operator and operand */
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
-	i16 ResultSize := ResultType->Size
+	i16 ResultSize := GetTypeSize(ResultType)
 	
 	if (Operator = OPERATOR_AND) {
 		ASTNode* Operand := ExpressionToCompile->Operand
@@ -1220,7 +1234,7 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 		else if (Operator = OPERATOR_BANG) {
 			/* ALWAYS 100% ENSURE THAT YOU AREN'T DOING OPERATIONS WITH THE WRONG SIZE, RESULTSIZE CAN'T ALWAYS BE TRUSTED */
 			/* 	Sincerely - mov r8, [some_pointer]; test r8b, r8b */
-			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, ExpressionToCompile->Operand->ValueType->Size)
+			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, GetTypeSize(ExpressionToCompile->Operand->ValueType))
 			
 			if !(DiscardResult) {
 				/* If the caller uses the FLAGS register, it doesn't need a 'true' result, and can just use what's in the FLAGS register */
@@ -1230,15 +1244,15 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type* ResultT
 	}
 }
 
-define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
+define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
 	ASTNode* Left := ExpressionToCompile->Left
 	ASTNode* Right := ExpressionToCompile->Right
 	
-	i16 LeftSize := Left->ValueType->Size
-	i16 RightSize := Right->ValueType->Size
-	i16 ResultSize := ResultType->Size
+	i16 LeftSize := GetTypeSize(Left->ValueType)
+	i16 RightSize := GetTypeSize(Right->ValueType)
+	i16 ResultSize := GetTypeSize(ResultType)
 	
 	i8 LeftRegister := ResultRegister
 	
@@ -1331,12 +1345,12 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		
 		if (Operator = OPERATOR_AS) {
 			/* For 'As', just compile the left operand, cast it, and return */
-			Type* RightType := Right->TypeValue
+			Type RightType := Right->TypeValue
 			
 			if (Left->NodeType != NODE_TYPE_INTEGER) {
 				/* Only emit cast instructions for values which aren't integers, since integer casts are done at compile time */
 				
-				Cast(cState, LeftRegister, RightType->Size)
+				Cast(cState, LeftRegister, GetTypeSize(RightType))
 			}
 		}
 		else if (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) {
@@ -1399,10 +1413,10 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			if (IsComparison) {
 				i8* ErrorMessage := 0
 				
-				Type* TrueResultType := TryGetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, &ErrorMessage)
+				Type TrueResultType := TryGetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, &ErrorMessage)
 				
 				if !(ErrorMessage) {
-					ResultSize := TrueResultType->Size
+					ResultSize := GetTypeSize(TrueResultType)
 				}
 				else {
 					ResultSize := 8
@@ -1473,7 +1487,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 				EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
 			}
 			else if (Operator = OPERATOR_STAR) {
-				if (ResultType->Size = 1) {
+				if (ResultSize = 1) {
 					/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
 					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, 2)
 					Cast(cState, LeftRegister, 1)
