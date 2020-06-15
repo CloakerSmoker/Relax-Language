@@ -90,13 +90,12 @@ for test_path in os.listdir(tests_dir):
             tests_passed += 1
         
         test_number += 1
-
-    os.remove(f'{binary_file}.{platform_extension}')
     
     test_count = len(inputs_outputs)
     foreground = Fore.LIGHTRED_EX
 
     if tests_passed == test_count:
+        os.remove(f'{binary_file}.{platform_extension}')
         foreground = Fore.LIGHTGREEN_EX
 
     print(f'Test {file_name} {foreground}{tests_passed}/{len(inputs_outputs)}{Fore.WHITE} passed.')

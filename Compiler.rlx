@@ -1342,7 +1342,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 		else if (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) {
 			i32 End := NextLabel(cState)
 			
-			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, ResultSize)
+			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, LeftSize)
 			
 			if !(DiscardResult) {
 				EmitSetNE_R8(cState, ResultRegister)
@@ -1357,17 +1357,13 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type* Result
 			
 			CompileExpression(cState, LeftRegister, Right)
 			
-			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, ResultSize)
+			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, RightSize)
 			
 			if !(DiscardResult) {
 				EmitSetNE_R8(cState, ResultRegister)
 			}
 			
 			SetLabel(cState, End)
-		
-			if (!DiscardResult && ResultSize > 1) {
-				Cast(cState, ResultRegister, ResultSize)
-			}
 		}
 		else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
 			i8 LeftWasRCX := LeftRegister = RCX

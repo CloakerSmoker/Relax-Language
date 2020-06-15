@@ -2,6 +2,11 @@
 #Include String.rlx
 #Include Console.rlx
 
+struct DumbTest {
+	i8 IdiotField,
+	void Dummy
+}
+
 define i32 Main() {
 	IWrite(20 + 10)
 	WriteCharacter(',')
@@ -38,6 +43,13 @@ define i32 Main() {
 	IWrite(~0)
 	WriteCharacter(',')
 	IWrite(~90 + 1)
+	
+	DumbTest D
+	DumbTest* DP := &D
+	
+	WriteCharacter(',')
+	IWrite(DP->IdiotField || false)
+	IWrite(DP->IdiotField && true)
 	
 	return 0
 }

@@ -7,6 +7,7 @@ from shutil import copyfile
 from shutil import rmtree
 from shutil import move
 from colorama import init, Fore, Back, Style
+from difflib import SequenceMatcher
 
 # Uses stable_version.exe to compile the most recent version of the source, and then 
 #  tests the new version of the compiled source (to ensure source changes haven't broken any part of the compiler)
@@ -48,9 +49,6 @@ for i in range(0, recursion_count):
     if compile_result.returncode != 1 or len(stderr_text) != 0:
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
-    
-    if i != 0:
-        os.remove(safe_compiler)
 
     test_script = path_join(cwd, 'test_compiler.py')
     test_command = f'python {test_script} {compiler_output}'
@@ -63,7 +61,12 @@ for i in range(0, recursion_count):
         #os.remove(compiler_output)
         sys.exit(1)
     
-    print(f'{Fore.LIGHTGREEN_EX}Output file iteration {i + 1} passed all tests.')
+    # muh one liner though
+    print(f'{Fore.LIGHTGREEN_EX}Output file iteration {i + 1} passed all tests, {SequenceMatcher(None, open(safe_compiler, "rb").read(), open(compiler_output, "rb").read()).real_quick_ratio() * 100:.2f}% similarity to previous file.')
+    
+    if i != 0:
+        os.remove(safe_compiler)
+    
     safe_compiler = compiler_output
 
 print(f'{Fore.LIGHTGREEN_EX}Output file(s) passed all tests.')

@@ -1,0 +1,35 @@
+#Include Memory.rlx
+#Include String.rlx
+#Include Console.rlx
+#Include File.rlx
+
+define i32 Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
+	
+	if (ArgC != 3) {
+		AWrite("Wrong argc")
+		return 0
+	}
+	
+	i8* FilePath := ArgV[1]
+	i8* TextToWrite := ArgV[2]
+	
+	
+	i64 F := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
+	
+	FileWrite(F, TextToWrite, ALen(TextToWrite))
+	
+	FileClose(F)
+	
+	
+	i64 F2 := FileOpen(FilePath, FILE_READ)
+	
+	AWrite(FileReadAll(F2))
+	
+	FileClose(F2)
+	
+	
+	FileDelete(FilePath)
+	
+	return 0
+}

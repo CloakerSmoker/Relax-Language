@@ -874,6 +874,11 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		/* Otherwise, just follow standard binary typing rules */
 		
 		ResultType := GetBinaryResultType(pState, LeftType, RightType)
+		
+		if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+			/* For && and ||, GetBinaryResultType is only called for the error messages, and the actual result type is a byte */
+			ResultType := pState->i8Type
+		}
 	}
 	
 	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
