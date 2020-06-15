@@ -13,24 +13,12 @@ struct TypeInfo {
 	i8 IsBits
 }
 
-/* struct Type {
-	TypeInfo* TrueType,
-	i16 Size,
-	i8 PointerDepth
-} */
-
 bits Type As i64 {
 	[0:47] BaseType,
 	[48:63] PointerDepth
 }
 
 define TypeInfo* GetBaseType(Type T) {
-	i64 R := T.BaseType As i64
-
-	if (R <= 900000) {
-		Exit(99)
-	}
-	
 	return T.BaseType As TypeInfo*
 }
 define i16 GetTypeSize(Type T) {
@@ -174,8 +162,13 @@ struct CallExpression {
 	i8 IsSysCall
 }
 
+bits ReturnStatement As i64 {
+	[0:47] ReturnExpression,
+	[48] IsLastInBlock
+}
+
 struct ParserState {
-	TokenizerState* pState,
+	TokenizerState* tState,
 	
 	HashMap* Functions,
 	
@@ -356,6 +349,9 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
 		return 10
 	}
+	else if (Operator = OPERATOR_POUND) {
+		return 13
+	}
 	
 	return 0 /* Returns 0 when the operator is not a prefix operator */
 }
@@ -468,7 +464,7 @@ define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDep
 	Type Result := TryGetType(pState, TypeName, PointerDepth, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->pState, ErrorMessage)
+		TokenizerError(pState->tState, ErrorMessage)
 	}
 	
 	return Result
@@ -479,7 +475,7 @@ define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement) {
 	
 	if (TypeToDecrement.PointerDepth = 0) {
 		/* If you're dereferencing a non-pointer type, something's wrong */
-		TokenizerError(pState->pState, "Pointer type expected")
+		TokenizerError(pState->tState, "Pointer type expected")
 	}
 	
 	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1)
@@ -555,7 +551,7 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 			Todo: Fix this ????????
 			Somehow, it's fixed. This comment will stay for when it breaks again
 		*/
-		PrintSafeString(BadNode->SourceFilePath)
+		AWrite(BadNode->SourceFilePath->Buffer)
 		TextColor(Red)
 		WriteNewLine()
 	}
@@ -592,7 +588,7 @@ define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	if (BadNode->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		PrintSafeString(BadNode->SourceFilePath)
+		AWrite(BadNode->SourceFilePath->Buffer)
 		TextColor(Red | Green)
 		WriteNewLine()
 	}
@@ -705,7 +701,7 @@ define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightTy
 	Type Result := TryGetBinaryResultType(pState, LeftType, RightType, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->pState, ErrorMessage)
+		TokenizerError(pState->tState, ErrorMessage)
 	}
 	
 	return Result
@@ -989,26 +985,27 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 
 /*
 ==========================================
-	Backing parser type + helpers
+	Parser + token helpers
 ==========================================
 */
 
 define i32 FreezeParser(ParserState* pState) {
 	/* Gets the tokenizer state in order to backtrack to said state */
 	
-	return pState->pState->TokenIndex
+	return pState->tState->TokenIndex
 }
 define void UnfreezeParser(ParserState* pState, i32 Index) {
 	/* Restores the tokenizer to a given state in order to backtrack */
 	
-	pState->pState->TokenIndex := Index
+	pState->tState->TokenIndex := Index
 }
 
 define Token* ParserNextToken(ParserState* pState) {
 	/* Gets the next token */
 	
-	return GetNextToken(pState->pState)
+	return GetNextToken(pState->tState)
 }
+
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	/* Compares two tokens using type/value */
 	
@@ -1026,6 +1023,7 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	
 	return false
 }
+
 define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
@@ -1039,7 +1037,7 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	if !(Matches) {
 		/* Backtrack if the next token didn't match */
 		/* AWrite("Unfreezing from: ")
-		IWriteLine(pState->pState->TokenIndex) */
+		IWriteLine(pState->tState->TokenIndex) */
 		
 		UnfreezeParser(pState, FrozenState)
 	}
@@ -1070,20 +1068,25 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 	Token* Result := TryConsume(pState, TokenType, TokenValue, Reason, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->pState, Reason)
+		Error(Result, Reason)
 	}
 	
 	return Result
 }
 
-declare void ParseProgram(ParserState*)
-declare void CompilerStart(ParserState*)
+/*
+==========================================
+	Actual parser + some helpers
+==========================================
+*/
 
-define ParserState* ParserStart(TokenizerState* pState, i8 OutputELF) {
-	/* Initializes pState and parses a program */
+declare void ParseProgram(ParserState*)
+
+define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
+	/* Initializes pState and uses tState to parse a program */
 	
 	ParserState* P := Alloc(ParserState.Size) As ParserState*
-	P->pState := pState
+	P->tState := tState
 	
 	P->Globals := NewHashMap()
 	P->GlobalOffset := 0
@@ -1631,7 +1634,7 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 			VariableInfo* NextParameter := AllocateNewVariableInfo()
 			
 			if (ParameterCount >= 16) {
-				TokenizerError(pState->pState, "Max parameter limit reached")
+				TokenizerError(pState->tState, "Max parameter limit reached")
 			}
 			
 			ParameterList[ParameterCount] := NextParameter
@@ -1705,7 +1708,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			
 			/* Max parameter count since I cba to expand the buffer. Todo: Fix this */
 			if (ParameterCount >= 16) {
-				TokenizerError(pState->pState, "Max parameter limit reached")
+				TokenizerError(pState->tState, "Max parameter limit reached")
 			}
 			
 			/* Insert the VariableInfo structure into the parameter list */
@@ -1738,7 +1741,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		/* If the loop was broken by any token besides a ')', then there's something wrong */
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			TokenizerError(pState->pState, "Expected closing paren for parameter list")
+			TokenizerError(pState->tState, "Expected closing paren for parameter list")
 		}
 	}
 	
@@ -1837,13 +1840,22 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			i16 ActualDepth := GetPointerDepth(ActualReturnType)
 			i16 ExpectedDepth := GetPointerDepth(ExpectedReturnType)
 			
-			/* And ensure that the two types are compatible */
+			
+/* 			ReturnStatement ReturnInfo := 0
+			
+			ReturnInfo.ReturnExpression := ExpressionToReturn
+			ReturnInfo.IsLastInBlock :=  */
+			
+			/* Allocate the result node (before type checking, since ASTError needs an ASTNode to print for the error */
 			
 			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 			Result->SourceFilePath := NextToken->SourceFilePath
 			Result->LineNumber := NextToken->LineNumber
 			
-			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER && GetNumberSize(ExpressionToReturn->TrueNode) <= ExpectedSize) {
+			/* And ensure that the two types are compatible */
+			
+			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER)
+				&& (GetNumberSize(ExpressionToReturn->TrueNode) <= ExpectedSize) {
 				/* Dummy branch */
 			}
 			else if (ActualSize > ExpectedSize) {
@@ -2202,9 +2214,24 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
 		/* A prefix operator, parse an expression only containing operators of a higher precedence than the prefix operator */
 		
-		Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
-		
-		Result := MakeUnary(pState, NextToken, Result)
+		if (NextToken->Value = OPERATOR_POUND) {
+			/* Handle #TypeName by parsing a type name after the #, and setting the result to the length of TypeName as an i32 */
+			
+			i8 ConsumeClosingParan := ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			
+			Type GetSizeOfType := ParseTypeName(pState)
+			
+			if (ConsumeClosingParan) {
+				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
+			}
+			
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, GetTypeSize(GetSizeOfType), MakeType(pState->i32, 0))
+		}
+		else {
+			Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
+			
+			Result := MakeUnary(pState, NextToken, Result)
+		}
 	}
 	else {
 		/* Else, this token isn't something we expected here, so error out */

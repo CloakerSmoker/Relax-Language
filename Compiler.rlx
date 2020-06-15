@@ -153,7 +153,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	}
 	
 	if !(FoundMain) {
-		TokenizerError(pState->pState, "Main function not found")
+		TokenizerError(pState->tState, "Main function not found")
 	}
 	
 	ResolveAllLabels(&C)
@@ -661,6 +661,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	
 	EmitLeave(cState)
 	EmitReturn(cState)
+	
+	/* Todo: Fix this generating Leave;Ret twice when `return X` is the last thing in a function */
 	
 	/* EmitJump_Label(cState, cState->CurrentFunctionReturnLabel) */
 }

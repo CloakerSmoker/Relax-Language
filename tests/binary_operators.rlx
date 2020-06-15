@@ -51,5 +51,18 @@ define i32 Main() {
 	IWrite(DP->IdiotField || false)
 	IWrite(DP->IdiotField && true)
 	
+	WriteCharacter(',')
+	IWrite(#i8)
+	WriteCharacter(',')
+	IWrite(#i16)
+	WriteCharacter(',')
+	IWrite(#i32)
+	WriteCharacter(',')
+	IWrite(#i64)
+	WriteCharacter(',')
+	IWrite(#i8*)
+	WriteCharacter(',')
+	IWrite(#DumbTest)
+	
 	return 0
 }

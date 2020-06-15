@@ -150,6 +150,8 @@ i8 OPERATOR_LESS_LESS := 27
 i8 OPERATOR_GREATER_GREATER := 28
 i8 OPERATOR_TILDE := 29
 
+i8 OPERATOR_POUND := 30
+
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
@@ -186,50 +188,6 @@ i8 KEYWORD_RETURN := 14
 i8 KEYWORD_WINDOWS := 15
 i8 KEYWORD_LINUX := 16
 
-define i16 PeekNextCharacter(TokenizerState* pState) {
-	return Lower((pState->Source)[pState->SourceIndex])
-}
-define void Backtrack(TokenizerState* pState) {
-	i16 ThisCharacter := PeekNextCharacter(pState)
-	
-	pState->SourceIndex -= 1
-	
-	i32 LastCharacter := PeekNextCharacter(pState)
-	
-	if (LastCharacter = 13 && ThisCharacter = 10) {
-		pState->CurrentLineNumber -= 1
-	}
-}
-define i16 GetNextCharacter(TokenizerState* pState) {
-	i16 NextCharacter := PeekNextCharacter(pState)
-	pState->SourceIndex += 1
-	
-	if (NextCharacter = 13 && PeekNextCharacter(pState) = 10) {
-		pState->CurrentLineNumber += 1
-	}
-	
-	return NextCharacter
-}
-define i16 GetNextCharacterRaw(TokenizerState* pState) {
-	i16 Result := (pState->Source)[pState->SourceIndex]
-	
-	GetNextCharacter(pState)
-	
-	return Result
-}
-define i8 NextCharacterMatches(TokenizerState* pState, i8 CharacterToCheck) {
-	if (PeekNextCharacter(pState) = CharacterToCheck) {
-		GetNextCharacter(pState)
-		return 1
-	}
-	
-	return 0
-}
-
-define i8 TokenizerAtEnd(TokenizerState* pState) {
-	return (pState->SourceIndex) > (pState->SourceLength)
-}
-
 define void Error(Token* AtToken, i8* Message) {
 	SwapOutputStream()
 	TextColor(Red)
@@ -238,7 +196,7 @@ define void Error(Token* AtToken, i8* Message) {
 	if (AtToken->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		PrintSafeString(AtToken->SourceFilePath)
+		AWrite(AtToken->SourceFilePath->Buffer)
 		TextColor(Red)
 		WriteNewLine()
 	}
@@ -258,39 +216,83 @@ define void Error(Token* AtToken, i8* Message) {
 	Exit(1)
 }
 
+define i16 PeekNextCharacter(TokenizerState* tState) {
+	return Lower((tState->Source)[tState->SourceIndex])
+}
+define void Backtrack(TokenizerState* tState) {
+	i16 ThisCharacter := PeekNextCharacter(tState)
+	
+	tState->SourceIndex -= 1
+	
+	i32 LastCharacter := PeekNextCharacter(tState)
+	
+	if (LastCharacter = 13 && ThisCharacter = 10) {
+		tState->CurrentLineNumber -= 1
+	}
+}
+define i16 GetNextCharacter(TokenizerState* tState) {
+	i16 NextCharacter := PeekNextCharacter(tState)
+	tState->SourceIndex += 1
+	
+	if (NextCharacter = 13 && PeekNextCharacter(tState) = 10) {
+		tState->CurrentLineNumber += 1
+	}
+	
+	return NextCharacter
+}
+define i16 GetNextCharacterRaw(TokenizerState* tState) {
+	i16 Result := (tState->Source)[tState->SourceIndex]
+	
+	GetNextCharacter(tState)
+	
+	return Result
+}
+define i8 NextCharacterMatches(TokenizerState* tState, i8 CharacterToCheck) {
+	if (PeekNextCharacter(tState) = CharacterToCheck) {
+		GetNextCharacter(tState)
+		return 1
+	}
+	
+	return 0
+}
+
 define void TokenizerError(TokenizerState* tState, i8* Message) {
 	Backtrack(tState)
 	
 	Error(tState->Tokens[tState->TokenIndex - 1], Message)
 }
 
-define Token* GetNextToken(TokenizerState* pState) {
+define i8 TokenizerAtEnd(TokenizerState* tState) {
+	return (tState->SourceIndex) > (tState->SourceLength)
+}
+
+define Token* GetNextToken(TokenizerState* tState) {
 	/* Gathers a single token, and sets/returns CurrentToken */
 	
-	i32 Index := pState->TokenIndex
-	pState->TokenIndex += 1
+	i32 Index := tState->TokenIndex
+	tState->TokenIndex += 1
 	
-	if (Index < pState->MaxTokenIndex) {
+	if (Index < tState->MaxTokenIndex) {
 		/* If we already have a token in the token list for this index, return it instead */
 		
 		/* 
 			AWrite("Found cached version of token[")
 			IWrite(Index)
 			AWrite("] @")
-			IWriteLine(((pState->Tokens)[Index]) as i64)
+			IWriteLine(((tState->Tokens)[Index]) as i64)
 		 */
 		
-		return (pState->Tokens)[Index]
+		return (tState->Tokens)[Index]
 	}
 	
-	while (!TokenizerAtEnd(pState)) {
-		i32 StartingIndex := pState->SourceIndex
-		i16 NextCharacter := GetNextCharacter(pState)
+	while (!TokenizerAtEnd(tState)) {
+		i32 StartingIndex := tState->SourceIndex
+		i16 NextCharacter := GetNextCharacter(tState)
 
-		if (PeekNextCharacter(pState) = '=') {
+		if (PeekNextCharacter(tState) = '=') {
 			/* If the next character is '=', check for the X= operators first */
 			
-			GetNextCharacter(pState)
+			GetNextCharacter(tState)
 			
 			i8 NewType := TOKEN_TYPE_NONE
 			
@@ -317,191 +319,191 @@ define Token* GetNextToken(TokenizerState* pState) {
 			}
 			else {
 				/* If we didn't match and X= operator, backtrack and continue like normal */
-				Backtrack(pState)
+				Backtrack(tState)
 			}
 			
 			if (NewType != TOKEN_TYPE_NONE) {
 				/* But if we did match an X=, return the matched operator */
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, NewType)
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, NewType)
 			}
 		}
 		
 		if (NextCharacter = ''') {
 			/* If the next character is an open single quote, then consume a single character as an integer */
 			
-			i8 NextNextCharacter := GetNextCharacterRaw(pState)
+			i8 NextNextCharacter := GetNextCharacterRaw(tState)
 			
-			if (GetNextCharacter(pState) != ''') {
+			if (GetNextCharacter(tState) != ''') {
 				/* And make sure there's a close single quote */
-				MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-				TokenizerError(pState, "Expected close single quote for character constant")
+				MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+				TokenizerError(tState, "Expected close single quote for character constant")
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, NextNextCharacter)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, NextNextCharacter)
 		}
 		else if (NextCharacter = '=') {
 			/* Manually compare for all of the operators */
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
 		}
 		else if (NextCharacter = '+') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
 		}
 		else if (NextCharacter = '-') {
-			if (NextCharacterMatches(pState, '>')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
+			if (NextCharacterMatches(tState, '>')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
 		}
 		else if (NextCharacter = '~') {
-			if (NextCharacterMatches(pState, '>')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
+			if (NextCharacterMatches(tState, '>')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE)
 		}
 		else if (NextCharacter = '*') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
 		}
 		else if (NextCharacter = '/') {
-			if (NextCharacterMatches(pState, '*')) {
+			if (NextCharacterMatches(tState, '*')) {
 				loop {
-					NextCharacter := GetNextCharacter(pState)
+					NextCharacter := GetNextCharacter(tState)
 					
-					if (NextCharacter = '*' && PeekNextCharacter(pState) = '/') {
-						GetNextCharacter(pState)
+					if (NextCharacter = '*' && PeekNextCharacter(tState) = '/') {
+						GetNextCharacter(tState)
 						break
 					}
 					
-					if (TokenizerAtEnd(pState)) {
-						MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
-						TokenizerError(pState, "Expected closing comment character")
+					if (TokenizerAtEnd(tState)) {
+						MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
+						TokenizerError(tState, "Expected closing comment character")
 					}
 				}
 				
 				continue
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
 		}
 		else if (NextCharacter = '%') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PERCENT)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PERCENT)
 		}
 		else if (NextCharacter = '.') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
 		}
 		else if (NextCharacter = '<') {
-			if (NextCharacterMatches(pState, '<')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS_LESS)
+			if (NextCharacterMatches(tState, '<')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS_LESS)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
 		}
 		else if (NextCharacter = '>') {
-			if (NextCharacterMatches(pState, '>')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER_GREATER)
+			if (NextCharacterMatches(tState, '>')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER_GREATER)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
 		}
 		else if (NextCharacter = '^') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_XOR)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_XOR)
 		}
 		else if (NextCharacter = '&') {
-			if (NextCharacterMatches(pState, '&')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
+			if (NextCharacterMatches(tState, '&')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
 		}
 		else if (NextCharacter = '|') {
-			if (NextCharacterMatches(pState, '|')) {
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
+			if (NextCharacterMatches(tState, '|')) {
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
 			}
 			
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
 		}
 		else if (NextCharacter = '!') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
 		}
 		else if (NextCharacter = ':') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		}
 		else if (NextCharacter = '(') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 		}
 		else if (NextCharacter = ')') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
 		}
 		else if (NextCharacter = '{') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
 		}
 		else if (NextCharacter = '}') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
 		}
 		else if (NextCharacter = '[') {
 			/* [ Is an operator in order for Array->A.B[Something] to parse correctly */
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
 		}
 		else if (NextCharacter = ']') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
 		}
 		else if (NextCharacter = ',') {
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 		}
 		else if (NextCharacter = '"') {
 			NextCharacter := 0
 			
 			/* Consume all characters in the string */
 			
-			while ((NextCharacter != '"') && (!TokenizerAtEnd(pState))) {
-				NextCharacter := GetNextCharacter(pState)
+			while ((NextCharacter != '"') && (!TokenizerAtEnd(tState))) {
+				NextCharacter := GetNextCharacter(tState)
 			}
 			
-			if (TokenizerAtEnd(pState)) {
-				MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
-				TokenizerError(pState, "Expected close quote before EOF")
+			if (TokenizerAtEnd(tState)) {
+				MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
+				TokenizerError(tState, "Expected close quote before EOF")
 			}
 			
-			SafeWideString* FoundString := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
+			SafeWideString* FoundString := MakeSafeStringToken(tState, StartingIndex + 1) As SafeWideString*
 			FoundString->Length -= 1
 			
 			/* And return the string as a TOKEN_TYPE_STRING */
-			return MakeToken(pState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {
 			i8 NumberIsHex := false
 			
-			if (NextCharacterMatches(pState, 'x')) {
+			if (NextCharacterMatches(tState, 'x')) {
 				/* If NextCharacter = 0 and Next-NextCharacter = 'x' */
 				NumberIsHex := true
 				
-				NextCharacter := PeekNextCharacter(pState)
+				NextCharacter := PeekNextCharacter(tState)
 				
 				/* Gather all hex characters */
-				while (IsHex(NextCharacter) && (!TokenizerAtEnd(pState))) {
-					NextCharacter := GetNextCharacter(pState)
+				while (IsHex(NextCharacter) && (!TokenizerAtEnd(tState))) {
+					NextCharacter := GetNextCharacter(tState)
 				}
 			}
 			else {
 				/* Number is not hex, gather all decimal characters */
 				
-				while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
-					NextCharacter := GetNextCharacter(pState)
+				while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(tState))) {
+					NextCharacter := GetNextCharacter(tState)
 				}
 			}
 			
-			if !(TokenizerAtEnd(pState)) {
-				Backtrack(pState)
+			if !(TokenizerAtEnd(tState)) {
+				Backtrack(tState)
 			}
 			
 			/* Convert the number to string which we can then parse into a number */
-			SafeWideString* AsString := (MakeSafeStringToken(pState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
+			SafeWideString* AsString := (MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
 			i8 NumberWasConverted := 0
 			
 			/* Set up a result token */
-			Token* ResultToken := MakeToken(pState, StartingIndex, TOKEN_TYPE_INTEGER, 0)
+			Token* ResultToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, 0)
 			
 			/* Convert the hex/decimal number, and store the result in the token */
 			if (NumberIsHex) {
@@ -517,74 +519,75 @@ define Token* GetNextToken(TokenizerState* pState) {
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			if (NextCharacter = 'a') {
-				if (GetNextCharacter(pState) = 's' && IsWhiteSpace(PeekNextCharacter(pState))) {
-					return MakeToken(pState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
+				if (GetNextCharacter(tState) = 's' && IsWhiteSpace(PeekNextCharacter(tState))) {
+					return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
 				}
 				
-				Backtrack(pState)
+				Backtrack(tState)
 			}
 			
 			while (IsAlphaNumeric(NextCharacter)) {
-				if (TokenizerAtEnd(pState)) {
+				if (TokenizerAtEnd(tState)) {
 					break
 				}
 				
-				NextCharacter := GetNextCharacter(pState)
+				NextCharacter := GetNextCharacter(tState)
 			}
 			
-			if !(TokenizerAtEnd(pState)) {
-				Backtrack(pState)
+			if !(TokenizerAtEnd(tState)) {
+				Backtrack(tState)
 			}
 			
 			/* Gather all alphanumeric characters in a row */
 			
-			SafeWideString* TokenText := MakeSafeStringToken(pState, StartingIndex) As SafeWideString*
+			SafeWideString* TokenText := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 			
 			i8 TokenAsKeyword := LookupKeyword(TokenText)
 			
 			if (TokenAsKeyword != TOKEN_TYPE_NONE) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
 				FreeSafeString(TokenText)
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
 			}
 			else {
 				/* Otherwise, make an identifier token */
-				return MakeToken(pState, StartingIndex, TOKEN_TYPE_IDENTIFER, TokenText As void*)
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_IDENTIFER, TokenText As void*)
 			}
 		}
 		else if (NextCharacter = '#') {
-			NextCharacter := PeekNextCharacter(pState)
+			NextCharacter := PeekNextCharacter(tState)
 			
-			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(pState))) {
-				NextCharacter := GetNextCharacter(pState)
+			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(tState))) {
+				NextCharacter := GetNextCharacter(tState)
 			}
 
-			if !(TokenizerAtEnd(pState)) {
-				Backtrack(pState)
+			if !(TokenizerAtEnd(tState)) {
+				Backtrack(tState)
 			}
 			
-			SafeWideString* DirectiveText := MakeSafeStringToken(pState, StartingIndex + 1) As SafeWideString*
-			StartingIndex := pState->SourceIndex
+			SafeWideString* DirectiveText := MakeSafeStringToken(tState, StartingIndex + 1) As SafeWideString*
 			
 			if (SafeStringEqualsAString(DirectiveText, "include")) {
-				if !(IsWhiteSpace(GetNextCharacter(pState))) {
+				StartingIndex := tState->SourceIndex
+				
+				if !(IsWhiteSpace(GetNextCharacter(tState))) {
 					AWriteLine("Fuck off")
 					Exit(1)
 				}
 				
 				StartingIndex += 1
 				
-				NextCharacter := PeekNextCharacter(pState)
+				NextCharacter := PeekNextCharacter(tState)
 				
 				while (IsPath(NextCharacter)) {
-					NextCharacter := GetNextCharacter(pState)
+					NextCharacter := GetNextCharacter(tState)
 				}
 				
-				if !(TokenizerAtEnd(pState)) {
-					Backtrack(pState)
+				if !(TokenizerAtEnd(tState)) {
+					Backtrack(tState)
 				}
 				
-				SafeWideString* IncludePath := MakeSafeStringToken(pState, StartingIndex) As SafeWideString*
+				SafeWideString* IncludePath := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 				
 				AWrite("Including file: ")
 				PrintSafeString(IncludePath)
@@ -609,16 +612,21 @@ define Token* GetNextToken(TokenizerState* pState) {
 						break
 					}
 					
-					Token* IncludeToken := PushToken(pState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
+					Token* IncludeToken := PushToken(tState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
 					IncludeToken->SourceFilePath := NextIncludeToken->SourceFilePath
 					IncludeToken->LineNumber := NextIncludeToken->LineNumber
 				}
 				
 				AWriteLine("Done including file")
 				
-				pState->TokenIndex -= 1
+				tState->TokenIndex -= 1
 				
-				return GetNextToken(pState)
+				return GetNextToken(tState)
+			}
+			else {
+				tState->SourceIndex := StartingIndex + 1
+				
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_POUND)
 			}
 		}
 		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
@@ -626,13 +634,17 @@ define Token* GetNextToken(TokenizerState* pState) {
 			continue
 		}
 		else {
-			MakeToken(pState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-			TokenizerError(pState, "Unexpected character")
+			MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+			TokenizerError(tState, "Unexpected character")
 		}
 	}
 	
-	return MakeToken(pState, pState->SourceLength, TOKEN_TYPE_EOF, 0)
+	return MakeToken(tState, tState->SourceLength, TOKEN_TYPE_EOF, 0)
 }
+
+/* 
+	Token printing helpers
+*/
 
 define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	/* Converts PotentialKeyword into a KEYWORD_ constant */
@@ -730,7 +742,7 @@ define void PrintOperator(i8 Operator) {
 	i8 SecondCharacter := 0 */
 	
 	/* Note: this way is betterworse than the commented out version, since it depends on the operator numbers not changing, but improves code size by a lot */
-	i8* Operators := ":= += -= *= +  -  *  /  %  .  -> !  && || =  != <  <= >  >= &  |  :  As [  ^  ~> << >> ~  "
+	i8* Operators := ":= += -= *= +  -  *  /  %  .  -> !  && || =  != <  <= >  >= &  |  :  As [  ^  ~> << >> ~  #  "
 	
 	i8* ThisOperator := Operators + (Operator * 3)
 	
