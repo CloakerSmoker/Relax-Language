@@ -61,8 +61,12 @@ for i in range(0, recursion_count):
         #os.remove(compiler_output)
         sys.exit(1)
     
-    # muh one liner though
-    print(f'{Fore.LIGHTGREEN_EX}Output file iteration {i + 1} passed all tests, {SequenceMatcher(None, open(safe_compiler, "rb").read(), open(compiler_output, "rb").read()).real_quick_ratio() * 100:.2f}% similarity to previous file.')
+    safe_bytes = open(safe_compiler, "rb").read()
+    output_bytes = open(compiler_output, "rb").read()
+    diff_count = len(output_bytes) - len(safe_bytes)
+    diff = f'+{diff_count}' if diff_count >= 0 else str(diff_count)
+
+    print(f'{Fore.LIGHTGREEN_EX}Output file iteration {i + 1} passed all tests, {SequenceMatcher(None, safe_bytes, output_bytes).real_quick_ratio() * 100:.2f}% similarity to previous file, {diff} bytes')
     
     if i != 0:
         os.remove(safe_compiler)

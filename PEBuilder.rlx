@@ -432,7 +432,7 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 define PEBuilder* BuildBuilder() {
 	/* Allocates a PEBuilder and sets all of the headers, along with writing the section headers */
 	
-	PEBuilder* NewBuilder := Alloc(PEBuilder.Size) As PEBuilder*
+	PEBuilder* NewBuilder := Alloc(#PEBuilder) As PEBuilder*
 	
 	NewBuilder->Buffer := Alloc(MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE + (SECTION_HEADER_SIZE * 4))
 	
@@ -614,7 +614,7 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 	
 	/* Otherwise, we need to build a new RelocationHelper for this page */
 	
-	RelocationHelper* NewHelper := Alloc(RelocationHelper.Size) As RelocationHelper*
+	RelocationHelper* NewHelper := Alloc(#RelocationHelper) As RelocationHelper*
 	NewHelper->PageRVA := PageRVA
 	NewHelper->Entries := Alloc(2) As i16*
 	
@@ -632,7 +632,7 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
 	
-	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (RelocationBlockHeader.Size + 32)
+	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (#RelocationBlockHeader + 32)
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
 	
 	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
@@ -768,7 +768,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 		ToBuilder->ImportSourceNameRVAs := ReAlloc((ToBuilder->ImportSourceNameRVAs) as void*, NewSize) As i32*
 		(ToBuilder->ImportSourceNameRVAs)[NewIndex] := AddHintNameTableEntry(ToBuilder, DllName)
 		
-		ImportHelper* ThisDllHelper := Alloc(ImportHelper.Size) As ImportHelper*
+		ImportHelper* ThisDllHelper := Alloc(#ImportHelper) As ImportHelper*
 		
 		ToBuilder->ImportHelpers := ReAlloc((ToBuilder->ImportHelpers) As void*, NewSize) As ImportHelper**
 		(ToBuilder->ImportHelpers)[NewIndex] := ThisDllHelper
@@ -844,7 +844,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 	/* Holds the array of import sources */
 	
 	i32 ImportTableBase := ImportLookupBase + ImportLookupSize
-	i32 ImportTableSize := RoundTo(((TargetBuilder->ImportSourceCount) + 1) * ImportTableEntry.Size, 16)
+	i32 ImportTableSize := RoundTo(((TargetBuilder->ImportSourceCount) + 1) * #ImportTableEntry, 16)
 	
 	/* Holds the dll/function names */
 	
@@ -889,7 +889,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 		ImportHelper* NextHelper := (TargetBuilder->ImportHelpers)[Index]
 		
 		/* Then calculate where the entry should be written, and cast it to an ImportTableEntry */
-		ImportTableEntry* NextEntry := (ImportEntries + (Index * ImportTableEntry.Size)) As ImportTableEntry*
+		ImportTableEntry* NextEntry := (ImportEntries + (Index * #ImportTableEntry)) As ImportTableEntry*
 		
 		/* Update the entry with the name RVA/LookupTable RVA/ThunkTable RVA */
 		NextEntry->DllNameRVA := HintNameBase + NextEntryNameRVA

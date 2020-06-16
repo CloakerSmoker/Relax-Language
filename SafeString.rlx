@@ -4,7 +4,7 @@ struct SafeWideString {
 }
 
 define SafeWideString* AllocateNewSafeString() {
-	return Alloc(SafeWideString.Size) As SafeWideString*
+	return Alloc(#SafeWideString) As SafeWideString*
 }
 define void FreeSafeString(SafeWideString* StringToFree) {
 	Free(StringToFree As void*)

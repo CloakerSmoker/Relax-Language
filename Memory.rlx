@@ -45,17 +45,17 @@ struct ExpandArray {
 }
 
 define void* AllocArray(i16 ElementSize, i16 InitialCapacity) {
-	void* Buffer := Alloc((ExpandArray.Size) + (ElementSize * InitialCapacity))
+	void* Buffer := Alloc(#ExpandArray + (ElementSize * InitialCapacity))
 	ExpandArray* NewArray := Buffer
 	
 	NewArray->ElementSize := ElementSize
 	NewArray->Capacity := InitialCapacity
 	
-	return Buffer + (ExpandArray.Size)
+	return Buffer + #ExpandArray
 }
 
 define void* ReAllocArray(void* ArrayBuffer, i32 AdditionalCapacity) {
-	ExpandArray* Array := ArrayBuffer - (ExpandArray.Size)
+	ExpandArray* Array := ArrayBuffer - #ExpandArray
 	
 	i32 ElementSize := Array->ElementSize
 	i32 OldCapacity := Array->Capacity
@@ -63,15 +63,15 @@ define void* ReAllocArray(void* ArrayBuffer, i32 AdditionalCapacity) {
 	
 	Array->Capacity := NewCapacity
 	
-	i32 NewSize := (ExpandArray.Size) + (ElementSize * NewCapacity)
+	i32 NewSize := #ExpandArray + (ElementSize * NewCapacity)
 	
-	return ReAlloc(Array, NewSize) + (ExpandArray.Size)
+	return ReAlloc(Array, NewSize) + #ExpandArray
 }
 
 define i32 GetArrayLength(void* ArrayBuffer) {
-	return ((ArrayBuffer - 8) As ExpandArray*)->Capacity
+	return ((ArrayBuffer - #ExpandArray) As ExpandArray*)->Capacity
 }
 
 define void FreeArray(void* ArrayBuffer) {
-	Free(ArrayBuffer - (ExpandArray.Size))
+	Free(ArrayBuffer - #ExpandArray)
 }

@@ -15,7 +15,7 @@ define SimpleHeap* SimpleHeapInit() {
 		
 		SimpleHeap* Heap := ProgramBreak As SimpleHeap*
 		
-		Heap->Next := ProgramBreak + SimpleHeap.Size
+		Heap->Next := ProgramBreak + #SimpleHeap
 		Heap->End := ProgramBreak + DEFAULT_HEAP_SIZE
 		
 		return Heap
@@ -32,57 +32,49 @@ declare void IWrite(i64)
 declare void IWriteHex(i64)
 
 define void SimpleHeapGrow() {	
-	ProcessHeap->End := syscall(12, ProcessHeap->End + DEFAULT_HEAP_SIZE)
+	linux {
+		ProcessHeap->End := syscall(12, ProcessHeap->End + DEFAULT_HEAP_SIZE)
+	}
 }
 
 define void* SimpleHeapAlloc(i64 Size) {
-	void* Result := ProcessHeap->Next
-	void* ResultEnd := Result + Size
-	
-	while (ResultEnd >= (ProcessHeap->End - 0x10000)) {		
-		SimpleHeapGrow()
+	linux {
+		void* Result := ProcessHeap->Next
+		void* ResultEnd := Result + Size
+		
+		while (ResultEnd >= (ProcessHeap->End - 0x10000)) {		
+			SimpleHeapGrow()
+		}
+		
+		Result[0] := Size
+		ProcessHeap->Next += Size + 8
+		
+		return Result + 8
 	}
-	
-	Result[0] := Size
-	ProcessHeap->Next += Size + 8
-	
-	return Result + 8
 }
 
 define void SimpleHeapCopyClear(i8* From, i8* To, i64 Size) {
-/* 	AWrite("SHCC ")
-	IWriteHex(From)
-	AWrite(":")
-	IWriteHex(To)
-	AWrite("[")
-	IWrite(Size)
-	AWriteLine("]") */
-	
-	for (i64 Index := 0, Index < Size, Index += 1) {
-		To[Index] := From[Index]
-		/* Todo: Put this back in, once you figure out who's using ReAlloc'd memory
-		From[Index] := 'R' */
+	linux {
+		for (i64 Index := 0, Index < Size, Index += 1) {
+			To[Index] := From[Index]
+			/* Todo: Put this back in, once you figure out who's using ReAlloc'd memory
+			From[Index] := 'R' */
+		}
 	}
 }
 
 define void* SimpleHeapReAlloc(void* Memory, i64 NewSize) {
-	i64 OldSize := (Memory - 8)[0]
-	
-	if (OldSize > NewSize) {
-		return Memory
+	linux {
+		i64 OldSize := (Memory - 8)[0]
+		
+		if (OldSize > NewSize) {
+			return Memory
+		}
+		
+		void* NewMemory := SimpleHeapAlloc(NewSize)
+		
+		SimpleHeapCopyClear(Memory, NewMemory, OldSize)
+		
+		return NewMemory
 	}
-	
-	void* NewMemory := SimpleHeapAlloc(NewSize)
-	
-/* 	AWrite("SHRA ")
-	IWriteHex(Memory)
-	AWrite(":")
-	IWriteHex(NewMemory)
-	AWrite("[")
-	IWrite(NewSize)
-	AWriteLine("]") */
-	
-	SimpleHeapCopyClear(Memory, NewMemory, OldSize)
-	
-	return NewMemory
 }

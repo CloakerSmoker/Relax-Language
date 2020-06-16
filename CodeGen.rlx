@@ -45,7 +45,7 @@ define void UseLabel(CompilerState* cState, i32 LabelNumber) {
 	
 	EnsureLabelBufferCapacity(cState)
 	
-	Label* NewLabel := Alloc(Label.Size) As Label*
+	Label* NewLabel := Alloc(#Label) As Label*
 	
 	NewLabel->LabelNumber := LabelNumber
 	NewLabel->OffsetToReplace := cState->Index
@@ -62,7 +62,7 @@ define Label* SetLabel(CompilerState* cState, i32 LabelNumber) {
 	
 	EnsureLabelBufferCapacity(cState)
 	
-	Label* NewLabel := Alloc(Label.Size) As Label*
+	Label* NewLabel := Alloc(#Label) As Label*
 	
 	NewLabel->LabelNumber := LabelNumber
 	NewLabel->OffsetToReplace := cState->Index

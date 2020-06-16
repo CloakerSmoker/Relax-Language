@@ -128,9 +128,10 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 					if (IsMain) {
 						FoundMain := true
 						MainOffset := C.Index
+						NextFunction->CallCount += 1
 					}
 					
-					if (IsMain || NextFunction->CallCount != 0) {
+					if (NextFunction->CallCount != 0) {
 						CompileFunction(&C, NextFunction, IsMain)
 					}
 				}
@@ -147,7 +148,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 				}
 				
 				/* Update the current element to be the next element in the linked list */
-				FoundElement := (FoundElement->NextElement) As HashMapElement*
+				FoundElement := FoundElement->NextElement
 			}
 		}
 	}
@@ -393,6 +394,11 @@ declare void CompileBlock(CompilerState*, Block*)
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
+	if (FunctionToCompile->Body->StatementCount = 0) {
+		EmitReturn(cState)
+		return 0
+	}
+	
 	cState->RegisterStackIndex := 0
 	
 	/* Store the current return type so return can cast values to it */
@@ -564,14 +570,32 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	/* Compile the body of the function */
-	CompileBlock(cState, FunctionToCompile->Body)
 	
-	SetLabel(cState, ReturnLabel)
+	Block* Body := FunctionToCompile->Body
+	i32 BodyCount := Body->StatementCount
+	ASTNode* ReturnExpression := 0
 	
-/* 	EmitPop_R64(cState, R15)
-	EmitPop_R64(cState, R14)
-	EmitPop_R64(cState, R13)
-	EmitPop_R64(cState, RBX) */
+	if (BodyCount >= 1) {
+		/* If the last statement of the function body is a return, then don't emit a Leave;Ret combo for it */
+		
+		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
+		
+/* 		WriteNewLine()
+		IWrite(LastStatement->NodeType)
+		WriteNewLine() */
+		
+		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
+			ReturnExpression := LastStatement->ReturnExpression
+			Body->StatementCount -= 1
+		}
+	
+	}
+	
+	CompileBlock(cState, Body)
+	
+	if (ReturnExpression) {
+		CompileExpression(cState, RAX, ReturnExpression)
+	}
 	
 	EmitLeave(cState)
 	
@@ -641,19 +665,17 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
 		CompileExpression(cState, RAX, NodeToCompile->ExpressionStatement)
 	}
-	else if (NodeType = NODE_TYPE_BLOCK) {
-		CompileBlock(cState, NodeToCompile->BlockBody)
-	}
 }
 
 define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
-	/* Compiles a return statement */
-	
 	/* Compile the expression to return */
+	
 	CompileExpression(cState, RAX, ReturnExpression)
 	
 	i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
 	i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunctionReturnType)
+	
+	/* And cast it up to (at least) 4 bytes, to ensure no garbage is left in RAX */
 	
 	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
 		Cast(cState, RAX, ReturnValueSize)
@@ -661,10 +683,6 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	
 	EmitLeave(cState)
 	EmitReturn(cState)
-	
-	/* Todo: Fix this generating Leave;Ret twice when `return X` is the last thing in a function */
-	
-	/* EmitJump_Label(cState, cState->CurrentFunctionReturnLabel) */
 }
 
 define i8 IsComparison(Token* OperatorToken) {
@@ -709,7 +727,7 @@ define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression
 		else if (Operator = OPERATOR_GREATER_EQAUL) {
 			EmitJLT_Label(cState, JumpToLabel)
 		}
-		else if (Operator = OPERATOR_LOGICAL_AND || OPERATOR_LOGICAL_OR) {
+		else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
 			EmitJEZ_Label(cState, JumpToLabel)
 		}
 	}

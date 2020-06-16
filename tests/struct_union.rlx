@@ -15,7 +15,7 @@ struct Test {
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
-	Test* T := Alloc(Test.Size)
+	Test* T := Alloc(#Test)
 	
 	T->LL := AToI(ArgV[1])
 	

@@ -32,7 +32,7 @@ declare void PrintPunctuation(i8)
 declare void PrintKeyword(i8)
 
 define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
-	TokenizerState* NewState := Alloc(TokenizerState.Size) As TokenizerState*
+	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
 	
 	NewState->SourceFilePath := SourceFilePath
 	NewState->Source := Source
@@ -59,7 +59,7 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 	
 	i32 Index := tState->MaxTokenIndex
 	
-	Token* OutputToken := Alloc(Token.Size) As Token*
+	Token* OutputToken := Alloc(#Token) As Token*
 	
 	/* Insert the token into the token list */
 	(tState->Tokens)[Index] := OutputToken

@@ -10,7 +10,7 @@ struct HashMap {
 }
 
 define HashMap* NewHashMap() {
-	HashMap* NewMap := Alloc(HashMap.Size) As HashMap*
+	HashMap* NewMap := Alloc(#HashMap) As HashMap*
 	
 	NewMap->BufferMaxCount := 100
 	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
@@ -100,7 +100,7 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 		
 		/* AWriteLine("which does not exist") */
 		
-		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement := Alloc(#HashMapElement) As HashMapElement*
 		NewElement->NextElement := 0
 		
 		TargetMap->Elements[Index] := NewElement
@@ -113,7 +113,7 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 		
 		/* AWriteLine("which does contain the key") */
 		
-		NewElement := Alloc(HashMapElement.Size) As HashMapElement*
+		NewElement := Alloc(#HashMapElement) As HashMapElement*
 		NewElement->NextElement := TailElement->NextElement
 	
 		TailElement->NextElement := NewElement

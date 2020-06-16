@@ -75,8 +75,6 @@ i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a lite
 i8 NODE_TYPE_STRUCT_ACCESS := 19
 i8 NODE_TYPE_IDENTIFIER := 20
 
-i8 NODE_TYPE_BLOCK := 21
-
 /*
 ==========================================
 	True AST node types
@@ -215,7 +213,6 @@ struct ASTNode {
 		ForLoop* ForNode,
 		WhileLoop* WhileNode,
 		Block* LoopBody,
-		Block* BlockBody,
 		i8 IsContinue,
 		
 		FunctionDefine* DefineNode,
@@ -239,7 +236,7 @@ struct ASTNode {
 }
 
 define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
-	ASTNode* NewNode := Alloc(ASTNode.Size) As ASTNode*
+	ASTNode* NewNode := Alloc(#ASTNode) As ASTNode*
 	
 	BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
 	StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
@@ -379,7 +376,7 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
 	
 	/* Should only be called once per type name */
-	TypeInfo* NewType := Alloc(TypeInfo.Size) As TypeInfo*
+	TypeInfo* NewType := Alloc(#TypeInfo) As TypeInfo*
 	
 	NewType->Name := Name
 	NewType->StructTypeFields := Fields
@@ -588,7 +585,7 @@ define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	if (BadNode->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		AWrite(BadNode->SourceFilePath->Buffer)
+		PrintSafeString(BadNode->SourceFilePath)
 		TextColor(Red | Green)
 		WriteNewLine()
 	}
@@ -623,7 +620,7 @@ struct VariableInfo {
 }
 
 define VariableInfo* AllocateNewVariableInfo() {
-	return Alloc(VariableInfo.Size) As VariableInfo*
+	return Alloc(#VariableInfo) As VariableInfo*
 }
 define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
 	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
@@ -781,7 +778,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 				StructField* TargetField := (FoundStructField->Value) As StructField*
 				
 				/* Build a StructAccessExpression node */
-				StructAccessExpression* NewAccess := Alloc(StructAccessExpression.Size) As StructAccessExpression*
+				StructAccessExpression* NewAccess := Alloc(#StructAccessExpression) As StructAccessExpression*
 				
 				/* Populate the StructAccessExpression node */
 				NewAccess->Left := Left
@@ -812,7 +809,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		if (LeftDepth != 0 && LeftBaseType->IsStructType && RightDepth && RightSize = 8) {
 			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
 			
-			/* This allows for stuff like `MyStruct* Test := Alloc(MyStruct.Size)` without ugly casting */
+			/* This allows for stuff like `MyStruct* Test := Alloc(#MyStruct)` without ugly casting */
 			
 			ResultType := LeftType
 		}
@@ -877,7 +874,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	/* Allocate a result node */
 	
-	BinaryExpression* Result := Alloc(BinaryExpression.Size) As BinaryExpression*
+	BinaryExpression* Result := Alloc(#BinaryExpression) As BinaryExpression*
 	
 	/* Populate the node */
 	
@@ -905,7 +902,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
 	/* Builds a NODE_TYPE_UNARY for the given operand/operator combo */
 	
-	UnaryExpression* Result := Alloc(UnaryExpression.Size) As UnaryExpression*
+	UnaryExpression* Result := Alloc(#UnaryExpression) As UnaryExpression*
 	
 	/* Get the  */
 	Type ResultType := Operand->ValueType
@@ -943,7 +940,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	
 	SafeWideString* Name := NameToken->StringValue
 	
-	CallExpression* Result := Alloc(CallExpression.Size) As CallExpression*
+	CallExpression* Result := Alloc(#CallExpression) As CallExpression*
 	Result->Parameters := Parameters
 	Result->ParameterCount := ParameterCount
 	
@@ -1085,7 +1082,7 @@ declare void ParseProgram(ParserState*)
 define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
 	/* Initializes pState and uses tState to parse a program */
 	
-	ParserState* P := Alloc(ParserState.Size) As ParserState*
+	ParserState* P := Alloc(#ParserState) As ParserState*
 	P->tState := tState
 	
 	P->Globals := NewHashMap()
@@ -1338,7 +1335,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 	
 	loop {
 		/* Allocate a StructField for the next field */
-		StructField* NextField := Alloc(StructField.Size) As StructField*
+		StructField* NextField := Alloc(#StructField) As StructField*
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNION) && !InUnion) {
 			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
@@ -1460,7 +1457,7 @@ define void ParseAndAddBits(ParserState* pState) {
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
 	
 	loop {
-		StructField* NextField := Alloc(StructField.Size) As StructField*
+		StructField* NextField := Alloc(#StructField) As StructField*
 		
 		Token* OpenBracket := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
 		
@@ -1557,7 +1554,7 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 		NewDefine := FoundFunction
 	}
 	else {
-		NewDefine := Alloc(FunctionDefine.Size) As FunctionDefine*
+		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
 		
 		HashMapAddValue(pState->Functions, Name, NewDefine As void)
 		
@@ -1577,6 +1574,29 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 
 declare ASTNode* ParseStatement(ParserState*)
 
+define void ConsumeAndIgnoreBlock(ParserState* pState) {
+	/* Used for linux/windows statements */
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+	
+	i32 Depth := 1
+	
+	loop {
+		Token* Next := ParserNextToken(pState)
+		
+		if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			Depth -= 1
+		}
+		else if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			Depth += 1
+		}
+		
+		if (Depth = 0) {
+			break
+		}
+	}
+}
+
 define Block* ParseBlock(ParserState* pState) {
 	/* Parses and builds a block of statements */
 	
@@ -1587,6 +1607,8 @@ define Block* ParseBlock(ParserState* pState) {
 	i16 StatementBufferSize := 8
 	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
 	i16 StatementCount := 0
+	
+	i32 Depth := 1
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {		
 		loop {
@@ -1600,21 +1622,59 @@ define Block* ParseBlock(ParserState* pState) {
 			}
 			
 			/* Parse a statement and put it into the statement list */
-			Statements[StatementCount] := ParseStatement(pState)
-			StatementCount += 1
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-				/* If the next token is a '}', then break */
-				break
+			i32 Start := FreezeParser(pState)
+			
+			Token* NextToken := ParserNextToken(pState)
+			
+			if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
+				if (pState->OutputELF) {
+					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+					Depth += 1
+				}
+				else {
+					ConsumeAndIgnoreBlock(pState)
+				}
 			}
-			else if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
+			else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
+				if !(pState->OutputELF) {
+					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+					Depth += 1
+				}
+				else {
+					ConsumeAndIgnoreBlock(pState)
+				}
+			}
+			else {
+				UnfreezeParser(pState, Start)
+				Statements[StatementCount] := ParseStatement(pState)
+				StatementCount += 1
+			}
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
 				Error(OpenBrace, "Expected close brace for block")
+			}
+			
+			i8 BreakOuter := false
+			
+			while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				Depth -= 1
+				
+				BreakOuter := Depth = 0
+				
+				if (BreakOuter) {
+					break
+				}
+			}
+			
+			if (BreakOuter) {
+				break
 			}
 		}
 	}
 	
 	/* Allocate a block structure and populate it with the statement list/count */
-	Block* NewBlock := Alloc(Block.Size) As Block*
+	Block* NewBlock := Alloc(#Block) As Block*
 	NewBlock->Statements := Statements
 	NewBlock->StatementCount := StatementCount
 	
@@ -1627,7 +1687,7 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 	Token* OpenParen := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
 	i8 ParameterCount := 0
-	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
+	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		loop {
@@ -1697,7 +1757,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	
 	/* Set up a buffer for parameters */
 	i8 ParameterCount := 0
-	VariableInfo** ParameterList := Alloc(VariableInfo.Size * 16) As VariableInfo**
+	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
@@ -1761,29 +1821,6 @@ declare ASTNode* ParseIf(ParserState*)
 declare ASTNode* ParseFor(ParserState*)
 declare ASTNode* ParseWhile(ParserState*)
 
-define void ConsumeAndIgnoreBlock(ParserState* pState) {
-	/* Used for linux/windows statements */
-	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
-	
-	i32 Depth := 1
-	
-	loop {
-		Token* Next := ParserNextToken(pState)
-		
-		if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-			Depth -= 1
-		}
-		else if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-			Depth += 1
-		}
-		
-		if (Depth = 0) {
-			break
-		}
-	}
-}
-
 define ASTNode* ParseStatement(ParserState* pState) {
 	/* Parses a single statement */
 	
@@ -1807,7 +1844,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				ASTError(Result, "Continue/Break must be inside loops")
 			}
 		}
-		else if (NextKeyword = KEYWORD_WINDOWS) {
+/* 		else if (NextKeyword = KEYWORD_WINDOWS) {
 			if !(pState->OutputELF) {
 				Result := AllocateNewASTNode(NODE_TYPE_BLOCK, ParseBlock(pState), TYPE_NONE)
 			}
@@ -1824,7 +1861,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				ConsumeAndIgnoreBlock(pState)
 				Result := AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
 			}
-		}
+		} */
 		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
 			
@@ -1949,10 +1986,10 @@ define ASTNode* ParseStatement(ParserState* pState) {
 }
 
 define ASTNode* ParseIf(ParserState* pState) {
-	IfGroup* NewIf := Alloc(IfGroup.Size) As IfGroup*
+	IfGroup* NewIf := Alloc(#IfGroup) As IfGroup*
 	
-	NewIf->Conditions := Alloc(8 * 10) As ASTNode**
-	NewIf->Bodies := Alloc(8 * 10) As Block**
+	NewIf->Conditions := Alloc(10 * #ASTNode*) As ASTNode**
+	NewIf->Bodies := Alloc(10 * #Block*) As Block**
 	i32 BranchCapacity := 10
 	i32 BranchIndex := 0
 	
@@ -2019,7 +2056,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 	
 	UnfreezeParser(pState, InitializerStart)
 	
-	ForLoop* NewLoop := Alloc(ForLoop.Size) As ForLoop*
+	ForLoop* NewLoop := Alloc(#ForLoop) As ForLoop*
 	
 	NewLoop->Initializer := ParseExpression(pState, 0)
 	
@@ -2042,7 +2079,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 }
 
 define ASTNode* ParseWhile(ParserState* pState) {
-	WhileLoop* NewWhile := Alloc(WhileLoop.Size) As WhileLoop*
+	WhileLoop* NewWhile := Alloc(#WhileLoop) As WhileLoop*
 	
 	NewWhile->Condition := ParseExpression(pState, 0)
 	
@@ -2158,31 +2195,9 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex)
 		}
 		else {
-			/* Else, this isn't a function call, but might be still be StructType.Size */
+			/* Else, this isn't a function call, and is just a normal variable */
 			
-			i32 FrozenAfterIdentifier := FreezeParser(pState)
-			
-			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
-				SafeWideString* LeftText := (NextToken->Value) As SafeWideString*
-				
-				i8* ErrorMessage := 0
-				Type LeftType := TryGetType(pState, LeftText, 0, &ErrorMessage)
-				
-				if (LeftType != 0 && (!ErrorMessage)) {
-					SafeWideString* KeyName := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Dummy message", &ErrorMessage)->Value
-					
-					if (KeyName != 0 && (!ErrorMessage)) {
-						if (SafeStringEqualsAString(KeyName, "Size")) {
-							Result := AllocateNewASTNode(NODE_TYPE_INTEGER, GetTypeSize(LeftType), MakeType(pState->i16, 0))
-						}
-					}
-				}
-			}
-			
-			if !(Result) {
-				UnfreezeParser(pState, FrozenAfterIdentifier)
-				Result := TranslateTokenToNode(pState, NextToken, false)
-			}
+			Result := TranslateTokenToNode(pState, NextToken, false)
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_STRING) {

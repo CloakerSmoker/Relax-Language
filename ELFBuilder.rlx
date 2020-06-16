@@ -118,8 +118,8 @@ define void WriteELFHeader(void* IntoBuffer) {
 	NewHeader->MachineType := ELF_MACHINE_AMD64
 	NewHeader->ELFVersion := 1 /* Use original version of ELF */
 	NewHeader->HeaderSize := 64 /* 64 bytes of headers */
-	NewHeader->ProgramHeadersSize := ELFProgramHeader.Size
-	NewHeader->SectionHeadersSize := ELFSectionHeader.Size
+	NewHeader->ProgramHeadersSize := #ELFProgramHeader
+	NewHeader->SectionHeadersSize := #ELFSectionHeader
 	NewHeader->SectionNameHeaderIndex := 1
 }
 
@@ -130,7 +130,7 @@ define ELFProgramHeader* AppendProgramHeader(ELFBuilder* ToBuilder) {
 	Header->ProgramHeaderEntryCount += 1
 	ToBuilder->ProgramHeaders := ReAlloc(ToBuilder->ProgramHeaders, (NextIndex + 1) * 8)
 	
-	ELFProgramHeader* Result := Alloc(ELFProgramHeader.Size)
+	ELFProgramHeader* Result := Alloc(#ELFProgramHeader)
 	
 	ToBuilder->ProgramHeaders[NextIndex] := Result
 	
@@ -143,7 +143,7 @@ define ELFSectionHeader* AppendSectionHeader(ELFBuilder* ToBuilder) {
 	Header->SectionHeaderEntryCount += 1
 	ToBuilder->SectionHeaders := ReAlloc(ToBuilder->SectionHeaders, (NextIndex + 1) * 8)
 	
-	ELFSectionHeader* Result := Alloc(ELFSectionHeader.Size)
+	ELFSectionHeader* Result := Alloc(#ELFSectionHeader)
 	
 	ToBuilder->SectionHeaders[NextIndex] := Result
 	
@@ -212,7 +212,7 @@ define void AddDataSection(ELFBuilder* ToBuilder, i32 ReserveBytes) {
 }
 
 define void* AllocateELFBuffer() {
-	return Alloc(ELFHeader.Size)
+	return Alloc(#ELFHeader)
 }
 define void ReAllocELFBuffer(ELFBuilder* ForBuilder, i32 NewSize) {
 	ForBuilder->Buffer := ReAlloc(ForBuilder->Buffer, NewSize)
@@ -222,9 +222,9 @@ define void ReAllocELFBuffer(ELFBuilder* ForBuilder, i32 NewSize) {
 }
 
 define ELFBuilder* BuildELFBuilder() {
-	ELFBuilder* NewBuilder := Alloc(ELFBuilder.Size)
+	ELFBuilder* NewBuilder := Alloc(#ELFBuilder)
 	NewBuilder->Buffer := AllocateELFBuffer()
-	NewBuilder->BufferSize := ELFHeader.Size
+	NewBuilder->BufferSize := #ELFHeader
 	
 	NewBuilder->ProgramHeaders := Alloc(8)
 	NewBuilder->SectionHeaders := Alloc(8)
@@ -268,8 +268,8 @@ define ELFBuilder* BuildELFBuilder() {
 }
 
 define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
-	i32 ProgramHeadersSize := TargetBuilder->ELF->ProgramHeaderEntryCount * ELFProgramHeader.Size
-	i32 SectionHeadersSize := TargetBuilder->ELF->SectionHeaderEntryCount * ELFSectionHeader.Size
+	i32 ProgramHeadersSize := TargetBuilder->ELF->ProgramHeaderEntryCount * #ELFProgramHeader
+	i32 SectionHeadersSize := TargetBuilder->ELF->SectionHeaderEntryCount * #ELFSectionHeader
 	i32 CodeSize := TargetBuilder->CodeProgramHeader->FileSize
 	i32 StringSectionSize := TargetBuilder->StringSection->FileSize
 	i32 DataSize := 0
@@ -279,15 +279,15 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	}
 	
 	i64 PHDRSize := ProgramHeadersSize + SectionHeadersSize
-	i64 FinalSize := ELFHeader.Size + PHDRSize + StringSectionSize + CodeSize + DataSize
+	i64 FinalSize := #ELFHeader + PHDRSize + StringSectionSize + CodeSize + DataSize
 	
 	/* Update the PHDR segment to contain the headers we are writing */
 	TargetBuilder->PHDR->FileSize := PHDRSize
 	TargetBuilder->PHDR->MemorySize := PHDRSize
 	
 	/* These fields are reused to hold the ProgramHeaders/SectionHeaders buffer sizes, but need to be set to their true values */
-	TargetBuilder->ELF->ProgramHeadersSize := ELFProgramHeader.Size
-	TargetBuilder->ELF->SectionHeadersSize := ELFSectionHeader.Size
+	TargetBuilder->ELF->ProgramHeadersSize := #ELFProgramHeader
+	TargetBuilder->ELF->SectionHeadersSize := #ELFSectionHeader
 	
 	/* Update the segment which contains the program headers */
 	TargetBuilder->LoadPHDR->FileSize := PHDRSize
@@ -348,15 +348,15 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	for (i32 Index := 0, Index < ProgramHeaderCount, Index += 1) {
 		i8* NextProgramHeader := TargetBuilder->ProgramHeaders[Index] As i8*
 		
-		for (i32 NestedIndex := 0, NestedIndex < ELFProgramHeader.Size, NestedIndex += 1) {
-			ByteBuffer[ProgramHeadersOffset + NestedIndex + (Index * ELFProgramHeader.Size)] := NextProgramHeader[NestedIndex]
+		for (i32 NestedIndex := 0, NestedIndex < #ELFProgramHeader, NestedIndex += 1) {
+			ByteBuffer[ProgramHeadersOffset + NestedIndex + (Index * #ELFProgramHeader)] := NextProgramHeader[NestedIndex]
 		}
 	}
 	for (Index := 0, Index < SectionHeaderCount, Index += 1) {
 		i8* NextSectionHeader := TargetBuilder->SectionHeaders[Index] As i8*
 		
-		for (NestedIndex := 0, NestedIndex < ELFSectionHeader.Size, NestedIndex += 1) {
-			ByteBuffer[SectionHeadersOffset + NestedIndex + (Index * ELFSectionHeader.Size)] := NextSectionHeader[NestedIndex]
+		for (NestedIndex := 0, NestedIndex < #ELFSectionHeader, NestedIndex += 1) {
+			ByteBuffer[SectionHeadersOffset + NestedIndex + (Index * #ELFSectionHeader)] := NextSectionHeader[NestedIndex]
 		}	
 	}
 	for (Index := 0, Index < StringSectionSize, Index += 1) {
