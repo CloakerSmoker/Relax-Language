@@ -18,9 +18,12 @@ init(autoreset=True)
 cwd = os.getcwd()
 path_join = os.path.join
 
+bin_dir = path_join(cwd, 'build')
+tools_dir = path_join(cwd, 'tools')
+
 running_on = platform.system()
 
-compile_command_format = '{} -i "{}" -o "{}"'
+compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}"'
 platform_extension = 'exe'
 
 if running_on == 'Linux':
@@ -35,11 +38,11 @@ recursion_count = 3
 if len(sys.argv) == 2:
     recursion_count = int(sys.argv[1])
 
-safe_compiler = path_join(cwd, f'stable_version.{platform_extension}')
+safe_compiler = path_join(bin_dir, f'relax_compiler.{platform_extension}')
 
 for i in range(0, recursion_count):
-    compiler_output = path_join(cwd, f'testing{i}.{platform_extension}')
-    compile_command = compile_command_format.format(safe_compiler, 'Bain.rlx', compiler_output)
+    compiler_output = path_join(bin_dir, f'testing{i}.{platform_extension}')
+    compile_command = compile_command_format.format(safe_compiler, compiler_output)
     #f'{safe_compiler} -i Bain.rlx -o testing{i}.exe'
 
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
@@ -50,7 +53,7 @@ for i in range(0, recursion_count):
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
-    test_script = path_join(cwd, 'test_compiler.py')
+    test_script = path_join(tools_dir, 'test_compiler.py')
     test_command = f'python {test_script} {compiler_output}'
 
     test_result = subprocess.run(test_command, cwd=cwd, shell=True, capture_output=True)
@@ -74,4 +77,4 @@ for i in range(0, recursion_count):
     safe_compiler = compiler_output
 
 print(f'{Fore.LIGHTGREEN_EX}Output file(s) passed all tests.')
-move(compiler_output, f'new_stable.{platform_extension}')
+move(compiler_output, path_join(bin_dir, f'new_relax_compiler.{platform_extension}'))

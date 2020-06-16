@@ -7,9 +7,14 @@ For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
 ## A quick peek at some code
 
 ```
-#Include Memory.rlx
-#Include String.rlx
-#Include Console.rlx
+/* Paths are relative to the root directory of the repo, compiler should be ran with:
+		./relax_compiler.exe -i path/to/this_file.rlx -o path/to/binary.exe
+	to ensure the working dir is correct.
+*/
+
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
 
 /* 
 	A simple calculator, which works when compiled for both Windows and Linux.

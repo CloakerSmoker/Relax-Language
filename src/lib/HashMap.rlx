@@ -1,0 +1,135 @@
+struct HashMapElement {
+	i64 Hash,
+	void Value,
+	HashMapElement* NextElement
+}
+
+struct HashMap {
+	i32 BufferMaxCount,
+	void *Elements
+}
+
+define HashMap* NewHashMap() {
+	HashMap* NewMap := Alloc(#HashMap) As HashMap*
+	
+	NewMap->BufferMaxCount := 100
+	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
+	
+	return NewMap
+}
+define i64 HashString(SafeWideString* StringToHash) {
+	i64 Hash := 5281
+	
+/*  	AWrite("Hash(")
+	IWrite(StringToHash->Buffer)
+	AWrite(", ")
+	IWrite(StringToHash->Length)
+	AWrite(", ")
+	PrintSafeString(StringToHash)
+	AWrite(") == ") */
+	
+	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
+		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
+	}
+	
+/* 	IWriteLine(Hash) */
+	
+	return Hash
+}
+define i64 HashMapGetIndex(i64 Hash, i32 Length) {
+	i64 Index := Hash % Length
+	
+	if (Index < 0) {
+		Index := -Index
+	}
+	
+	return 0
+}
+
+
+define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
+	/* 
+		Finds the last element in the linked list for Hash, and returns it
+		OR returns 0 when there is no element with Hash yet
+	*/
+	
+	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
+	
+	HashMapElement* Node := (TargetMap->Elements)[Index]
+	HashMapElement* NoNode := false As HashMapElement*
+	
+	if !(Node) {
+		return NoNode
+	}
+
+	while (Node->Hash != Hash) {
+		if !(Node->NextElement) {
+			return Node
+		}
+		
+		Node := Node->NextElement
+	}
+	
+	return Node
+}
+define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) {
+	i64 Hash := HashString(Key)
+	
+	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
+	
+	if (Result != 0) {
+		if (Result->Hash = Hash) {
+			return Result
+		}
+	}
+	
+	return false As HashMapElement*
+}
+define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
+	i64 Hash := HashString(Key)
+	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
+	
+	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
+	HashMapElement* NewElement := 0
+	
+	if (TailElement = 0) {
+		/* If TailElement = 0 then:
+			No linked list exists for this index
+			Create one, and insert the head into the element list
+		*/
+		
+		/* AWriteLine("which does not exist") */
+		
+		NewElement := Alloc(#HashMapElement) As HashMapElement*
+		NewElement->NextElement := 0
+		
+		TargetMap->Elements[Index] := NewElement
+	}
+	else if (TailElement->Hash != Hash) {
+		/* else if TailElement->Hash != Hash:
+			Linked list exists, but doesn't contain the key yet
+			Create new element, and insert it into to the list
+		*/
+		
+		/* AWriteLine("which does contain the key") */
+		
+		NewElement := Alloc(#HashMapElement) As HashMapElement*
+		NewElement->NextElement := TailElement->NextElement
+	
+		TailElement->NextElement := NewElement
+	}
+	else {
+		/* Else, the tail node exists, and the hash matches
+			Aka this key already has an element
+			So just overwrite the values in it
+		*/
+		
+		/* AWriteLine("which already contains the key") */
+		
+		NewElement := TailElement
+		/* TailElement->NextElement := 0 */
+	}
+	
+	NewElement->Hash := Hash
+	NewElement->Value := Value
+}

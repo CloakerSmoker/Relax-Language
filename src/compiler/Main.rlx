@@ -10,21 +10,21 @@ define void Exit(i32 ExitCode) {
 	}
 }
 
-#Include Memory.rlx
-#Include File.rlx
+#Include .\src\lib\Memory.rlx
+#Include .\src\lib\File.rlx
 
-#Include String.rlx
-#Include Console.rlx
-#Include SafeString.rlx
-#Include HashMap.rlx
+#Include .\src\lib\String.rlx
+#Include .\src\lib\Console.rlx
+#Include .\src\lib\SafeString.rlx
+#Include .\src\lib\HashMap.rlx
 
 declare i16* OpenAndRead(i8*, i32*)
 
-#Include Lexer.rlx
-#Include Parser.rlx
-#Include PEBuilder.rlx
-#Include ELFBuilder.rlx
-#Include Compiler.rlx
+#Include .\src\compiler\Lexer.rlx
+#Include .\src\compiler\Parser.rlx
+#Include .\src\compiler\PEBuilder.rlx
+#Include .\src\compiler\ELFBuilder.rlx
+#Include .\src\compiler\Compiler.rlx
 
 define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	i64 FileHandle := FileOpen(FilePath, FILE_READ)

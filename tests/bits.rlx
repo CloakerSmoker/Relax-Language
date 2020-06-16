@@ -1,6 +1,6 @@
-#Include Memory.rlx
-#Include String.rlx
-#Include Console.rlx
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
 
 bits Example As i32 {
 	[0:10] test,

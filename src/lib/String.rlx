@@ -1,0 +1,292 @@
+define i16* AToW(i8* AString, i32 Length) {
+	/* Converts an ASCII string to a wide string */
+	
+	i16* NewBuffer := Alloc((Length * 2) + 2)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		NewBuffer[Index] := AString[Index]
+	}
+	
+	return NewBuffer
+}
+
+/* generics when? */
+define i32 ALen(i8* AString) {
+	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+define i32 WLen(i16* WString) {
+	for (i32 Length := 0, WString[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+
+define i8* HeapString(i8* StringToCopy) {
+	i32 Length := ALen(StringToCopy)
+	i8* Buffer := Alloc(Length)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		Buffer[Index] := StringToCopy[Index]
+	}
+	
+	return Buffer
+}
+
+define i16 Lower(i16 Character) {
+	/* Gets a character as lowercase */
+	
+	if ('A' <= Character && Character <= 'Z') {
+		Character += 32
+	}
+	
+	return Character
+}
+
+define i8 CharacterEqualsNoCase(i16 CharacterOne, i16 CharacterTwo) {
+	/* Checks if two characters are equal, ignoring case */
+	return Lower(CharacterOne) = Lower(CharacterTwo)
+}
+
+define i8 IsAlpha(i16 Character) {
+	/* Checks if a character is alpha */
+	
+	if ('a' <= Character && Character <= 'z') {
+		return 1
+	}
+	else if ('A' <= Character && Character <= 'Z') {
+		return 1
+	}
+
+	return 0
+}
+define i8 IsNumeric(i16 Character) {
+	/* Checks if a character is a number of not */
+	return (Character >= '0') && (Character <= '9')
+}
+
+define i8 IsAlphaNumeric(i16 Character) {
+	/* Checks if a character is alphanumeric(/can be part of an identifier) */
+	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
+}
+
+define i8 IsPath(i16 Character) {
+	if (IsAlphaNumeric(Character)) {
+		return true
+	}
+	else if (Character = '/' || Character = '\') {
+		return true
+	}
+	else if (Character = '.') {
+		return true
+	}
+	
+	return false
+}
+
+define i8 _IsHex(i16 Character) {
+	/* Checks if a character is a hex character (a-fA-F) */
+	
+	if ((Character >= 'a') && (Character <= 'f')) {
+		return true
+	}
+	else if ((Character >= 'A') && (Character <= 'F')) {
+		return true
+	}
+	
+	return false
+}
+define i8 IsHex(i16 Character) {
+	/* Checks if a character is numeric or hex */
+	return IsNumeric(Character) || _IsHex(Character)
+}
+
+define i8 IsWhiteSpace(i16 Character) {
+	if (Character = ' ' || Character = '	') {
+		/* space+tab */
+		return true
+	}
+	else if (Character = 10 || Character = 13) {
+		/* linefeeds */
+		return true
+	}
+
+	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
+}
+
+define void AReverse(i8* Buffer) {
+	i32 Length := ALen(Buffer)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Temp := Buffer[Index]
+		Buffer[Index] := Buffer[Length - 1]
+		Buffer[Length - 1] := Temp
+		
+		Length -= 1
+	}
+}
+
+define i8* IToA(i64 Number) {
+	i8* Buffer := Alloc(100) As i8*
+	i8 Sign := 0
+	
+	if (Number = 0) {
+		Buffer[0] := '0'
+		return Buffer
+	}
+	
+	if (Number < 0) {
+		Sign := true
+		Number := -Number
+	}
+	
+	for (i32 Index := 0, Number > 0, Index += 1) {
+		Buffer[Index] := (Number % 10) + '0'
+		Number := Number / 10
+	}
+	
+	if (Sign) {
+		Buffer[Index] := '-'
+	}
+	
+	Buffer[Index + 1] := 0
+	
+	AReverse(Buffer)
+	
+	return Buffer
+}
+
+define i8 NumberToHex(i8 Number) {
+	if (Number <= 9) {
+		Number := Number + '0'
+	}
+	else {
+		Number := (Number - 10) + 'A'
+	}
+	
+	return Number
+}
+
+define i8* IToAH(i64 Number) {
+	i8* Buffer := Alloc(100) As i8*
+	
+	if (Number = 0) {
+		Buffer[0] := '0'
+		return Buffer
+	}
+	
+	if ((Number >> 32) As i32 = 0xFFFFFFFF) {
+		/* If a number is looking like a negative i32, print it as a positive i32
+			Todo: Function overloading, so this isn't needed
+		*/
+		
+		Number := Number & 0xFFFFFFFF
+	}
+	
+	if (Number < 0) {
+		Number := -Number
+	}
+	
+	for (i32 Index := 0, Number > 0, Index += 1) {
+		Buffer[Index] := NumberToHex(Number % 0x10)
+		Number := Number / 0x10
+	}
+	
+	Buffer[Index + 0] := 'x'
+	Buffer[Index + 1] := '0'
+	Buffer[Index + 2] := 0
+	
+	AReverse(Buffer)
+	
+	return Buffer
+}
+
+define i16* IToW(i64 Number) {
+	i8* AString := IToA(Number)
+	i16* WString := AToW(AString, ALen(AString))
+	
+	Free(AString As void*)
+	
+	return WString
+}
+define i16* IToWH(i64 Number) {
+	i8* AString := IToAH(Number)
+	i16* WString := AToW(AString, ALen(AString))
+	
+	Free(AString As void*)
+	
+	return WString
+}
+
+define i64 WToI(i16* WString) {
+	i64 Result := 0
+	i64 Negative := 0
+	
+	i16 FirstCharacter := WString[0]
+	
+	if (FirstCharacter = '-') {
+		Negative := 1
+		WString += 2
+		FirstCharacter := WString[0]
+	}
+	
+	if !(IsNumeric(FirstCharacter)) {
+		return 0
+	}
+	
+	i32 Length := WLen(WString)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i16 NextCharacter := WString[Index]
+		
+		if !(IsNumeric(NextCharacter)) {
+			Break
+		}
+		
+		Result := (Result * 10) + (NextCharacter - '0')
+	}
+	
+	if (Negative) {
+		Result := -Result
+	}
+	
+	return Result
+}
+define i64 AToI(i8* AString) {
+	i16* WString := AToW(AString, ALen(AString))
+	
+	i64 Result := WToI(WString)
+	
+	Free(WString)
+	
+	return Result	
+}
+
+define i8* WToA(i16* WString) {
+	i32 Length := WLen(WString)
+	i8* Buffer := Alloc(Length + 1)
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		Buffer[Index] := WString[Index]
+	}
+	
+	return Buffer
+}
+
+define i8 StringEquals(i8* Left, i8* Right) {
+	i32 Index := 0
+	
+	loop {
+		i8 LeftCharacter := Left[Index]
+		i8 RightCharacter := Right[Index]
+		
+		if (LeftCharacter = 0 && RightCharacter = 0) {
+			return true
+		}
+		else if (LeftCharacter != RightCharacter || LeftCharacter = 0 || RightCharacter = 0) {
+			return false
+		}
+		
+		Index += 1
+	}
+}

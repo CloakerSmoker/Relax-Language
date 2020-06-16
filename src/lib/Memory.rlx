@@ -1,0 +1,77 @@
+DllImport i64 _GetProcessHeap() {Kernel32.dll, GetProcessHeap}
+DllImport void* HeapAlloc(i64, i32, i64) {Kernel32.dll, HeapAlloc}
+DllImport void* HeapReAlloc(i64, i32, void*, i64) {Kernel32.dll, HeapReAlloc}
+DllImport i8 HeapFree(i64, i32, void*) {Kernel32.dll, HeapFree}
+
+define i64 GetProcessHeap() {
+	windows {
+		return _GetProcessHeap()
+	}
+}
+
+i64 hProcessHeap := GetProcessHeap()
+i32 HEAP_ZERO_MEMORY := 0x00000008
+i32 HEAP_REALLOC_IN_PLACE_ONLY := 0x00000010
+
+#Include ./src/lib/SimpleHeap.rlx
+
+define void* Alloc(i64 Size) {
+	windows {
+		return HeapAlloc(hProcessHeap, HEAP_ZERO_MEMORY, Size)
+	}
+	linux {
+		return SimpleHeapAlloc(Size)
+	}
+}
+
+define void* ReAlloc(void* Memory, i64 NewSize) {
+	windows {
+		return HeapReAlloc(hProcessHeap, HEAP_ZERO_MEMORY, Memory, NewSize)
+	}
+	linux {
+		return SimpleHeapReAlloc(Memory, NewSize)
+	}
+}
+
+define i8 Free(void* Memory) {
+	windows {
+		return HeapFree(hProcessHeap, 0, Memory)
+	}
+}
+
+struct ExpandArray {
+	i32 ElementSize,
+	i32 Capacity	
+}
+
+define void* AllocArray(i16 ElementSize, i16 InitialCapacity) {
+	void* Buffer := Alloc(#ExpandArray + (ElementSize * InitialCapacity))
+	ExpandArray* NewArray := Buffer
+	
+	NewArray->ElementSize := ElementSize
+	NewArray->Capacity := InitialCapacity
+	
+	return Buffer + #ExpandArray
+}
+
+define void* ReAllocArray(void* ArrayBuffer, i32 AdditionalCapacity) {
+	ExpandArray* Array := ArrayBuffer - #ExpandArray
+	
+	i32 ElementSize := Array->ElementSize
+	i32 OldCapacity := Array->Capacity
+	i32 NewCapacity := OldCapacity + AdditionalCapacity
+	
+	Array->Capacity := NewCapacity
+	
+	i32 NewSize := #ExpandArray + (ElementSize * NewCapacity)
+	
+	return ReAlloc(Array, NewSize) + #ExpandArray
+}
+
+define i32 GetArrayLength(void* ArrayBuffer) {
+	return ((ArrayBuffer - #ExpandArray) As ExpandArray*)->Capacity
+}
+
+define void FreeArray(void* ArrayBuffer) {
+	Free(ArrayBuffer - #ExpandArray)
+}

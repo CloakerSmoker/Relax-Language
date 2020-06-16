@@ -1,7 +1,7 @@
-#Include Memory.rlx
-#Include String.rlx
-#Include Console.rlx
-#Include File.rlx
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
+#Include ./src/lib/File.rlx
 
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)

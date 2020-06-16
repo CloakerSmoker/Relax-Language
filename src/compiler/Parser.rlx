@@ -1,0 +1,2654 @@
+/*
+==========================================
+	Typing helper structs (Defined first since ASTNode has a Type field)
+==========================================
+*/
+
+struct TypeInfo {
+	SafeWideString* Name,
+	HashMap* StructTypeFields,
+	i16 Size,
+	i8 IsStructType,
+	i8 IsIncomplete,
+	i8 IsBits
+}
+
+bits Type As i64 {
+	[0:47] BaseType,
+	[48:63] PointerDepth
+}
+
+define TypeInfo* GetBaseType(Type T) {
+	return T.BaseType As TypeInfo*
+}
+define i16 GetTypeSize(Type T) {
+	if (T.PointerDepth) {
+		return 8
+	}
+	else {
+		return GetBaseType(T)->Size
+	}
+}
+define i32 GetPointerDepth(Type T) {
+	return T.PointerDepth As i32
+}
+
+struct StructField {
+	SafeWideString* Name,
+	i16 Offset,
+	Type ValueType,
+	i8 BitStartIndex,
+	i8 BitEndIndex
+}
+
+/*
+==========================================
+	AST Node type constants
+==========================================
+*/
+
+i8 NODE_TYPE_NONE := 0
+i8 NODE_TYPE_TOKEN := 1
+
+i8 NODE_TYPE_UNARY := 2
+i8 NODE_TYPE_BINARY := 3
+i8 NODE_TYPE_CALL := 4
+
+i8 NODE_TYPE_DEFINE := 6
+i8 NODE_TYPE_DLLIMPORT := 7
+
+i8 NODE_TYPE_IF := 8
+
+i8 NODE_TYPE_FOR := 9
+i8 NODE_TYPE_WHILE := 10
+i8 NODE_TYPE_LOOP := 11
+i8 NODE_TYPE_CONTINUEBREAK := 12
+
+i8 NODE_TYPE_RETURN := 13
+i8 NODE_TYPE_EXPRESSION := 14
+
+i8 NODE_TYPE_VARIABLE := 15
+i8 NODE_TYPE_INTEGER := 16
+i8 NODE_TYPE_STRING := 17
+
+i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
+i8 NODE_TYPE_STRUCT_ACCESS := 19
+i8 NODE_TYPE_IDENTIFIER := 20
+
+/*
+==========================================
+	True AST node types
+==========================================
+*/
+
+struct UnaryExpression {
+	Token* Operator,
+	ASTNode* Operand
+}
+
+struct BinaryExpression {
+	ASTNode* Left,
+	Token* Operator,
+	ASTNode* Right
+}
+
+struct StructAccessExpression {
+	ASTNode* Left,
+	Token* Operator,
+	StructField* TargetField
+}
+
+struct Block {
+	ASTNode** Statements,
+	i16 StatementCount
+}
+
+struct IfGroup {
+	ASTNode** Conditions,
+	Block** Bodies,
+	Block* ElseBranch,
+	i16 BranchCount
+}
+
+struct ForLoop {
+	ASTNode* Initializer,
+	ASTNode* Condition,
+	ASTNode* Step,
+	Block* Body
+}
+
+struct WhileLoop {
+	ASTNode* Condition,
+	Block* Body
+}
+
+struct FunctionDefine {
+	SafeWideString* Name,
+	
+	i16 ParameterCount,
+	VariableInfo** Parameters,
+	
+	HashMap* Locals,
+	Type ReturnType,
+	
+	i8 IsImported,
+	
+	union {
+		Block* Body,
+		SafeWideString* ImportFileName
+	},
+	union {
+		i8* StringBuffer,
+		SafeWideString* ImportFunctionName
+	},
+	
+	i16 LocalOffset,
+	i8 HasFullDefinition,
+	i32 LabelNumber,
+	i32 StringBufferSize,
+	
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	
+	i32 CallCount
+}
+
+struct CallExpression {
+	FunctionDefine* TargetFunction,
+	ASTNode** Parameters,
+	i32 ParameterCount,
+	i8 IsSysCall
+}
+
+bits ReturnStatement As i64 {
+	[0:47] ReturnExpression,
+	[48] IsLastInBlock
+}
+
+struct ParserState {
+	TokenizerState* tState,
+	
+	HashMap* Functions,
+	
+	i64 GlobalOffset,
+	HashMap* Globals,
+	ASTNode** GlobalDefaults,
+	
+	HashMap* Types,
+	
+	/* Builtin types, actually added to the type list in CreateDefaultTypes */
+	
+	TypeInfo* i8,
+	TypeInfo* i16,
+	TypeInfo* i32,
+	TypeInfo* i64,
+	TypeInfo* void,
+	
+	FunctionDefine* CurrentFunction,
+	
+	i16 FunctionCount,
+	i16 GlobalCount,
+	i16 TypeCount,
+	
+	i8 InLoop,
+	i8 OutputELF
+}
+
+/*
+==========================================
+	AST Node definition + alloc/free helpers
+==========================================
+*/
+
+struct ASTNode {
+	union {
+		void* TrueNode,
+		
+		UnaryExpression* UnaryNode,
+		BinaryExpression* BinaryNode,
+		CallExpression* CallNode,
+		StructAccessExpression* AccessNode,
+		
+		IfGroup* IfNode,
+		ForLoop* ForNode,
+		WhileLoop* WhileNode,
+		Block* LoopBody,
+		i8 IsContinue,
+		
+		FunctionDefine* DefineNode,
+		
+		ASTNode* ReturnExpression,
+		
+		ASTNode* ExpressionStatement,
+		
+		SafeWideString* StringValue,
+		VariableInfo* VariableValue,
+		i64 IntegerValue,
+		Type TypeValue,
+		i32 StringOffsetValue
+	},
+	
+	Type ValueType,
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	i8 NodeType,
+	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
+}
+
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
+	ASTNode* NewNode := Alloc(#ASTNode) As ASTNode*
+	
+	BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
+	StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
+	
+	i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
+	
+	i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
+	
+	if (IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
+		NewNode->IsStorageValue := true
+	}
+	
+	NewNode->NodeType := NewNodeType
+	NewNode->TrueNode := NewNodeTrueNode
+	NewNode->ValueType := NewNodeValueType
+	
+	return NewNode
+}
+define void FreeASTNode(ASTNode* NodeToFree) {
+	Free(NodeToFree As void*)
+}
+
+
+/*
+==========================================
+	Expression parser constant lookup functions
+==========================================
+*/
+
+i8 NONE_ASSOCIATIVE := 0
+i8 LEFT_ASSOCIATIVE := 1
+i8 RIGHT_ASSOCIATIVE := 2
+
+define i8 GetPrecedence(Token* ForOperator) {
+	/* Gets the precedence for a given operator */
+	
+	i8 Operator := (ForOperator->Value) As i8
+	
+	if (Operator = OPERATOR_COLON_EQUAL || Operator = OPERATOR_STAR_EQUAL) {
+		return 1
+	}
+	else if (Operator = OPERATOR_PLUS_EQUAL || Operator = OPERATOR_MINUS_EQUAL) {
+		return 1
+	}
+	else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+		return 2
+	}
+	else if (Operator = OPERATOR_BANG_EQUAL || Operator = OPERATOR_EQUAL) {
+		return 3
+	}
+	else if (Operator = OPERATOR_GREATER_EQAUL || Operator = OPERATOR_LESS_EQAUL) {
+		return 3
+	}
+	else if (Operator = OPERATOR_GREATER || Operator = OPERATOR_LESS) {
+		return 3
+	}
+	else if (Operator = OPERATOR_AS) {
+		return 5
+	}
+	else if (Operator = OPERATOR_PLUS || Operator = OPERATOR_MINUS) {
+		return 7
+	}
+	else if (Operator = OPERATOR_STAR || Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
+		return 8
+	}
+	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+		return 8
+	}
+	else if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
+		return 9
+	}
+	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		return 11
+	}
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
+		return 12
+	}
+}
+
+define i8 GetAssociation(Token* ForOperator) {
+	/* Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE depending on the operator passed */
+	
+	i8 Precedence := GetPrecedence(ForOperator)
+	
+	if (Precedence = 1 || Precedence = 3) {
+		return RIGHT_ASSOCIATIVE
+	}
+	else {
+		return LEFT_ASSOCIATIVE
+	}
+}
+
+define i8 GetPrefixPrecedence(Token* ForOperator) {
+	/* Returns the precedence of an operator when it is used as a prefix operator */
+	
+	i8 Operator := (ForOperator->Value) As i8
+	
+	if (Operator = OPERATOR_STAR) {
+		return 4
+	}
+	else if (Operator = OPERATOR_AND) {
+		return 4
+	}
+	else if (Operator = OPERATOR_BANG) {
+		return 10
+	}
+	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
+		return 10
+	}
+	else if (Operator = OPERATOR_POUND) {
+		return 13
+	}
+	
+	return 0 /* Returns 0 when the operator is not a prefix operator */
+}
+
+define i8 IsPrefixOperator(Token* ForOperator) {
+	/* Used to determine if an operator can be a prefix operator in the parser */
+	
+	return GetPrefixPrecedence(ForOperator) != 0
+}
+
+/*
+==========================================
+	Typing functions
+==========================================
+*/
+
+Type TYPE_NONE := 0
+
+i8 TYPE_REGULAR := 0
+i8 TYPE_STRUCT := 1
+i8 TYPE_INCOMPLETE := 2
+i8 TYPE_BITS := 4
+
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
+	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
+	
+	/* Should only be called once per type name */
+	TypeInfo* NewType := Alloc(#TypeInfo) As TypeInfo*
+	
+	NewType->Name := Name
+	NewType->StructTypeFields := Fields
+	NewType->Size := Size
+
+	if (Flags & TYPE_STRUCT) {
+		NewType->IsStructType := True
+	}
+	
+	if (Flags & TYPE_INCOMPLETE) {
+		NewType->IsIncomplete := True
+	}
+	
+	if (Flags & TYPE_BITS) {
+		NewType->IsBits := True
+	}
+	
+	/* AWrite("Adding ")
+	PrintSafeString(Name)
+	AWrite(" at ")
+	IWriteLine(NewType As i64) */
+	
+	HashMapAddValue(pState->Types, Name, NewType As void)
+	
+	return NewType
+}
+
+define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
+	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
+	
+	Type NewType := 0
+	
+	NewType.BaseType := BackingType
+	NewType.PointerDepth := PointerDepth
+
+	return NewType
+}
+
+define void CreateDefaultTypes(ParserState* pState) {
+	/* Creates all the standard types, only called once */
+	
+	/* All standard types are not structs, and are not incomplete */
+	pState->i8 := AddType(pState, AToS("i8"), 0, 1, TYPE_REGULAR)
+	pState->i16 := AddType(pState, AToS("i16"), 0, 2, TYPE_REGULAR)
+	pState->i32 := AddType(pState, AToS("i32"), 0, 4, TYPE_REGULAR)
+	pState->i64 := AddType(pState, AToS("i64"), 0, 8, TYPE_REGULAR)
+	pState->void := AddType(pState, AToS("void"), 0, 8, TYPE_REGULAR)
+}
+
+define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
+	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
+	
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
+	TypeInfo* FoundTypeInfo := 0
+
+	if (FoundElement) {
+		/* We found the type with the given name, so we can now set FoundTypeInfo */
+		FoundTypeInfo := (FoundElement->Value) As TypeInfo*
+	}
+	else {
+		/*
+			If we did not find a typeinfo, then this type has to be an undefined user type, which is defined somewhere else
+			So, we will call AddType and add it as incomplete
+		*/
+		
+		if (PointerDepth = 0) {
+			ErrorMessage[0] := HeapString("Incomplete types can only be used with pointers")
+			return 0 As Type
+		}
+		else {
+			/* We didn't find a type with the name, build an incomplete type for it */
+			FoundTypeInfo := AddType(pState, TypeName, 0, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+		}
+	}
+	
+	return MakeType(FoundTypeInfo, PointerDepth)
+}
+
+define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
+	i8* ErrorMessage := 0
+	
+	Type Result := TryGetType(pState, TypeName, PointerDepth, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->tState, ErrorMessage)
+	}
+	
+	return Result
+}
+
+define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement) {
+	/* Returns the type you would get from dereferencing TypeToDecrement */
+	
+	if (TypeToDecrement.PointerDepth = 0) {
+		/* If you're dereferencing a non-pointer type, something's wrong */
+		TokenizerError(pState->tState, "Pointer type expected")
+	}
+	
+	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1)
+}
+define Type IncrementPointerType(ParserState* pState, Type TypeToIncrement) {
+	/* Returns a type which is a pointer to the passed type */
+	
+	return MakeType(TypeToIncrement.BaseType, (TypeToIncrement.PointerDepth) + 1)
+}
+
+define void PrintType(Type TypeToPrint) {
+	/* Prints a type, including its pointer depth */
+	
+	PrintSafeString(GetBaseType(TypeToPrint)->Name)
+	
+	i16 Depth := GetPointerDepth(TypeToPrint)
+	
+	for (i32 Index := 0, Index < Depth, Index += 1) {
+		WriteCharacter('*')
+	}
+}
+
+define i8 GetNumberSize(i64 NumberToCheck) {
+	/* Returns the minimum number of bytes needed to store NumberToCheck */
+	
+	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		return 8
+	}
+	else if (NumberToCheck & 0x7FFF8000) {
+		return 4
+	}
+	else if (NumberToCheck & 0x7F80) {
+		return 2
+	}
+	else {
+		return 1
+	}
+}
+
+define Type GetNumberType(ParserState* pState, i64 NumberToCheck) {
+	/* Returns a type for the given number (smallest type that can store the number signed) */
+	
+	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		/* If any of the upper 33 bits are set, then it's an i64 */
+		
+		return MakeType(pState->i64, 0)
+	}
+	else {
+		/* Smallest type for a number is i32 for the sake of sanity (10 * 300 = 300, not 44) */
+		
+		return MakeType(pState->i32, 0)
+	}
+}
+
+/*
+==========================================
+	Error message printing functions
+==========================================
+*/
+
+declare void PrintAST(ASTNode*)
+
+define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
+	SwapOutputStream()
+	TextColor(Red)
+	AWriteLine(ErrorMessage)
+	
+	if (BadNode->SourceFilePath != 0) {
+		AWrite("In: ")
+		TextColor(White)
+		
+		/* Note: This *should* call PrintSafeString, but source file paths are i8* stored in a SafeWideString* here 
+			Todo: Fix this ????????
+			Somehow, it's fixed. This comment will stay for when it breaks again
+		*/
+		AWrite(BadNode->SourceFilePath->Buffer)
+		TextColor(Red)
+		WriteNewLine()
+	}
+	
+	if (BadNode->LineNumber != 0) {
+		AWrite("On Line: ")
+		TextColor(White)
+		IWriteLine(BadNode->LineNumber)
+		TextColor(Red)
+	}
+	
+	AWrite("At: ")
+	ResetColors()
+	
+	PrintAST(BadNode)
+	
+	WriteNewLine()
+	
+	Exit(1)
+}
+
+declare ASTNode* TranslateTokenToNode(ParserState*, Token*, i8)
+
+define void ASTErrorFromToken(ParserState* pState, Token* FromToken, i8* ErrorMessage) {
+	ASTNode* FakeNode := TranslateTokenToNode(pState, FromToken, true)
+
+	ASTError(FakeNode, ErrorMessage)
+}
+
+define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
+	TextColor(Red | Green)
+	AWriteLine(WarnMessage)
+	
+	if (BadNode->SourceFilePath != 0) {
+		AWrite("In: ")
+		TextColor(White)
+		PrintSafeString(BadNode->SourceFilePath)
+		TextColor(Red | Green)
+		WriteNewLine()
+	}
+	
+	if (BadNode->LineNumber != 0) {
+		AWrite("On Line: ")
+		TextColor(White)
+		IWriteLine(BadNode->LineNumber)
+		TextColor(Red | Green)
+	}
+	
+	AWrite("At: ")
+	TextColor(White)
+	
+	PrintAST(BadNode)
+	
+	WriteNewLine()
+}
+
+/*
+==========================================
+	Variable struct + alloc helper + hashmap helpers
+==========================================
+*/
+
+struct VariableInfo {
+	SafeWideString* Name,
+	Type Type,
+	i32 StackOffset,
+	i8 IsGlobal,
+	i8 IsParameter
+}
+
+define VariableInfo* AllocateNewVariableInfo() {
+	return Alloc(#VariableInfo) As VariableInfo*
+}
+define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
+	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
+}
+define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
+	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
+	
+	if (Result) {
+		return (Result->Value) As VariableInfo*
+	}
+	
+	return 0 As VariableInfo*
+}
+
+/*
+==========================================
+	AST Node construction helpers
+==========================================
+*/
+
+define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, i8** ErrorMessage) {
+	/* Decides the result of a binary expression with the given operand types */
+	
+	TypeInfo* LeftBaseType := GetBaseType(LeftType)
+	TypeInfo* RightBaseType := GetBaseType(RightType)
+	
+	i16 LeftDepth := LeftType.PointerDepth
+	i16 RightDepth := RightType.PointerDepth
+	
+	if (LeftDepth && RightDepth) {
+		/* If we are dealing with two pointer types, something's wrong */
+		
+		ErrorMessage := HeapString("Operations involving two pointers are disallowed.")
+	}
+	else if (LeftDepth) {
+		/* Eles if the left side is a pointer */
+		
+		if (RightBaseType->IsStructType) {
+			/* And the right type is a.. struct? Then something's real funky */
+			
+			ErrorMessage := HeapString("Invalid operation types1.")
+		}
+		
+		/* Otherwise, right type is a normal type, so return the pointer type */
+		return LeftType
+	}
+	else if (RightDepth) {
+		/* Same as above, just in the opposite direction */
+		
+		if (LeftBaseType->IsStructType) {
+			ErrorMessage := HeapString("Invalid operation types2.")
+		}
+		
+		return RightType
+	}
+	else {
+		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
+			/* If both types are structs, then something even more funky is going on */
+			ErrorMessage := HeapString("Invalid operation types3.")
+		}
+		
+		/* Otherwise, two normal types, just pick the bigger of the two */
+		if (LeftBaseType->Size >= RightBaseType->Size) {
+			return LeftType
+		}
+		else {
+			return RightType
+		}
+	}
+}
+
+define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType) {
+	i8* ErrorMessage := 0
+	
+	Type Result := TryGetBinaryResultType(pState, LeftType, RightType, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		TokenizerError(pState->tState, ErrorMessage)
+	}
+	
+	return Result
+}
+
+define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
+	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_STRUCT_ACCESS */
+	
+	i8 Operator := (OperatorToken->Value) As i8
+	Type ResultType := 0
+	
+	Type LeftType := Left->ValueType
+	Type RightType := Right->ValueType
+	
+	TypeInfo* LeftBaseType := GetBaseType(LeftType)
+	TypeInfo* RightBaseType := GetBaseType(RightType)
+	i16 LeftDepth := GetPointerDepth(LeftType)
+	i16 RightDepth := GetPointerDepth(RightType)
+	i16 LeftSize := GetTypeSize(LeftType)
+	i16 RightSize := GetTypeSize(RightType)
+	
+	/* Warnings/Errors are defered until the ASTNode result is built, so ASTError/ASTWarn can be used */
+	i8* WarningText := 0
+	i8* ErrorMessage := 0
+	
+	if (Operator = OPERATOR_AS) {
+		/* OPERATOR_AS does nothing, just switches the result type of the expression */
+		
+		if (Right->NodeType != NODE_TYPE_TYPE) {
+			ErrorMessage := "Right side operand of 'as' must be a type name"
+		}
+		
+		ResultType := RightType
+	}
+	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+		if (RightBaseType->IsStructType || RightDepth != 0) {
+			ErrorMessage := "Right side operand of '<<'/'>>' must be an integer."
+		}
+		else if (LeftDepth = 0 && LeftBaseType->IsStructType) {
+			ErrorMessage := "Left side operator of '<<'/'>>' must not be a local struct."
+		}
+		else if (RightSize != 1) {
+			if !(Right->NodeType = NODE_TYPE_INTEGER && GetNumberSize(Right->IntegerValue) = 1) {
+				ErrorMessage := "Right side operand of '<<'/'>>' must be 8 bits."
+			}
+		}
+		
+		ResultType := LeftType
+	}
+	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
+		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
+		
+		if !(LeftBaseType->IsStructType || (LeftBaseType->IsBits && Operator = OPERATOR_DOT)) {
+			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
+			ErrorMessage := "Left side operand of '.' and '->'/'~>' must be of a struct/struct pointer type"
+		}
+		else if (LeftBaseType->IsIncomplete) {
+			/* Ensure the left type is not incomplete (otherwise we don't know what the result type would be) */
+			ErrorMessage := "Fields of incomplete structs cannot be accessed."
+		}
+		else if (Right->NodeType != NODE_TYPE_IDENTIFIER) {
+			/* If the right operand isn't an identifier(/NODE_TYPE_VARIABLE) then it is not what we need */
+			ErrorMessage := "Right side operand of of '.' and '->'/'~>' must be an identifiers"
+		}
+		else if (LeftDepth != 0 && Operator = OPERATOR_DOT) {
+			ErrorMessage := "Struct pointer fields can only be accessed with the '->'/'~>' operators."
+		}
+		else {
+			/* Get the right side text */
+			SafeWideString* RightText := Right->StringValue
+			
+			/* And look up the struct field with that name */
+			HashMapElement* FoundStructField := HashMapGetValue(LeftBaseType->StructTypeFields, RightText)
+			
+			if (FoundStructField) {
+				/* Convert the HashMapElement* into a StructField* */
+				StructField* TargetField := (FoundStructField->Value) As StructField*
+				
+				/* Build a StructAccessExpression node */
+				StructAccessExpression* NewAccess := Alloc(#StructAccessExpression) As StructAccessExpression*
+				
+				/* Populate the StructAccessExpression node */
+				NewAccess->Left := Left
+				NewAccess->Operator := OperatorToken
+				NewAccess->TargetField := TargetField
+				
+				ResultType := TargetField->ValueType
+				
+				if (Operator = OPERATOR_TILDE_GREATER) {
+					ResultType := IncrementPointerType(pState, ResultType)
+				}
+				
+				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
+				return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, ResultType)
+			}
+			else {
+				/* If we didn't find a field with that name, then error out */
+				
+				ErrorMessage := "Unknown struct field"
+			}
+		}
+	}
+	else if (Operator = OPERATOR_COLON_EQUAL) {
+		/* If this is an assignment do some extra type checking */
+		
+		i8 LeftNodeType := Left->NodeType
+		
+		if (LeftDepth != 0 && LeftBaseType->IsStructType && RightDepth && RightSize = 8) {
+			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
+			
+			/* This allows for stuff like `MyStruct* Test := Alloc(#MyStruct)` without ugly casting */
+			
+			ResultType := LeftType
+		}
+		else if (LeftDepth = 0 && LeftBaseType->IsStructType) {
+			/* Else if the left is a literal struct type, error out */
+			
+			ErrorMessage := "Local structs cannot be assigned"
+		}
+		else if (LeftSize < RightSize) {
+			/* Warn of the right side being truncated to fit the left */
+			
+			if !(Right->NodeType = NODE_TYPE_INTEGER && (LeftSize >= GetNumberSize(Right->TrueNode))) {
+				/* If the right operand is a number, and the actual size of the number is less than the variable size, don't show this warning */
+				
+				WarningText := "Right side operand of ':=' is bigger than left, right side will be truncated"
+			}
+			
+			ResultType := LeftType
+		}
+		else if !(Left->IsStorageValue) {
+			ErrorMessage := "Left side of ':=' must be a storage value"
+		}
+		else {
+			/* Otherwise, the result type is the right type */
+			ResultType := LeftType
+		}
+	}
+	else if (Operator = OPERATOR_OPEN_BRACKET) {
+		/* For an array access, make sure the index type isn't a pointer/struct */
+		
+		if (RightDepth != 0 || RightBaseType->IsStructType) {
+			ErrorMessage := "Right side operand of '[' must not be a pointer or struct."
+		}
+		else {
+			/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
+			
+			ResultType := DecrementPointerType(pState, LeftType)
+		}
+	}
+	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
+		ResultType := MakeType(pState->i8, 0)
+	}
+	else {
+		/* Otherwise, just follow standard binary typing rules */
+		
+		ResultType := GetBinaryResultType(pState, LeftType, RightType)
+		
+		if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+			/* For && and ||, GetBinaryResultType is only called for the error messages, and the actual result type is a byte */
+			ResultType := MakeType(pState->i8, 0)
+		}
+	}
+	
+	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
+	
+	if (Left->NodeType = NODE_TYPE_INTEGER) {
+		Left->ValueType := ResultType
+	}
+	if (Right->NodeType = NODE_TYPE_INTEGER) {
+		Right->ValueType := ResultType
+	}
+	
+	/* Allocate a result node */
+	
+	BinaryExpression* Result := Alloc(#BinaryExpression) As BinaryExpression*
+	
+	/* Populate the node */
+	
+	Result->Left := Left
+	Result->Operator := OperatorToken
+	Result->Right := Right
+	
+	/* Wrap it, and return it */
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
+	ResultNode->SourceFilePath := OperatorToken->SourceFilePath
+	ResultNode->LineNumber := OperatorToken->LineNumber
+	
+	if (WarningText) {
+		/* But show a warning (if we have one) */
+		ASTWarn(ResultNode, WarningText)
+	}
+	
+	if (ErrorMessage) {
+		/* Or show an error (if we have one) */
+		ASTError(ResultNode, ErrorMessage)
+	}
+	
+	return ResultNode
+}
+define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
+	/* Builds a NODE_TYPE_UNARY for the given operand/operator combo */
+	
+	UnaryExpression* Result := Alloc(#UnaryExpression) As UnaryExpression*
+	
+	/* Get the  */
+	Type ResultType := Operand->ValueType
+	i8 Operator := (OperatorToken->Value) As i8
+	
+	Result->Operator := OperatorToken
+	Result->Operand := Operand
+	
+	if (Operator = OPERATOR_BANG) {
+		ResultType := MakeType(pState->i8, 0)
+	}
+	else if (Operator = OPERATOR_AND) {
+		/* if (Operand->Type = NODE_TYPE_IDENTIFIER) {
+			
+		} */
+		
+		if !(Operand->IsStorageValue) {
+			ASTError(Operand, "Operand of the '&' operator must be a storage value.")
+		}
+		
+		ResultType := IncrementPointerType(pState, ResultType)
+	}
+	else if (Operator = OPERATOR_STAR) {
+		ResultType := DecrementPointerType(pState, ResultType)
+	}
+	
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
+	ResultNode->SourceFilePath := OperatorToken->SourceFilePath
+	ResultNode->LineNumber := OperatorToken->LineNumber
+	
+	return ResultNode
+}
+define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
+	
+	SafeWideString* Name := NameToken->StringValue
+	
+	CallExpression* Result := Alloc(#CallExpression) As CallExpression*
+	Result->Parameters := Parameters
+	Result->ParameterCount := ParameterCount
+	
+	/* Wrap the CallExpression with a NODE_TYPE_CALL for any errors */
+	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, TYPE_NONE)
+	ResultNode->SourceFilePath := NameToken->SourceFilePath
+	ResultNode->LineNumber := NameToken->LineNumber
+	
+	/* Find the function which is being called. */
+	if (SafeStringEqualsAString(NameToken->Value, "syscall")) {
+		Result->IsSysCall := true
+		ResultNode->ValueType := MakeType(pState->i64, 0)
+	}
+	else {
+		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+		
+		if !(FoundFunction) {
+			/* And if the function was not found, then error out */
+			
+			Error(NameToken, "Function definition not found.")
+		}
+		
+		/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
+		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+		
+		FoundDefine->CallCount += 1
+		
+		Result->TargetFunction := FoundDefine
+		ResultNode->ValueType := FoundDefine->ReturnType
+		
+		/* And verify the parameter counts match */
+		if (FoundDefine->ParameterCount != ParameterCount) {
+			Error(NameToken, "Wrong number of parameters passed to function.")
+		}
+	}
+	
+	return ResultNode
+}
+
+/*
+==========================================
+	Parser + token helpers
+==========================================
+*/
+
+define i32 FreezeParser(ParserState* pState) {
+	/* Gets the tokenizer state in order to backtrack to said state */
+	
+	return pState->tState->TokenIndex
+}
+define void UnfreezeParser(ParserState* pState, i32 Index) {
+	/* Restores the tokenizer to a given state in order to backtrack */
+	
+	pState->tState->TokenIndex := Index
+}
+
+define Token* ParserNextToken(ParserState* pState) {
+	/* Gets the next token */
+	
+	return GetNextToken(pState->tState)
+}
+
+define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
+	/* Compares two tokens using type/value */
+	
+	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING || TokenType = TOKEN_TYPE_INTEGER) {
+		/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
+		
+		if (TokenToTest->Type = TokenType) {
+			return true
+		}
+	}
+	
+	if (TokenToTest->Type = TokenType && TokenToTest->Value = TokenValue) {
+		return true
+	}
+	
+	return false
+}
+
+define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
+	i32 FrozenState := FreezeParser(pState)
+	
+	/* AWrite("Frozen at: ")
+	IWriteLine(FrozenState) */
+	
+	Token* NextToken := ParserNextToken(pState)
+	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
+	
+	if !(Matches) {
+		/* Backtrack if the next token didn't match */
+		/* AWrite("Unfreezing from: ")
+		IWriteLine(pState->tState->TokenIndex) */
+		
+		UnfreezeParser(pState, FrozenState)
+	}
+	
+	return Matches
+}
+
+define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
+	/* Gets the next token and ensures it is a TokenText:TokenValue token (with Reason being an error message for when the next token doesn't match) */
+	
+	Token* NextToken := ParserNextToken(pState)
+	
+	if (NextToken->Type = TOKEN_TYPE_EOF) {
+		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
+		ErrorMessage[0] := HeapString("Unexpected EOF")
+	}
+	
+	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
+		/* Warning: This is technically a memory leak */
+		ErrorMessage[0] := HeapString(Reason)
+	}
+	
+	return NextToken
+}
+define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
+	i8* ErrorMessage := 0
+	
+	Token* Result := TryConsume(pState, TokenType, TokenValue, Reason, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		Error(Result, Reason)
+	}
+	
+	return Result
+}
+
+/*
+==========================================
+	Actual parser + some helpers
+==========================================
+*/
+
+declare void ParseProgram(ParserState*)
+
+define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
+	/* Initializes pState and uses tState to parse a program */
+	
+	ParserState* P := Alloc(#ParserState) As ParserState*
+	P->tState := tState
+	
+	P->Globals := NewHashMap()
+	P->GlobalOffset := 0
+	P->GlobalCount := 0
+	
+	P->GlobalDefaults := AllocArray(8, 0)
+	
+	P->Functions := NewHashMap()
+	P->FunctionCount := 0
+	
+	P->Types := NewHashMap()
+	P->TypeCount := 0
+	
+	P->OutputELF := OutputELF
+	
+	CreateDefaultTypes(P)
+	
+	ParseProgram(P)
+	
+	return P
+}
+
+define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
+	/* Finds a variable, prioritizing locals over globals */
+	
+	SafeWideString* VariableName := NameToken->StringValue
+	
+	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	VariableInfo* FoundVariable := 0
+	
+	if (CurrentFunction) {
+		/* If we are in a function, try to find the variable in the locals */
+		FoundVariable := HashMapGetVariable(CurrentFunction->Locals, VariableName)
+	}
+	
+	if !(FoundVariable) {
+		/* If we didn't find the variable in the locals, then check the globals */
+		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
+	}
+	
+	if !(FoundVariable) {
+		/* If we still haven't found the variable, then it is undefined */
+		
+		ASTErrorFromToken(pState, NameToken, "Undefined variable")
+	}
+	
+	/* Variable has to have been found at some point for this to be reached */
+	
+	return FoundVariable
+}
+
+
+declare i32 RoundTo(i32, i32)
+
+define i32 ParserAddVariable(HashMap* ToScope, VariableInfo* NewVariable, i32 Offset, Token* SourceToken) {
+	if (HashMapGetVariable(ToScope, NewVariable->Name)) {
+		/* If we already have this name in the hashmap, then it's a duplicate definition */
+		
+		ASTNode* FakeNode := AllocateNewASTNode(NODE_TYPE_VARIABLE, NewVariable, NewVariable->Type)
+		FakeNode->LineNumber := SourceToken->LineNumber
+		FakeNode->SourceFilePath := SourceToken->SourceFilePath
+		
+		ASTError(FakeNode, "Duplicate definition")
+	}
+	
+	HashMapAddVariable(ToScope, NewVariable)
+	
+	NewVariable->StackOffset := Offset
+	
+	i16 NewVariableSize := GetTypeSize(NewVariable->Type)
+	
+	if (NewVariableSize <= 8) {
+		return 8
+	}
+	else {
+		i16 RoundedSize := RoundTo(NewVariableSize, 8) As i16
+		
+		NewVariable->StackOffset += RoundedSize
+		
+		return RoundedSize + 8
+	}
+}
+define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal, Token* SourceToken) {
+	/* Adds a global variable to the current program */
+	
+	pState->GlobalOffset += ParserAddVariable(pState->Globals, NewGlobal, pState->GlobalOffset, SourceToken)
+}
+
+define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* SourceToken) {
+	/* Adds a local variable to the current function */
+	
+	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	CurrentFunction->LocalOffset += ParserAddVariable(CurrentFunction->Locals, NewLocal, CurrentFunction->LocalOffset, SourceToken)
+}
+
+/*
+==========================================
+	Actual parsing functions
+==========================================
+*/
+
+define Type TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
+	/* Parses a type name, and returns a Type struct representing that type */
+	
+	/* Find the base type name */
+	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
+	
+	if *(ErrorMessage) {
+		return 0
+	}
+	
+	SafeWideString* Name := NameToken->StringValue
+	
+	i8 PointerDepth := 0
+	
+	/* And the pointer depth of the type */
+	while (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+		PointerDepth += 1
+	}
+	
+	/* Get (and return) a type (which might be incomplete) using the parsed info */
+	return TryGetType(pState, Name, PointerDepth, ErrorMessage)
+}
+
+declare ASTNode* TranslateTokenToNode(ParserState*, Token*, i8)
+
+define Type ParseTypeName(ParserState* pState) {
+	i8* ErrorMessage := 0
+	i32 Frozen := FreezeParser(pState)
+	
+	Type Result := TryParseTypeName(pState, &ErrorMessage)
+	
+	if (ErrorMessage) {
+		UnfreezeParser(pState, Frozen)
+		
+		Token* ErrorToken := ParserNextToken(pState)
+		
+		Error(ErrorToken, ErrorMessage)
+	}
+	
+	return Result
+}
+
+i8 IS_NOT_IMPORT := 0
+i8 IS_IMPORT := 1
+
+declare void ParseAndAddDefine(ParserState*)
+declare void ParseAndAddDeclare(ParserState*, i8)
+declare void ParseAndAddStruct(ParserState*)
+declare void ParseAndAddBits(ParserState*)
+declare ASTNode* ParseExpression(ParserState*, i8)
+
+define void ParseProgram(ParserState* pState) {
+	/* Parse a whole program */
+	
+	loop {
+		i32 FrozenState := FreezeParser(pState)
+		Token* NextToken := ParserNextToken(pState)
+		
+		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
+			ParseAndAddDefine(pState)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
+			ParseAndAddDeclare(pState, IS_NOT_IMPORT)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
+			ParseAndAddDeclare(pState, IS_IMPORT)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
+			ParseAndAddStruct(pState)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
+			ParseAndAddBits(pState)
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
+			break
+		}
+		else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+			/* If the next token isn't an identifier, then it's definitely not a declaration */
+			
+			UnfreezeParser(pState, FrozenState)
+			
+			i8* ErrorMessage := 0
+			
+			Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+			
+			if ((PotentialType != 0) && (ErrorMessage = 0)) {
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(pState)
+				Token* PotentialName := ParserNextToken(pState)
+				
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, 0)) {
+					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+
+					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					SafeWideString* NameString := PotentialName->StringValue
+					
+					VariableInfo* NewGlobal := AllocateNewVariableInfo()
+					
+					NewGlobal->Name := NameString
+					NewGlobal->Type := PotentialType
+					NewGlobal->IsGlobal := True
+					NewGlobal->IsParameter := False
+					
+					ParserAddGlobal(pState, NewGlobal, PotentialName)
+					
+					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						UnfreezeParser(pState, DefaultValueExpressionStart)
+						
+						i32 Index := GetArrayLength(pState->GlobalDefaults)
+						
+						pState->GlobalDefaults := ReAllocArray(pState->GlobalDefaults, 1)
+						
+						(pState->GlobalDefaults)[Index] := ParseExpression(pState, 0)
+					}
+				}
+			}
+		}
+		else {
+			Error(NextToken, "Unexpected token")
+		}
+	}
+}
+
+define void ParseAndAddStruct(ParserState* pState) {
+	/* Parses a struct type, and adds it to pState */
+	
+	/* Gets the type name */
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
+	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	
+	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
+	
+	/* Consumes the opening '{' */
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
+	
+	/* Creates a hashmap for the struct fields */
+	HashMap* Fields := NewHashMap()
+	i16 FieldCount := 0
+	
+	/* Stores where the next field will be */
+	i16 NextFieldOffset := 0
+	
+	/* Stores the total size of the struct */
+	i16 TotalSize := 0
+	
+	i8 InUnion := false
+	i16 MaxUnionSize := 0
+	
+	loop {
+		/* Allocate a StructField for the next field */
+		StructField* NextField := Alloc(#StructField) As StructField*
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNION) && !InUnion) {
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
+			
+			InUnion := true
+		}
+		
+		/* Parse the type of the field */
+		NextField->ValueType := ParseTypeName(pState)
+		
+		/* Get the name of the field */
+		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
+		SafeWideString* FieldName := (FieldNameToken->Value) As SafeWideString*
+		
+		HashMapAddValue(Fields, FieldName, NextField As void)
+		
+		i16 FieldSize := GetTypeSize(NextField->ValueType)
+		
+		NextField->Name := FieldName
+		
+		if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->IsStructType) {
+			/* Dummy branch */
+		}
+		else if (InUnion || IsUnaligned) {
+			/* Dummy branch */
+		}
+		else if (NextFieldOffset % FieldSize) {
+			/* Pad the field to a multiple of its size */
+			NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
+		}
+		/* If we're in a union, don't change the NextFieldOffset so all union fields get overlapping offsets */
+		
+		NextField->Offset := NextFieldOffset
+		FieldCount += 1
+		
+		if (InUnion) {
+			if (FieldSize > MaxUnionSize) {
+				MaxUnionSize := FieldSize
+			}
+		}
+		else {
+			NextFieldOffset += FieldSize
+		}
+		
+		TotalSize := NextFieldOffset
+		
+		if (InUnion && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			InUnion := false
+			NextFieldOffset += MaxUnionSize
+			TotalSize := NextFieldOffset
+		}
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			/* If the next token is not a ',' break the loop */
+			break
+		}
+	}
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
+	
+	/* Check if there's already a type with this name */
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
+	TypeInfo* FoundType := 0
+	
+	if (FoundElement) {
+		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
+		
+		FoundType := (FoundElement->Value) As TypeInfo*
+		
+		if !(FoundType->IsIncomplete) {
+			/* If the type we found isn't incomplete, then error out */
+			
+			Error(NameToken, "Duplicate type definition")
+		}
+		
+		/* Otherwise, update the found type with the info we just parsed */
+		FoundType->StructTypeFields := Fields
+		FoundType->Size := TotalSize
+		FoundType->IsStructType := true
+		FoundType->IsIncomplete := false /* And set that it is no longer incomplete */
+	}
+	else {
+		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
+		AddType(pState, Name, Fields, TotalSize, TYPE_STRUCT)
+	}
+}
+
+define void ParseAndAddBits(ParserState* pState) {
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected name for bits type.")
+	SafeWideString* BitsName := NameToken->Value As SafeWideString*
+	
+	Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
+	
+	i32 BeforeType := FreezeParser(pState)
+	Type BackingType := ParseTypeName(pState)
+	
+	TypeInfo* BackingBase := GetBaseType(BackingType)
+	i32 BackingDepth := GetPointerDepth(BackingType) As i32
+	
+	if (BackingBase->IsStructType || BackingDepth) {
+		UnfreezeParser(pState, BeforeType)
+		
+		Error(ParserNextToken(pState), "Bits backing type must be a plain integer type.")
+	}
+	
+	i8 BackingTypeSize := GetTypeSize(BackingType) As i8
+	i8 BackingTypeSizeBits := BackingTypeSize * 8
+	
+	/* Creates a hashmap for the bit fields */
+	HashMap* Fields := NewHashMap()
+	i16 FieldCount := 0
+	
+	/* Stores where the next field will be */
+	i16 NextFieldOffset := 0
+	
+	/* Stores the total size of the bits (in bits, obviously) */
+	i16 TotalSize := 0
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
+	
+	loop {
+		StructField* NextField := Alloc(#StructField) As StructField*
+		
+		Token* OpenBracket := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
+		
+		i8 StartIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field start index.")->Value As i8
+		i8 EndIndex := StartIndex
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+			EndIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field end index.")->Value As i8
+		}
+		
+		i8 FieldSize := EndIndex - StartIndex
+		
+		if (FieldSize < 0 || FieldSize > BackingTypeSizeBits) {
+			Error(OpenBracket, "Field size can not be negative, or bigger than the backing type.")
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected close bracket for bit field range.")
+		
+		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected bit field name.")->Value
+		
+		NextField->Name := FieldName
+		NextField->Offset := BackingTypeSize
+		NextField->BitStartIndex := StartIndex
+		NextField->BitEndIndex := EndIndex
+		
+		if (FieldSize <= 8) {
+			NextField->ValueType := MakeType(pState->i8, 0)
+		}
+		else if (FieldSize <= 16) {
+			NextField->ValueType := MakeType(pState->i16, 0)
+		}
+		else if (FieldSize <= 32) {
+			NextField->ValueType := MakeType(pState->i32, 0)
+		}
+		else {
+			NextField->ValueType := MakeType(pState->i64, 0)
+		}
+		
+		HashMapAddValue(Fields, FieldName, NextField As void)
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			/* If the next token is not a ',' break the loop */
+			break
+		}
+	}
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for bits body.")
+	
+	/* Check if there's already a type with this name */
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, BitsName)
+	TypeInfo* FoundType := 0
+	
+	if (FoundElement) {
+		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
+		
+		FoundType := (FoundElement->Value) As TypeInfo*
+		
+		if !(FoundType->IsIncomplete) {
+			/* If the type we found isn't incomplete, then error out */
+			
+			ASTErrorFromToken(pState, NameToken, "Duplicate type definition")
+		}
+		
+		/* Otherwise, update the found type with the info we just parsed */
+		FoundType->StructTypeFields := Fields
+		FoundType->Size := BackingTypeSize
+		FoundType->IsStructType := false
+		FoundType->IsBits := true
+		FoundType->IsIncomplete := false /* And set that it is no longer incomplete */
+	}
+	else {
+		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
+		AddType(pState, BitsName, Fields, BackingTypeSize, TYPE_BITS)
+	}
+}
+
+define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
+	Type ReturnType := ParseTypeName(pState)
+	
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	
+	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
+	
+	FunctionDefine* NewDefine := 0
+	
+	if (FoundFunctionElement) {
+		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
+		
+		if (FoundFunction->HasFullDefinition) {
+			ASTErrorFromToken(pState, NameToken, "Duplicate function definition")
+		}
+		
+		NewDefine := FoundFunction
+	}
+	else {
+		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
+		
+		HashMapAddValue(pState->Functions, Name, NewDefine As void)
+		
+		NewDefine->LabelNumber := pState->FunctionCount
+		pState->FunctionCount += 1
+	}
+	
+	NewDefine->ReturnType := ReturnType
+	NewDefine->Name := Name
+	NewDefine->Locals := NewHashMap()
+	NewDefine->LocalOffset := 0
+	NewDefine->SourceFilePath := NameToken->SourceFilePath
+	NewDefine->LineNumber := NameToken->LineNumber
+	
+	return NewDefine
+}
+
+declare ASTNode* ParseStatement(ParserState*)
+
+define void ConsumeAndIgnoreBlock(ParserState* pState) {
+	/* Used for linux/windows statements */
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+	
+	i32 Depth := 1
+	
+	loop {
+		Token* Next := ParserNextToken(pState)
+		
+		if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			Depth -= 1
+		}
+		else if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			Depth += 1
+		}
+		
+		if (Depth = 0) {
+			break
+		}
+	}
+}
+
+define Block* ParseBlock(ParserState* pState) {
+	/* Parses and builds a block of statements */
+	
+	/* Consume the { */
+	Token* OpenBrace := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
+	
+	/* Set up a buffer for the statements */
+	i16 StatementBufferSize := 8
+	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
+	i16 StatementCount := 0
+	
+	i32 Depth := 1
+	
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {		
+		loop {
+			/* Loop until NextMatches('}') */
+			
+			if (StatementCount * 8 <= StatementBufferSize) {
+				/* If the buffer needs to be expanded, expand it */
+				
+				Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
+				StatementBufferSize += (10 * 8)
+			}
+			
+			/* Parse a statement and put it into the statement list */
+			
+			i32 Start := FreezeParser(pState)
+			
+			Token* NextToken := ParserNextToken(pState)
+			
+			if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
+				if (pState->OutputELF) {
+					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+					Depth += 1
+				}
+				else {
+					ConsumeAndIgnoreBlock(pState)
+				}
+			}
+			else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
+				if !(pState->OutputELF) {
+					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+					Depth += 1
+				}
+				else {
+					ConsumeAndIgnoreBlock(pState)
+				}
+			}
+			else {
+				UnfreezeParser(pState, Start)
+				Statements[StatementCount] := ParseStatement(pState)
+				StatementCount += 1
+			}
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
+				Error(OpenBrace, "Expected close brace for block")
+			}
+			
+			i8 BreakOuter := false
+			
+			while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				Depth -= 1
+				
+				BreakOuter := Depth = 0
+				
+				if (BreakOuter) {
+					break
+				}
+			}
+			
+			if (BreakOuter) {
+				break
+			}
+		}
+	}
+	
+	/* Allocate a block structure and populate it with the statement list/count */
+	Block* NewBlock := Alloc(#Block) As Block*
+	NewBlock->Statements := Statements
+	NewBlock->StatementCount := StatementCount
+	
+	return NewBlock
+}
+
+define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
+	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
+	
+	Token* OpenParen := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	
+	i8 ParameterCount := 0
+	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
+	
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		loop {
+			VariableInfo* NextParameter := AllocateNewVariableInfo()
+			
+			if (ParameterCount >= 16) {
+				TokenizerError(pState->tState, "Max parameter limit reached")
+			}
+			
+			ParameterList[ParameterCount] := NextParameter
+			
+			NextParameter->Type := ParseTypeName(pState)
+			NextParameter->Name := NewDefine->Name /* Dummy value, it will never be used */
+			NextParameter->IsGlobal := false
+			NextParameter->IsParameter := true
+			NextParameter->StackOffset := (ParameterCount * 8)
+			
+			/* Update the parameter count */
+			ParameterCount += 1
+			
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
+				break
+			}
+		}
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			Error(OpenParen, "Expected closing paren for parameter list")
+		}
+	}
+	
+	NewDefine->Parameters := ParameterList
+	NewDefine->ParameterCount := ParameterCount
+	
+	if (IsImported) {
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+		
+		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file name expected")->Value
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+			Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file extension expected")
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
+		
+		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source function name expected")->Value
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+		
+		NewDefine->IsImported := true
+		NewDefine->ImportFileName := FileName
+		NewDefine->ImportFunctionName := FunctionName
+	}
+	
+	NewDefine->HasFullDefinition := false
+}
+
+define ASTNode* ParseAndAddDefine(ParserState* pState) {
+	/* Parses a 'define' statement */
+
+	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
+	
+	pState->CurrentFunction := NewDefine
+	
+	/* Consume the parameter list opening '(' */
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	
+	/* Set up a buffer for parameters */
+	i8 ParameterCount := 0
+	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
+	
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
+		
+		loop {
+			/* Allocate a VariableInfo struct for the next parameter */
+			VariableInfo* NextParameter := AllocateNewVariableInfo()
+			
+			/* Max parameter count since I cba to expand the buffer. Todo: Fix this */
+			if (ParameterCount >= 16) {
+				TokenizerError(pState->tState, "Max parameter limit reached")
+			}
+			
+			/* Insert the VariableInfo structure into the parameter list */
+			ParameterList[ParameterCount] := NextParameter
+			
+			/* Parse the parameter type */
+			NextParameter->Type := ParseTypeName(pState)
+			
+			/* Get the parameter name */
+			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+			
+			/* Populate the VariableInfo structure */
+			NextParameter->Name := (NextParameterNameToken->Value) As SafeWideString*
+			NextParameter->IsGlobal := false
+			NextParameter->IsParameter := true
+			NextParameter->StackOffset := (ParameterCount * 8)
+			
+			/* Add the parameter as a local */
+			ParserAddLocal(pState, NextParameter, NextParameterNameToken)
+			
+			/* Update the parameter count */
+			ParameterCount += 1
+			
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
+				break
+			}
+		}
+		
+		/* If the loop was broken by any token besides a ')', then there's something wrong */
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			TokenizerError(pState->tState, "Expected closing paren for parameter list")
+		}
+	}
+	
+	/* Update the function's parameter list/count */
+	
+	NewDefine->Parameters := ParameterList
+	NewDefine->ParameterCount := ParameterCount
+	
+	/* Parse the body of the function */
+	NewDefine->HasFullDefinition := true
+	NewDefine->StringBuffer := Alloc(4) As i8*
+	NewDefine->StringBufferSize := 0
+	NewDefine->Body := ParseBlock(pState)
+}
+
+declare ASTNode* ParseIf(ParserState*)
+declare ASTNode* ParseFor(ParserState*)
+declare ASTNode* ParseWhile(ParserState*)
+
+define ASTNode* ParseStatement(ParserState* pState) {
+	/* Parses a single statement */
+	
+	/* Freeze the parser just in case the next token isn't a keyword */
+	i32 FrozenState := FreezeParser(pState)
+	
+	Token* NextToken := ParserNextToken(pState)
+	ASTNode* Result := 0
+	
+	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
+		i8 NextKeyword := (NextToken->Value) As i8
+		
+		i8 IsContinue := (NextKeyword = KEYWORD_CONTINUE)
+		
+		if (NextKeyword = KEYWORD_BREAK || IsContinue) {
+			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
+			Result->SourceFilePath := NextToken->SourceFilePath
+			Result->LineNumber := NextToken->LineNumber
+			
+			if !(pState->InLoop) {
+				ASTError(Result, "Continue/Break must be inside loops")
+			}
+		}
+/* 		else if (NextKeyword = KEYWORD_WINDOWS) {
+			if !(pState->OutputELF) {
+				Result := AllocateNewASTNode(NODE_TYPE_BLOCK, ParseBlock(pState), TYPE_NONE)
+			}
+			else {
+				ConsumeAndIgnoreBlock(pState)
+				Result := AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+			}
+		}
+		else if (NextKeyword = KEYWORD_LINUX) {
+			if (pState->OutputELF) {
+				Result := AllocateNewASTNode(NODE_TYPE_BLOCK, ParseBlock(pState), TYPE_NONE)
+			}
+			else {
+				ConsumeAndIgnoreBlock(pState)
+				Result := AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+			}
+		} */
+		else if (NextKeyword = KEYWORD_RETURN) {
+			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
+			
+			/* Parse the expression to return */
+			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
+			
+			/* Get the type of the return expression, and the current function's return type */
+			Type ActualReturnType := ExpressionToReturn->ValueType
+			Type ExpectedReturnType := pState->CurrentFunction->ReturnType
+			
+			i16 ActualSize := GetTypeSize(ActualReturnType)
+			i16 ExpectedSize := GetTypeSize(ExpectedReturnType)
+			i16 ActualDepth := GetPointerDepth(ActualReturnType)
+			i16 ExpectedDepth := GetPointerDepth(ExpectedReturnType)
+			
+			
+/* 			ReturnStatement ReturnInfo := 0
+			
+			ReturnInfo.ReturnExpression := ExpressionToReturn
+			ReturnInfo.IsLastInBlock :=  */
+			
+			/* Allocate the result node (before type checking, since ASTError needs an ASTNode to print for the error */
+			
+			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+			Result->SourceFilePath := NextToken->SourceFilePath
+			Result->LineNumber := NextToken->LineNumber
+			
+			/* And ensure that the two types are compatible */
+			
+			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER)
+				&& (GetNumberSize(ExpressionToReturn->TrueNode) <= ExpectedSize) {
+				/* Dummy branch */
+			}
+			else if (ActualSize > ExpectedSize) {
+				ASTError(Result, "Return type too large")
+			}
+			else if (ActualDepth != ExpectedDepth) {
+				ASTError(Result, "Return type has wrong pointer depth")
+			}
+			else if (ActualDepth = 0) {
+				TypeInfo* ActualBase := GetBaseType(ActualReturnType)
+				TypeInfo* ExpectedBase := GetBaseType(ExpectedReturnType)
+				
+				if (ActualBase->IsStructType != ExpectedBase->IsStructType) {
+					ASTError(Result, "Return type should be a struct type")
+				}
+			}
+		}
+		else if (NextKeyword = KEYWORD_IF) {
+			Result := ParseIf(pState)
+		}
+		else if (NextKeyword = KEYWORD_FOR) {
+			Result := ParseFor(pState)
+		}
+		else if (NextKeyword = KEYWORD_LOOP) {
+			i8 OldInLoop := pState->InLoop
+			pState->InLoop := true
+			
+			Result := AllocateNewASTNode(NODE_TYPE_LOOP, ParseBlock(pState) As void*, TYPE_NONE)
+			
+			pState->InLoop := OldInLoop
+		}
+		else if (NextKeyword = KEYWORD_WHILE) {
+			Result := ParseWhile(pState)
+		}
+	}
+	
+	if (Result = 0) {
+		/* When we don't have a result yet, this is either a declaration or a expression statement */
+		
+		UnfreezeParser(pState, FrozenState)
+		
+		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+			/* If the next token isn't an identifier, then it's definitely not a declaration */
+			
+			i8* ErrorMessage := 0
+			Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+			
+			if ((PotentialType != 0) && (ErrorMessage = 0)) {
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(pState)
+				Token* PotentialName := ParserNextToken(pState)
+				
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					
+					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+					
+					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					
+					NewLocal->Name := NameString
+					NewLocal->Type := PotentialType
+					NewLocal->IsGlobal := False
+					NewLocal->IsParameter := False
+					
+					ParserAddLocal(pState, NewLocal, PotentialName)
+					
+					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						UnfreezeParser(pState, DefaultValueExpressionStart)
+					}
+					else {
+						/* The next token is not a `:=`, so the following tokens are not a value for this variable */
+						return AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+					}
+				}
+				else {
+					/* Token after the type name was not an identifier */
+					UnfreezeParser(pState, FrozenState)
+				}
+			}
+			else {
+				UnfreezeParser(pState, FrozenState)
+			}
+		}
+		
+		/* This expression will either be at A) The start of the line or B) After a type name (for declarations) */
+		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
+	}
+	
+	return Result
+}
+
+define ASTNode* ParseIf(ParserState* pState) {
+	IfGroup* NewIf := Alloc(#IfGroup) As IfGroup*
+	
+	NewIf->Conditions := Alloc(10 * #ASTNode*) As ASTNode**
+	NewIf->Bodies := Alloc(10 * #Block*) As Block**
+	i32 BranchCapacity := 10
+	i32 BranchIndex := 0
+	
+	loop {
+		if (BranchIndex = 0 || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {
+			if (BranchCapacity <= BranchIndex) {
+				BranchCapacity += 10
+			
+				NewIf->Conditions := ReAlloc(NewIf->Conditions, BranchCapacity * 8)
+				NewIf->Bodies := ReAlloc(NewIf->Bodies, BranchCapacity * 8)
+			}
+			
+			NewIf->Conditions[BranchIndex] := ParseExpression(pState, 0)
+			NewIf->Bodies[BranchIndex] := ParseBlock(pState)
+		
+			BranchIndex += 1
+
+			if !(ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ELSE)) {
+				break
+			}
+		}
+		else {
+			NewIf->ElseBranch := ParseBlock(pState)
+			break
+		}
+	}
+	
+	NewIf->BranchCount := BranchIndex
+
+	return AllocateNewASTNode(NODE_TYPE_IF, NewIf, TYPE_NONE)
+}
+
+define ASTNode* ParseFor(ParserState* pState) {
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for for loop.")
+	
+	i32 InitializerStart := FreezeParser(pState)
+	
+	if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+		UnfreezeParser(pState, InitializerStart)
+		
+		i8* ErrorMessage := 0
+		Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+		
+		if ((PotentialType != 0) && (ErrorMessage = 0)) {
+			i32 ExpressionStart := FreezeParser(pState)
+			Token* PotentialName := ParserNextToken(pState)
+			
+			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+				if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
+					
+					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					
+					NewLocal->Name := NameString
+					NewLocal->Type := PotentialType
+					
+					ParserAddLocal(pState, NewLocal, PotentialName)
+					
+					InitializerStart := ExpressionStart /* Set the initializer expression to start after the type name */
+				}
+			}
+		}
+	}
+	
+	UnfreezeParser(pState, InitializerStart)
+	
+	ForLoop* NewLoop := Alloc(#ForLoop) As ForLoop*
+	
+	NewLoop->Initializer := ParseExpression(pState, 0)
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop initializer.")
+	NewLoop->Condition := ParseExpression(pState, 0)
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop condition.")
+	NewLoop->Step := ParseExpression(pState, 0)
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' in for loop.")
+	
+	i8 OldInLoop := pState->InLoop
+	pState->InLoop := true
+	
+	NewLoop->Body := ParseBlock(pState)
+	
+	pState->InLoop := OldInLoop
+	
+	return AllocateNewASTNode(NODE_TYPE_FOR, NewLoop, TYPE_NONE)
+}
+
+define ASTNode* ParseWhile(ParserState* pState) {
+	WhileLoop* NewWhile := Alloc(#WhileLoop) As WhileLoop*
+	
+	NewWhile->Condition := ParseExpression(pState, 0)
+	
+	i8 OldInLoop := pState->InLoop
+	pState->InLoop := true
+	
+	NewWhile->Body := ParseBlock(pState)
+	
+	pState->InLoop := OldInLoop
+	
+	return AllocateNewASTNode(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
+}
+
+
+define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate, i8 ForErrorMessage) {
+	/* Translates some kind of token in an AST node which contains the actual version of the token */
+	
+	ASTNode* Result := 0
+	
+	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
+		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
+		
+		Type ResultType := GetNumberType(pState, TokenToTranslate->Value)
+		
+		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
+		Result->SourceFilePath := TokenToTranslate->SourceFilePath
+		Result->LineNumber := TokenToTranslate->LineNumber
+		
+		return Result
+	}
+	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
+		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
+		
+		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
+		
+		if (SafeStringEqualsAString(TokenToTranslate->Value, "true")) {
+			Result->IntegerValue := 1
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
+			Result->IntegerValue := 0
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "windows")) {
+			Result->IntegerValue := !pState->OutputELF
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->Value, "linux")) {
+			Result->IntegerValue := pState->OutputELF
+		}
+		else if (ForErrorMessage) {
+			Result->NodeType := NODE_TYPE_IDENTIFIER
+			Result->StringValue := TokenToTranslate->Value
+		}
+		else {
+			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
+			/* Using the found variable's type as the node type */
+			
+			Result->NodeType := NODE_TYPE_VARIABLE
+			Result->IsStorageValue := true
+			Result->VariableValue := FoundVariable
+			Result->ValueType := FoundVariable->Type
+		}
+		
+		Result->SourceFilePath := TokenToTranslate->SourceFilePath
+		Result->LineNumber := TokenToTranslate->LineNumber
+		
+		return Result
+	}
+	
+	if !(ForErrorMessage) {
+		Error(TokenToTranslate, "Unexpected token")
+	}
+}
+
+define ASTNode* ParseExpressionOperand(ParserState* pState) {
+	/* Parses and returns a single operand of an expression */
+	
+	Token* NextToken := ParserNextToken(pState)
+	ASTNode* Result := 0
+	
+	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
+		/* If the next token is an (, then parse a subexpression and consume a closing ) */
+		
+		Result := ParseExpression(pState, 0)
+		
+		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			Error(NextToken, "Expected closing paren")
+		}
+	}
+	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+		/* Else if the next token is an identifier */
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			/* If the next-next token is an (, then this is a function call */
+			
+			i8 ParameterIndex := 0
+			ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
+			
+			/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+				while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA) || ParameterIndex = 0) {
+					Parameters[ParameterIndex] := ParseExpression(pState, 0)
+					ParameterIndex += 1
+				}
+				
+				/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
+				
+				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+					Error(NextToken, "Expected closing paren for function call")
+				}
+			}
+			
+			/* Make a NODE_TYPE_CALL node for the function call */
+			
+			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex)
+		}
+		else {
+			/* Else, this isn't a function call, and is just a normal variable */
+			
+			Result := TranslateTokenToNode(pState, NextToken, false)
+		}
+	}
+	else if (NextToken->Type = TOKEN_TYPE_STRING) {
+		FunctionDefine* CurrentFunction := pState->CurrentFunction
+		
+		if !(CurrentFunction) {
+			Error(NextToken, "Strings can only be used inside functions.")
+		}
+		
+		SafeWideString* StringText := NextToken->StringValue
+		
+		i32 Offset := CurrentFunction->StringBufferSize
+		i32 NewSize := Offset + StringText->Length + 1
+		
+		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
+		CurrentFunction->StringBufferSize := NewSize
+		
+		for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
+			CurrentFunction->StringBuffer[Offset + Index] := StringText->Buffer[Index]
+		}
+		
+		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(pState->i8, 1))
+	}
+	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
+		/* A literal integer, just make a NODE_TYPE_INTEGER for it */
+		
+		Result := TranslateTokenToNode(pState, NextToken, false)
+	}
+	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
+		/* A prefix operator, parse an expression only containing operators of a higher precedence than the prefix operator */
+		
+		if (NextToken->Value = OPERATOR_POUND) {
+			/* Handle #TypeName by parsing a type name after the #, and setting the result to the length of TypeName as an i32 */
+			
+			i8 ConsumeClosingParan := ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			
+			Type GetSizeOfType := ParseTypeName(pState)
+			
+			if (ConsumeClosingParan) {
+				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
+			}
+			
+			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, GetTypeSize(GetSizeOfType), MakeType(pState->i32, 0))
+		}
+		else {
+			Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
+			
+			Result := MakeUnary(pState, NextToken, Result)
+		}
+	}
+	else {
+		/* Else, this token isn't something we expected here, so error out */
+		
+		Error(NextToken, "Unexpected token in expression")
+	}
+	
+	return Result
+}
+
+define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
+	/* Parses and returns and expression only containing operators with higher precedence than Precedence */
+	
+	ASTNode* Result := ParseExpressionOperand(pState)
+	
+	i32 FrozenState := FreezeParser(pState)
+	Token* OperatorToken := ParserNextToken(pState)
+	
+	while (OperatorToken->Type = TOKEN_TYPE_OPERATOR && GetPrecedence(OperatorToken) >= Precedence) {
+		i8 NewPrecedence := GetPrecedence(OperatorToken)
+		
+		if (GetAssociation(OperatorToken) = LEFT_ASSOCIATIVE) {
+			NewPrecedence += 1
+		}
+		
+		ASTNode* Operand := 0
+		i8 Operator := (OperatorToken->Value) As i8
+		
+		if (Operator = OPERATOR_OPEN_BRACKET) {
+			/* If the next operator is [, then parse the index expression (for the right operand) and consume the closing ] */
+			
+			Operand := ParseExpression(pState, 0)
+			
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
+		}
+		else if (Operator = OPERATOR_AS) {
+			/* Else if the next operator is 'as' then parse a type name as the right operand */
+			
+			Type CastToType := ParseTypeName(pState)
+			
+			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
+		}
+		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
+			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
+			
+			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(pState->i64, 0))
+		}
+		else {
+			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
+			
+			Operand := ParseExpression(pState, NewPrecedence)
+		}
+		
+		/* Fold the left/operator/right into just the left */
+		Result := MakeBinary(pState, Result, OperatorToken, Operand)
+		
+		/* Update where to restore the parser to once the expression ends */
+		FrozenState := FreezeParser(pState)
+		
+		/* Update the next operator */
+		OperatorToken := ParserNextToken(pState)
+	}
+	
+	UnfreezeParser(pState, FrozenState)
+	
+	return Result
+}
+
+define void PrintIndent(i8 IndentLevel) {
+	for (i32 Index := 0, Index < IndentLevel, Index += 1) {
+		AWrite("    ")
+	}
+}
+
+declare void PrintAST(ASTNode*)
+
+define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
+	/* Recursively prints an AST node and all child nodes */
+	
+	PrintIndent(IndentLevel)
+	
+	i8 NodeType := NodeToPrint->NodeType
+	
+	if (NodeType = NODE_TYPE_UNARY) {
+		UnaryExpression* UnaryNode := NodeToPrint->UnaryNode
+		
+		WriteCharacter('(')
+		
+		PrintOperator(UnaryNode->Operator->Value)
+		PrintAST(UnaryNode->Operand)
+		
+		WriteCharacter(')')
+	}
+	else if (NodeType = NODE_TYPE_BINARY) {
+		BinaryExpression* BinaryNode := NodeToPrint->BinaryNode
+		
+		if (BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET) {
+			PrintAST(BinaryNode->Left)
+			WriteCharacter('[')
+			PrintAST(BinaryNode->Right)
+			WriteCharacter(']')
+		}
+		else {
+			WriteCharacter('(')
+			PrintAST(BinaryNode->Left)
+			WriteCharacter(' ')
+			PrintOperator(BinaryNode->Operator->Value)
+			WriteCharacter(' ')
+			PrintAST(BinaryNode->Right)
+			WriteCharacter(')')
+		}
+	}
+	else if (NodeType = NODE_TYPE_CALL) {
+		CallExpression* CallNode := NodeToPrint->CallNode
+		
+		if (CallNode->IsSysCall) {
+			AWrite("syscall")
+		}
+		else {
+			PrintSafeString(CallNode->TargetFunction->Name)
+		}
+		
+		WriteCharacter('(')
+		
+		for (i32 CallParameterIndex := 0, CallParameterIndex < (CallNode->ParameterCount), CallParameterIndex += 1) {
+			ASTNode* NextCallParameter := (CallNode->Parameters)[CallParameterIndex]
+			
+			PrintAST(NextCallParameter)
+			
+			if (CallParameterIndex + 1 < (CallNode->ParameterCount)) {
+				WriteCharacter(',')
+				WriteCharacter(' ')
+			}
+		}
+		
+		WriteCharacter(')')
+	}
+	else if (NodeType = NODE_TYPE_DEFINE) {
+		FunctionDefine* DefineNode := NodeToPrint->DefineNode
+		
+		if (DefineNode->IsImported) {
+			AWrite("DllImport ")
+		}
+		else if (DefineNode->HasFullDefinition) {
+			AWrite("define ")
+		}
+		else {
+			AWrite("declare ")
+		}
+		
+		PrintType(DefineNode->ReturnType)
+		WriteCharacter(' ')
+		PrintSafeString(DefineNode->Name)
+		WriteCharacter('(')
+		
+		for (i32 ParameterIndex := 0, ParameterIndex < (DefineNode->ParameterCount), ParameterIndex += 1) {
+			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
+			
+			PrintType(NextDefineParameter->Type)
+			
+			if (DefineNode->HasFullDefinition) {
+				WriteCharacter(' ')
+				PrintSafeString(NextDefineParameter->Name)
+			}
+			
+			if (ParameterIndex + 1 < (DefineNode->ParameterCount)) {
+				WriteCharacter(',')
+				WriteCharacter(' ')
+			}
+		}
+		
+		WriteCharacter(')')
+		
+		if (DefineNode->HasFullDefinition) {
+			AWriteLine(" {")
+			
+			if (DefineNode->StringBufferSize) {
+				PrintIndent(1)
+				AWrite("i8* StringBuffer := ")
+				
+				WriteCharacter('"')
+				
+				for (i32 StringIndex := 0, StringIndex < (DefineNode->StringBufferSize), StringIndex += 1) {
+					WriteCharacter((DefineNode->StringBuffer)[StringIndex])
+				}
+				
+				WriteCharacter('"')
+				WriteNewLine()
+			}
+			
+			/* Brute-force loop through the function local hashmap */
+			
+			void* Elements := DefineNode->Locals->Elements
+			
+			for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
+				/* Loop through each slot in the hashmap bucket */
+				
+				if (Elements[ElementIndex]) {
+					/* If the slot has an element */
+					
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					/* Then start walking the element hashmap, printing each element */
+					
+					while (FoundElement) {
+						/* Print the current element's value as a local */
+						
+						VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
+						
+						if !(NextLocal->IsParameter) {
+							/* Stop parameters from being double printed */
+							
+							PrintIndent(IndentLevel + 1)
+							PrintType(NextLocal->Type)
+							WriteCharacter(' ')
+							PrintSafeString(NextLocal->Name)
+							WriteNewLine()
+						}
+						
+						/* And update the current element to be the next element in the linked list */
+						FoundElement := (FoundElement->NextElement) As HashMapElement*
+					}
+				}
+			}
+			
+			for (i32 StatementIndex := 0, StatementIndex < (DefineNode->Body->StatementCount), StatementIndex += 1) {
+				ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
+				
+				IndentPrintAST(BodyStatement, IndentLevel + 1)
+			}
+			
+			WriteCharacter('}')
+		}
+		else if (DefineNode->IsImported) {
+			WriteCharacter(' ')
+			WriteCharacter('{')
+			PrintSafeString(DefineNode->ImportFileName)
+			AWrite(".dll, ")
+			PrintSafeString(DefineNode->ImportFunctionName)
+			WriteCharacter('}')
+		}
+		
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_LOOP) {
+		Block* LoopBody := NodeToPrint->LoopBody
+		
+		AWrite("loop {")
+		WriteNewLine()
+		
+		for (i32 LoopBodyIndex := 0, LoopBodyIndex < (LoopBody->StatementCount), LoopBodyIndex += 1) {
+			ASTNode* NextStatement := (LoopBody->Statements)[LoopBodyIndex]
+			
+			IndentPrintAST(NextStatement, IndentLevel + 1)
+		}
+		
+		PrintIndent(IndentLevel)
+		WriteCharacter('}')
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
+		if (NodeToPrint->IsContinue) {
+			AWrite("continue")
+		}
+		else {
+			AWrite("break")
+		}
+		
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_RETURN) {
+		ASTNode* ReturnExpression := NodeToPrint->ReturnExpression
+		
+		AWrite("return ")
+		PrintAST(ReturnExpression)
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_EXPRESSION) {
+		ASTNode* ExpressionStatement := NodeToPrint->ExpressionStatement
+		
+		PrintAST(ExpressionStatement)
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_VARIABLE) {
+		VariableInfo* TargetVariable := NodeToPrint->VariableValue
+		
+		PrintSafeString(TargetVariable->Name)
+	}
+	else if (NodeType = NODE_TYPE_INTEGER) {
+		IWrite(NodeToPrint->IntegerValue)
+	}
+	else if (NodeType = NODE_TYPE_TYPE) {
+		PrintType(NodeToPrint->TypeValue)
+	}
+	else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
+		StructAccessExpression* AccessNode := NodeToPrint->AccessNode
+		
+		PrintAST(AccessNode->Left)
+		PrintOperator(AccessNode->Operator->Value)
+		PrintSafeString(AccessNode->TargetField->Name)
+	}
+	else if (NodeType = NODE_TYPE_IDENTIFIER) {
+		PrintSafeString(NodeToPrint->StringValue)
+	}
+	else if (NodeType = NODE_TYPE_IF) {
+		IfGroup* IfNode := NodeToPrint->IfNode
+		
+		AWrite("if ")
+		
+		for (i32 BranchIndex := 0, BranchIndex < (IfNode->BranchCount), BranchIndex += 1) {
+			if (BranchIndex != 0) {
+				PrintIndent(IndentLevel)
+				AWrite("else if ")
+			}
+			
+			PrintAST((IfNode->Conditions)[BranchIndex])
+			
+			AWrite(" {")
+			WriteNewLine()
+			
+			Block* BranchBody := (IfNode->Bodies)[BranchIndex]
+			
+			for (i32 IfBodyIndex := 0, IfBodyIndex < (BranchBody->StatementCount), IfBodyIndex += 1) {
+				ASTNode* IfBodyStatement := (BranchBody->Statements)[IfBodyIndex]
+				
+				IndentPrintAST(IfBodyStatement, IndentLevel + 1)
+			}
+			
+			PrintIndent(IndentLevel)
+			WriteCharacter('}')
+			WriteNewLine()
+		}
+		
+		if (IfNode->ElseBranch) {
+			PrintIndent(IndentLevel)
+			AWrite("else {")
+			WriteNewLine()
+			
+			Block* ElseBody := IfNode->ElseBranch
+			
+			for (i32 ElseStatementIndex := 0, ElseStatementIndex < (ElseBody->StatementCount), ElseStatementIndex += 1) {
+				ASTNode* ElseBodyStatement := (ElseBody->Statements)[ElseStatementIndex]
+				
+				IndentPrintAST(ElseBodyStatement, IndentLevel + 1)
+			}
+			
+			PrintIndent(IndentLevel)
+			WriteCharacter('}')
+			WriteNewLine()
+		}
+	}
+	else if (NodeType = NODE_TYPE_FOR) {
+		ForLoop* ForNode := NodeToPrint->ForNode
+		
+		AWrite("for (")
+		
+		PrintAST(ForNode->Initializer)
+		AWrite(", ")
+		PrintAST(ForNode->Condition)
+		AWrite(", ")
+		PrintAST(ForNode->Step)
+		AWrite(") {")
+		WriteNewLine()
+		
+		Block* ForBody := ForNode->Body
+		
+		for (i32 ForBodyIndex := 0, ForBodyIndex < (ForBody->StatementCount), ForBodyIndex += 1) {
+			ASTNode* NextBodyStatement := (ForBody->Statements)[ForBodyIndex]
+			
+			IndentPrintAST(NextBodyStatement, IndentLevel + 1)
+		}
+		
+		PrintIndent(IndentLevel)
+		WriteCharacter('}')
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_WHILE) {
+		WhileLoop* WhileNode := NodeToPrint->WhileNode
+		
+		AWrite("while ")
+		PrintAST(WhileNode->Condition)
+		AWrite(" {")
+		WriteNewLine()
+		
+		Block* WhileBody := WhileNode->Body
+		
+		for (i32 WhileBodyIndex := 0, WhileBodyIndex < (WhileBody->StatementCount), WhileBodyIndex += 1) {
+			ASTNode* WhileBodyStatement := (WhileBody->Statements)[WhileBodyIndex]
+			
+			IndentPrintAST(WhileBodyStatement, IndentLevel + 1)
+		}
+		
+		PrintIndent(IndentLevel)
+		WriteCharacter('}')
+		WriteNewLine()
+	}
+	else if (NodeType = NODE_TYPE_STRING) {
+		AWrite("(StringTable + ")
+		IWrite(NodeToPrint->StringOffsetValue)
+		WriteCharacter(')')
+	}
+}
+
+define void PrintAST(ASTNode* NodeToPrint) {
+	IndentPrintAST(NodeToPrint, 0)
+}
