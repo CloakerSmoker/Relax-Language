@@ -8,7 +8,7 @@ For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
 
 ```
 /* Paths are relative to the root directory of the repo, compiler should be ran with:
-		./relax_compiler.exe -i path/to/this_file.rlx -o path/to/binary.exe
+		./build/compiler.exe -i path/to/this_file.rlx -o path/to/binary.exe
 	to ensure the working dir is correct.
 */
 
@@ -28,7 +28,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i8 Operator := ArgV[2][0]
 	
-	/* IWrite calls print with `WriteFile(STDOUT, NumberAsString)` on Windows, and `sys_write(STDOUT, NumberAsString)` on Linux */
+	/* IWrite boils down to `WriteFile(STDOUT, NumberAsString)` on Windows, and `sys_write(STDOUT, NumberAsString)` on Linux */
 
 	if (Operator = '+') {
 		IWrite(Left + Right)

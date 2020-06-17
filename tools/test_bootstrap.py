@@ -38,7 +38,7 @@ recursion_count = 3
 if len(sys.argv) == 2:
     recursion_count = int(sys.argv[1])
 
-safe_compiler = path_join(bin_dir, f'relax_compiler.{platform_extension}')
+safe_compiler = path_join(bin_dir, f'compiler.{platform_extension}')
 
 for i in range(0, recursion_count):
     compiler_output = path_join(bin_dir, f'testing{i}.{platform_extension}')
@@ -77,4 +77,4 @@ for i in range(0, recursion_count):
     safe_compiler = compiler_output
 
 print(f'{Fore.LIGHTGREEN_EX}Output file(s) passed all tests.')
-move(compiler_output, path_join(bin_dir, f'new_relax_compiler.{platform_extension}'))
+move(compiler_output, path_join(bin_dir, f'new_compiler.{platform_extension}'))

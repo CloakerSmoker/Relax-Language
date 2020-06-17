@@ -1,3 +1,15 @@
+/* generics when? */
+define i32 ALen(i8* AString) {
+	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+define i32 WLen(i16* WString) {
+	for (i32 Length := 0, WString[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+
 define i16* AToW(i8* AString, i32 Length) {
 	/* Converts an ASCII string to a wide string */
 	
@@ -9,17 +21,15 @@ define i16* AToW(i8* AString, i32 Length) {
 	
 	return NewBuffer
 }
-
-/* generics when? */
-define i32 ALen(i8* AString) {
-	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
+define i8* WToA(i16* WString) {
+	i32 Length := WLen(WString)
+	i8* Buffer := Alloc(Length + 1)
 	
-	return Length
-}
-define i32 WLen(i16* WString) {
-	for (i32 Length := 0, WString[Length] != 0, Length += 1) {}
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		Buffer[Index] := WString[Index]
+	}
 	
-	return Length
+	return Buffer
 }
 
 define i8* HeapString(i8* StringToCopy) {
@@ -111,7 +121,7 @@ define i8 IsWhiteSpace(i16 Character) {
 		return true
 	}
 
-	return (Character = ' ' || Character = '	' || Character = 10 || Character = 13)
+	return false
 }
 
 define void AReverse(i8* Buffer) {
@@ -260,17 +270,6 @@ define i64 AToI(i8* AString) {
 	Free(WString)
 	
 	return Result	
-}
-
-define i8* WToA(i16* WString) {
-	i32 Length := WLen(WString)
-	i8* Buffer := Alloc(Length + 1)
-	
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		Buffer[Index] := WString[Index]
-	}
-	
-	return Buffer
 }
 
 define i8 StringEquals(i8* Left, i8* Right) {

@@ -513,10 +513,15 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	i8 StackParameterOffset := 0x8
 	
-	if (USE_SYSTEMV) {
-		/* SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address */
+	/* Shadow space is a dumb concept, which was invented by microsoft to increase RAM usage and to get you to buy more RAM from big memory. 
+		(But actually, it goes unused in every function ever, so there's no point in handling it UNLESS: 
+			this function is called by windows/external code, which isn't possible right now)
+	*/
+	
+	/* if (USE_SYSTEMV) {
+		SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address
 		StackParameterOffset := 0x8
-	}
+	} */
 	
 	for (i16 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
 		/* For each stack parameter */
