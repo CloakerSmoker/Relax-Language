@@ -585,15 +585,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		
 		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
-/* 		WriteNewLine()
-		IWrite(LastStatement->NodeType)
-		WriteNewLine() */
-		
 		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
 			ReturnExpression := LastStatement->ReturnExpression
 			Body->StatementCount -= 1
 		}
-	
 	}
 	
 	CompileBlock(cState, Body)

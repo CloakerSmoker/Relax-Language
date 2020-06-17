@@ -308,12 +308,17 @@ define void EmitInstruction(CompilerState* cState, InstructionInfo* Instruction,
 	}
 }
 
-define void EmitBasicInstruction(CompilerState* cState, InstructionInfo* Instruction, i8 DestinationRegister, i8 SourceRegister) {
-	/* Helper to clear commonly unused flags which might have an old value from the stack */
+define void EmitBasicInstruction(CompilerState* cState, i8 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
+	/* Helper so each caller doesn't have to build an InstructionInfo and call EmitInstruction */
 	
-	Instruction->HasTwoByteOpcode := false
-	Instruction->REX := 0
-	Instruction->ByteOpcodeOne := Instruction->OpcodeOne - 1
+	InstructionInfo Instruction
+	
+	Instruction.HasTwoByteOpcode := false
+	Instruction.REX := 0
+	Instruction.OpcodeOne := Opcode
+	Instruction.ByteOpcodeOne := Opcode - 1
+	Instruction.Mode := Mode
+	Instruction.Size := Size
 	
 	EmitInstruction(cState, Instruction, DestinationRegister, SourceRegister)
 }
@@ -411,13 +416,7 @@ define void EmitMove_R64_R64(CompilerState* cState, i8 DestinationRegister, i8 S
 	EmitREXOpcodeModRM(cState, 0x8B, MODE_RTOR, DestinationRegister, SourceRegister, REX_W)
 }
 define void EmitMove_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x8B
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x8B, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitMove_R64_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
@@ -436,25 +435,13 @@ define void EmitMove_R64_RX(CompilerState* cState, i8 DestinationRegister, i8 So
 }
 
 define void EmitMove_RX_RIX_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x8B
-	I.Mode := MODE_PTOR_DISP32
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x8B, MODE_PTOR_DISP32, Size, DestinationRegister, SourceRegister)
 	
 	PushI32(cState, Displacement)
 }
 
 define void EmitMove_RX_RIX_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x8B
-	I.Mode := MODE_PTOR_DISP8
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x8B, MODE_PTOR_DISP8, Size, DestinationRegister, SourceRegister)
 	
 	PushByte(cState, Displacement)
 }
@@ -464,13 +451,7 @@ define void EmitMove_RX_RIX_DISP8(CompilerState* cState, i8 DestinationRegister,
 /* Flipped operands due to MR encoding */
 
 define void EmitMove_RIX_DISP32_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x89
-	I.Mode := MODE_PTOR_DISP32
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	EmitBasicInstruction(cState, 0x89, MODE_PTOR_DISP32, Size, SourceRegister, DestinationRegister)
 	
 	PushI32(cState, Displacement)
 }
@@ -478,25 +459,13 @@ define void EmitMove_RIX_DISP32_RX(CompilerState* cState, i8 DestinationRegister
 /* Flipped operands due to MR encoding */
 
 define void EmitMove_RIX_DISP8_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x89
-	I.Mode := MODE_PTOR_DISP8
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	EmitBasicInstruction(cState, 0x89, MODE_PTOR_DISP8, Size, SourceRegister, DestinationRegister)
 	
 	PushI8(cState, Displacement)
 }
 
 define void EmitMove_RIX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x89
-	I.Mode := MODE_PTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	EmitBasicInstruction(cState, 0x89, MODE_PTOR, Size, SourceRegister, DestinationRegister)
 }
 
 
@@ -535,13 +504,7 @@ define void EmitMove_RX_SIB(CompilerState* cState, i8 DestinationRegister, i8 Sc
 ==========================================
 */
 define void EmitMove_RX_RIX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x8B
-	I.Mode := MODE_PTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x8B, MODE_PTOR, Size, DestinationRegister, SourceRegister)
 }
 
 /*
@@ -579,13 +542,7 @@ define void EmitLea_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 Sc
 ==========================================
 */
 define void EmitAdd_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x03
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x03, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitAdd_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
@@ -609,13 +566,7 @@ define void EmitAdd_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 ==========================================
 */
 define void EmitSub_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x2B
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x2B, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 
@@ -636,13 +587,7 @@ define void EmitSub_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 
 
 define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xF7
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 3, TargetRegister) 
+	EmitBasicInstruction(cState, 0xF7, MODE_RTOR, Size, 3, TargetRegister)
 }
 /*
 ==========================================
@@ -672,57 +617,27 @@ define void EmitCXX(CompilerState* cState, i8 Size) {
 
 
 define void EmitIDiv_RAX_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xF7
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 7, SourceRegister) 
+	EmitBasicInstruction(cState, 0xF7, MODE_RTOR, Size, 7, SourceRegister)
 }
 
 define void EmitSAL_RX_I8(CompilerState* cState, i8 TargetRegister, i8 ShiftCount, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xC1
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 4, TargetRegister)
+	EmitBasicInstruction(cState, 0xC1, MODE_RTOR, Size, 4, TargetRegister)
 	
 	PushByte(cState, ShiftCount)
 }
 
 define void EmitSAR_RX_I8(CompilerState* cState, i8 TargetRegister, i8 ShiftCount, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xC1
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 5, TargetRegister)
+	EmitBasicInstruction(cState, 0xC1, MODE_RTOR, Size, 5, TargetRegister)
 	
 	PushByte(cState, ShiftCount)
 }
 
 define void EmitSHL_RX_CL(CompilerState* cState, i8 TargetRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xD3
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 4, TargetRegister)
+	EmitBasicInstruction(cState, 0xD3, MODE_RTOR, Size, 4, TargetRegister)
 }
 
 define void EmitSHR_RX_CL(CompilerState* cState, i8 TargetRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xD3
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 5, TargetRegister)
+	EmitBasicInstruction(cState, 0xD3, MODE_RTOR, Size, 5, TargetRegister)
 }
 
 
@@ -772,23 +687,11 @@ define void EmitSysCall(CompilerState* cState) {
 */
 
 define void EmitTest_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x85
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x85, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitCmp_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x39
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, SourceRegister, DestinationRegister) 
+	EmitBasicInstruction(cState, 0x39, MODE_RTOR, Size, SourceRegister, DestinationRegister)
 }
 
 /*
@@ -798,43 +701,19 @@ define void EmitCmp_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 Sour
 */
 
 define void EmitAnd_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x21
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x21, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitOr_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x09
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x09, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitXor_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0x31
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, DestinationRegister, SourceRegister) 
+	EmitBasicInstruction(cState, 0x31, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
 define void EmitNot_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
-	InstructionInfo I
-	
-	I.OpcodeOne := 0xF7
-	I.Mode := MODE_RTOR
-	I.Size := Size
-	
-	EmitBasicInstruction(cState, &I, 2, SourceRegister) 
+	EmitBasicInstruction(cState, 0xF7, MODE_RTOR, Size, 2, SourceRegister)
 }
 
 define void R8NeedsREX(i8 RegisterNumber) {
