@@ -54,7 +54,7 @@ struct CompilerState {
 ==========================================
 */
 
-#Include ./src/compiler/CodeGen.rlx
+#Include .\src\compiler\CodeGen.rlx
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)

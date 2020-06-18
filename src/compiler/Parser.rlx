@@ -201,6 +201,11 @@ struct ParserState {
 */
 
 struct ASTNode {
+	/* First two fields are the same as Token, so they can be used interchangably in error handling functions */
+	
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	
 	union {
 		void* TrueNode,
 		
@@ -229,8 +234,6 @@ struct ASTNode {
 	},
 	
 	Type ValueType,
-	SafeWideString* SourceFilePath,
-	i32 LineNumber,
 	i8 NodeType,
 	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
 }
@@ -275,7 +278,7 @@ define i8 GetPrecedence(Token* ForOperator) {
 	
 	i8 Operator := (ForOperator->Value) As i8
 	
-	if (Operator = OPERATOR_COLON_EQUAL || Operator = OPERATOR_STAR_EQUAL) {
+/* 	if (Operator = OPERATOR_COLON_EQUAL || Operator = OPERATOR_STAR_EQUAL) {
 		return 1
 	}
 	else if (Operator = OPERATOR_PLUS_EQUAL || Operator = OPERATOR_MINUS_EQUAL) {
@@ -313,19 +316,37 @@ define i8 GetPrecedence(Token* ForOperator) {
 	}
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 		return 12
-	}
-}
-
-define i8 GetAssociation(Token* ForOperator) {
-	/* Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE depending on the operator passed */
+	} */
 	
-	i8 Precedence := GetPrecedence(ForOperator)
-	
-	if (Precedence = 1 || Precedence = 3) {
-		return RIGHT_ASSOCIATIVE
+	if (Operator >= PRECEDENCE_11) {
+		return 11
 	}
-	else {
-		return LEFT_ASSOCIATIVE
+	else if (Operator >= PRECEDENCE_10) {
+		return 10
+	}
+	else if (Operator >= PRECEDENCE_9) {
+		return 9
+	}
+	else if (Operator >= PRECEDENCE_8) {
+		return 8
+	}
+	else if (Operator >= PRECEDENCE_7) {
+		return 7
+	}
+	else if (Operator >= PRECEDENCE_6) {
+		return 6
+	}
+	else if (Operator >= PRECEDENCE_5) {
+		return 5
+	}
+	else if (Operator >= PRECEDENCE_3) {
+		return 3
+	}
+	else if (Operator >= PRECEDENCE_2) {
+		return 2
+	}
+	else if (Operator >= PRECEDENCE_1) {
+		return 1
 	}
 }
 
@@ -347,7 +368,7 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 		return 10
 	}
 	else if (Operator = OPERATOR_POUND) {
-		return 13
+		return 12
 	}
 	
 	return 0 /* Returns 0 when the operator is not a prefix operator */
@@ -357,6 +378,19 @@ define i8 IsPrefixOperator(Token* ForOperator) {
 	/* Used to determine if an operator can be a prefix operator in the parser */
 	
 	return GetPrefixPrecedence(ForOperator) != 0
+}
+
+define i8 GetAssociation(Token* ForOperator) {
+	/* Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE depending on the operator passed */
+	
+	i8 Precedence := GetPrecedence(ForOperator)
+	
+	if (Precedence = 1 || Precedence = 3) {
+		return RIGHT_ASSOCIATIVE
+	}
+	else {
+		return LEFT_ASSOCIATIVE
+	}
 }
 
 /*
@@ -537,31 +571,8 @@ declare void PrintAST(ASTNode*)
 
 define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	SwapOutputStream()
-	TextColor(Red)
-	AWriteLine(ErrorMessage)
 	
-	if (BadNode->SourceFilePath != 0) {
-		AWrite("In: ")
-		TextColor(White)
-		
-		/* Note: This *should* call PrintSafeString, but source file paths are i8* stored in a SafeWideString* here 
-			Todo: Fix this ????????
-			Somehow, it's fixed. This comment will stay for when it breaks again
-		*/
-		AWrite(BadNode->SourceFilePath->Buffer)
-		TextColor(Red)
-		WriteNewLine()
-	}
-	
-	if (BadNode->LineNumber != 0) {
-		AWrite("On Line: ")
-		TextColor(White)
-		IWriteLine(BadNode->LineNumber)
-		TextColor(Red)
-	}
-	
-	AWrite("At: ")
-	ResetColors()
+	PrintErrorHeader(BadNode As ErrorContext*, ErrorMessage, Red)
 	
 	PrintAST(BadNode)
 	
@@ -569,36 +580,8 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	
 	Exit(1)
 }
-
-declare ASTNode* TranslateTokenToNode(ParserState*, Token*, i8)
-
-define void ASTErrorFromToken(ParserState* pState, Token* FromToken, i8* ErrorMessage) {
-	ASTNode* FakeNode := TranslateTokenToNode(pState, FromToken, true)
-
-	ASTError(FakeNode, ErrorMessage)
-}
-
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
-	TextColor(Red | Green)
-	AWriteLine(WarnMessage)
-	
-	if (BadNode->SourceFilePath != 0) {
-		AWrite("In: ")
-		TextColor(White)
-		PrintSafeString(BadNode->SourceFilePath)
-		TextColor(Red | Green)
-		WriteNewLine()
-	}
-	
-	if (BadNode->LineNumber != 0) {
-		AWrite("On Line: ")
-		TextColor(White)
-		IWriteLine(BadNode->LineNumber)
-		TextColor(Red | Green)
-	}
-	
-	AWrite("At: ")
-	TextColor(White)
+	PrintErrorHeader(BadNode As ErrorContext*, WarnMessage, Red | Green)
 	
 	PrintAST(BadNode)
 	
@@ -1127,7 +1110,7 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	if !(FoundVariable) {
 		/* If we still haven't found the variable, then it is undefined */
 		
-		ASTErrorFromToken(pState, NameToken, "Undefined variable")
+		Error(NameToken, "Undefined variable")
 	}
 	
 	/* Variable has to have been found at some point for this to be reached */
@@ -1518,7 +1501,7 @@ define void ParseAndAddBits(ParserState* pState) {
 		if !(FoundType->IsIncomplete) {
 			/* If the type we found isn't incomplete, then error out */
 			
-			ASTErrorFromToken(pState, NameToken, "Duplicate type definition")
+			Error(NameToken, "Duplicate type definition")
 		}
 		
 		/* Otherwise, update the found type with the info we just parsed */
@@ -1548,7 +1531,7 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
 		
 		if (FoundFunction->HasFullDefinition) {
-			ASTErrorFromToken(pState, NameToken, "Duplicate function definition")
+			Error(NameToken, "Duplicate function definition")
 		}
 		
 		NewDefine := FoundFunction

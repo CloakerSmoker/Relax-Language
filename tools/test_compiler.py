@@ -41,6 +41,7 @@ compiler_path = path.abspath(argv[1])
 cwd = os.getcwd()
 
 tests_dir = path_join(cwd, 'tests')
+build_dir = path_join(cwd, 'build')
 
 for test_path in os.listdir(tests_dir):
     path_parts = path.split(test_path)
@@ -57,7 +58,7 @@ for test_path in os.listdir(tests_dir):
         inputs_outputs = [line.split(':') for line in f.read().splitlines()]
 
     source_file = path_join(tests_dir, f'{file_name}.rlx')
-    binary_file = path_join(tests_dir, f'{file_name}')
+    binary_file = path_join(build_dir, f'{file_name}')
     compile_command = compile_command_format.format(compiler_path, source_file, binary_file)
     #f'{compiler_path} -i "{source_file}" -o "{binary_file}" {compiler_extra}'
 

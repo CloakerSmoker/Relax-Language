@@ -1,11 +1,13 @@
 struct Token {
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	
 	union {
 		void* Value,
 		SafeWideString* StringValue
 	},
 	
 	i16* Source,
-	SafeWideString* SourceFilePath,
 	i32 LineNumber,
 	i32 PositionInSource,
 	i16 LengthInSource,
@@ -104,52 +106,66 @@ i8 TOKEN_TYPE_DEBUG_CHARACTER := 7
 
 
 i8 OPERATOR_FIRST_ASSIGNMENT := 0
+i8 PRECEDENCE_1 := 0
 	i8 OPERATOR_COLON_EQUAL := 0
 	i8 OPERATOR_PLUS_EQUAL := 1
 	i8 OPERATOR_MINUS_EQUAL := 2
 	i8 OPERATOR_STAR_EQUAL := 3
 i8 OPERATOR_LAST_ASSIGNMENT := 3
 
-i8 OPERATOR_PLUS := 4
-i8 OPERATOR_MINUS := 5
-i8 OPERATOR_STAR := 6
-i8 OPERATOR_SLASH := 7
-i8 OPERATOR_PERCENT := 8
-i8 OPERATOR_DOT := 9
+i8 PRECEDENCE_2 := 4
+i8 OPERATOR_FIRST_SHORT_CIRCUIT := 4
+	i8 OPERATOR_LOGICAL_AND := 4
+	i8 OPERATOR_LOGICAL_OR := 5
+i8 OPERATOR_LAST_SHORT_CIRCUIT := 5
 
-i8 OPERATOR_MINUS_GREATER := 10
-i8 OPERATOR_BANG := 11
+i8 PRECEDENCE_3 := 6
+i8 OPERATOR_FIRST_COMPARISON := 6
+	i8 OPERATOR_EQUAL := 6
+	i8 OPERATOR_BANG_EQUAL := 7
+	i8 OPERATOR_LESS := 8
+	i8 OPERATOR_LESS_EQAUL := 9
+	i8 OPERATOR_GREATER := 10
+	i8 OPERATOR_GREATER_EQAUL := 11
+i8 OPERATOR_LAST_COMPARISON := 11
 
-i8 OPERATOR_FIRST_SHORT_CIRCUIT := 12
-	i8 OPERATOR_LOGICAL_AND := 12
-	i8 OPERATOR_LOGICAL_OR := 13
-i8 OPERATOR_LAST_SHORT_CIRCUIT := 13
+/* Precedence level 4 is for prefix operators &/*. */
 
-i8 OPERATOR_FIRST_COMPARISON := 14
-	i8 OPERATOR_EQUAL := 14
-	i8 OPERATOR_BANG_EQUAL := 15
-	i8 OPERATOR_LESS := 16
-	i8 OPERATOR_LESS_EQAUL := 17
-	i8 OPERATOR_GREATER := 18
-	i8 OPERATOR_GREATER_EQAUL := 19
-i8 OPERATOR_LAST_COMPARISON := 19
+i8 PRECEDENCE_5 := 12
+i8 OPERATOR_AS := 12
 
+i8 PRECEDENCE_6 := 13
+i8 OPERATOR_PLUS := 13
+i8 OPERATOR_MINUS := 14
 
+i8 PRECEDENCE_7 := 15
+i8 OPERATOR_STAR := 15
+i8 OPERATOR_SLASH := 16
+i8 OPERATOR_PERCENT := 17
+i8 OPERATOR_LESS_LESS := 18
+i8 OPERATOR_GREATER_GREATER := 19
+
+i8 PRECEDENCE_8 := 20
 i8 OPERATOR_AND := 20
 i8 OPERATOR_OR := 21
+i8 OPERATOR_XOR := 22
 
-i8 OPERATOR_COLON := 22
-i8 OPERATOR_AS := 23
+/* Precedence level 9 is for prefix operators !-~ */
 
-i8 OPERATOR_OPEN_BRACKET := 24
-i8 OPERATOR_XOR := 25
+i8 PRECEDENCE_9 := 23
+i8 OPERATOR_BANG := 23
+i8 OPERATOR_TILDE := 24
 
-i8 OPERATOR_TILDE_GREATER := 26
+i8 PRECEDENCE_10 := 25
+i8 OPERATOR_OPEN_BRACKET := 25
 
-i8 OPERATOR_LESS_LESS := 27
-i8 OPERATOR_GREATER_GREATER := 28
-i8 OPERATOR_TILDE := 29
+i8 PRECEDENCE_11 := 26
+i8 OPERATOR_DOT := 26
+i8 OPERATOR_MINUS_GREATER := 27
+i8 OPERATOR_TILDE_GREATER := 28
 
+
+i8 OPERATOR_COLON := 29
 i8 OPERATOR_POUND := 30
 
 
@@ -188,30 +204,47 @@ i8 KEYWORD_RETURN := 14
 i8 KEYWORD_WINDOWS := 15
 i8 KEYWORD_LINUX := 16
 
-define void Error(Token* AtToken, i8* Message) {
-	SwapOutputStream()
-	TextColor(Red)
+
+/* Both the Token and ASTNode struct have the same first 2 fields as ErrorContext, making them safe to cast down to
+	ErrorContext for PrintErrorHeader calls.
+ */
+
+struct ErrorContext {
+	SafeWideString* SourceFilePath,
+	i32 LineNumber
+}
+
+define void PrintErrorHeader(ErrorContext* AtContext, i8* Message, i8 Color) {
+	TextColor(Color)
 	AWriteLine(Message)
 	
-	if (AtToken->SourceFilePath != 0) {
+	if (AtContext->SourceFilePath != 0) {
 		AWrite("In: ")
 		TextColor(White)
-		AWrite(AtToken->SourceFilePath->Buffer)
-		TextColor(Red)
+		PrintSafeString(AtContext->SourceFilePath)
+		TextColor(Color)
 		WriteNewLine()
 	}
 	
-	if (AtToken->LineNumber != 0) {
+	if (AtContext->LineNumber != 0) {
 		AWrite("On Line: ")
 		TextColor(White)
-		IWriteLine(AtToken->LineNumber)
-		TextColor(Red)
+		IWriteLine(AtContext->LineNumber)
+		TextColor(Color)
 	}
 	
 	AWrite("At: ")
 	ResetColors()
+}
+
+define void Error(Token* AtToken, i8* Message) {
+	SwapOutputStream()
+	
+	PrintErrorHeader(AtToken As ErrorContext*, Message, Red)
 	
 	PrintToken(AtToken)
+	
+	WriteNewLine()
 	
 	Exit(1)
 }
@@ -742,7 +775,7 @@ define void PrintOperator(i8 Operator) {
 	i8 SecondCharacter := 0 */
 	
 	/* Note: this way is betterworse than the commented out version, since it depends on the operator numbers not changing, but improves code size by a lot */
-	i8* Operators := ":= += -= *= +  -  *  /  %  .  -> !  && || =  != <  <= >  >= &  |  :  As [  ^  ~> << >> ~  #  "
+	i8* Operators := ":= += -= *= && || =  != <  <= >  >= As +  -  *  /  %  << >> &  |  ^  !  ~  [  .  -> ~> :  #  "
 	
 	i8* ThisOperator := Operators + (Operator * 3)
 	

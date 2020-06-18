@@ -128,10 +128,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	i32 SourceLength := 0
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
 	
-	SafeWideString SourcePath
-	SourcePath.Buffer := InputFilePath
-	SourcePath.Length := WLen(InputFilePath)
-	
-	ParserState* P := ParserStart(NewTokenizer(&SourcePath, Source, SourceLength), OutputELF)
+	TokenizerState* T := NewTokenizer(AToS(InputFilePath), Source, SourceLength)
+	ParserState* P := ParserStart(T, OutputELF)
 	CompilerStart(P, OutputFilePath, OutputELF, DumpFunctionBytes)
 }
