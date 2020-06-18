@@ -13,7 +13,7 @@ i64 hProcessHeap := GetProcessHeap()
 i32 HEAP_ZERO_MEMORY := 0x00000008
 i32 HEAP_REALLOC_IN_PLACE_ONLY := 0x00000010
 
-#Include ./src/lib/SimpleHeap.rlx
+#Include .\src\lib\SimpleHeap.rlx
 
 define void* Alloc(i64 Size) {
 	windows {

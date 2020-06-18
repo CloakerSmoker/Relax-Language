@@ -10,9 +10,9 @@ define i32 ALen(i8* AString) {
 define i32 AWrite(i8* AString) {
 	windows {
 		i32 BytesWritten := 0
-	
+		
 		WriteFile(GetStdHandle(-11), AString, ALen(AString), &BytesWritten, 0)
-	
+		
 		return BytesWritten
 	}
 	linux {

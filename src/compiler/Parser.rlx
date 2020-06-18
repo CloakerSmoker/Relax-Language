@@ -153,11 +153,15 @@ struct FunctionDefine {
 	i32 CallCount
 }
 
+i8 BUILTIN_NONE := 0
+i8 BUILTIN_SYSCALL := 1
+i8 BUILTIN_BREAKPOINT := 2
+
 struct CallExpression {
 	FunctionDefine* TargetFunction,
 	ASTNode** Parameters,
 	i32 ParameterCount,
-	i8 IsSysCall
+	i8 BuiltinID
 }
 
 bits ReturnStatement As i64 {
@@ -918,7 +922,7 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 	
 	return ResultNode
 }
-define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount, i8 IsBuiltin) {
 	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
 	
 	SafeWideString* Name := NameToken->StringValue
@@ -933,9 +937,19 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	ResultNode->LineNumber := NameToken->LineNumber
 	
 	/* Find the function which is being called. */
-	if (SafeStringEqualsAString(NameToken->Value, "syscall")) {
-		Result->IsSysCall := true
-		ResultNode->ValueType := MakeType(pState->i64, 0)
+	
+	if (IsBuiltin) {
+		if (SafeStringEqualsAString(Name, "syscall")) {
+			Result->BuiltinID := BUILTIN_SYSCALL
+			ResultNode->ValueType := MakeType(pState->i64, 0)
+		}
+		else if (SafeStringEqualsAString(Name, "breakpoint")) {
+			Result->BuiltinID := BUILTIN_BREAKPOINT
+			ResultNode->ValueType := MakeType(pState->i8, 0)
+		}
+		else {
+			Error(NameToken, "Builtin function not recognized.")
+		}
 	}
 	else {
 		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
@@ -2153,6 +2167,9 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
 		/* Else if the next token is an identifier */
 		
+		/* This check is fine, since x:(y) is never valid, nor is x:y */
+		i8 IsBuiltin := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+		
 		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If the next-next token is an (, then this is a function call */
 			
@@ -2175,11 +2192,10 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			
 			/* Make a NODE_TYPE_CALL node for the function call */
 			
-			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex)
+			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex, IsBuiltin)
 		}
 		else {
 			/* Else, this isn't a function call, and is just a normal variable */
-			
 			Result := TranslateTokenToNode(pState, NextToken, false)
 		}
 	}
@@ -2344,9 +2360,13 @@ define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
 	}
 	else if (NodeType = NODE_TYPE_CALL) {
 		CallExpression* CallNode := NodeToPrint->CallNode
+		i8 BuiltinID := CallNode->BuiltinID	
 		
-		if (CallNode->IsSysCall) {
+		if (BuiltinID = BUILTIN_SYSCALL) {
 			AWrite("syscall")
+		}
+		else if (BuiltinID = BUILTIN_BREAKPOINT) {
+			AWrite("breakpoint")
 		}
 		else {
 			PrintSafeString(CallNode->TargetFunction->Name)

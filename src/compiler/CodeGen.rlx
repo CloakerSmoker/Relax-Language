@@ -724,21 +724,35 @@ define void R8NeedsREX(i8 RegisterNumber) {
 	return 0
 }
 
+define void EmitSetX_R8(CompilerState* cState, i8 Opcode, i8 DestinationRegister) {
+	EmitREXBigOpcodeModRM(cState, 0x0F, Opcode, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+}
+
 define void EmitSetE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x94, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x94, DestinationRegister)
 }
 define void EmitSetNE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x95, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x95, DestinationRegister)
 }
 define void EmitSetL_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9C, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x9C, DestinationRegister)
 }
 define void EmitSetLE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9E, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x9E, DestinationRegister)
 }
 define void EmitSetG_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9F, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x9F, DestinationRegister)
 }
 define void EmitSetGE_R8(CompilerState* cState, i8 DestinationRegister) {
-	EmitREXBigOpcodeModRM(cState, 0x0F, 0x9D, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
+	EmitSetX_R8(cState, 0x9D, DestinationRegister)
+}
+
+/*
+==========================================
+	Other
+==========================================
+*/
+
+define void EmitInt3(CompilerState* cState) {
+	PushByte(cState, 0xCC)
 }

@@ -8,7 +8,6 @@ struct Token {
 	},
 	
 	i16* Source,
-	i32 LineNumber,
 	i32 PositionInSource,
 	i16 LengthInSource,
 	i8 Type

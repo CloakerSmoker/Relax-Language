@@ -925,8 +925,15 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
-	if (CallNode->IsSysCall) {
-		/* Dummy branch */
+	i8 BuiltinID := CallNode->BuiltinID
+	i8 IS_SYSCALL := BuiltinID = BUILTIN_SYSCALL /* Used later to decide which set of registers are for parameters */
+	
+	if (IS_SYSCALL) {
+		/* Dummy branch to stop TargetFunction (a null pointer for `syscall(X, ...)`) from being accessed */
+	}
+	else if (BuiltinID = BUILTIN_BREAKPOINT) {
+		EmitInt3(cState)
+		return 0
 	}
 	else if (cState->OutputELF && TargetFunction->IsImported) {
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Calls to DllImported functions are not allowed when compiling to .elf")
@@ -974,8 +981,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	}
 	
 	i8 ParameterRegister := RBX
-	
-	i8 IS_SYSCALL := CallNode->IsSysCall
 	
 	if (ParameterCount != 0) {
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
