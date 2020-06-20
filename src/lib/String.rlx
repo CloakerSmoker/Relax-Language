@@ -198,7 +198,7 @@ define i8* IToAH(i64 Number) {
 	}
 	
 	for (i32 Index := 0, Number > 0, Index += 1) {
-		Buffer[Index] := NumberToHex(Number % 0x10)
+		Buffer[Index] := NumberToHex((Number % 0x10) As i8)
 		Number := Number / 0x10
 	}
 	

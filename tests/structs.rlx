@@ -61,11 +61,11 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	Test2 V
 	
-	IWrite(V~>B % 8)
+	IWrite((V~>B) as i64 % 8)
 	
 	Test3 W
 	
-	IWrite(W~>B % 8)
+	IWrite((W~>B) as i64 % 8)
 	
 	return 0
 }

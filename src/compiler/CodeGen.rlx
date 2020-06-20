@@ -1,26 +1,5 @@
 /*
 ==========================================
-	Code printing helpers
-==========================================
-*/
-
-define void PrintByteHex(i8 NumberToPrint) {
-	i8 SecondCharacter := NumberToHex(NumberToPrint & 0x0F)
-	i8 FirstCharacter := NumberToHex((NumberToPrint / 0x10) & 0x0F)
-	
-	WriteCharacter(FirstCharacter)
-	WriteCharacter(SecondCharacter)
-}
-
-define void PrintCodeBytes(CompilerState* cState) {
-	for (i32 Index := 0, Index < (cState->Index), Index += 1) {
-		PrintByteHex((cState->CodeBuffer)[Index])
-		WriteCharacter(' ')
-	}
-}
-
-/*
-==========================================
 	Label helpers
 ==========================================
 */
@@ -121,10 +100,12 @@ define void PushI8(CompilerState* cState, i8 NumberToPush) {
 	(cState->CodeBuffer)[cState->Index] := NumberToPush
 	cState->Index += 1
 }
-define void PushByte(CompilerState* cState, i8 NumberToPush) {
-	/* Alternate name for PushI8 since I was too used to typing PushByte */
+define void PushByte(CompilerState* cState, i16 NumberToPush) {
+	/* Alternate name for PushI8 since I was too used to typing PushByte, takes an i16 since 
+		Some opcodes are >0x7F, and are can only be represented using i16s
+	*/
 	
-	PushI8(cState, NumberToPush)
+	PushI8(cState, NumberToPush As i8)
 }
 
 define void PushI16(CompilerState* cState, i16 NumberToPush) {
@@ -171,6 +152,11 @@ define i8 ClampRegisterNumber(i8 RegisterNumber) {
 	}
 	
 	return RegisterNumber
+}
+define i8 PushRegisterInOpcode(CompilerState* cState, i16 Opcode, i8 Register) {
+	Register := ClampRegisterNumber(Register)
+	
+	PushByte(cState, Opcode + Register)
 }
 
 /* Constants used while generating code */
@@ -232,19 +218,23 @@ define void EmitREX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegi
 }
 
 define void EmitModRM(CompilerState* cState, i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
-	PushByte(cState, (Mode * 64) | (ClampRegisterNumber(DestinationRegister) * 8) | (ClampRegisterNumber(SourceRegister)))
+	Mode := Mode << 6
+	i8 Reg := ClampRegisterNumber(DestinationRegister) << 3
+	i8 RM := ClampRegisterNumber(SourceRegister)
+	
+	PushByte(cState, Mode | Reg | RM)
 }
 
 define void EmitLegacySizePrefix(CompilerState* cState) {
 	PushByte(cState, 0x66)
 }
 
-define void EmitREXOpcodeModRM(CompilerState* cState, i8 Opcode, i8 Mode, i8 DestinationRegister, i8 SourceRegister, i8 ExtraREX) {
+define void EmitREXOpcodeModRM(CompilerState* cState, i16 Opcode, i8 Mode, i8 DestinationRegister, i8 SourceRegister, i8 ExtraREX) {
 	EmitREX(cState, DestinationRegister, SourceRegister, ExtraREX)
 	PushByte(cState, Opcode)
 	EmitModRM(cState, Mode, DestinationRegister, SourceRegister)
 }
-define void EmitREXBigOpcodeModRM(CompilerState* cState, i8 FirstOpcodeByte, i8 SecondOpcodeByte, i8 Mode, i8 DestinationRegister, i8 SourceRegister, i8 ExtraREX) {
+define void EmitREXBigOpcodeModRM(CompilerState* cState, i16 FirstOpcodeByte, i16 SecondOpcodeByte, i8 Mode, i8 DestinationRegister, i8 SourceRegister, i8 ExtraREX) {
 	EmitREX(cState, DestinationRegister, SourceRegister, ExtraREX)
 	PushByte(cState, FirstOpcodeByte)
 	PushByte(cState, SecondOpcodeByte)
@@ -258,10 +248,10 @@ define void EmitSIB(CompilerState* cState, i8 Scale, i8 IndexRegister, i8 BaseRe
 	else if (Scale = 4) {TrueScale := 2}
 	else if (Scale = 8) {TrueScale := 3}
 	
-	PushByte(cState, (TrueScale * 64) | (IndexRegister * 8) | BaseRegister)
+	PushByte(cState, (TrueScale << 6) | (IndexRegister << 3) | BaseRegister)
 }
 
-define void EmitREXOpcodeModRMSIB(CompilerState* cState, i8 Opcode, i8 Mode, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister, i8 ExtraREX) {
+define void EmitREXOpcodeModRMSIB(CompilerState* cState, i16 Opcode, i8 Mode, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister, i8 ExtraREX) {
 	if (RegisterRequiresREX(IndexRegister)) {
 		ExtraREX := ExtraREX | REX_X
 	}
@@ -308,19 +298,19 @@ define void EmitInstruction(CompilerState* cState, InstructionInfo* Instruction,
 	}
 }
 
-define void EmitBasicInstruction(CompilerState* cState, i8 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
+define void EmitBasicInstruction(CompilerState* cState, i16 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
 	/* Helper so each caller doesn't have to build an InstructionInfo and call EmitInstruction */
 	
 	InstructionInfo Instruction
 	
 	Instruction.HasTwoByteOpcode := false
 	Instruction.REX := 0
-	Instruction.OpcodeOne := Opcode
-	Instruction.ByteOpcodeOne := Opcode - 1
+	Instruction.OpcodeOne := Opcode As i8
+	Instruction.ByteOpcodeOne := (Opcode - 1) As i8
 	Instruction.Mode := Mode
 	Instruction.Size := Size
 	
-	EmitInstruction(cState, Instruction, DestinationRegister, SourceRegister)
+	EmitInstruction(cState, &Instruction, DestinationRegister, SourceRegister)
 }
 
 /*
@@ -339,7 +329,7 @@ define void EmitJump_Label(CompilerState* cState, i32 LabelNumber) {
 	UseLabel(cState, LabelNumber)
 }
 
-define void EmitJXX_Label(CompilerState* cState, i32 LabelNumber, i8 Opcode) {
+define void EmitJXX_Label(CompilerState* cState, i32 LabelNumber, i16 Opcode) {
 	PushByte(cState, 0x0F)
 	PushByte(cState, Opcode)
 	UseLabel(cState, LabelNumber)
@@ -382,12 +372,12 @@ define void EmitZeroRegister(CompilerState* cState, i8 RegisterNumber) {
 
 define void EmitMove_R64_I64(CompilerState* cState, i8 RegisterNumber, i64 NumberToMove) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, REX_W)
-	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0xB8, RegisterNumber)
 	PushI64(cState, NumberToMove)
 }
 define void EmitMove_R32_I32(CompilerState* cState, i8 RegisterNumber, i32 NumberToMove) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
-	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0xB8, RegisterNumber)
 	PushI32(cState, NumberToMove)
 }
 define void EmitMove_R16_I16(CompilerState* cState, i8 RegisterNumber, i16 NumberToMove) {
@@ -397,12 +387,12 @@ define void EmitMove_R16_I16(CompilerState* cState, i8 RegisterNumber, i16 Numbe
 		EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
 	}
 	
-	PushByte(cState, 0xB8 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0xB8, RegisterNumber)
 	PushI16(cState, NumberToMove)
 }
 define void EmitMove_R8_I8(CompilerState* cState, i8 RegisterNumber, i8 NumberToMove) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, REX_BASE)
-	PushByte(cState, 0xB0 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0xB0, RegisterNumber)
 	PushI8(cState, NumberToMove)
 }
 define void EmitMove_RX_IX(CompilerState* cState, i8 RegisterNumber, i64 NumberToMove, i8 Size) {
@@ -513,7 +503,7 @@ define void EmitMove_RX_RIX(CompilerState* cState, i8 DestinationRegister, i8 So
 ==========================================
 */
 
-define void EmitLea_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement) {
+define void EmitLea_R64_R64_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement) {
 	EmitREXOpcodeModRM(cState, 0x8D, MODE_PTOR_DISP8, DestinationRegister, SourceRegister, REX_W)
 	PushByte(cState, Displacement)
 }
@@ -649,11 +639,11 @@ define void EmitSHR_RX_CL(CompilerState* cState, i8 TargetRegister, i8 Size) {
 
 define void EmitPush_R64(CompilerState* cState, i8 RegisterNumber) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
-	PushByte(cState, 0x50 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0x50, RegisterNumber)
 }
 define void EmitPop_R64(CompilerState* cState, i8 RegisterNumber) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
-	PushByte(cState, 0x58 + ClampRegisterNumber(RegisterNumber))
+	PushRegisterInOpcode(cState, 0x58, RegisterNumber)
 }
 
 /*
@@ -724,7 +714,7 @@ define void R8NeedsREX(i8 RegisterNumber) {
 	return 0
 }
 
-define void EmitSetX_R8(CompilerState* cState, i8 Opcode, i8 DestinationRegister) {
+define void EmitSetX_R8(CompilerState* cState, i16 Opcode, i8 DestinationRegister) {
 	EmitREXBigOpcodeModRM(cState, 0x0F, Opcode, MODE_RTOR, NO_REGISTER, DestinationRegister, R8NeedsREX(DestinationRegister))
 }
 

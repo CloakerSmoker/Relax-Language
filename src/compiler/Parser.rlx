@@ -10,7 +10,8 @@ struct TypeInfo {
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
-	i8 IsBits
+	i8 IsBits,
+	i8 IsBuiltin
 }
 
 bits Type As i64 {
@@ -164,17 +165,12 @@ struct CallExpression {
 	i8 BuiltinID
 }
 
-bits ReturnStatement As i64 {
-	[0:47] ReturnExpression,
-	[48] IsLastInBlock
-}
-
 struct ParserState {
 	TokenizerState* tState,
 	
 	HashMap* Functions,
 	
-	i64 GlobalOffset,
+	i32 GlobalOffset,
 	HashMap* Globals,
 	ASTNode** GlobalDefaults,
 	
@@ -405,10 +401,10 @@ define i8 GetAssociation(Token* ForOperator) {
 
 Type TYPE_NONE := 0
 
-i8 TYPE_REGULAR := 0
-i8 TYPE_STRUCT := 1
-i8 TYPE_INCOMPLETE := 2
-i8 TYPE_BITS := 4
+i8 TYPE_REGULAR := 1
+i8 TYPE_STRUCT := 2
+i8 TYPE_INCOMPLETE := 4
+i8 TYPE_BITS := 8
 
 define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
@@ -430,6 +426,10 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fie
 	
 	if (Flags & TYPE_BITS) {
 		NewType->IsBits := True
+	}
+	
+	if (Flags & TYPE_REGULAR) {
+		NewType->IsBuiltin := True
 	}
 	
 	/* AWrite("Adding ")
@@ -513,12 +513,12 @@ define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement) {
 		TokenizerError(pState->tState, "Pointer type expected")
 	}
 	
-	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1)
+	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1 As i16)
 }
 define Type IncrementPointerType(ParserState* pState, Type TypeToIncrement) {
 	/* Returns a type which is a pointer to the passed type */
 	
-	return MakeType(TypeToIncrement.BaseType, (TypeToIncrement.PointerDepth) + 1)
+	return MakeType(TypeToIncrement.BaseType, (TypeToIncrement.PointerDepth) + 1 As i16)
 }
 
 define void PrintType(Type TypeToPrint) {
@@ -565,6 +565,115 @@ define Type GetNumberType(ParserState* pState, i64 NumberToCheck) {
 	}
 }
 
+declare void ASTError(ASTNode*, i8*)
+
+define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
+	if !(AtNode) {
+		return 1
+	}
+	
+	SwapOutputStream()
+	
+	AWrite(Message)
+	AWrite(", expected ")
+	PrintType(Expected)
+	AWrite(", got ")
+	PrintType(AtNode->ValueType)
+	WriteNewLine()
+	
+	ASTError(AtNode, 0)
+}
+
+define i8 CheckTypes(Type Source, Type Target, ASTNode* SourceNode) {
+	if (SourceNode) {
+		Source := SourceNode->ValueType
+	}
+	
+	TypeInfo* SourceBase := GetBaseType(Source)
+	TypeInfo* TargetBase := GetBaseType(Target)
+	
+	i16 SourceDepth := GetPointerDepth(Source)
+	i16 TargetDepth := GetPointerDepth(Target)
+	
+	i16 SourceSize := GetTypeSize(Source)
+	i16 TargetSize := GetTypeSize(Target)
+	
+	if (SourceSize = 8 && (TargetDepth <= 1 && TargetBase->IsBuiltin)) {
+		/* Allow any 8 byte type to be casted to void/void pointer/i64/i64 pointer */
+		
+		return 0
+	}
+	else if (TargetSize = 8 && (SourceDepth <= 1 && SourceBase->IsBuiltin)) {
+		/* Allow any void/void pointer/i64/i64 pointer to be casted to any 8 byte type */
+		
+		return 0
+	}
+	else if (SourceDepth = TargetDepth) {
+		if (SourceBase = TargetBase) {
+			return 0
+		}
+		else if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
+			if (SourceSize <= TargetSize) {
+				return 0
+			}
+			
+			return TypeError(SourceNode, Target, "Incompatible types")
+		}
+		else {
+			if (SourceDepth && TargetDepth) {
+				if (CheckTypes(MakeType(SourceBase, 0), MakeType(TargetBase, 0), 0)) {
+					return TypeError(SourceNode, Target, "Incompatible pointed-to types")
+				}
+				
+				return 0
+			}
+			
+			return TypeError(SourceNode, Target, "Incompatible types")
+		}
+	}
+	else if (SourceDepth || TargetDepth) {
+		if (TargetDepth && (SourceDepth = 1 && SourceBase->IsBuiltin)) {
+			/* Allow for i64/void pointers to be casted to any kind of pointer  */
+			
+			return 0
+		}
+		else if (SourceDepth && (TargetDepth = 1 && TargetBase->IsBuiltin)) {
+			/* Allow for any kind of pointer to be casted to a void/i64 pointer */
+			
+			return 0
+		}
+		
+		return TypeError(SourceNode, Target, "Incompatible pointer depths")
+	}
+	else if (SourceBase->IsStructType || TargetBase->IsStructType) {
+		return TypeError(SourceNode, Target, "Incompatible struct type")
+	}
+	else if (TargetBase->IsBits || SourceBase->IsBits) {
+		if (SourceSize > TargetSize) {
+			return TypeError(SourceNode, Target, "Incompatible bits type size")
+		}
+		
+		return 0
+	}
+}
+
+define ASTNode* DowncastIntegerType(ParserState* pState, ASTNode* Target) {
+	if (Target->NodeType != NODE_TYPE_INTEGER) {
+		return Target
+	}
+	
+	i8 Size := GetNumberSize(Target->IntegerValue)
+	TypeInfo* Base := pState->i8
+	
+	if (Size = 2) {Base := pState->i16}
+	else if (Size = 4) {Base := pState->i32}
+	else if (Size = 8) {Base := pState->i64}
+	
+	Target->ValueType := MakeType(Base, 0)
+	
+	return Target
+}
+
 /*
 ==========================================
 	Error message printing functions
@@ -574,7 +683,10 @@ define Type GetNumberType(ParserState* pState, i64 NumberToCheck) {
 declare void PrintAST(ASTNode*)
 
 define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
-	SwapOutputStream()
+	if (ErrorMessage) {
+		/* When the error message is already printed, skip switching to stderr, since the error message was already printed to stderr */
+		SwapOutputStream()
+	}
 	
 	PrintErrorHeader(BadNode As ErrorContext*, ErrorMessage, Red)
 	
@@ -779,7 +891,13 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 				}
 				
 				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
-				return AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, ResultType)
+				
+				ASTNode* StructNode := AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, ResultType)
+				
+				StructNode->SourceFilePath := OperatorToken->SourceFilePath
+				StructNode->LineNumber := OperatorToken->LineNumber
+				
+				return StructNode
 			}
 			else {
 				/* If we didn't find a field with that name, then error out */
@@ -968,9 +1086,18 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
 		
-		/* And verify the parameter counts match */
 		if (FoundDefine->ParameterCount != ParameterCount) {
-			Error(NameToken, "Wrong number of parameters passed to function.")
+			/* Ensure the parameter counts match */
+			ASTError(ResultNode, "Wrong number of parameters passed to function.")
+		}
+		
+		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
+			/* And that the parameter types are compatible */
+			
+			VariableInfo* ExpectedParameter := FoundDefine->Parameters[ParameterIndex]
+			ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
+			
+			CheckTypes(ActualParameter->ValueType, ExpectedParameter->Type, ActualParameter)
 		}
 	}
 	
@@ -1866,19 +1993,8 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
 			
 			/* Get the type of the return expression, and the current function's return type */
-			Type ActualReturnType := ExpressionToReturn->ValueType
+			Type ActualReturnType := DowncastIntegerType(pState, ExpressionToReturn)
 			Type ExpectedReturnType := pState->CurrentFunction->ReturnType
-			
-			i16 ActualSize := GetTypeSize(ActualReturnType)
-			i16 ExpectedSize := GetTypeSize(ExpectedReturnType)
-			i16 ActualDepth := GetPointerDepth(ActualReturnType)
-			i16 ExpectedDepth := GetPointerDepth(ExpectedReturnType)
-			
-			
-/* 			ReturnStatement ReturnInfo := 0
-			
-			ReturnInfo.ReturnExpression := ExpressionToReturn
-			ReturnInfo.IsLastInBlock :=  */
 			
 			/* Allocate the result node (before type checking, since ASTError needs an ASTNode to print for the error */
 			
@@ -1888,24 +2004,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			
 			/* And ensure that the two types are compatible */
 			
-			if (ExpressionToReturn->NodeType = NODE_TYPE_INTEGER)
-				&& (GetNumberSize(ExpressionToReturn->TrueNode) <= ExpectedSize) {
-				/* Dummy branch */
-			}
-			else if (ActualSize > ExpectedSize) {
-				ASTError(Result, "Return type too large")
-			}
-			else if (ActualDepth != ExpectedDepth) {
-				ASTError(Result, "Return type has wrong pointer depth")
-			}
-			else if (ActualDepth = 0) {
-				TypeInfo* ActualBase := GetBaseType(ActualReturnType)
-				TypeInfo* ExpectedBase := GetBaseType(ExpectedReturnType)
-				
-				if (ActualBase->IsStructType != ExpectedBase->IsStructType) {
-					ASTError(Result, "Return type should be a struct type")
-				}
-			}
+			CheckTypes(ActualReturnType, ExpectedReturnType, ExpressionToReturn)
 		}
 		else if (NextKeyword = KEYWORD_IF) {
 			Result := ParseIf(pState)
@@ -2314,7 +2413,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	return Result
 }
 
-define void PrintIndent(i8 IndentLevel) {
+define void PrintIndent(i32 IndentLevel) {
 	for (i32 Index := 0, Index < IndentLevel, Index += 1) {
 		AWrite("    ")
 	}
@@ -2322,7 +2421,7 @@ define void PrintIndent(i8 IndentLevel) {
 
 declare void PrintAST(ASTNode*)
 
-define void IndentPrintAST(ASTNode* NodeToPrint, i8 IndentLevel) {
+define void IndentPrintAST(ASTNode* NodeToPrint, i32 IndentLevel) {
 	/* Recursively prints an AST node and all child nodes */
 	
 	PrintIndent(IndentLevel)

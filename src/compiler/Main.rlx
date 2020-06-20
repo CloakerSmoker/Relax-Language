@@ -10,6 +10,14 @@ define void Exit(i32 ExitCode) {
 	}
 }
 
+bits Terror As i8 {
+	[0:1] Dummy
+}
+
+define void ForceTypeError(Terror T) {
+	return 0
+}
+
 #Include .\src\lib\Memory.rlx
 #Include .\src\lib\File.rlx
 

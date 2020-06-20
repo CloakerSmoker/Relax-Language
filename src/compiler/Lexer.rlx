@@ -9,7 +9,7 @@ struct Token {
 	
 	i16* Source,
 	i32 PositionInSource,
-	i16 LengthInSource,
+	i32 LengthInSource,
 	i8 Type
 }
 
@@ -49,7 +49,7 @@ define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source,
 	return NewState
 }
 
-define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i16 LengthInSource, i8 Type) {
+define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i32 LengthInSource, i8 Type) {
 	/* Ensure the token buffer has space for another token */
 	
 	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
@@ -215,7 +215,11 @@ struct ErrorContext {
 
 define void PrintErrorHeader(ErrorContext* AtContext, i8* Message, i8 Color) {
 	TextColor(Color)
-	AWriteLine(Message)
+	
+	if (Message) {
+		/* A null message might be passed when the error message was complex enough that it needed to be printed beforehand. */
+		AWriteLine(Message)
+	}
 	
 	if (AtContext->SourceFilePath != 0) {
 		AWrite("In: ")

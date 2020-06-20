@@ -24,7 +24,7 @@ define i32 Main() {
 	E.test2 := 20
 	E.test3 := 0
 	
-	IWrite(E)
+	IWrite(E As i64)
 	WriteCharacter(',')
 	
 	Example2 E2 := 0x4000000090009000
@@ -46,5 +46,5 @@ define i32 Main() {
 	
 	IWrite(*(E3.a_pointer As i64*) = Test)
 	
-	return E
+	return E As i32
 }
