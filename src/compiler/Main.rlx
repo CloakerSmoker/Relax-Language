@@ -28,6 +28,7 @@ define void ForceTypeError(Terror T) {
 
 declare i16* OpenAndRead(i8*, i32*)
 
+#Include .\src\compiler\Utility.rlx
 #Include .\src\compiler\Lexer.rlx
 #Include .\src\compiler\Parser.rlx
 #Include .\src\compiler\PEBuilder.rlx

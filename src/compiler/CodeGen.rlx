@@ -706,7 +706,7 @@ define void EmitNot_RX(CompilerState* cState, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(cState, 0xF7, MODE_RTOR, Size, 2, SourceRegister)
 }
 
-define void R8NeedsREX(i8 RegisterNumber) {
+define i8 R8NeedsREX(i8 RegisterNumber) {
 	if (4 <= RegisterNumber && RegisterNumber <= 7) {
 		return REX_BASE
 	}

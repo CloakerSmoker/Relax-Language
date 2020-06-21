@@ -1,15 +1,11 @@
 struct Token {
-	SafeWideString* SourceFilePath,
-	i32 LineNumber,
+	ErrorContext Context,
 	
 	union {
 		void* Value,
 		SafeWideString* StringValue
 	},
 	
-	i16* Source,
-	i32 PositionInSource,
-	i32 LengthInSource,
 	i8 Type
 }
 
@@ -23,14 +19,11 @@ struct TokenizerState {
 	i32 TokenIndex,
 	i32 MaxTokenIndex,
 	i32 CurrentLineNumber,
+	i16 CurrentLineStart,
 	i32 TokenCapacity
 }
 
 declare i8 LookupKeyword(SafeWideString*)
-declare void PrintToken(Token*)
-declare void PrintOperator(i8)
-declare void PrintPunctuation(i8)
-declare void PrintKeyword(i8)
 
 define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
@@ -68,13 +61,14 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 	tState->MaxTokenIndex += 1
 	
 	/* Populate the token */
-	OutputToken->Value := Value
-	OutputToken->SourceFilePath := tState->SourceFilePath
-	OutputToken->LineNumber := tState->CurrentLineNumber
-	OutputToken->Source := Source
-	OutputToken->PositionInSource := PositionInSource
-	OutputToken->LengthInSource := LengthInSource
 	OutputToken->Type := Type
+	OutputToken->Value := Value
+	
+	OutputToken->Context.SourceFilePath := tState->SourceFilePath
+	OutputToken->Context.LineNumber := tState->CurrentLineNumber
+	OutputToken->Context.Source := Source
+	OutputToken->Context.PositionInSource := PositionInSource
+	OutputToken->Context.LengthInSource := LengthInSource
 	
 	return OutputToken
 }
@@ -208,48 +202,15 @@ i8 KEYWORD_LINUX := 16
 	ErrorContext for PrintErrorHeader calls.
  */
 
-struct ErrorContext {
-	SafeWideString* SourceFilePath,
-	i32 LineNumber
-}
-
-define void PrintErrorHeader(ErrorContext* AtContext, i8* Message, i8 Color) {
-	TextColor(Color)
-	
-	if (Message) {
-		/* A null message might be passed when the error message was complex enough that it needed to be printed beforehand. */
-		AWriteLine(Message)
-	}
-	
-	if (AtContext->SourceFilePath != 0) {
-		AWrite("In: ")
-		TextColor(White)
-		PrintSafeString(AtContext->SourceFilePath)
-		TextColor(Color)
-		WriteNewLine()
-	}
-	
-	if (AtContext->LineNumber != 0) {
-		AWrite("On Line: ")
-		TextColor(White)
-		IWriteLine(AtContext->LineNumber)
-		TextColor(Color)
-	}
-	
-	AWrite("At: ")
-	ResetColors()
-}
-
 define void Error(Token* AtToken, i8* Message) {
 	SwapOutputStream()
 	
-	PrintErrorHeader(AtToken As ErrorContext*, Message, Red)
-	
-	PrintToken(AtToken)
-	
-	WriteNewLine()
-	
+	PrettyError(AtToken As ErrorContext*, Message, Red | Bright)
 	Exit(1)
+}
+
+define void TokenError(Token* AtToken, i8* Message) {
+	ContextError(AtToken~>Context, Message)
 }
 
 define i16 PeekNextCharacter(TokenizerState* tState) {
@@ -648,9 +609,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 						break
 					}
 					
-					Token* IncludeToken := PushToken(tState, NextIncludeToken->Value, IncludeTokenizer->Source, NextIncludeToken->PositionInSource, NextIncludeToken->LengthInSource, NextIncludeToken->Type)
-					IncludeToken->SourceFilePath := NextIncludeToken->SourceFilePath
-					IncludeToken->LineNumber := NextIncludeToken->LineNumber
+					Token* IncludeToken := PushToken(tState, NextIncludeToken->Value, 0 As i16*, 0, 0, NextIncludeToken->Type)
+					CopyContext(NextIncludeToken~>Context, IncludeToken~>Context)
 				}
 				
 				AWriteLine("Done including file")
@@ -667,11 +627,13 @@ define Token* GetNextToken(TokenizerState* tState) {
 		}
 		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
 			/* Ignore null characters and whitespace */
+			
+			
 			continue
 		}
 		else {
-			MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-			TokenizerError(tState, "Unexpected character")
+			Token* ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+			Error(ErrorToken, "Unexpected character")
 		}
 	}
 	
@@ -740,9 +702,9 @@ define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
 	return TOKEN_TYPE_NONE
 }
 
+/*
+
 define void PrintToken(Token* TokenToPrint) {
-	/* Debug prints a token */
-	
 	if (TokenToPrint->Type = TOKEN_TYPE_IDENTIFER) {
 		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
 	}
@@ -752,13 +714,13 @@ define void PrintToken(Token* TokenToPrint) {
 		WriteCharacter('"')
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_OPERATOR) {
-		PrintOperator(TokenToPrint->Value)
+		PrintOperator(TokenToPrint->Value As i8)
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_PUNCTUATION) {
-		PrintPunctuation(TokenToPrint->Value)
+		PrintPunctuation(TokenToPrint->Value As i8)
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_KEYWORD) {
-		PrintKeyword(TokenToPrint->Value)
+		PrintKeyword(TokenToPrint->Value As i8)
 	}
 	else if (TokenToPrint->Type = TOKEN_TYPE_EOF) {
 		AWrite("<EOF>")
@@ -772,12 +734,6 @@ define void PrintToken(Token* TokenToPrint) {
 }
 
 define void PrintOperator(i8 Operator) {
-	/* Prints an operator in the worst way possible */
-	
-/* 	i8 FirstCharacter := 0
-	i8 SecondCharacter := 0 */
-	
-	/* Note: this way is betterworse than the commented out version, since it depends on the operator numbers not changing, but improves code size by a lot */
 	i8* Operators := ":= += -= *= && || =  != <  <= >  >= As +  -  *  /  %  << >> &  |  ^  !  ~  [  .  -> ~> :  #  "
 	
 	i8* ThisOperator := Operators + (Operator * 3)
@@ -790,128 +746,13 @@ define void PrintOperator(i8 Operator) {
 	}
 	
 	AWrite(ThisOperator)
-	
-/* 	if (Operator = OPERATOR_COLON_EQUAL) {
-		FirstCharacter := ':'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_PLUS_EQUAL) {
-		FirstCharacter := '+'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_MINUS_EQUAL) {
-		FirstCharacter := '-'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_STAR_EQUAL) {
-		FirstCharacter := '*'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_LESS_EQAUL) {
-		FirstCharacter := '<'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_GREATER_EQAUL) {
-		FirstCharacter := '>'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_BANG_EQUAL) {
-		FirstCharacter := '!'
-		SecondCharacter := '='
-	}
-	else if (Operator = OPERATOR_MINUS_GREATER) {
-		FirstCharacter := '-'
-		SecondCharacter := '>'
-	}
-	else if (Operator = OPERATOR_TILDE_GREATER) {
-		FirstCharacter := '~'
-		SecondCharacter := '>'
-	}
-	else if (Operator = OPERATOR_LOGICAL_AND) {
-		FirstCharacter := '&'
-		SecondCharacter := '&'
-	}
-	else if (Operator = OPERATOR_LOGICAL_OR) {
-		FirstCharacter := '|'
-		SecondCharacter := '|'
-	}
-	else if (Operator = OPERATOR_AS) {
-		FirstCharacter := 'a'
-		SecondCharacter := 's'
-	}
-	else if (Operator = OPERATOR_LESS_LESS) {
-		FirstCharacter := '<'
-		SecondCharacter := '<'
-	}
-	else if (Operator = OPERATOR_GREATER_GREATER) {
-		FirstCharacter := '>'
-		SecondCharacter := '>'
-	}
-	else if (Operator = OPERATOR_OPEN_BRACKET) {
-		FirstCharacter := '['
-	}
-	else if (Operator = OPERATOR_PLUS) {
-		FirstCharacter := '+'
-	}
-	else if (Operator = OPERATOR_MINUS) {
-		FirstCharacter := '-'
-	}
-	else if (Operator = OPERATOR_STAR) {
-		FirstCharacter := '*'
-	}
-	else if (Operator = OPERATOR_SLASH) {
-		FirstCharacter := '/'
-	}
-	else if (Operator = OPERATOR_PERCENT) {
-		FirstCharacter := '%'
-	}
-	else if (Operator = OPERATOR_EQUAL) {
-		FirstCharacter := '='
-	}
-	else if (Operator = OPERATOR_DOT) {
-		FirstCharacter := '.'
-	}
-	else if (Operator = OPERATOR_BANG) {
-		FirstCharacter := '!'
-	}
-	else if (Operator = OPERATOR_LESS) {
-		FirstCharacter := '<'
-	}
-	else if (Operator = OPERATOR_GREATER) {
-		FirstCharacter := '>'
-	}
-	else if (Operator = OPERATOR_XOR) {
-		FirstCharacter := '^'
-	}
-	else if (Operator = OPERATOR_AND) {
-		FirstCharacter := '&'
-	}
-	else if (Operator = OPERATOR_OR) {
-		FirstCharacter := '|'
-	}
-	else if (Operator = OPERATOR_COLON) {
-		FirstCharacter := ':'
-	}
-	else if (Operator = OPERATOR_TILDE) {
-		FirstCharacter := '~'
-	}
-	
-	if (FirstCharacter) {
-		WriteCharacter(FirstCharacter)
-	}
-	if (SecondCharacter) {
-		WriteCharacter(SecondCharacter)
-	} */
 }
 
 define void PrintPunctuation(i8 Punctuation) {
-	/* Prints a punctuation token in the worst way possible */
-	
-	/* i8 Character := 0 */
 	
 	WriteCharacter("(){}],"[Punctuation])
 	
-/* 	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
+	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
 		Character := '('
 	}
 	else if (Punctuation = PUNCTUATION_CLOSE_PAREN) {
@@ -930,12 +771,10 @@ define void PrintPunctuation(i8 Punctuation) {
 		Character := ','
 	}
 	
-	WriteCharacter(Character) */
+	WriteCharacter(Character)
 }
 
 define void PrintKeyword(i8 Keyword) {
-	/* ugh, prints a keyword in the worst way possible */
-	
 	if (Keyword = KEYWORD_DECLARE) {
 		AWrite("declare")
 	}
@@ -987,4 +826,4 @@ define void PrintKeyword(i8 Keyword) {
 	else if (Keyword = KEYWORD_WINDOWS) {
 		AWrite("windows")
 	}
-}
+} */

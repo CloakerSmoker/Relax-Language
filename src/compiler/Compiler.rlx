@@ -17,7 +17,7 @@ struct CompilerState {
 	PEBuilder* Builder,
 	ELFBuilder* ELF,
 	
-	i64 GlobalBase,
+	i32 GlobalBase,
 	
 	i8* CodeBuffer,
 	i32 CodeBufferSize,
@@ -116,11 +116,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 					}
 				}
 				else if !(NextFunction->HasFullDefinition) {
-					ASTNode* FakeNode := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, NextFunction->Name, TYPE_NONE)
-					FakeNode->SourceFilePath := NextFunction->SourceFilePath
-					FakeNode->LineNumber := NextFunction->LineNumber
-					
-					ASTError(FakeNode, "Function is declared, but never defined.")
+					ContextError(NextFunction~>Context, "Function is declared, but never defined.")
 				}
 				else {
 					i8 IsMain := SafeStringEqualsAString(NextFunction->Name, "Main")

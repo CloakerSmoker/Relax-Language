@@ -77,7 +77,7 @@ struct ELFProgramSectionHeaders {
 
 struct ELFBuilder {
 	void* Buffer,
-	i64 BufferSize,
+	i32 BufferSize,
 	
 	ELFProgramHeader* PHDR, /* Segment which contains the segment headers */
 	ELFProgramHeader* LoadPHDR, /* Segment which loads the segment containing the segment headers */
@@ -278,8 +278,8 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 		DataSize := TargetBuilder->DataProgramHeader->MemorySize
 	}
 	
-	i64 PHDRSize := ProgramHeadersSize + SectionHeadersSize
-	i64 FinalSize := #ELFHeader + PHDRSize + StringSectionSize + CodeSize + DataSize
+	i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
+	i32 FinalSize := #ELFHeader + PHDRSize + StringSectionSize + CodeSize + DataSize
 	
 	/* Update the PHDR segment to contain the headers we are writing */
 	TargetBuilder->PHDR->FileSize := PHDRSize

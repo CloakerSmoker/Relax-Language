@@ -64,5 +64,5 @@ define i32 Main() {
 	WriteCharacter(',')
 	IWrite(#DumbTest)
 	
-	return 0
+	return 1 >> 127
 }

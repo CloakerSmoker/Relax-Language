@@ -1,0 +1,138 @@
+struct ErrorContext {
+	SafeWideString* SourceFilePath,
+	i32 LineNumber,
+	i16* Source,
+	i32 PositionInSource,
+	i16 LengthInSource
+}
+
+define void CopyContext(ErrorContext* From, ErrorContext* To) {
+	To->SourceFilePath := From->SourceFilePath
+	To->LineNumber := From->LineNumber
+	To->Source := From->Source
+	To->PositionInSource := From->PositionInSource
+	To->LengthInSource := From->LengthInSource
+}
+
+define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext* To) {
+	CopyContext(Left, To)
+	
+	if (Left->PositionInSource > Right->PositionInSource) {
+		To->PositionInSource := Right->PositionInSource
+	}
+	
+	i32 LeftEnd := Left->PositionInSource + Left->LengthInSource
+	i32 RightEnd := Right->PositionInSource + Right->LengthInSource
+	
+	if (LeftEnd < RightEnd) {
+		To->LengthInSource := RightEnd - To->PositionInSource
+	}
+	else {
+		To->LengthInSource := LeftEnd - To->PositionInSource
+	}
+}
+
+define void FindLastLine(i16* WString) {
+	i32 Index := 0
+	
+	loop {
+		i16 NextCharacter := (WString - Index)[0]
+		
+		if (NextCharacter = 13 || NextCharacter = 10) {
+			return (WString - Index) + 2
+		}
+		
+		Index += 1
+	}
+}
+
+define void PrintSpaces(i32 Count) {
+	while (Count != 0) {
+		WriteCharacter(' ')
+		Count -= 1
+	}
+}
+
+define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {	
+	i8* LineNumberString := IToA(At->LineNumber)
+	i32 LineNumberLength := ALen(LineNumberString)
+	
+	if (Message) {
+		TextColor(Color)
+		AWriteLine(Message)
+		ResetColors()
+	}
+	
+	PrintSpaces(LineNumberLength + 1) 
+	AWrite(" [ ")
+	TextColor(Blue | Bright)
+	PrintSafeString(At->SourceFilePath)
+	ResetColors()
+	AWriteLine(" ]")
+	
+	WriteCharacter(' ')
+	AWrite(LineNumberString)
+	AWrite(" | ")
+	
+	i32 OffsetInSource := At->PositionInSource * 2
+	
+	i16* SourceLine := FindLastLine(At->Source + OffsetInSource)
+	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Source)) / 2
+	
+	i32 DashCount := 0
+	
+	for (i32 LeftIndex := 0, LeftIndex < PositionInLine, LeftIndex += 1) {
+		i16 NextLeftCharacter := SourceLine[LeftIndex]
+		
+		if (NextLeftCharacter = '	') {
+			PrintSpaces(4)
+			DashCount += 4
+		}
+		else {
+			WriteCharacter(NextLeftCharacter As i8)
+			DashCount += 1
+		}
+	}
+	
+	i32 RightIndex := LeftIndex
+	
+	loop {
+		i16 NextCharacter := SourceLine[RightIndex]
+		
+		if (NextCharacter = 10 || NextCharacter = 13) {
+			break
+		}
+		
+		WriteCharacter(NextCharacter As i8)
+		RightIndex += 1
+	}
+	
+	WriteNewLine()
+	
+	PrintSpaces(LineNumberLength + 1)
+	
+	AWrite(" |-")
+	
+	for (i32 DashIndex := 0, DashIndex < DashCount, DashIndex += 1) {
+		WriteCharacter('-')
+	}
+	
+	TextColor(Color)
+	
+	for (i32 ArrowIndex := 0, ArrowIndex < At->LengthInSource, ArrowIndex += 1) {
+		WriteCharacter('^')
+	}
+	
+	ResetColors()
+	
+	WriteNewLine()
+}
+
+define void ContextError(ErrorContext* At, i8* Message) {
+	if (Message) {
+		SwapOutputStream()
+	}
+	
+	PrettyError(At, Message, Red | Bright)
+	Exit(1)
+}
