@@ -6,7 +6,7 @@ define void Exit(i32 ExitCode) {
 		TerminateProcess(GetCurrentProcess(), ExitCode)
 	}
 	linux {
-		syscall(60, ExitCode)
+		syscall:(60, ExitCode)
 	}
 }
 

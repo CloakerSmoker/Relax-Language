@@ -35,7 +35,7 @@ define void WriteNewLine() {
 	}
 	linux {
 		i8 NewLine := 0x0A
-		syscall(1, STDOUT, &NewLine, 1)
+		syscall:(1, STDOUT, &NewLine, 1)
 	}
 }
 define void WriteCharacter(i8 Character) {
@@ -45,7 +45,7 @@ define void WriteCharacter(i8 Character) {
 		WriteFile(STDOUT, &Character, 1, &BytesWritten, 0)
 	}
 	linux {
-		syscall(1, STDOUT, &Character, 1)
+		syscall:(1, STDOUT, &Character, 1)
 	}
 }
 define i32 AWrite(i8* AString) {
@@ -55,7 +55,7 @@ define i32 AWrite(i8* AString) {
 		WriteFile(STDOUT, AString As i8*, ALen(AString), &BytesWritten, 0)
 	}
 	linux {
-		syscall(1, STDOUT, AString, ALen(AString))
+		syscall:(1, STDOUT, AString, ALen(AString))
 	}
 }
 define i32 AWriteLine(i8* AString) {

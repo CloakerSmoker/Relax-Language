@@ -491,24 +491,35 @@ define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 Pointe
 	return MakeType(FoundTypeInfo, PointerDepth)
 }
 
+declare i32 FreezeParser(ParserState*)
+declare void UnfreezeParser(ParserState*, i32)
+declare Token* ParserNextToken(ParserState*)
+
 define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
 	i8* ErrorMessage := 0
 	
+	i32 BeforeType := FreezeParser(pState)
 	Type Result := TryGetType(pState, TypeName, PointerDepth, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->tState, ErrorMessage)
+		UnfreezeParser(pState, BeforeType)
+		
+		Token* BadToken := ParserNextToken(pState)
+		
+		TokenError(BadToken, ErrorMessage)
 	}
 	
 	return Result
 }
+
+declare Token* ParserCurrentToken(ParserState*)
 
 define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement) {
 	/* Returns the type you would get from dereferencing TypeToDecrement */
 	
 	if (TypeToDecrement.PointerDepth = 0) {
 		/* If you're dereferencing a non-pointer type, something's wrong */
-		TokenizerError(pState->tState, "Pointer type expected")
+		TokenError(ParserCurrentToken(pState), "Pointer type expected")
 	}
 	
 	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1 As i16)
@@ -785,13 +796,13 @@ define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type Righ
 	}
 }
 
-define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType) {
+define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, ErrorContext* BlameContext) {
 	i8* ErrorMessage := 0
 	
 	Type Result := TryGetBinaryResultType(pState, LeftType, RightType, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenizerError(pState->tState, ErrorMessage)
+		ContextError(BlameContext, ErrorMessage)
 	}
 	
 	return Result
@@ -944,7 +955,9 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else {
 		/* Otherwise, just follow standard binary typing rules */
 		
-		ResultType := GetBinaryResultType(pState, LeftType, RightType)
+		MergeContexts(Left~>Context, Right~>Context, OperatorToken~>Context)
+		
+		ResultType := GetBinaryResultType(pState, LeftType, RightType, OperatorToken~>Context)
 		
 		if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
 			/* For && and ||, GetBinaryResultType is only called for the error messages, and the actual result type is a byte */
@@ -1651,7 +1664,7 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 	Type ReturnType := ParseTypeName(pState)
 	
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
-	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	SafeWideString* Name := NameToken->StringValue
 	
 	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
 	
@@ -1679,6 +1692,8 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 	NewDefine->Name := Name
 	NewDefine->Locals := NewHashMap()
 	NewDefine->LocalOffset := 0
+	
+	CopyContext(NameToken~>Context, NewDefine~>Context)
 	
 	return NewDefine
 }
@@ -2375,335 +2390,3 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	
 	return Result
 }
-
-/* define void PrintIndent(i32 IndentLevel) {
-	for (i32 Index := 0, Index < IndentLevel, Index += 1) {
-		AWrite("    ")
-	}
-}
-
-declare void PrintAST(ASTNode*)
-
-define void IndentPrintAST(ASTNode* NodeToPrint, i32 IndentLevel) {
-	
-	PrintIndent(IndentLevel)
-	
-	i8 NodeType := NodeToPrint->NodeType
-	
-	if (NodeType = NODE_TYPE_UNARY) {
-		UnaryExpression* UnaryNode := NodeToPrint->UnaryNode
-		
-		WriteCharacter('(')
-		
-		PrintOperator(UnaryNode->Operator->Value  As i8)
-		PrintAST(UnaryNode->Operand)
-		
-		WriteCharacter(')')
-	}
-	else if (NodeType = NODE_TYPE_BINARY) {
-		BinaryExpression* BinaryNode := NodeToPrint->BinaryNode
-		
-		if (BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET) {
-			PrintAST(BinaryNode->Left)
-			WriteCharacter('[')
-			PrintAST(BinaryNode->Right)
-			WriteCharacter(']')
-		}
-		else {
-			WriteCharacter('(')
-			PrintAST(BinaryNode->Left)
-			WriteCharacter(' ')
-			PrintOperator(BinaryNode->Operator->Value As i8)
-			WriteCharacter(' ')
-			PrintAST(BinaryNode->Right)
-			WriteCharacter(')')
-		}
-	}
-	else if (NodeType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := NodeToPrint->CallNode
-		i8 BuiltinID := CallNode->BuiltinID	
-		
-		if (BuiltinID = BUILTIN_SYSCALL) {
-			AWrite("syscall")
-		}
-		else if (BuiltinID = BUILTIN_BREAKPOINT) {
-			AWrite("breakpoint")
-		}
-		else {
-			PrintSafeString(CallNode->TargetFunction->Name)
-		}
-		
-		WriteCharacter('(')
-		
-		for (i32 CallParameterIndex := 0, CallParameterIndex < (CallNode->ParameterCount), CallParameterIndex += 1) {
-			ASTNode* NextCallParameter := (CallNode->Parameters)[CallParameterIndex]
-			
-			PrintAST(NextCallParameter)
-			
-			if (CallParameterIndex + 1 < (CallNode->ParameterCount)) {
-				WriteCharacter(',')
-				WriteCharacter(' ')
-			}
-		}
-		
-		WriteCharacter(')')
-	}
-	else if (NodeType = NODE_TYPE_DEFINE) {
-		FunctionDefine* DefineNode := NodeToPrint->DefineNode
-		
-		if (DefineNode->IsImported) {
-			AWrite("DllImport ")
-		}
-		else if (DefineNode->HasFullDefinition) {
-			AWrite("define ")
-		}
-		else {
-			AWrite("declare ")
-		}
-		
-		PrintType(DefineNode->ReturnType)
-		WriteCharacter(' ')
-		PrintSafeString(DefineNode->Name)
-		WriteCharacter('(')
-		
-		for (i32 ParameterIndex := 0, ParameterIndex < (DefineNode->ParameterCount), ParameterIndex += 1) {
-			VariableInfo* NextDefineParameter := (DefineNode->Parameters)[ParameterIndex]
-			
-			PrintType(NextDefineParameter->Type)
-			
-			if (DefineNode->HasFullDefinition) {
-				WriteCharacter(' ')
-				PrintSafeString(NextDefineParameter->Name)
-			}
-			
-			if (ParameterIndex + 1 < (DefineNode->ParameterCount)) {
-				WriteCharacter(',')
-				WriteCharacter(' ')
-			}
-		}
-		
-		WriteCharacter(')')
-		
-		if (DefineNode->HasFullDefinition) {
-			AWriteLine(" {")
-			
-			if (DefineNode->StringBufferSize) {
-				PrintIndent(1)
-				AWrite("i8* StringBuffer := ")
-				
-				WriteCharacter('"')
-				
-				for (i32 StringIndex := 0, StringIndex < (DefineNode->StringBufferSize), StringIndex += 1) {
-					WriteCharacter((DefineNode->StringBuffer)[StringIndex])
-				}
-				
-				WriteCharacter('"')
-				WriteNewLine()
-			}
-				
-			void* Elements := DefineNode->Locals->Elements
-			
-			for (i32 ElementIndex := 0, ElementIndex < (DefineNode->Locals->BufferMaxCount), ElementIndex += 1) {
-			
-				if (Elements[ElementIndex]) {
-				
-					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-		
-					while (FoundElement) {
-
-						VariableInfo* NextLocal := (FoundElement->Value) As VariableInfo*
-						
-						if !(NextLocal->IsParameter) {
-							
-							PrintIndent(IndentLevel + 1)
-							PrintType(NextLocal->Type)
-							WriteCharacter(' ')
-							PrintSafeString(NextLocal->Name)
-							WriteNewLine()
-						}
-						FoundElement := (FoundElement->NextElement) As HashMapElement*
-					}
-				}
-			}
-			
-			for (i32 StatementIndex := 0, StatementIndex < (DefineNode->Body->StatementCount), StatementIndex += 1) {
-				ASTNode* BodyStatement := (DefineNode->Body->Statements)[StatementIndex]
-				
-				IndentPrintAST(BodyStatement, IndentLevel + 1)
-			}
-			
-			WriteCharacter('}')
-		}
-		else if (DefineNode->IsImported) {
-			WriteCharacter(' ')
-			WriteCharacter('{')
-			PrintSafeString(DefineNode->ImportFileName)
-			AWrite(".dll, ")
-			PrintSafeString(DefineNode->ImportFunctionName)
-			WriteCharacter('}')
-		}
-		
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_LOOP) {
-		Block* LoopBody := NodeToPrint->LoopBody
-		
-		AWrite("loop {")
-		WriteNewLine()
-		
-		for (i32 LoopBodyIndex := 0, LoopBodyIndex < (LoopBody->StatementCount), LoopBodyIndex += 1) {
-			ASTNode* NextStatement := (LoopBody->Statements)[LoopBodyIndex]
-			
-			IndentPrintAST(NextStatement, IndentLevel + 1)
-		}
-		
-		PrintIndent(IndentLevel)
-		WriteCharacter('}')
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
-		if (NodeToPrint->IsContinue) {
-			AWrite("continue")
-		}
-		else {
-			AWrite("break")
-		}
-		
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_RETURN) {
-		ASTNode* ReturnExpression := NodeToPrint->ReturnExpression
-		
-		AWrite("return ")
-		PrintAST(ReturnExpression)
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_EXPRESSION) {
-		ASTNode* ExpressionStatement := NodeToPrint->ExpressionStatement
-		
-		PrintAST(ExpressionStatement)
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_VARIABLE) {
-		VariableInfo* TargetVariable := NodeToPrint->VariableValue
-		
-		PrintSafeString(TargetVariable->Name)
-	}
-	else if (NodeType = NODE_TYPE_INTEGER) {
-		IWrite(NodeToPrint->IntegerValue)
-	}
-	else if (NodeType = NODE_TYPE_TYPE) {
-		PrintType(NodeToPrint->TypeValue)
-	}
-	else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
-		StructAccessExpression* AccessNode := NodeToPrint->AccessNode
-		
-		PrintAST(AccessNode->Left)
-		PrintOperator(AccessNode->Operator->Value As i8)
-		PrintSafeString(AccessNode->TargetField->Name)
-	}
-	else if (NodeType = NODE_TYPE_IDENTIFIER) {
-		PrintSafeString(NodeToPrint->StringValue)
-	}
-	else if (NodeType = NODE_TYPE_IF) {
-		IfGroup* IfNode := NodeToPrint->IfNode
-		
-		AWrite("if ")
-		
-		for (i32 BranchIndex := 0, BranchIndex < (IfNode->BranchCount), BranchIndex += 1) {
-			if (BranchIndex != 0) {
-				PrintIndent(IndentLevel)
-				AWrite("else if ")
-			}
-			
-			PrintAST((IfNode->Conditions)[BranchIndex])
-			
-			AWrite(" {")
-			WriteNewLine()
-			
-			Block* BranchBody := (IfNode->Bodies)[BranchIndex]
-			
-			for (i32 IfBodyIndex := 0, IfBodyIndex < (BranchBody->StatementCount), IfBodyIndex += 1) {
-				ASTNode* IfBodyStatement := (BranchBody->Statements)[IfBodyIndex]
-				
-				IndentPrintAST(IfBodyStatement, IndentLevel + 1)
-			}
-			
-			PrintIndent(IndentLevel)
-			WriteCharacter('}')
-			WriteNewLine()
-		}
-		
-		if (IfNode->ElseBranch) {
-			PrintIndent(IndentLevel)
-			AWrite("else {")
-			WriteNewLine()
-			
-			Block* ElseBody := IfNode->ElseBranch
-			
-			for (i32 ElseStatementIndex := 0, ElseStatementIndex < (ElseBody->StatementCount), ElseStatementIndex += 1) {
-				ASTNode* ElseBodyStatement := (ElseBody->Statements)[ElseStatementIndex]
-				
-				IndentPrintAST(ElseBodyStatement, IndentLevel + 1)
-			}
-			
-			PrintIndent(IndentLevel)
-			WriteCharacter('}')
-			WriteNewLine()
-		}
-	}
-	else if (NodeType = NODE_TYPE_FOR) {
-		ForLoop* ForNode := NodeToPrint->ForNode
-		
-		AWrite("for (")
-		
-		PrintAST(ForNode->Initializer)
-		AWrite(", ")
-		PrintAST(ForNode->Condition)
-		AWrite(", ")
-		PrintAST(ForNode->Step)
-		AWrite(") {")
-		WriteNewLine()
-		
-		Block* ForBody := ForNode->Body
-		
-		for (i32 ForBodyIndex := 0, ForBodyIndex < (ForBody->StatementCount), ForBodyIndex += 1) {
-			ASTNode* NextBodyStatement := (ForBody->Statements)[ForBodyIndex]
-			
-			IndentPrintAST(NextBodyStatement, IndentLevel + 1)
-		}
-		
-		PrintIndent(IndentLevel)
-		WriteCharacter('}')
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_WHILE) {
-		WhileLoop* WhileNode := NodeToPrint->WhileNode
-		
-		AWrite("while ")
-		PrintAST(WhileNode->Condition)
-		AWrite(" {")
-		WriteNewLine()
-		
-		Block* WhileBody := WhileNode->Body
-		
-		for (i32 WhileBodyIndex := 0, WhileBodyIndex < (WhileBody->StatementCount), WhileBodyIndex += 1) {
-			ASTNode* WhileBodyStatement := (WhileBody->Statements)[WhileBodyIndex]
-			
-			IndentPrintAST(WhileBodyStatement, IndentLevel + 1)
-		}
-		
-		PrintIndent(IndentLevel)
-		WriteCharacter('}')
-		WriteNewLine()
-	}
-	else if (NodeType = NODE_TYPE_STRING) {
-		AWrite("(StringTable + ")
-		IWrite(NodeToPrint->StringOffsetValue)
-		WriteCharacter(')')
-	}
-}
-
-define void PrintAST(ASTNode* NodeToPrint) {
-	IndentPrintAST(NodeToPrint, 0)
-} */

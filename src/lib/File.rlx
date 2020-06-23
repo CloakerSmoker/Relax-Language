@@ -44,7 +44,7 @@ define i64 FileOpen(i8* FilePath, i32 Mode) {
 		return CreateFile(FilePath, AccessMask, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CreationMode, FILE_ATTRIBUTE_NORMAL, 0)
 	}
 	linux {
-		return syscall(2, FilePath, Mode - 1, 0x1C0)
+		return syscall:(2, FilePath, Mode - 1, 0x1C0)
 	}
 }
 
@@ -57,7 +57,7 @@ define i32 FileSeek(i64 File, i32 Offset, i32 Mode) {
 		return SetFilePointer(File, Offset, 0, Mode)
 	}
 	linux {
-		return syscall(8, File, Offset, Mode) As i32
+		return syscall:(8, File, Offset, Mode) As i32
 	}
 }
 define i32 FileTell(i64 File) {
@@ -83,7 +83,7 @@ define void FileRead(i64 File, void* Buffer, i32 BytesToRead) {
 		return ReadFile(File, Buffer, BytesToRead, &BytesRead, 0)
 	}
 	linux {
-		return syscall(0, File, Buffer, BytesToRead)
+		return syscall:(0, File, Buffer, BytesToRead)
 	}
 }
 define void* FileReadAll(i64 File) {
@@ -101,7 +101,7 @@ define i32 FileWrite(i64 File, void* Buffer, i32 BufferSize) {
 		return _WriteFile(File, Buffer, BufferSize, &BytesWritten, 0)
 	}
 	linux {
-		return syscall(1, File, Buffer, BufferSize) As i32
+		return syscall:(1, File, Buffer, BufferSize) As i32
 	}
 }
 define void FileClose(i64 File) {
@@ -109,7 +109,7 @@ define void FileClose(i64 File) {
 		return CloseHandle(File)
 	}
 	linux {
-		return syscall(3, File)
+		return syscall:(3, File)
 	}
 }
 define void FileGetError(i64 Result) {
@@ -129,6 +129,6 @@ define i32 FileDelete(i8* FilePath) {
 		return DeleteFile(FilePath)
 	}
 	linux {
-		return syscall(87, FilePath) As i32
+		return syscall:(87, FilePath) As i32
 	}
 } 

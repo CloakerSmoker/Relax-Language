@@ -150,7 +150,10 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	}
 	
 	if !(FoundMain) {
-		TokenizerError(pState->tState, "Main function not found")
+		SwapOutputStream()
+		TextColor(Red | Bright)
+		AWriteLine("Main function not found, aborting.")
+		Exit(1)
 	}
 	
 	ResolveAllLabels(&C)
@@ -279,7 +282,10 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 	if ((cState->Index + 0x100) >= (cState->CodeBufferSize)) {
 		cState->CodeBufferSize += 0x5000
 		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
-		cState->Builder->ImportFixupBase := cState->CodeBuffer
+		
+		if !(cState->OutputELF) {
+			cState->Builder->ImportFixupBase := cState->CodeBuffer
+		}
 	}
 }
 
@@ -701,7 +707,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 
 define i8 IsComparison(Token* OperatorToken) {
 	i8 Operator := OperatorToken->Value As i8
-	return (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) || (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) 
+	
+	return (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
 }
 
 define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression, i32 JumpToLabel) {

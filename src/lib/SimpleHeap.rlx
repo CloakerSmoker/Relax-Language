@@ -9,9 +9,9 @@ i32 DEFAULT_HEAP_SIZE := 0x100000
 
 define SimpleHeap* SimpleHeapInit() {
 	linux {
-		void* ProgramBreak := syscall(12, 0)
+		void* ProgramBreak := syscall:(12, 0)
 		
-		syscall(12, ProgramBreak + DEFAULT_HEAP_SIZE)
+		syscall:(12, ProgramBreak + DEFAULT_HEAP_SIZE)
 		
 		SimpleHeap* Heap := ProgramBreak As SimpleHeap*
 		
@@ -33,7 +33,7 @@ declare void IWriteHex(i64)
 
 define void SimpleHeapGrow() {	
 	linux {
-		ProcessHeap->End := syscall(12, ProcessHeap->End + DEFAULT_HEAP_SIZE)
+		ProcessHeap->End := syscall:(12, ProcessHeap->End + DEFAULT_HEAP_SIZE)
 	}
 }
 

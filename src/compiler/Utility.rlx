@@ -32,14 +32,18 @@ define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext*
 	}
 }
 
-define void FindLastLine(i16* WString) {
+define void FindLastLine(i16* Base, i32 Offset) {
 	i32 Index := 0
+	i16* WString := Base + Offset
 	
 	loop {
 		i16 NextCharacter := (WString - Index)[0]
 		
 		if (NextCharacter = 13 || NextCharacter = 10) {
 			return (WString - Index) + 2
+		}
+		else if ((WString - Index) <= Base) {
+			return Base
 		}
 		
 		Index += 1
@@ -76,7 +80,7 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	
 	i32 OffsetInSource := At->PositionInSource * 2
 	
-	i16* SourceLine := FindLastLine(At->Source + OffsetInSource)
+	i16* SourceLine := FindLastLine(At->Source, OffsetInSource)
 	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Source)) / 2
 	
 	i32 DashCount := 0

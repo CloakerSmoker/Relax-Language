@@ -6,7 +6,8 @@ struct HashMapElement {
 
 struct HashMap {
 	i32 BufferMaxCount,
-	void *Elements
+	void *Elements,
+	i8 IgnoreCase
 }
 
 define HashMap* NewHashMap() {
@@ -17,25 +18,38 @@ define HashMap* NewHashMap() {
 	
 	return NewMap
 }
-define i64 HashString(SafeWideString* StringToHash) {
+define i64 HashString(SafeWideString* StringToHash, i8 IgnoreCase) {
 	i64 Hash := 5281
 	
-/*  	AWrite("Hash(")
-	IWrite(StringToHash->Buffer)
-	AWrite(", ")
-	IWrite(StringToHash->Length)
-	AWrite(", ")
-	PrintSafeString(StringToHash)
-	AWrite(") == ") */
-	
 	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
-		Hash := ((Hash * 32) + Hash) ^ (StringToHash->Buffer)[Index]
+		i8 NextCharacter := StringToHash->Buffer[Index] As i8
+		
+		if (IgnoreCase) {
+			NextCharacter := Lower(NextCharacter) As i8
+		}
+		
+		Hash := ((Hash * 32) + Hash) ^ NextCharacter
 	}
-	
-/* 	IWriteLine(Hash) */
 	
 	return Hash
 }
+define i64 HashAString(i8* StringToHash, i8 IgnoreCase) {
+	i64 Hash := 5281
+	
+	for (i32 Index := 0, StringToHash[Index] != 0, Index += 1) {
+		i8 NextCharacter := StringToHash[Index]
+		
+		if (IgnoreCase) {
+			NextCharacter := Lower(NextCharacter) As i8
+		}
+		
+		Hash := ((Hash * 32) + Hash) ^ NextCharacter
+	}
+	
+	return Hash
+}
+
+
 define i64 HashMapGetIndex(i64 Hash, i32 Length) {
 	i64 Index := Hash % Length
 	
@@ -73,7 +87,7 @@ define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
 	return Node
 }
 define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) {
-	i64 Hash := HashString(Key)
+	i64 Hash := HashString(Key, TargetMap->IgnoreCase)
 	
 	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
 	
@@ -85,11 +99,11 @@ define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) 
 	
 	return false As HashMapElement*
 }
-define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
-	i64 Hash := HashString(Key)
-	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
+
+define void HashMapUpsert(HashMap* TargetMap, i64 KeyHash, void Value) {
+	i64 Index := HashMapGetIndex(KeyHash, TargetMap->BufferMaxCount)
 	
-	HashMapElement* TailElement := HashMapFindElement(TargetMap, Hash)
+	HashMapElement* TailElement := HashMapFindElement(TargetMap, KeyHash)
 	HashMapElement* NewElement := 0
 	
 	if (TailElement = 0) {
@@ -105,8 +119,8 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 		
 		TargetMap->Elements[Index] := NewElement
 	}
-	else if (TailElement->Hash != Hash) {
-		/* else if TailElement->Hash != Hash:
+	else if (TailElement->Hash != KeyHash) {
+		/* else if TailElement->Hash != KeyHash:
 			Linked list exists, but doesn't contain the key yet
 			Create new element, and insert it into to the list
 		*/
@@ -130,6 +144,13 @@ define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value)
 		/* TailElement->NextElement := 0 */
 	}
 	
-	NewElement->Hash := Hash
+	NewElement->Hash := KeyHash
 	NewElement->Value := Value
+}
+
+define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
+	HashMapUpsert(TargetMap, HashString(Key, TargetMap->IgnoreCase), Value)
+}
+define void HashMapASet(HashMap* TargetMap, i8* Key, void Value) {
+	HashMapUpsert(TargetMap, HashAString(Key, TargetMap->IgnoreCase), Value)
 }

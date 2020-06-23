@@ -20,71 +20,9 @@ struct TokenizerState {
 	i32 MaxTokenIndex,
 	i32 CurrentLineNumber,
 	i16 CurrentLineStart,
-	i32 TokenCapacity
-}
-
-declare i8 LookupKeyword(SafeWideString*)
-
-define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
-	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
+	i32 TokenCapacity,
 	
-	NewState->SourceFilePath := SourceFilePath
-	NewState->Source := Source
-	NewState->SourceLength := SourceLength
-	
-	NewState->Tokens := Alloc(8 * 300) As Token**
-	
-	NewState->SourceIndex := 0
-	NewState->TokenIndex := 0
-	NewState->MaxTokenIndex := 0
-	NewState->CurrentLineNumber := 1
-	
-	return NewState
-}
-
-define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i32 LengthInSource, i8 Type) {
-	/* Ensure the token buffer has space for another token */
-	
-	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
-		tState->TokenCapacity += 300
-		
-		tState->Tokens := ReAlloc(tState->Tokens, 8 * (tState->TokenCapacity)) As Token**
-	}
-	
-	i32 Index := tState->MaxTokenIndex
-	
-	Token* OutputToken := Alloc(#Token) As Token*
-	
-	/* Insert the token into the token list */
-	(tState->Tokens)[Index] := OutputToken
-	
-	tState->MaxTokenIndex += 1
-	
-	/* Populate the token */
-	OutputToken->Type := Type
-	OutputToken->Value := Value
-	
-	OutputToken->Context.SourceFilePath := tState->SourceFilePath
-	OutputToken->Context.LineNumber := tState->CurrentLineNumber
-	OutputToken->Context.Source := Source
-	OutputToken->Context.PositionInSource := PositionInSource
-	OutputToken->Context.LengthInSource := LengthInSource
-	
-	return OutputToken
-}
-define Token* MakeToken(TokenizerState* tState, i32 PositionInSource, i8 Type, void* Value) {
-	return PushToken(tState, Value, tState->Source, PositionInSource, (tState->SourceIndex) - PositionInSource, Type)
-}
-
-define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
-	/* Makes a SafeWideString from tState and returns it as a void* to fit into Token->Value */
-	
-	SafeWideString* NewSafeString := AllocateNewSafeString()
-
-	NewSafeString->Length := tState->SourceIndex - StartingIndex
-	NewSafeString->Buffer := tState->Source + (StartingIndex * 2)
-
-	return NewSafeString As void*
+	HashMap* Keywords
 }
 
 i8 TOKEN_TYPE_EOF := 0
@@ -197,6 +135,90 @@ i8 KEYWORD_RETURN := 14
 i8 KEYWORD_WINDOWS := 15
 i8 KEYWORD_LINUX := 16
 
+define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
+	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
+	
+	NewState->SourceFilePath := SourceFilePath
+	NewState->Source := Source
+	NewState->SourceLength := SourceLength
+	
+	NewState->Tokens := Alloc(8 * 300) As Token**
+	
+	NewState->SourceIndex := 0
+	NewState->TokenIndex := 0
+	NewState->MaxTokenIndex := 0
+	NewState->CurrentLineNumber := 1
+	
+	HashMap* K := NewHashMap()
+	NewState->Keywords := K
+	
+	K->IgnoreCase := true
+	
+	HashMapASet(K, "declare", 	KEYWORD_DECLARE)
+	HashMapASet(K, "define", 	KEYWORD_DEFINE)
+	HashMapASet(K, "dllimport", KEYWORD_DLLIMPORT)
+	HashMapASet(K, "if", 		KEYWORD_IF)
+	HashMapASet(K, "else", 		KEYWORD_ELSE)
+	HashMapASet(K, "for", 		KEYWORD_FOR)
+	HashMapASet(K, "while",		KEYWORD_WHILE)
+	HashMapASet(K, "loop", 		KEYWORD_LOOP)
+	HashMapASet(K, "continue", 	KEYWORD_CONTINUE)
+	HashMapASet(K, "break", 	KEYWORD_BREAK)
+	HashMapASet(K, "struct", 	KEYWORD_STRUCT)
+	HashMapASet(K, "return", 	KEYWORD_RETURN)
+	HashMapASet(K, "union", 	KEYWORD_UNION)
+	HashMapASet(K, "bits", 		KEYWORD_BITS)
+	HashMapASet(K, "unaligned", KEYWORD_UNALIGNED)
+	HashMapASet(K, "windows", 	KEYWORD_WINDOWS)
+	HashMapASet(K, "linux", 	KEYWORD_LINUX)
+	
+	return NewState
+}
+
+define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i32 LengthInSource, i8 Type) {
+	/* Ensure the token buffer has space for another token */
+	
+	if (tState->MaxTokenIndex >= tState->TokenCapacity) {
+		tState->TokenCapacity += 300
+		
+		tState->Tokens := ReAlloc(tState->Tokens, 8 * (tState->TokenCapacity)) As Token**
+	}
+	
+	i32 Index := tState->MaxTokenIndex
+	
+	Token* OutputToken := Alloc(#Token) As Token*
+	
+	/* Insert the token into the token list */
+	(tState->Tokens)[Index] := OutputToken
+	
+	tState->MaxTokenIndex += 1
+	
+	/* Populate the token */
+	OutputToken->Type := Type
+	OutputToken->Value := Value
+	
+	OutputToken->Context.SourceFilePath := tState->SourceFilePath
+	OutputToken->Context.LineNumber := tState->CurrentLineNumber
+	OutputToken->Context.Source := Source
+	OutputToken->Context.PositionInSource := PositionInSource
+	OutputToken->Context.LengthInSource := LengthInSource
+	
+	return OutputToken
+}
+define Token* MakeToken(TokenizerState* tState, i32 PositionInSource, i8 Type, void* Value) {
+	return PushToken(tState, Value, tState->Source, PositionInSource, (tState->SourceIndex) - PositionInSource, Type)
+}
+
+define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
+	/* Makes a SafeWideString from tState and returns it as a void* to fit into Token->Value */
+	
+	SafeWideString* NewSafeString := AllocateNewSafeString()
+
+	NewSafeString->Length := tState->SourceIndex - StartingIndex
+	NewSafeString->Buffer := tState->Source + (StartingIndex * 2)
+
+	return NewSafeString As void*
+}
 
 /* Both the Token and ASTNode struct have the same first 2 fields as ErrorContext, making them safe to cast down to
 	ErrorContext for PrintErrorHeader calls.
@@ -253,12 +275,6 @@ define i8 NextCharacterMatches(TokenizerState* tState, i8 CharacterToCheck) {
 	return 0
 }
 
-define void TokenizerError(TokenizerState* tState, i8* Message) {
-	Backtrack(tState)
-	
-	Error(tState->Tokens[tState->TokenIndex - 1], Message)
-}
-
 define i8 TokenizerAtEnd(TokenizerState* tState) {
 	return (tState->SourceIndex) > (tState->SourceLength)
 }
@@ -281,6 +297,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 		
 		return (tState->Tokens)[Index]
 	}
+	
+	Token* ErrorToken := 0
 	
 	while (!TokenizerAtEnd(tState)) {
 		i32 StartingIndex := tState->SourceIndex
@@ -332,8 +350,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 			
 			if (GetNextCharacter(tState) != ''') {
 				/* And make sure there's a close single quote */
-				MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-				TokenizerError(tState, "Expected close single quote for character constant")
+				ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+				TokenError(ErrorToken, "Expected close single quote for character constant")
 			}
 			
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, NextNextCharacter)
@@ -374,8 +392,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 					}
 					
 					if (TokenizerAtEnd(tState)) {
-						MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
-						TokenizerError(tState, "Expected closing comment character")
+						ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
+						TokenError(ErrorToken, "Expected closing comment character")
 					}
 				}
 				
@@ -459,8 +477,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 			}
 			
 			if (TokenizerAtEnd(tState)) {
-				MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
-				TokenizerError(tState, "Expected close quote before EOF")
+				ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
+				TokenError(ErrorToken, "Expected close quote before EOF")
 			}
 			
 			SafeWideString* FoundString := MakeSafeStringToken(tState, StartingIndex + 1) As SafeWideString*
@@ -539,12 +557,12 @@ define Token* GetNextToken(TokenizerState* tState) {
 			
 			SafeWideString* TokenText := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 			
-			i8 TokenAsKeyword := LookupKeyword(TokenText)
+			HashMapElement* FoundKeyword := HashMapGetValue(tState->Keywords, TokenText)
 			
-			if (TokenAsKeyword != TOKEN_TYPE_NONE) {
+			if (FoundKeyword) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
 				FreeSafeString(TokenText)
-				return MakeToken(tState, StartingIndex, TOKEN_TYPE_KEYWORD, TokenAsKeyword)
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_KEYWORD, FoundKeyword->Value As i8)
 			}
 			else {
 				/* Otherwise, make an identifier token */
@@ -628,202 +646,13 @@ define Token* GetNextToken(TokenizerState* tState) {
 		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
 			/* Ignore null characters and whitespace */
 			
-			
 			continue
 		}
 		else {
-			Token* ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-			Error(ErrorToken, "Unexpected character")
+			ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
+			TokenError(ErrorToken, "Unexpected character")
 		}
 	}
 	
 	return MakeToken(tState, tState->SourceLength, TOKEN_TYPE_EOF, 0)
 }
-
-/* 
-	Token printing helpers
-*/
-
-define i8 LookupKeyword(SafeWideString* PotentialKeyword) {
-	/* Converts PotentialKeyword into a KEYWORD_ constant */
-	
-	if (SafeStringEqualsAString(PotentialKeyword, "declare")) {
-		return KEYWORD_DECLARE
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "define")) {
-		return KEYWORD_DEFINE
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "dllimport")) {
-		return KEYWORD_DLLIMPORT
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "if")) {
-		return KEYWORD_IF
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "else")) {
-		return KEYWORD_ELSE
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "for")) {
-		return KEYWORD_FOR
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "while")) {
-		return KEYWORD_WHILE
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "loop")) {
-		return KEYWORD_LOOP
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "continue")) {
-		return KEYWORD_CONTINUE
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "break")) {
-		return KEYWORD_BREAK
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "struct")) {
-		return KEYWORD_STRUCT
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "return")) {
-		return KEYWORD_RETURN
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "union")) {
-		return KEYWORD_UNION
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "bits")) {
-		return KEYWORD_BITS
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "unaligned")) {
-		return KEYWORD_UNALIGNED
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "windows")) {
-		return KEYWORD_WINDOWS
-	}
-	else if (SafeStringEqualsAString(PotentialKeyword, "linux")) {
-		return KEYWORD_LINUX
-	}
-	
-	return TOKEN_TYPE_NONE
-}
-
-/*
-
-define void PrintToken(Token* TokenToPrint) {
-	if (TokenToPrint->Type = TOKEN_TYPE_IDENTIFER) {
-		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_STRING) {
-		WriteCharacter('"')
-		PrintSafeString((TokenToPrint->Value) As SafeWideString*)
-		WriteCharacter('"')
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_OPERATOR) {
-		PrintOperator(TokenToPrint->Value As i8)
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_PUNCTUATION) {
-		PrintPunctuation(TokenToPrint->Value As i8)
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_KEYWORD) {
-		PrintKeyword(TokenToPrint->Value As i8)
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_EOF) {
-		AWrite("<EOF>")
-	}
-	else if (TokenToPrint->Type = TOKEN_TYPE_DEBUG_CHARACTER) {
-		WriteCharacter(TokenToPrint->Value As i8)
-	}
-	else {
-		IWrite(TokenToPrint->Value)
-	}
-}
-
-define void PrintOperator(i8 Operator) {
-	i8* Operators := ":= += -= *= && || =  != <  <= >  >= As +  -  *  /  %  << >> &  |  ^  !  ~  [  .  -> ~> :  #  "
-	
-	i8* ThisOperator := Operators + (Operator * 3)
-	
-	if (ThisOperator[1] = ' ') {
-		ThisOperator[1] := 0
-	}
-	else {
-		ThisOperator[2] := 0
-	}
-	
-	AWrite(ThisOperator)
-}
-
-define void PrintPunctuation(i8 Punctuation) {
-	
-	WriteCharacter("(){}],"[Punctuation])
-	
-	if (Punctuation = PUNCTUATION_OPEN_PAREN) {
-		Character := '('
-	}
-	else if (Punctuation = PUNCTUATION_CLOSE_PAREN) {
-		Character := ')'
-	}
-	else if (Punctuation = PUNCTUATION_OPEN_BRACE) {
-		Character := '{'
-	}
-	else if (Punctuation = PUNCTUATION_CLOSE_BRACE) {
-		Character := '}'
-	}
-	else if (Punctuation = PUNCTUATION_CLOSE_BRACKET) {
-		Character := ']'
-	}
-	else if (Punctuation = PUNCTUATION_COMMA) {
-		Character := ','
-	}
-	
-	WriteCharacter(Character)
-}
-
-define void PrintKeyword(i8 Keyword) {
-	if (Keyword = KEYWORD_DECLARE) {
-		AWrite("declare")
-	}
-	else if (Keyword = KEYWORD_DEFINE) {
-		AWrite("define")
-	}
-	else if (Keyword = KEYWORD_DLLIMPORT) {
-		AWrite("DllImport")
-	}
-	else if (Keyword = KEYWORD_IF) {
-		AWrite("if")
-	}
-	else if (Keyword = KEYWORD_ELSE) {
-		AWrite("else")
-	}
-	else if (Keyword = KEYWORD_FOR) {
-		AWrite("for")
-	}
-	else if (Keyword = KEYWORD_WHILE) {
-		AWrite("while")
-	}
-	else if (Keyword = KEYWORD_LOOP) {
-		AWrite("loop")
-	}
-	else if (Keyword = KEYWORD_CONTINUE) {
-		AWrite("continue")
-	}
-	else if (Keyword = KEYWORD_BREAK) {
-		AWrite("break")
-	}
-	else if (Keyword = KEYWORD_STRUCT) {
-		AWrite("struct")
-	}
-	else if (Keyword = KEYWORD_RETURN) {
-		AWrite("return")
-	}
-	else if (Keyword = KEYWORD_UNION) {
-		AWrite("union")
-	}
-	else if (Keyword = KEYWORD_BITS) {
-		AWrite("bits")
-	}
-	else if (Keyword = KEYWORD_UNALIGNED) {
-		AWrite("unaligned")
-	}
-	else if (Keyword = KEYWORD_LINUX) {
-		AWrite("linux")
-	}
-	else if (Keyword = KEYWORD_WINDOWS) {
-		AWrite("windows")
-	}
-} */
