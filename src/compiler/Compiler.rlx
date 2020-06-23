@@ -711,6 +711,8 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	EmitLeave(cState)
 	
 	if (cState->CompilingMain && cState->OutputELF) {
+		/* If returning from Main() on Linux, actually call sys_exit() to ensure that the program exits correctly. */
+		
 		EmitMove_R64_R64(cState, RDI, RAX)
 		EmitMove_R32_I32(cState, RAX, 60)
 		EmitSysCall(cState)
