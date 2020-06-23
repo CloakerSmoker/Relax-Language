@@ -1,2 +1,2 @@
 :Wrong argc
-file_test.test "abcdefg 123":abcdefg 123
+"file_test.test" "abcdefg 123":abcdefg 123

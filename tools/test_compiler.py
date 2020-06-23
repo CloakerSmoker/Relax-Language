@@ -22,11 +22,13 @@ running_on = platform.system()
 compile_command_format = '{} -i "{}" -o "{}'
 platform_extension = 'exe'
 run_command_format = '{}.{} {}'
+expected_exitcode = 1
 
 if running_on == 'Linux':
-    compile_command_format = f'./{compile_command_format}.elf" --elf'
+    compile_command_format = f'{compile_command_format}.elf" --elf'
     platform_extension = 'elf'
-    run_command_format = f'./{run_command_format}'
+    run_command_format = f'{run_command_format}'
+    expected_exitcode = 0
 elif running_on == 'Windows':
     compile_command_format += '.exe"'
 else:
@@ -66,7 +68,7 @@ for test_path in os.listdir(tests_dir):
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
     stderr_text = compile_result.stderr.decode('UTF-8')
 
-    if compile_result.returncode != 1 or len(stderr_text) != 0:
+    if compile_result.returncode != expected_exitcode or len(stderr_text) != 0:
         print(f'{Fore.RED}Test {file_name} failed to compile with exit code {hex(compile_result.returncode)} and stderr "{stderr_text}""', file=sys.stderr)
         continue
 

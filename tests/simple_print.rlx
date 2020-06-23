@@ -16,7 +16,7 @@ define i32 AWrite(i8* AString) {
 		return BytesWritten
 	}
 	linux {
-		return syscall(1, 1, AString, ALen(AString)) As i32
+		return syscall:(1, 1, AString, ALen(AString)) As i32
 	}
 }
 

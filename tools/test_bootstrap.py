@@ -26,11 +26,13 @@ running_on = platform.system()
 compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}"'
 platform_extension = 'exe'
 python = 'python'
+expected_returncode = 1
 
 if running_on == 'Linux':
     compile_command_format = f'{compile_command_format} --elf'
     platform_extension = 'elf'
-    python += '38'
+    python = '/usr/bin/python3.8'
+    expected_returncode = 0
 elif running_on != 'Windows':
     print('Unsupported platform.', file=sys.stderr)
     sys.exit(1)
@@ -51,12 +53,12 @@ for i in range(0, recursion_count):
 
     stderr_text = compile_result.stderr.decode('UTF-8')
 
-    if compile_result.returncode != 1 or len(stderr_text) != 0:
+    if compile_result.returncode != expected_returncode or len(stderr_text) != 0:
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
     test_script = path_join(tools_dir, 'test_compiler.py')
-    test_command = f'python {test_script} {compiler_output}'
+    test_command = f'{python} {test_script} {compiler_output}'
 
     test_result = subprocess.run(test_command, cwd=cwd, shell=True, capture_output=True)
     stderr_text = test_result.stderr.decode('UTF-8')

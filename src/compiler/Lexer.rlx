@@ -246,7 +246,7 @@ define void Backtrack(TokenizerState* tState) {
 	
 	i32 LastCharacter := PeekNextCharacter(tState)
 	
-	if (LastCharacter = 13 && ThisCharacter = 10) {
+	if (LastCharacter = 10) {
 		tState->CurrentLineNumber -= 1
 	}
 }
@@ -254,7 +254,7 @@ define i16 GetNextCharacter(TokenizerState* tState) {
 	i16 NextCharacter := PeekNextCharacter(tState)
 	tState->SourceIndex += 1
 	
-	if (NextCharacter = 13 && PeekNextCharacter(tState) = 10) {
+	if (NextCharacter = 10) {
 		tState->CurrentLineNumber += 1
 	}
 	

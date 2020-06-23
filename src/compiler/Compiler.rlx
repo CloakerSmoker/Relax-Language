@@ -45,7 +45,8 @@ struct CompilerState {
 	i8 NoClobberCD89,
 	i8 NoClobberA,
 	
-	i8 OutputELF
+	i8 OutputELF,
+	i8 CompilingMain
 }
 
 /*
@@ -169,6 +170,8 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		IWrite(C.Index)
 		AWriteLine(" total bytes of code generated.")
 		WriteCharacter('	')
+		
+		ResetColors()
 	}
 	
 	/* Actual compiling is done, time to build the output file */
@@ -225,9 +228,11 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		Exit(1)
 	}
 	
+	TextColor(Blue)
 	AWrite("Done writing output file, ")
 	IWrite(BytesWritten)
 	AWriteLine(" bytes written.")
+	ResetColors()
 	
 	FileClose(OutputFileHandle)
 }
@@ -611,6 +616,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 	}
 	
+	cState->CompilingMain := IsMain
+	
 	CompileBlock(cState, Body)
 	
 	if (ReturnExpression) {
@@ -702,7 +709,15 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	}
 	
 	EmitLeave(cState)
-	EmitReturn(cState)
+	
+	if (cState->CompilingMain && cState->OutputELF) {
+		EmitMove_R64_R64(cState, RDI, RAX)
+		EmitMove_R32_I32(cState, RAX, 60)
+		EmitSysCall(cState)
+	}
+	else {
+		EmitReturn(cState)
+	}
 }
 
 define i8 IsComparison(Token* OperatorToken) {
