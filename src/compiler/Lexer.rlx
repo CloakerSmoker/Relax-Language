@@ -139,6 +139,7 @@ define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source,
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
 	
 	NewState->SourceFilePath := SourceFilePath
+	
 	NewState->Source := Source
 	NewState->SourceLength := SourceLength
 	

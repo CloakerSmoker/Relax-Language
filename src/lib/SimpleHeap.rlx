@@ -40,14 +40,14 @@ define void SimpleHeapGrow() {
 define void* SimpleHeapAlloc(i64 Size) {
 	linux {
 		void* Result := ProcessHeap->Next
-		void* ResultEnd := Result + Size
+		void* ResultEnd := Result + Size + 8
 		
 		while (ResultEnd >= (ProcessHeap->End - 0x10000)) {		
 			SimpleHeapGrow()
 		}
 		
 		Result[0] := Size
-		ProcessHeap->Next += Size + 8
+		ProcessHeap->Next := ResultEnd
 		
 		return Result + 8
 	}

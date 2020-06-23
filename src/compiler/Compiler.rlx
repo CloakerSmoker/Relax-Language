@@ -54,7 +54,7 @@ struct CompilerState {
 ==========================================
 */
 
-#Include .\src\compiler\CodeGen.rlx
+#Include ./src/compiler/CodeGen.rlx
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
@@ -993,8 +993,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	cState->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
 	
 	if (OldNoClobberCD89) {
-		EmitPush_R64(cState, R11)
-		EmitPush_R64(cState, R10)
+		EmitPush_R64(cState, RDI)
+		EmitPush_R64(cState, RSI)
 		EmitPush_R64(cState, R9)
 		EmitPush_R64(cState, R8)
 		EmitPush_R64(cState, RDX)
@@ -1077,8 +1077,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitPop_R64(cState, RDX)
 		EmitPop_R64(cState, R8)
 		EmitPop_R64(cState, R9)
-		EmitPop_R64(cState, R10)
-		EmitPop_R64(cState, R11)
+		EmitPop_R64(cState, RSI)
+		EmitPop_R64(cState, RDI)
 	}
 	
 	if (ExtraPadding) {
