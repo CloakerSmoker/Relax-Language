@@ -38,17 +38,29 @@ define void WriteNewLine() {
 		syscall:(1, STDOUT, &NewLine, 1)
 	}
 }
-define void WriteCharacter(i8 Character) {
+define void WriteCharacters(i8* Characters, i32 Count) {
 	windows {
 		i32 BytesWritten := 0
 		
-		WriteFile(STDOUT, &Character, 1, &BytesWritten, 0)
+		WriteFile(STDOUT, Characters, Count, &BytesWritten, 0)
 	}
 	linux {
-		syscall:(1, STDOUT, &Character, 1)
+		syscall:(1, STDOUT, Characters, Count)
 	}
 }
+define void WriteLiteral(i64 PackedCharacters) {
+	i8* Characters := (&PackedCharacters) As i8*
+	
+	for (i32 Length := 0, (Length < 8) && (Characters[Length] != 0), Length += 1) {}
+	
+	WriteCharacters(Characters, Length)
+}
+define void WriteCharacter(i8 Character) {
+	WriteCharacters(&Character, 1)
+}
 define i32 AWrite(i8* AString) {
+	WriteCharacters(AString, ALen(AString))
+/* 	
 	windows {
 		i32 BytesWritten := 0
 		
@@ -56,7 +68,7 @@ define i32 AWrite(i8* AString) {
 	}
 	linux {
 		syscall:(1, STDOUT, AString, ALen(AString))
-	}
+	} */
 }
 define i32 AWriteLine(i8* AString) {
 	AWrite(AString)
@@ -153,7 +165,13 @@ define void WriteANSIEscape(i8 Foreground, i8 Background) {
 	WriteCharacter('m')
 }
 
+i8 NO_COLORS := false
+
 define void SetColor(i8 Foreground, i8 Background) {
+	if (NO_COLORS) {
+		return 0
+	}
+	
 	linux {
 		WriteANSIEscape(Foreground, Background)
 	}

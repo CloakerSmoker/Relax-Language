@@ -106,6 +106,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextArg, "--function-bytes") || StringEquals(NextArg, "-fb")) {
 			DumpFunctionBytes := true
 		}
+		else if (StringEquals(NextArg, "--no-colors")) {
+			NO_COLORS := true
+		}
 		else if (StringEquals(NextArg, "-i")) {			
 			Index += 1
 			InputFilePath := ArgV[Index]

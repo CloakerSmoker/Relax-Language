@@ -1007,7 +1007,7 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 	}
 	else if (Operator = OPERATOR_AND) {	
 		if !(Operand->IsStorageValue) {
-			ASTError(Operand, "Operand of the '&' operator must be a storage value.")
+			TokenError(OperatorToken, "Operand of the '&' operator must be a storage value.")
 		}
 		
 		ResultType := IncrementPointerType(pState, ResultType)

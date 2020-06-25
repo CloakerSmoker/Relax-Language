@@ -103,7 +103,7 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	loop {
 		i16 NextCharacter := SourceLine[RightIndex]
 		
-		if (NextCharacter = 10 || NextCharacter = 13) {
+		if (NextCharacter = 10 || NextCharacter = 13 || NextCharacter = 0) {
 			break
 		}
 		

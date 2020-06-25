@@ -347,15 +347,28 @@ define Token* GetNextToken(TokenizerState* tState) {
 		if (NextCharacter = ''') {
 			/* If the next character is an open single quote, then consume a single character as an integer */
 			
-			i8 NextNextCharacter := GetNextCharacterRaw(tState)
+			i64 LiteralValue := 0
+			i8* LiteralValueBytes := (&LiteralValue) As i8*
 			
-			if (GetNextCharacter(tState) != ''') {
+			for (i32 LiteralIndex := 0, LiteralIndex < 8, LiteralIndex += 1) {
+				i8 LiteralCharacter := GetNextCharacterRaw(tState)				
+				
+				LiteralValueBytes[LiteralIndex] := LiteralCharacter
+				
+				if (PeekNextCharacter(tState) = ''') {
+					break
+				}
+			}
+			
+			NextCharacter := GetNextCharacter(tState)
+			
+			if (NextCharacter != ''') {
 				/* And make sure there's a close single quote */
 				ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
 				TokenError(ErrorToken, "Expected close single quote for character constant")
 			}
 			
-			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, NextNextCharacter)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, LiteralValue)
 		}
 		else if (NextCharacter = '=') {
 			/* Manually compare for all of the operators */
