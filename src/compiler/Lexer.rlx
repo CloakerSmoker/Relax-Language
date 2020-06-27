@@ -280,6 +280,55 @@ define i8 TokenizerAtEnd(TokenizerState* tState) {
 	return (tState->SourceIndex) > (tState->SourceLength)
 }
 
+define i64 TokenizeNumber(TokenizerState* tState, i16 NextCharacter, i32 StartingIndex, i8* Success) {
+	i8 NumberIsHex := false
+	
+	if (NextCharacterMatches(tState, 'x')) {
+		/* If NextCharacter = 0 and Next-NextCharacter = 'x' */
+		NumberIsHex := true
+		
+		NextCharacter := PeekNextCharacter(tState)
+		
+		/* Gather all hex characters */
+		while (IsHex(NextCharacter) && (!TokenizerAtEnd(tState))) {
+			NextCharacter := GetNextCharacter(tState)
+		}
+	}
+	else {
+		/* Number is not hex, gather all decimal characters */
+		
+		while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(tState))) {
+			NextCharacter := GetNextCharacter(tState)
+		}
+	}
+	
+	if !(TokenizerAtEnd(tState)) {
+		Backtrack(tState)
+	}
+	
+	/* Convert the number to string which we can then parse into a number */
+	SafeWideString* AsString := (MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
+	i8 NumberWasConverted := 0
+	
+	if (Success = 0) {
+		Success := &NumberWasConverted
+	}
+	
+	i64 Result := 0
+	
+	/* Convert the hex/decimal number, and store the result in the token */
+	if (NumberIsHex) {
+		Result := SafeStringHexToI64(AsString, Success)
+	}
+	else {
+		Result := SafeStringToI64(AsString, Success)
+	}
+	
+	FreeSafeString(AsString)
+	
+	return Result
+}
+
 define Token* GetNextToken(TokenizerState* tState) {
 	/* Gathers a single token, and sets/returns CurrentToken */
 	
@@ -501,50 +550,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 			/* And return the string as a TOKEN_TYPE_STRING */
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
-		else if (IsNumeric(NextCharacter)) {
-			i8 NumberIsHex := false
-			
-			if (NextCharacterMatches(tState, 'x')) {
-				/* If NextCharacter = 0 and Next-NextCharacter = 'x' */
-				NumberIsHex := true
-				
-				NextCharacter := PeekNextCharacter(tState)
-				
-				/* Gather all hex characters */
-				while (IsHex(NextCharacter) && (!TokenizerAtEnd(tState))) {
-					NextCharacter := GetNextCharacter(tState)
-				}
-			}
-			else {
-				/* Number is not hex, gather all decimal characters */
-				
-				while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(tState))) {
-					NextCharacter := GetNextCharacter(tState)
-				}
-			}
-			
-			if !(TokenizerAtEnd(tState)) {
-				Backtrack(tState)
-			}
-			
-			/* Convert the number to string which we can then parse into a number */
-			SafeWideString* AsString := (MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
-			i8 NumberWasConverted := 0
-			
-			/* Set up a result token */
-			Token* ResultToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, 0)
-			
-			/* Convert the hex/decimal number, and store the result in the token */
-			if (NumberIsHex) {
-				ResultToken->Value := SafeStringHexToI64(AsString, &NumberWasConverted)
-			}
-			else {
-				ResultToken->Value := SafeStringToI64(AsString, &NumberWasConverted)
-			}
-			
-			FreeSafeString(AsString)
-			
-			return ResultToken
+		else if (IsNumeric(NextCharacter)) {			
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, 0))
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			if (NextCharacter = 'a') {
@@ -650,6 +657,27 @@ define Token* GetNextToken(TokenizerState* tState) {
 				tState->TokenIndex -= 1
 				
 				return GetNextToken(tState)
+			}
+			else if (SafeStringEqualsAString(DirectiveText, "Imagebase")) {
+				if !(IsWhiteSpace(GetNextCharacter(tState))) {
+					AWriteLine("Expected whitespace after #ImageBase.")
+					Exit(1)
+				}
+				
+				i8 ImageBaseValid := false
+				
+				NextCharacter := GetNextCharacter(tState)
+				
+				i64 NewImageBase := TokenizeNumber(tState, NextCharacter, StartingIndex + 11, &ImageBaseValid)
+				
+				if !(ImageBaseValid && NewImageBase) {
+					ErrorToken := MakeToken(tState, StartingIndex + 11, TOKEN_TYPE_DEBUG_CHARACTER, '#')
+					TokenError(ErrorToken, "Invalid Image Base")
+				}
+				
+				DEFAULT_IMAGE_BASE := NewImageBase
+				
+				continue
 			}
 			else {
 				tState->SourceIndex := StartingIndex + 1

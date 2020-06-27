@@ -1,0 +1,21 @@
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
+
+define i32 Main() {
+	IWriteHex('aaaaaaaa')
+	WriteLiteral(', ')
+	IWriteHex('aaaaaaa')
+	WriteLiteral(', ')
+	IWriteHex('aaaaa')
+	WriteLiteral(', ')
+	IWriteHex('aaaa')
+	WriteLiteral(', ')
+	IWriteHex('aaa')
+	WriteLiteral(', ')
+	IWriteHex('aa')
+	WriteLiteral(', ')
+	IWriteHex('a')
+	
+	return 0
+}

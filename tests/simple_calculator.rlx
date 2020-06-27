@@ -6,6 +6,8 @@
 	A simple calculator, which works when compiled for both Windows and Linux.
 */
 
+#ImageBase 0x30000000
+
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV) /* Ensures that ArgC/ArgV are set on Windows, does nothing on Linux */
 	
