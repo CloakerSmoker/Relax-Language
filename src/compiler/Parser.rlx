@@ -76,6 +76,8 @@ i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a lite
 i8 NODE_TYPE_STRUCT_ACCESS := 19
 i8 NODE_TYPE_IDENTIFIER := 20
 
+i8 NODE_TYPE_ASSEMBLY := 21
+
 /*
 ==========================================
 	True AST node types
@@ -173,6 +175,9 @@ struct ParserState {
 	HashMap* Globals,
 	ASTNode** GlobalDefaults,
 	
+	HashMap* Registers,
+	HashMap* Instructions,
+	
 	HashMap* Types,
 	
 	/* Builtin types, actually added to the type list in CreateDefaultTypes */
@@ -190,7 +195,17 @@ struct ParserState {
 	i16 TypeCount,
 	
 	i8 InLoop,
-	i8 OutputELF
+	i8 OutputELF,
+	
+	i32 LabelCount
+}
+
+define i32 ParserNextLabel(ParserState* pState) {
+	i32 Result := pState->LabelCount
+	
+	pState->LabelCount += 1
+	
+	return Result
 }
 
 /*
@@ -228,7 +243,9 @@ struct ASTNode {
 		VariableInfo* VariableValue,
 		i64 IntegerValue,
 		Type TypeValue,
-		i32 StringOffsetValue
+		i32 StringOffsetValue,
+		
+		AssemblyBlock* AssemblyValue
 	},
 	
 	Type ValueType,
@@ -1198,6 +1215,7 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 */
 
 declare void ParseProgram(ParserState*)
+declare void SetupAssembly(ParserState*)
 
 define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
 	/* Initializes pState and uses tState to parse a program */
@@ -1220,6 +1238,7 @@ define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
 	P->OutputELF := OutputELF
 	
 	CreateDefaultTypes(P)
+	SetupAssembly(P)
 	
 	ParseProgram(P)
 	
@@ -1684,7 +1703,7 @@ define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 		
 		HashMapAddValue(pState->Functions, Name, NewDefine As void)
 		
-		NewDefine->LabelNumber := pState->FunctionCount
+		NewDefine->LabelNumber := ParserNextLabel(pState)
 		pState->FunctionCount += 1
 	}
 	
@@ -1944,6 +1963,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 declare ASTNode* ParseIf(ParserState*)
 declare ASTNode* ParseFor(ParserState*)
 declare ASTNode* ParseWhile(ParserState*)
+declare ASTNode* ParseAssembly(ParserState*)
 
 define ASTNode* ParseStatement(ParserState* pState) {
 	/* Parses a single statement */
@@ -1997,6 +2017,9 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		}
 		else if (NextKeyword = KEYWORD_WHILE) {
 			Result := ParseWhile(pState)
+		}
+		else if (NextKeyword = KEYWORD_ASSEMBLY) {
+			Result := ParseAssembly(pState)
 		}
 	}
 	
@@ -2390,3 +2413,5 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	
 	return Result
 }
+
+#Include ./src/compiler/AssemblyParse.rlx

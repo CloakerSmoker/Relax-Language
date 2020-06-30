@@ -1,0 +1,338 @@
+i32 OP_R := 1
+i32 OP_M := 2
+i32 OP_I8 := 4
+i32 OP_I16 := 8
+i32 OP_I32 := 16
+i32 OP_I64 := 32
+
+i32 E_M := OP_R | OP_M
+i32 E_RM := OP_R | (E_M << 8)
+i32 E_MR := E_M | (OP_R << 8)
+i32 E_I := OP_I8 | OP_I16 | OP_I32
+i32 E_MI := E_M | (E_I << 8)
+
+define void SetupRegisters(ParserState* pState) {
+	HashMap* R := NewHashMap()
+	pState->Registers := R
+	
+	HashMapASet(R, "rax", 0)
+	HashMapASet(R, "rcx", 1)
+	HashMapASet(R, "rdx", 2)
+	HashMapASet(R, "rbx", 3)
+	HashMapASet(R, "rsp", 4)
+	HashMapASet(R, "rbp", 5)
+	HashMapASet(R, "rsi", 6)
+	HashMapASet(R, "rdi", 7)
+}
+
+struct Instruction {
+	Instruction* Next,
+	i8 Opcode,
+	i8 Extra,
+	i32 EncodingMask
+}
+
+define Instruction* MakeInstruction(i16 Opcode, i32 Encoding, i8 Extra, Instruction* Base) {
+	Instruction* Next := Alloc(#Instruction)
+	
+	Next->Opcode := Opcode As i8
+	Next->EncodingMask := Encoding
+	Next->Extra := Extra
+	
+	if (Base) {
+		while (Base->Next) {
+			Base := Base->Next
+		}
+		
+		Base->Next := Next
+	}
+	
+	return Next
+}
+
+define void SetupInstructions(ParserState* pState) {
+	HashMap* I := NewHashMap()
+	pState->Instructions := I
+	
+	HashMapASet(I, "not", MakeInstruction(0xF7, E_M, 2, 0))
+	HashMapASet(I, "neg", MakeInstruction(0xF7, E_M, 3, 0))
+	
+	Instruction* And := MakeInstruction(0x23, E_RM, 0, 0)
+	MakeInstruction(0x20, E_MR, 0, And)
+	MakeInstruction(0x80, E_I, 4, And)
+	
+	HashMapASet(I, "and", And)
+}
+
+define void SetupAssembly(ParserState* pState) {
+	SetupRegisters(pState)
+	SetupInstructions(pState)
+}
+
+define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
+	HashMapElement* FoundBaseElement := HashMapGetValue(pState->Instructions, Name)
+	
+	if !(FoundBaseElement) {
+		return 0 As Instruction*
+	}
+	
+	Instruction* FoundBase := FoundBaseElement->Value As Instruction*
+	
+	while (FoundBase) {
+		if (FoundBase->EncodingMask = 0 && EncodedOperands = 0) {
+			return FoundBase
+		}
+		else if (EncodedOperands = 0) {
+			/* Dummy branch */
+		}
+		else if ((FoundBase->EncodingMask & EncodedOperands) = EncodedOperands) {
+			return FoundBase
+		}
+		
+		FoundBase := FoundBase->Next
+	}
+	
+	return 0 As Instruction*
+}
+
+
+define i8 LookupRegister(ParserState* pState, Token* NameToken) {
+	HashMapElement* FoundRegister := HashMapGetValue(pState->Registers, NameToken->StringValue)
+	
+	if !(FoundRegister) {
+		TokenError(NameToken, "Invalid register name.")
+	}
+	
+	return FoundRegister->Value As i8
+}
+
+struct SIBInfo {
+	i8 BaseRegister,
+	i8 IndexRegister,
+	i8 Scale
+}
+
+struct InstructionOperand {
+	ErrorContext Context,
+	
+	i32 Type,
+	i8 HasSIB,
+	i8 DispSize,
+	
+	union {
+		i8 RegisterNumber,
+		SIBInfo SIBValue
+	},
+	
+	union {
+		i32 DispValue,
+		i64 IntegerValue
+	}
+}
+
+define InstructionOperand* ParseAssemblyOperand(ParserState* pState) {
+	InstructionOperand* Next := Alloc(#InstructionOperand)
+	
+	Token* NextToken := ParserNextToken(pState)
+	
+	if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+		/* A memory reference, through a register or SIB (plus displacements) */
+		Next->Type := OP_M
+		
+		Token* MaybeBase := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected register name.")
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+			/* Register[ = SIB, so parse the SIB */
+			
+			Next->HasSIB := true
+			Next->SIBValue.BaseRegister := LookupRegister(pState, MaybeBase)
+			
+			Token* Index := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected index register name.")
+			
+			Next->SIBValue.IndexRegister := LookupRegister(pState, Index)
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+				Token* Scale := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected scale value.")
+				i64 ScaleValue := Scale->IntegerValue
+				
+				if (ScaleValue = 8 || ScaleValue = 4 || ScaleValue = 2 || ScaleValue = 1) {
+					Next->SIBValue.Scale := ScaleValue As i8
+				}
+				else {
+					TokenError(Scale, "Invalid scale value.")
+				}
+			}
+			
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for SIB.")
+		}
+		else {
+			/* No [ following the register, just a regular register reference */
+			
+			Next->RegisterNumber := LookupRegister(pState, MaybeBase)
+		}
+		
+		i8 IsPlus := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+		i8 IsMinus := false
+		
+		if !(IsPlus) {
+			IsMinus := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+		}
+		
+		/* If the next token is + or -, then parse the displacement */
+		if (IsPlus || IsMinus) {
+			Token* DispToken := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected displacement value.")
+			i8 DispSize := GetNumberSize(DispToken->IntegerValue)
+			
+			if (DispSize > 4) {
+				/* 64 bit displacements are invalid */
+				TokenError(DispSize, "Displacement too big, must be 1-4 bytes.")
+			}
+			else if (DispSize = 2) {
+				/* 16 bit displacements are just 32 bit displacements with some padding */
+				DispSize := 4
+			}
+			
+			Next->DispSize := DispSize
+			Next->DispValue := DispToken->IntegerValue As i32
+			
+			if (IsMinus) {
+				Next->DispValue := 0 - (Next->DispValue)
+			}
+		}
+		
+		Token* CloseBrace := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for operand.")
+		
+		MergeContexts(NextToken~>Context, CloseBrace~>Context, Next~>Context)
+	}
+	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFER, 0)) {
+		Next->Type := OP_R
+		
+		Next->RegisterNumber := LookupRegister(pState, NextToken)
+		
+		CopyContext(NextToken~>Context, Next~>Context)
+	}
+	else if (TokenMatches(NextToken, TOKEN_TYPE_INTEGER, 0)) {
+		/* Integer types are OP_I8 - OP_I64, are defined as 1,2,4,8 bit shifted left by 2 */
+		
+		Next->Type := GetNumberSize(NextToken->IntegerValue) << 2
+		
+		Next->IntegerValue := NextToken->IntegerValue
+		CopyContext(NextToken~>Context, Next~>Context)
+	}
+	else {
+		TokenError(NextToken, "Unexpected token.")
+	}
+	
+	return Next
+}
+
+i8 INSTRUCTION_REGULAR := 0
+i8 INSTRUCTION_LABEL := 1
+
+struct InstructionNode {
+	ErrorContext Context,
+	i8 Type,
+	
+	union {
+		Instruction* Base,
+		SafeWideString* LabelName
+	},
+	
+	union {
+		InstructionOperand** Operands,
+		i32 LabelNumber
+	}
+}
+
+struct AssemblyBlock {
+	i32 InstructionCount,
+	InstructionNode** Instructions,
+	HashMap* Labels
+}
+
+define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* ThisBlock) {
+	InstructionNode* Result := Alloc(#InstructionNode)
+	
+	if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected label name.")
+		SafeWideString* LabelName := LabelToken->StringValue
+		
+		if (HashMapGetValue(ThisBlock->Labels, LabelName)) {
+			TokenError(LabelToken, "Duplicate label definition")
+		}
+		
+		Result->Type := INSTRUCTION_LABEL
+		Result->LabelName := LabelName
+		Result->LabelNumber := ParserNextLabel(pState)
+		
+		HashMapAddValue(ThisBlock->Labels, LabelName, Result As void)
+	}
+	else {
+		Token* InstructionToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected instruction name.")
+		SafeWideString* InstructionName := InstructionToken->StringValue
+		
+		i32 OperandTypes := 0
+		InstructionOperand** Operands := Alloc(2 * #ASTNode)
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
+				InstructionOperand* Next := ParseAssemblyOperand(pState)
+				
+				Operands[OperandIndex] := Next
+				
+				OperandTypes := OperandTypes | (Next->Type << (8 * OperandIndex As i8))
+				
+				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					break
+				}
+			}
+			
+			MergeContexts(InstructionToken~>Context, Next~>Context, Result~>Context)
+		}
+		else {
+			CopyContext(InstructionToken~>Context, Result~>Context)
+		}
+		
+		Instruction* Found := FindInstruction(pState, InstructionName, OperandTypes)
+		
+		if !(Found) {
+			ContextError(Result~>Context, "No encoding for operand type(s).")
+		}
+		
+		Result->Base := Found
+		Result->Operands := Operands
+	}
+	
+	return Result
+}
+
+define ASTNode* ParseAssembly(ParserState* pState) {
+	AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
+	
+	ThisBlock->Labels := NewHashMap()
+	
+	InstructionNode** Instructions := Alloc(16 * #InstructionNode)
+	i32 InstructionCapacity := 16
+	i32 InstructionCount := 0
+	
+	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for assembly block.")
+	
+	loop {
+		if (InstructionCount >= InstructionCapacity) {
+			InstructionCapacity += 16
+			Instructions := ReAlloc(Instructions, InstructionCapacity * #InstructionNode)
+		}
+		
+		Instructions[InstructionCount] := ParseInstruction(pState, ThisBlock)
+		InstructionCount += 1
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			break
+		}
+	}
+	
+	ThisBlock->Instructions := Instructions
+	ThisBlock->InstructionCount := InstructionCount
+	
+	return AllocateNewASTNode(NODE_TYPE_ASSEMBLY, ThisBlock As void*, TYPE_NONE)
+}

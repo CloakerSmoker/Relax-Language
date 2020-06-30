@@ -3,6 +3,7 @@ struct Token {
 	
 	union {
 		void* Value,
+		i64 IntegerValue,
 		SafeWideString* StringValue
 	},
 	
@@ -135,6 +136,8 @@ i8 KEYWORD_RETURN := 14
 i8 KEYWORD_WINDOWS := 15
 i8 KEYWORD_LINUX := 16
 
+i8 KEYWORD_ASSEMBLY := 17
+
 define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
 	
@@ -172,6 +175,7 @@ define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source,
 	HashMapASet(K, "unaligned", KEYWORD_UNALIGNED)
 	HashMapASet(K, "windows", 	KEYWORD_WINDOWS)
 	HashMapASet(K, "linux", 	KEYWORD_LINUX)
+	HashMapASet(K, "asm", 		KEYWORD_ASSEMBLY)
 	
 	return NewState
 }

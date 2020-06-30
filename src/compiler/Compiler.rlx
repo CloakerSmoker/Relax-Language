@@ -659,6 +659,8 @@ declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
 declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
 declare void CompileCall(CompilerState*, i8, CallExpression*)
 
+declare void CompileAssembly(CompilerState*, AssemblyBlock*)
+
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
@@ -691,6 +693,9 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	}
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
 		CompileExpression(cState, RAX, NodeToCompile->ExpressionStatement)
+	}
+	else if (NodeType = NODE_TYPE_ASSEMBLY) {
+		CompileAssembly(cState, NodeToCompile->AssemblyValue)
 	}
 }
 
@@ -1688,3 +1693,5 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 		cState->NoClobberA := OldClobberA
 	}
 }
+
+#Include ./src/compiler/AssemblyCompile.rlx

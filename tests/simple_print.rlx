@@ -18,6 +18,15 @@ define i32 AWrite(i8* AString) {
 	linux {
 		return syscall:(1, 1, AString, ALen(AString)) As i32
 	}
+	
+	asm {
+		not, {rax}
+		not, {rax[rbx]}
+		not, {rax[rbx * 8]}
+		not, {rax[rbx * 8] + 20}
+		
+		and, {rax}, {rbx}
+	}
 }
 
 define i32 Main() {
