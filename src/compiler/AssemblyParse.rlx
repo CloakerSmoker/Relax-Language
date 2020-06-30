@@ -1,3 +1,6 @@
+
+/* Operand type flags, R = register, M = register indirect or SIB (with a disp on either) */
+
 i32 OP_R := 1
 i32 OP_M := 2
 i32 OP_I8 := 4
@@ -5,15 +8,18 @@ i32 OP_I16 := 8
 i32 OP_I32 := 16
 i32 OP_I64 := 32
 
-i32 E_M := OP_R | OP_M
-i32 E_RM := OP_R | (E_M << 8)
-i32 E_MR := E_M | (OP_R << 8)
-i32 E_I := OP_I8 | OP_I16 | OP_I32
-i32 E_MI := E_M | (E_I << 8)
+/* Prepacked operand types */
+i32 O_M := OP_R | OP_M 			/* Register or memory reference */
+i32 O_RM := OP_R | (O_M << 8)	/* RM encoding */
+i32 O_MR := O_M | (OP_R << 8)	/* MR encoding */
+i32 O_I := OP_I8 | OP_I16 | OP_I32 /* Imm8,Imm16,Imm32 encoding */
+i32 O_MI := O_M | (O_I << 8) 	/* MI encoding */
 
 define void SetupRegisters(ParserState* pState) {
 	HashMap* R := NewHashMap()
 	pState->Registers := R
+	
+	R->IgnoreCase := true
 	
 	HashMapASet(R, "rax", 0)
 	HashMapASet(R, "rcx", 1)
@@ -23,20 +29,39 @@ define void SetupRegisters(ParserState* pState) {
 	HashMapASet(R, "rbp", 5)
 	HashMapASet(R, "rsi", 6)
 	HashMapASet(R, "rdi", 7)
+	HashMapASet(R, "r8", 8)
+	HashMapASet(R, "r9", 9)
+	HashMapASet(R, "r10", 10)
+	HashMapASet(R, "r11", 11)
+	HashMapASet(R, "r12", 12)
+	HashMapASet(R, "r13", 13)
+	HashMapASet(R, "r14", 14)
+	HashMapASet(R, "r15", 15)
 }
 
 struct Instruction {
 	Instruction* Next,
 	i8 Opcode,
+	i8 Flags,
 	i8 Extra,
 	i32 EncodingMask
 }
 
-define Instruction* MakeInstruction(i16 Opcode, i32 Encoding, i8 Extra, Instruction* Base) {
+i8 E_NO_RM := 1
+i8 E_RM_IS_OP1 := 2
+i8 E_RM_IS_OP2 := 4
+i8 E_OP_EXT := 8
+i8 E_IMM8 := 16
+i8 E_IMM32 := 32
+i8 E_IMM64 := 64
+i8 E_REG_IN_OPCODE := 128
+
+define Instruction* MakeInstruction(Instruction* Base, i16 Opcode, i32 Encoding, i8 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
 	
 	Next->Opcode := Opcode As i8
 	Next->EncodingMask := Encoding
+	Next->Flags := Flags
 	Next->Extra := Extra
 	
 	if (Base) {
@@ -54,14 +79,24 @@ define void SetupInstructions(ParserState* pState) {
 	HashMap* I := NewHashMap()
 	pState->Instructions := I
 	
-	HashMapASet(I, "not", MakeInstruction(0xF7, E_M, 2, 0))
-	HashMapASet(I, "neg", MakeInstruction(0xF7, E_M, 3, 0))
+	I->IgnoreCase := true
 	
-	Instruction* And := MakeInstruction(0x23, E_RM, 0, 0)
-	MakeInstruction(0x20, E_MR, 0, And)
-	MakeInstruction(0x80, E_I, 4, And)
+	HashMapASet(I, "not", MakeInstruction(0, 0xF7, O_M, E_RM_IS_OP1 | E_OP_EXT, 2)) /* Not, memory */
+	HashMapASet(I, "neg", MakeInstruction(0, 0xF7, O_M, E_RM_IS_OP1 | E_OP_EXT, 3)) /* Neg, memory */
+	
+	Instruction* And := MakeInstruction(0, 0x23, O_RM, E_RM_IS_OP2, 0) /* And, register, memory  */
+	MakeInstruction(And, 0x20, O_MR, E_RM_IS_OP1, 0) /* And, memory, register */
+	MakeInstruction(And, 0x80, O_MI, E_RM_IS_OP1 | E_IMM8 | E_OP_EXT, 4) /* And, memory, byte */
+	MakeInstruction(And, 0x81, O_MI, E_RM_IS_OP1 | E_IMM32 | E_OP_EXT, 4) /* And, memory, dword */
 	
 	HashMapASet(I, "and", And)
+	
+	Instruction* Mov := MakeInstruction(0, 0xC7, O_MI, E_RM_IS_OP1 | E_IMM32 | E_OP_EXT, 0) /* Mov, register, <i32 */
+	MakeInstruction(Mov, 0xB8, O_M | (OP_I64 << 8), E_NO_RM | E_REG_IN_OPCODE | E_IMM64, 0) /* Mov, register, i64 */
+	MakeInstruction(Mov, 0x8B, O_RM, E_RM_IS_OP2, 0) /* Mov, register, memory */
+	MakeInstruction(Mov, 0x89, O_MR, E_RM_IS_OP1, 0) /* Mov, memory, register */
+	
+	HashMapASet(I, "mov", Mov)
 }
 
 define void SetupAssembly(ParserState* pState) {

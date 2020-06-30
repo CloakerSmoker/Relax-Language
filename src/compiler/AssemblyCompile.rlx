@@ -1,30 +1,130 @@
-
+define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOperand* ForOperand, InstructionOperand* Other) {
+	i8 Mode := 0
+	i8 Reg := 0
+	i8 RM := 0
+	i8 REX := REX_BASE | REX_W
+	i8 SIB := 0
+	i8 DispSize := 0
+	i8 DispValue := 0
+	
+	if (ForOperand->Type = OP_R) {
+		Mode := 3
+		RM := ClampRegisterNumber(ForOperand->RegisterNumber)
+		
+		if (RegisterRequiresREX(ForOperand->RegisterNumber)) {
+			REX := REX | REX_B
+		}
+	}
+	else {
+		if (ForOperand->HasSIB) {
+			SIBInfo* S := ForOperand~>SIBValue
+			
+			SIB := MakeSIB(S->Scale, ClampRegisterNumber(S->IndexRegister), ClampRegisterNumber(S->BaseRegister))
+			
+			if (RegisterRequiresREX(S->BaseRegister)) {
+				REX := REX | REX_B
+			}
+			if (RegisterRequiresREX(S->IndexRegister)) {
+				REX := REX | REX_X
+			}
+			
+			Mode := 0
+			RM := 4
+		}
+		else {
+			RM := ForOperand->RegisterNumber
+		}
+		
+		if (ForOperand->DispSize) {
+			i8 Size := ForOperand->DispSize
+			
+			if (Size = 1) {
+				Mode := 1
+			}
+			else if (Size = 4) {
+				Mode := 2
+			}
+			
+			DispSize := ForOperand->DispSize
+			DispValue := ForOperand->DispValue
+		}
+	}
+	
+	if (I->Flags & E_OP_EXT) {
+		Reg := I->Extra
+	}
+	else if (Other->Type = OP_R) {
+		Reg := ClampRegisterNumber(Other->RegisterNumber)
+		
+		if (RegisterRequiresREX(Other->RegisterNumber)) {
+			REX := REX | REX_R
+		}
+	}
+	
+	PushByte(cState, REX)
+	PushByte(cState, I->Opcode)
+	EmitModRM(cState, Mode, Reg, RM)
+	
+	if (RM = 4) {
+		PushByte(cState, SIB)
+	}
+	
+	if (DispSize = 1) {
+		PushByte(cState, DispValue As i8)
+	}
+	else if (DispSize = 4) {
+		PushI32(cState, DispValue)
+	}
+	
+	if (I->Flags & E_IMM8) {
+		PushByte(cState, Other->IntegerValue As i8)
+	}
+	else if (I->Flags & E_IMM32) {
+		PushI32(cState, Other->IntegerValue As i32)
+	}
+}
 
 define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile) {
 	Instruction* Base := ToCompile->Base
 	
-	i8 Mode := 0
-	i8 Reg := 0
-	i8 RM := 0
+	InstructionOperand* OperandOne := ToCompile->Operands[0]
+	InstructionOperand* OperandTwo := ToCompile->Operands[1]
+	InstructionOperand* MemoryOperand := 0
+	InstructionOperand* OtherOperand := 0
 	
-	i8 SIB := 0
-	
-	i8 Disp8 := 0
-	i32 Disp32 := 0
-	
-	
-	
-	for (i32 Index := 0, Index < 2, Index += 1) {
-		InstructionOperand* NextOperand := ToCompile->Operands[Index]
-		
-		if !(NextOperand) {
-			break
-		}
-		
-		
+	if (Base->Flags & E_RM_IS_OP1) {
+		MemoryOperand := OperandOne
+		OtherOperand := OperandTwo
+	}
+	else if (Base->Flags & E_RM_IS_OP2) {
+		MemoryOperand := OperandTwo
+		OtherOperand := OperandOne
 	}
 	
+	i8 REX := REX_BASE | REX_W
 	
+	if (MemoryOperand) {
+		EmitAssembly(cState, Base, MemoryOperand, OtherOperand)
+	}
+	else if (Base->Flags & E_REG_IN_OPCODE) {
+		i8 TargetRegister := OperandOne->RegisterNumber
+		
+		PushByte(cState, REX)
+		PushByte(cState, Base->Opcode + ClampRegisterNumber(TargetRegister))
+		
+		if (Base->Flags & E_IMM8) {
+			PushByte(cState, OperandTwo->IntegerValue As i8)
+		}
+		else if (Base->Flags & E_IMM32) {
+			PushI32(cState, OperandTwo->IntegerValue As i32)
+		}
+		else if (Base->Flags & E_IMM64) {
+			PushI64(cState, OperandTwo->IntegerValue)
+		}
+	}
+	else {
+		PushByte(cState, Base->Opcode)
+	}
 }
 
 define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {

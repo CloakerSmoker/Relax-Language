@@ -217,12 +217,16 @@ define void EmitREX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegi
 	}
 }
 
-define void EmitModRM(CompilerState* cState, i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
+define i8 MakeModRM(i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
 	Mode := Mode << 6
 	i8 Reg := ClampRegisterNumber(DestinationRegister) << 3
 	i8 RM := ClampRegisterNumber(SourceRegister)
 	
-	PushByte(cState, Mode | Reg | RM)
+	return Mode | Reg | RM
+}
+
+define void EmitModRM(CompilerState* cState, i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
+	PushByte(cState, MakeModRM(Mode, DestinationRegister, SourceRegister))
 }
 
 define void EmitLegacySizePrefix(CompilerState* cState) {
@@ -241,14 +245,18 @@ define void EmitREXBigOpcodeModRM(CompilerState* cState, i16 FirstOpcodeByte, i1
 	EmitModRM(cState, Mode, DestinationRegister, SourceRegister)
 }
 
-define void EmitSIB(CompilerState* cState, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
+define i8 MakeSIB(i8 Scale, i8 IndexRegister, i8 BaseRegister) {
 	i8 TrueScale := 0
 	
 	if (Scale = 2) {TrueScale := 1}
 	else if (Scale = 4) {TrueScale := 2}
 	else if (Scale = 8) {TrueScale := 3}
 	
-	PushByte(cState, (TrueScale << 6) | (IndexRegister << 3) | BaseRegister)
+	return (TrueScale << 6) | (IndexRegister << 3) | BaseRegister
+}
+
+define void EmitSIB(CompilerState* cState, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
+	PushByte(cState, MakeSIB(Scale, IndexRegister, BaseRegister))
 }
 
 define void EmitREXOpcodeModRMSIB(CompilerState* cState, i16 Opcode, i8 Mode, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister, i8 ExtraREX) {
