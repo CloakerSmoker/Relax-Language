@@ -666,8 +666,10 @@ define void EmitCall_Label(CompilerState* cState, i32 LabelNumber) {
 }
 
 define void EmitSysCall(CompilerState* cState) {
-	PushByte(cState, 0x0F)
-	PushByte(cState, 0x05)
+	if !(BUILDING_STANDALONE) {
+		PushByte(cState, 0x0F)
+		PushByte(cState, 0x05)
+	}
 }
 
 /*
@@ -745,4 +747,22 @@ define void EmitSetGE_R8(CompilerState* cState, i8 DestinationRegister) {
 
 define void EmitInt3(CompilerState* cState) {
 	PushByte(cState, 0xCC)
+}
+define void EmitOutB(CompilerState* cState) {
+	PushByte(cState, 0xEE)
+}
+define void EmitInB(CompilerState* cState) {
+	PushByte(cState, 0xEC)
+}
+define void EmitLea_RAX_Label(CompilerState* cState, i32 Label) {
+	PushByte(cState, 0x8D)
+	EmitModRM(cState, 0, RAX, 5)
+	UseLabel(cState, Label)
+}
+define void EmitXCHG_R64_RI64(CompilerState* cState, i8 Register, i8 PointerRegister) {
+	EmitBasicInstruction(cState, 0x87, MODE_PTOR, 8, Register, PointerRegister)
+}
+define void EmitIRet(CompilerState* cState) {
+	PushByte(cState, 0x48)
+	PushByte(cState, 0xCF)
 }

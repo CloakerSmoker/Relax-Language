@@ -37,7 +37,6 @@ struct CompilerState {
 	i32 CurrentLoopBreakLabel,
 	
 	Type CurrentFunctionReturnType,
-	
 	i32 CurrentFunctionStringBufferOffset,
 	
 	i8 RegisterStackIndex,
@@ -46,7 +45,9 @@ struct CompilerState {
 	i8 NoClobberA,
 	
 	i8 OutputELF,
-	i8 CompilingMain
+	i8 CompilingMain,
+	
+	FunctionDefine* CurrentFunction
 }
 
 /*
@@ -82,7 +83,11 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	i64 CODE_BASE := 0x3000
 	
-	if (OutputELF) {
+	if (BUILDING_STANDALONE) {
+		C.GlobalBase := DEFAULT_IMAGE_BASE + 0x10
+		CODE_BASE := pState->GlobalOffset + 0x10
+	}
+	else if (OutputELF) {
 		C.ELF := BuildELFBuilder()
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 64 + 0x1000
 		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
@@ -188,7 +193,24 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	i32 Result := 0
 	i32 BytesWritten := 0
 	
-	if (OutputELF) {
+	if (BUILDING_STANDALONE) {
+		i32 CodeBase := pState->GlobalOffset + 0x10
+		i32 FileSize := CodeBase + C.Index
+		
+		void* Binary := Alloc(FileSize)
+		i8* BinaryBytes := Binary As i8*
+		
+		BinaryBytes[0] := 0xE9
+		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
+		
+		for (i32 CodeIndex := 0, CodeIndex < C.Index, CodeIndex += 1) {
+			BinaryBytes[CodeBase + CodeIndex] := C.CodeBuffer[CodeIndex]
+		}
+		
+		Result := FileWrite(OutputFileHandle, Binary, FileSize)
+		BytesWritten := FileSize
+	}
+	else if (OutputELF) {
 		AddDataSection(C.ELF, C.pState->GlobalOffset)
 		AddCodeSection(C.ELF, C.CodeBuffer, C.Index)
 		
@@ -415,6 +437,8 @@ declare void CompileBlock(CompilerState*, Block*)
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
+	cState->CurrentFunction := FunctionToCompile
+	
 	if (FunctionToCompile->Body->StatementCount = 0) {
 		EmitReturn(cState)
 		return 0
@@ -430,6 +454,27 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	cState->CurrentFunctionReturnLabel := ReturnLabel
 	
 	SetLabel(cState, FunctionToCompile->LabelNumber)
+	
+	if (FunctionToCompile->Flags & FUNCTION_INTERRUPT) {
+		if (FunctionToCompile->Flags & FUNCTION_INTERRUPT_CODE) {
+			EmitXCHG_R64_RI64(cState, RDI, RSP)
+		}
+		else {
+			EmitPush_R64(cState, RDI)
+		}
+		
+		EmitPush_R64(cState, RSI)
+		EmitLea_R64_R64_DISP8(cState, RSI, RSP, 0x10)
+		
+		EmitPush_R64(cState, RBP)
+		
+		for (i8 I := 0, I < 4, I += 1) {
+			EmitPush_R64(cState, I)
+		}
+		for (i8 R := 8, R <= 15, R += 1) {
+			EmitPush_R64(cState, R)
+		}
+	}
 	
 	i8 USE_SYSTEMV := cState->OutputELF
 	
@@ -626,7 +671,21 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	EmitLeave(cState)
 	
-	if (IsMain && USE_SYSTEMV) {
+	if (FunctionToCompile->Flags & FUNCTION_INTERRUPT) {
+		for (i8 PR := 15, PR >= 8, PR -= 1) {
+			EmitPop_R64(cState, PR)
+		}
+		for (i8 PI := 4, PI >= 0, PI -= 1) {
+			EmitPop_R64(cState, PI)
+		}
+		
+		EmitPop_R64(cState, RBP)
+		EmitPop_R64(cState, RSI)
+		EmitPop_R64(cState, RDI)
+		
+		EmitIRet(cState)
+	}
+	else if (IsMain && USE_SYSTEMV && !BUILDING_STANDALONE) {
 		EmitMove_R64_R64(cState, RDI, RAX)
 		EmitMove_R32_I32(cState, RAX, 60)
 		EmitSysCall(cState)
@@ -710,7 +769,21 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	
 	EmitLeave(cState)
 	
-	if (cState->CompilingMain && cState->OutputELF) {
+	if (cState->CurrentFunction->Flags & FUNCTION_INTERRUPT) {
+		for (i8 R := 15, R >= 8, R -= 1) {
+			EmitPop_R64(cState, R)
+		}
+		for (i8 I := 4, I >= 0, I -= 1) {
+			EmitPop_R64(cState, I)
+		}
+		
+		EmitPop_R64(cState, RBP)
+		EmitPop_R64(cState, RSI)
+		EmitPop_R64(cState, RDI)
+		
+		EmitIRet(cState)
+	}
+	else if (cState->CompilingMain && cState->OutputELF) {
 		/* If returning from Main() on Linux, actually call sys_exit() to ensure that the program exits correctly. */
 		
 		EmitMove_R64_R64(cState, RDI, RAX)
@@ -971,6 +1044,36 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	}
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
 		EmitInt3(cState)
+		
+		return 0
+	}
+	else if (BuiltinID = BUILTIN_IN) {
+		CompileExpression(cState, RDX, CallNode->Parameters[0])
+		
+		EmitInB(cState)
+		
+		return 0
+	}
+	else if (BuiltinID = BUILTIN_OUT) {
+		CompileExpression(cState, RDX, CallNode->Parameters[0])
+		CompileExpression(cState, RAX, CallNode->Parameters[1])
+		
+		EmitOutB(cState)
+		
+		if (ResultRegister != RAX) {
+			EmitMove_R64_R64(cState, ResultRegister, RAX)
+		}
+		
+		return 0
+	}
+	else if (BuiltinID = BUILTIN_STATICALLOC) {
+		EmitMove_R64_I64(cState, ResultRegister, cState->GlobalBase + CallNode->Parameters[0]->IntegerValue)
+		
+		return 0
+	}
+	else if (BuiltinID = BUILTIN_EMIT) {
+		PushByte(cState, CallNode->Parameters[0]->IntegerValue As i8)
+		
 		return 0
 	}
 	else if (cState->OutputELF && TargetFunction->IsImported) {
@@ -1337,6 +1440,12 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type ResultTy
 			if (OperandExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
 				CompileGetArrayAccess(cState, ResultRegister, OperandExpression->Left, OperandExpression->Right, true)
 			}
+		}
+		else if (OperandType = NODE_TYPE_DEFINE) {
+			FunctionDefine* OperandFunction := Operand->DefineNode
+			
+			EmitLea_RAX_Label(cState, OperandFunction->LabelNumber)
+			EmitMove_R64_R64(cState, ResultRegister, RAX)
 		}
 	}
 	else {
