@@ -1,0 +1,23 @@
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
+
+define i64 ReturnParam(i64 A, i64* B) {
+	asm {
+		mov, {rdx}, rcx
+		mov, rax, rcx
+		mov, ax, 90
+		
+		mov, si, di
+	}
+}
+
+define i32 Main() {
+	i64 B := 0
+	
+	IWrite(ReturnParam(9000000, &B))
+	WriteCharacter(',')
+	IWrite(B)
+	
+	asm {mov, rax, 0}
+}
