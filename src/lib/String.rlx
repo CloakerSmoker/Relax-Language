@@ -74,6 +74,9 @@ define i8 IsNumeric(i16 Character) {
 	/* Checks if a character is a number of not */
 	return (Character >= '0') && (Character <= '9')
 }
+define i8 IsNumber(i16 Character) {
+	return IsNumeric(Character)
+}
 
 define i8 IsAlphaNumeric(i16 Character) {
 	/* Checks if a character is alphanumeric(/can be part of an identifier) */

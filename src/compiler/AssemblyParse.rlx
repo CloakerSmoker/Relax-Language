@@ -1,62 +1,46 @@
 
 /* Operand type flags, R = register, M = register indirect or SIB (with a disp on either) */
 
-i32 OP_R := 1
-i32 OP_M := 2
-i32 OP_I8 := 4
-i32 OP_I16 := 8
-i32 OP_I32 := 16
-i32 OP_I64 := 32
+i32 OP_M := 1
+i32 OP_R8 := 2
+i32 OP_R16 := 4
+i32 OP_R32 := 8
+i32 OP_R64 := 16
+i32 OP_I8 := 32
+i32 OP_I16 := 64
+i32 OP_I32 := 128
+i32 OP_I64 := 256
+
+i32 OP_R := OP_R8 | OP_R16 | OP_R32 | OP_R64
 
 /* Prepacked operand types */
 i32 O_M := OP_R | OP_M 			/* Register or memory reference */
-i32 O_RM := OP_R | (O_M << 8)	/* RM encoding */
-i32 O_MR := O_M | (OP_R << 8)	/* MR encoding */
+i32 O_RM := OP_R | (O_M << 16)	/* RM encoding */
+i32 O_MR := O_M | (OP_R << 16)	/* MR encoding */
 i32 O_I := OP_I8 | OP_I16 | OP_I32 /* Imm8,Imm16,Imm32 encoding */
-i32 O_MI := O_M | (O_I << 8) 	/* MI encoding */
-
-define void SetupRegisters(ParserState* pState) {
-	HashMap* R := NewHashMap()
-	pState->Registers := R
-	
-	R->IgnoreCase := true
-	
-	HashMapASet(R, "rax", 0)
-	HashMapASet(R, "rcx", 1)
-	HashMapASet(R, "rdx", 2)
-	HashMapASet(R, "rbx", 3)
-	HashMapASet(R, "rsp", 4)
-	HashMapASet(R, "rbp", 5)
-	HashMapASet(R, "rsi", 6)
-	HashMapASet(R, "rdi", 7)
-	HashMapASet(R, "r8", 8)
-	HashMapASet(R, "r9", 9)
-	HashMapASet(R, "r10", 10)
-	HashMapASet(R, "r11", 11)
-	HashMapASet(R, "r12", 12)
-	HashMapASet(R, "r13", 13)
-	HashMapASet(R, "r14", 14)
-	HashMapASet(R, "r15", 15)
-}
+i32 O_MI := O_M | (O_I << 16) 	/* MI encoding */
 
 struct Instruction {
 	Instruction* Next,
 	i8 Opcode,
-	i8 Flags,
+	i16 Flags,
 	i8 Extra,
 	i32 EncodingMask
 }
 
-i8 E_NO_RM := 1
-i8 E_RM_IS_OP1 := 2
-i8 E_RM_IS_OP2 := 4
-i8 E_OP_EXT := 8
-i8 E_IMM8 := 16
-i8 E_IMM32 := 32
-i8 E_IMM64 := 64
-i8 E_REG_IN_OPCODE := 128
+i16 E_NO_RM := 1			/* The instruction does not use the ModRM byte */
+i16 E_RM_IS_OP1 := 2		/* The RM field of the ModRM byte encodes the first operand */
+i16 E_RM_IS_OP2 := 4		/* The RM field of the ModRM byte encodes the second operand */
+i16 E_OP_EXT := 8			/* The Reg field of the ModRM byte is an opcode extension contained in Instruction.Extra */
+i16 E_IMM8 := 16			/* Encode a 8 bit immediate value */
+i16 E_IMM32 := 32			/* Encode a 32 bit immediate value */
+i16 E_IMM64 := 64			/* Encode a 64 bit immediate value */
+i16 E_REG_IN_OPCODE := 128	/* Encode the register operand in the opcode */
+i16 E_DIF_SIZES := 256 		/* Allow two different register sizes to be used */
+i16 E_BYTE_OPCODE_N1 := 512 /* The byte opcode for this instruction is not the regular opcode minus 1 */
+i16 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
 
-define Instruction* MakeInstruction(Instruction* Base, i16 Opcode, i32 Encoding, i8 Flags, i8 Extra) {
+define Instruction* MakeInstruction(Instruction* Base, i16 Opcode, i32 Encoding, i16 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
 	
 	Next->Opcode := Opcode As i8
@@ -75,7 +59,7 @@ define Instruction* MakeInstruction(Instruction* Base, i16 Opcode, i32 Encoding,
 	return Next
 }
 
-define void SetupInstructions(ParserState* pState) {
+define void SetupAssembly(ParserState* pState) {
 	HashMap* I := NewHashMap()
 	pState->Instructions := I
 	
@@ -91,17 +75,12 @@ define void SetupInstructions(ParserState* pState) {
 	
 	HashMapASet(I, "and", And)
 	
-	Instruction* Mov := MakeInstruction(0, 0xC7, O_MI, E_RM_IS_OP1 | E_IMM32 | E_OP_EXT, 0) /* Mov, register, <i32 */
-	MakeInstruction(Mov, 0xB8, O_M | (OP_I64 << 8), E_NO_RM | E_REG_IN_OPCODE | E_IMM64, 0) /* Mov, register, i64 */
+	Instruction* Mov := MakeInstruction(0, 0xC7, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 0) /* Mov, register, <i32 */
+	MakeInstruction(Mov, 0xB8, O_M | (OP_I64 << 16), E_NO_RM | E_REG_IN_OPCODE | E_IMM64, 0) /* Mov, register, i64 */
 	MakeInstruction(Mov, 0x8B, O_RM, E_RM_IS_OP2, 0) /* Mov, register, memory */
 	MakeInstruction(Mov, 0x89, O_MR, E_RM_IS_OP1, 0) /* Mov, memory, register */
 	
 	HashMapASet(I, "mov", Mov)
-}
-
-define void SetupAssembly(ParserState* pState) {
-	SetupRegisters(pState)
-	SetupInstructions(pState)
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
@@ -130,15 +109,160 @@ define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i
 	return 0 As Instruction*
 }
 
-
-define i8 LookupRegister(ParserState* pState, Token* NameToken) {
-	HashMapElement* FoundRegister := HashMapGetValue(pState->Registers, NameToken->StringValue)
-	
-	if !(FoundRegister) {
-		TokenError(NameToken, "Invalid register name.")
+define i8 GetCharacter(SafeWideString* NameString, i32 CharacterIndex) {
+	if (CharacterIndex >= NameString->Length) {
+		return ' '
 	}
 	
-	return FoundRegister->Value As i8
+	return NameString->Buffer[CharacterIndex] As i8
+}
+
+define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize) {
+	i8* InvalidName := "Invalid register name."
+	
+	i32 RegisterSize := 0
+	i32 RegisterNumber := 0
+	
+	SafeWideString* NameString := NameToken->StringValue
+	
+	/* Any one register name is maximum four characters long. */
+	if (NameString->Length > 4) {
+		TokenError(NameToken, InvalidName)
+	}
+	
+	i8 FirstCharacter := GetCharacter(NameString, 0)
+	i8 SecondCharacter := GetCharacter(NameString, 1)
+	
+	i32 Offset := 0
+	
+	if (FirstCharacter = 'r') {
+		/* All RDD registers must start with an R */
+		
+		if (IsNumber(SecondCharacter)) {
+			/* If the character after the 'R' is number */
+			
+			if (SecondCharacter = '8' || SecondCharacter = '9') {
+				/* If it is R8 or R9, we can set RegisterNumber, since there is no R80+ or R90+ */
+				
+				Offset += 1
+				RegisterNumber := SecondCharacter - '0'
+			}
+			else if (SecondCharacter = '1') {
+				/* Else we can skip past the '1' before 0-5, since it doesn't help us get the number */
+				
+				Offset += 2
+			}
+		}
+		else {
+			/* If this is not an RDD register, then the 'r' prefix means it is 64 bit */
+			
+			Offset += 1
+			RegisterSize := 8
+		}
+	}
+	else if (FirstCharacter = 'e' && !IsNumber(SecondCharacter)) {
+		/* If the first character is a 'e', then it means the following register is 32 bit */
+		
+		Offset += 1
+		RegisterSize := 4
+	}
+	
+	FirstCharacter := GetCharacter(NameString, Offset)
+	SecondCharacter := GetCharacter(NameString, Offset + 1)
+	
+	if (IsNumber(FirstCharacter)) {
+		/* RDD, DD = digits */
+		
+		if !(RegisterNumber) {
+			/* R8 and R9 are resolved above, so we need to get 10-15 here (FirstCharacter = 0-5) */
+			RegisterNumber := (FirstCharacter - '0') + 10
+		}
+		
+		/* Advance past the register number+suffix */
+		Offset += 2
+		
+		/* RDD register sizes are denoted by the b/w/d suffix, with no suffix for 64 bit */
+		if (SecondCharacter = 'b') {
+			RegisterSize := 1
+		}
+		else if (SecondCharacter = 'w') {
+			RegisterSize := 2
+		}
+		else if (SecondCharacter = 'd') {
+			RegisterSize := 4
+		}
+		else {
+			/* No suffix, backtrack by one */
+			Offset -= 1
+			RegisterSize := 8
+		}
+	}
+	else if ((FirstCharacter = 's' || FirstCharacter = 'd') && SecondCharacter = 'i') {
+		/* For si/di */
+		
+		Offset += 2 /* Advance past the register name */
+		RegisterNumber := 6 + (FirstCharacter = 'd') /* Numbers 6 and 7, 6 for SI, 7 for DI */
+		
+		SecondCharacter := GetCharacter(NameString, Offset)
+		
+		if !(RegisterSize) {
+			/* Custom 'x' suffix for the word version of each */
+			if (SecondCharacter = 'x') {
+				Offset += 1
+				RegisterSize := 1
+			}
+			else {
+				/* si/di = 8 bit, six/dix = 16 bit, esi/edi = 32 bit, rsi/rdi = 64 bit */
+				RegisterSize := 2
+			}
+		}
+	}
+	else if (FirstCharacter >= 'a' && FirstCharacter <= 'd') {
+		/* a-d registers */
+		
+		Offset += 1
+		
+		if (SecondCharacter = 'x') {
+			/* The 'x' suffix, either for a eOx/rOx/Ox combo. Since E/R are handled, we can use RegisterSize to decide 16 bit or not */
+			
+			if !(RegisterSize) {
+				RegisterSize := 2
+			}
+			
+			Offset += 1
+		}
+		else if !(RegisterSize) {
+			RegisterSize := 1
+		}
+		
+		if (FirstCharacter = 'a') {
+			RegisterNumber := 0
+		}
+		else if (FirstCharacter = 'b') {
+			RegisterNumber := 3
+		}
+		else if (FirstCharacter = 'c') {
+			RegisterNumber := 1
+		}
+		else if (FirstCharacter = 'd') {
+			RegisterNumber := 2
+		}
+	}
+	else {
+		TokenError(NameToken, InvalidName)
+	}
+	
+	if (RegisterSize = 0) {
+		TokenError(NameToken, InvalidName)
+	}
+	else if (Offset != NameString->Length) {
+		TokenError(NameToken, "Malformed register name.")
+	}
+	else if (RequiredSize && (RegisterSize != RequiredSize)) {
+		TokenError(NameToken, "Incorrect register size.")
+	}
+	
+	return RegisterNumber | (RegisterSize << 8)
 }
 
 struct SIBInfo {
@@ -180,11 +304,11 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState) {
 			/* Register[ = SIB, so parse the SIB */
 			
 			Next->HasSIB := true
-			Next->SIBValue.BaseRegister := LookupRegister(pState, MaybeBase)
+			Next->SIBValue.BaseRegister := LookupRegister(pState, MaybeBase, 8) As i8
 			
 			Token* Index := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected index register name.")
 			
-			Next->SIBValue.IndexRegister := LookupRegister(pState, Index)
+			Next->SIBValue.IndexRegister := LookupRegister(pState, Index, 8) As i8
 			
 			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 				Token* Scale := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected scale value.")
@@ -203,7 +327,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState) {
 		else {
 			/* No [ following the register, just a regular register reference */
 			
-			Next->RegisterNumber := LookupRegister(pState, MaybeBase)
+			Next->RegisterNumber := LookupRegister(pState, MaybeBase, 8) As i8
 		}
 		
 		i8 IsPlus := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
@@ -240,16 +364,17 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState) {
 		MergeContexts(NextToken~>Context, CloseBrace~>Context, Next~>Context)
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFER, 0)) {
-		Next->Type := OP_R
+		i32 Register := LookupRegister(pState, NextToken, 0)
 		
-		Next->RegisterNumber := LookupRegister(pState, NextToken)
+		Next->Type := ((Register >> 8) & 0xFF) << 1
+		Next->RegisterNumber := Register & 0xFF
 		
 		CopyContext(NextToken~>Context, Next~>Context)
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_INTEGER, 0)) {
-		/* Integer types are OP_I8 - OP_I64, are defined as 1,2,4,8 bit shifted left by 2 */
+		/* Integer types are OP_I8 - OP_I64, are defined as 1,2,4,8 bit shifted left by 5 */
 		
-		Next->Type := GetNumberSize(NextToken->IntegerValue) << 2
+		Next->Type := GetNumberSize(NextToken->IntegerValue) << 5
 		
 		Next->IntegerValue := NextToken->IntegerValue
 		CopyContext(NextToken~>Context, Next~>Context)
@@ -315,7 +440,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 				
 				Operands[OperandIndex] := Next
 				
-				OperandTypes := OperandTypes | (Next->Type << (8 * OperandIndex As i8))
+				OperandTypes := OperandTypes | (Next->Type << (16 * OperandIndex As i8))
 				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 					break
@@ -331,7 +456,22 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		Instruction* Found := FindInstruction(pState, InstructionName, OperandTypes)
 		
 		if !(Found) {
-			ContextError(Result~>Context, "No encoding for operand type(s).")
+			SwapOutputStream()
+			IWriteHexLine(OperandTypes)
+			AWriteLine("No encoding for operand type(s).")
+			
+			ContextError(Result~>Context, 0)
+		}
+		
+		i32 LowType := OperandTypes & 0xFFFF
+		i32 HighType := (OperandTypes >> 16) & 0xFFFF
+		
+		if ((LowType & OP_R) && (HighType & OP_R)) {
+			if !(Found->Flags & E_DIF_SIZES) {
+				if (LowType != HighType) {
+					ContextError(Result~>Context, "Incompatible operand types.")
+				}
+			}
 		}
 		
 		Result->Base := Found

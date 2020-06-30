@@ -1,19 +1,30 @@
+define void PushIX(CompilerState* cState, i64 Number, i8 Size) {
+	if (Size = 1) {PushByte(cState, Number As i8)}
+	else if (Size = 2) {PushI16(cState, Number As i16)}
+	else if (Size = 4) {PushI32(cState, Number As i32)}
+	else {PushI64(cState, Number)}
+}
+
+
 define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOperand* ForOperand, InstructionOperand* Other) {
 	i8 Mode := 0
 	i8 Reg := 0
 	i8 RM := 0
-	i8 REX := REX_BASE | REX_W
+	i8 REX := REX_BASE
 	i8 SIB := 0
 	i8 DispSize := 0
 	i8 DispValue := 0
+	i8 OperationSize := 0
 	
-	if (ForOperand->Type = OP_R) {
+	if (ForOperand->Type & OP_R) {
 		Mode := 3
 		RM := ClampRegisterNumber(ForOperand->RegisterNumber)
 		
 		if (RegisterRequiresREX(ForOperand->RegisterNumber)) {
 			REX := REX | REX_B
 		}
+		
+		OperationSize := (ForOperand->Type) >> 1
 	}
 	else {
 		if (ForOperand->HasSIB) {
@@ -53,16 +64,34 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 	if (I->Flags & E_OP_EXT) {
 		Reg := I->Extra
 	}
-	else if (Other->Type = OP_R) {
+	else if (Other->Type & OP_R) {
 		Reg := ClampRegisterNumber(Other->RegisterNumber)
 		
 		if (RegisterRequiresREX(Other->RegisterNumber)) {
 			REX := REX | REX_R
 		}
+		
+		OperationSize := (Other->Type) >> 1
 	}
 	
-	PushByte(cState, REX)
-	PushByte(cState, I->Opcode)
+	if (OperationSize = 8) {
+		REX := REX | REX_W
+	}
+	else if (OperationSize = 2) {
+		EmitLegacySizePrefix(cState)
+	}
+	
+	if (REX != REX_BASE) {
+		PushByte(cState, REX)
+	}
+	
+	if (OperationSize = 1 && !(I->Flags & E_BYTE_OPCODE_N1)) {
+		PushByte(cState, (I->Opcode - 1) As i16)
+	}
+	else {
+		PushByte(cState, I->Opcode)
+	}
+	
 	EmitModRM(cState, Mode, Reg, RM)
 	
 	if (RM = 4) {
@@ -76,11 +105,23 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 		PushI32(cState, DispValue)
 	}
 	
-	if (I->Flags & E_IMM8) {
-		PushByte(cState, Other->IntegerValue As i8)
+	
+	if (I->Flags & E_IMM_X) {
+		if (OperationSize = 8) {
+			/* Even if we're working with a 64 bit register, the max imm size is 32, since only movabs gets a 64 bit imm */
+			
+			OperationSize := 4
+		}
+		
+		PushIX(cState, Other->IntegerValue, OperationSize)
 	}
-	else if (I->Flags & E_IMM32) {
-		PushI32(cState, Other->IntegerValue As i32)
+	else {
+		if (I->Flags & E_IMM8) {
+			PushByte(cState, Other->IntegerValue As i8)
+		}
+		else if (I->Flags & E_IMM32) {
+			PushI32(cState, Other->IntegerValue As i32)
+		}
 	}
 }
 
