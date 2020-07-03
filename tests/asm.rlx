@@ -4,20 +4,32 @@
 
 define i64 ReturnParam(i64 A, i64* B) {
 	asm {
-		mov, {rdx}, rcx
+		mov, {rdx} as i8*, c
 		mov, rax, rcx
 		mov, ax, 90
 		
 		mov, si, di
+		mov, six, dix
+	}
+}
+define i32 Abc(i64 a) {
+	asm {
+		mov, rax, rcx
+		:start
+		dec, rax
+		test, rax, rax
+		jnz, :start
 	}
 }
 
 define i32 Main() {
-	i64 B := 0
+	i64 B := 696969
 	
 	IWrite(ReturnParam(9000000, &B))
 	WriteCharacter(',')
 	IWrite(B)
+	WriteCharacter(',')
+	IWrite(Abc(1))
 	
 	asm {mov, rax, 0}
 }

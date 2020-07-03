@@ -4,7 +4,15 @@ define void PushIX(CompilerState* cState, i64 Number, i8 Size) {
 	else if (Size = 4) {PushI32(cState, Number As i32)}
 	else {PushI64(cState, Number)}
 }
-
+define void PushOpcode(CompilerState* cState, Instruction* I) {
+	if (I->Flags & E_2_BYTE_OPCODE) {
+		PushByte(cState, (I->Opcode >> 8) & 0xFF As i16)
+		PushByte(cState, I->Opcode & 0xFF As i16)
+	}
+	else {
+		PushByte(cState, I->Opcode)
+	}
+}
 
 define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOperand* ForOperand, InstructionOperand* Other) {
 	i8 Mode := 0
@@ -24,9 +32,12 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 			REX := REX | REX_B
 		}
 		
-		OperationSize := (ForOperand->Type) >> 1
+		OperationSize := (ForOperand->Type) >> OP_R_OFFSET
 	}
 	else {
+		/* OP_MX map directly to 1/2/4/8, so the OperationSize is directly dependent on the type of the memory operand */
+		OperationSize := ForOperand->Type As i8
+		
 		if (ForOperand->HasSIB) {
 			SIBInfo* S := ForOperand~>SIBValue
 			
@@ -71,17 +82,30 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 			REX := REX | REX_R
 		}
 		
-		OperationSize := (Other->Type) >> 1
+		if !(OperationSize) {
+			OperationSize := (Other->Type) >> OP_R_OFFSET
+		}
 	}
 	
 	if (OperationSize = 8) {
+		/* REX_W for 64 bit operations */
+		
 		REX := REX | REX_W
 	}
 	else if (OperationSize = 2) {
+		/* 0x66 for 16 bit operations */
+		
 		EmitLegacySizePrefix(cState)
 	}
 	
-	if (REX != REX_BASE) {
+	/* Nothing for 32 bit operations, they are default */
+	
+	if (OperationSize = 1) {
+		/* For byte operations, emit REX_BASE to ensure sil/dil/spl/bpl can be accessed, and not ah/bh/dh/ch */
+		
+		PushByte(cState, REX | REX_BASE)
+	}
+	else if (REX != REX_BASE) {
 		PushByte(cState, REX)
 	}
 	
@@ -89,7 +113,7 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 		PushByte(cState, (I->Opcode - 1) As i16)
 	}
 	else {
-		PushByte(cState, I->Opcode)
+		PushOpcode(cState, I)
 	}
 	
 	EmitModRM(cState, Mode, Reg, RM)
@@ -126,12 +150,17 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 }
 
 define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile) {
-	Instruction* Base := ToCompile->Base
+	if (ToCompile->Type = INSTRUCTION_LABEL) {
+		SetLabel(cState, ToCompile->LabelNumber)
+		return 0
+	}
 	
 	InstructionOperand* OperandOne := ToCompile->Operands[0]
 	InstructionOperand* OperandTwo := ToCompile->Operands[1]
 	InstructionOperand* MemoryOperand := 0
 	InstructionOperand* OtherOperand := 0
+	
+	Instruction* Base := ToCompile->Base
 	
 	if (Base->Flags & E_RM_IS_OP1) {
 		MemoryOperand := OperandOne
@@ -146,6 +175,10 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 	
 	if (MemoryOperand) {
 		EmitAssembly(cState, Base, MemoryOperand, OtherOperand)
+	}
+	else if (Base->Flags & E_LABEL) {
+		PushOpcode(cState, Base)
+		UseLabel(cState, OperandOne->LabelNumber)
 	}
 	else if (Base->Flags & E_REG_IN_OPCODE) {
 		i8 TargetRegister := OperandOne->RegisterNumber
@@ -164,7 +197,7 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 		}
 	}
 	else {
-		PushByte(cState, Base->Opcode)
+		PushOpcode(cState, Base)
 	}
 }
 

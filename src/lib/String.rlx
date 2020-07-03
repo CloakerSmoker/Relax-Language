@@ -188,7 +188,7 @@ define i8* IToAH(i64 Number) {
 		return Buffer
 	}
 	
-	if ((Number >> 32) As i32 = 0xFFFFFFFF) {
+	if ((Number >> 32) As i32 = 0xFFFFFFFF As i32) {
 		/* If a number is looking like a negative i32, print it as a positive i32
 			Todo: Function overloading, so this isn't needed
 		*/

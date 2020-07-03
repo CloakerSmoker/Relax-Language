@@ -252,7 +252,7 @@ define i8 MakeSIB(i8 Scale, i8 IndexRegister, i8 BaseRegister) {
 	else if (Scale = 4) {TrueScale := 2}
 	else if (Scale = 8) {TrueScale := 3}
 	
-	return (TrueScale << 6) | (IndexRegister << 3) | BaseRegister
+	return ((TrueScale << 6) | (IndexRegister << 3) | BaseRegister) As i8
 }
 
 define void EmitSIB(CompilerState* cState, i8 Scale, i8 IndexRegister, i8 BaseRegister) {

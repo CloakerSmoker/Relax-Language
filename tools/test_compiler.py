@@ -67,9 +67,19 @@ for test_path in os.listdir(tests_dir):
     # Compiler is ran in the main/current dir so `#Include` can use regular paths
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
     stderr_text = compile_result.stderr.decode('UTF-8')
-
-    if compile_result.returncode != expected_exitcode or len(stderr_text) != 0:
-        print(f'{Fore.RED}Test {file_name} failed to compile with exit code {hex(compile_result.returncode)} and stderr "{stderr_text}""', file=sys.stderr)
+    no_stderr = len(stderr_text) == 0
+    
+    if compile_result.returncode != expected_exitcode or not no_stderr:
+        stdout_text = compile_result.stdout.decode('UTF-8')
+		
+        if no_stderr:
+            stderr_text = 'no stderr.'
+        else:
+            stderr_text = f'stderr "{stderr_text}".'
+        
+        stderr_text += f'\nstdout:\n{stdout_text}'
+        
+        print(f'{Fore.RED}Test {file_name} failed to compile with exit code {hex(compile_result.returncode)} and {stderr_text}', file=sys.stderr)
         continue
 
     test_number = 1

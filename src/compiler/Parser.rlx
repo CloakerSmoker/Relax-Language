@@ -843,6 +843,8 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	i16 LeftSize := GetTypeSize(LeftType)
 	i16 RightSize := GetTypeSize(RightType)
 	
+	i8 ALLOW_INTEGER_DOWNCAST := true
+	
 	if (Operator = OPERATOR_AS) {
 		/* OPERATOR_AS does nothing, just switches the result type of the expression */
 		
@@ -857,7 +859,12 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		
 		CheckTypes(Right->ValueType, MakeType(pState->i8, 0), Right)
 		
-		ResultType := LeftType
+		if (LeftSize < 4) {
+			ResultType := MakeType(pState->i32, 0)
+		}
+		else {
+			ResultType := LeftType
+		}
 	}
 	else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
 		/* OPERATOR_DOT and OPERATOR_MINUS_GREATER are both struct accesses */
@@ -968,6 +975,8 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	}
 	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
 		ResultType := MakeType(pState->i8, 0)
+		
+		ALLOW_INTEGER_DOWNCAST := false
 	}
 	else {
 		/* Otherwise, just follow standard binary typing rules */
@@ -984,11 +993,13 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	/* If the left or right operands are integers, just elevate them to the ResultType to ensure a compile-time cast (instead of a runtime cast) */
 	
-	if (Left->NodeType = NODE_TYPE_INTEGER) {
-		Left->ValueType := ResultType
-	}
-	if (Right->NodeType = NODE_TYPE_INTEGER) {
-		Right->ValueType := ResultType
+	if (ALLOW_INTEGER_DOWNCAST) {
+		if (Left->NodeType = NODE_TYPE_INTEGER) {
+			Left->ValueType := ResultType
+		}
+		if (Right->NodeType = NODE_TYPE_INTEGER) {
+			Right->ValueType := ResultType
+		}
 	}
 	
 	/* Allocate a result node */
