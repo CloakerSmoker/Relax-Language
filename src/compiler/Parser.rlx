@@ -160,6 +160,7 @@ struct FunctionDefine {
 i8 BUILTIN_NONE := 0
 i8 BUILTIN_SYSCALL := 1
 i8 BUILTIN_BREAKPOINT := 2
+i8 BUILTIN_STATICALLOC := 3
 
 struct CallExpression {
 	FunctionDefine* TargetFunction,
@@ -1036,7 +1037,7 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 		ResultType := MakeType(pState->i8, 0)
 	}
 	else if (Operator = OPERATOR_AND) {	
-		if !(Operand->IsStorageValue) {
+		if !(Operand->IsStorageValue || Operand->NodeType = NODE_TYPE_DEFINE) {
 			TokenError(OperatorToken, "Operand of the '&' operator must be a storage value.")
 		}
 		
@@ -1079,9 +1080,19 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 			Result->BuiltinID := BUILTIN_SYSCALL
 			ResultNode->ValueType := MakeType(pState->i64, 0)
 		}
-		else if (SafeStringEqualsAString(Name, "breakpoint")) {
+		else if (SafeStringEqualsAString(Name, "breakpoint") && ParameterCount = 0) {
 			Result->BuiltinID := BUILTIN_BREAKPOINT
 			ResultNode->ValueType := MakeType(pState->i8, 0)
+		}
+		else if (SafeStringEqualsAString(Name, "StaticAllocate") && ParameterCount = 1 && Parameters[0]->NodeType = NODE_TYPE_INTEGER) {
+			Result->BuiltinID := BUILTIN_STATICALLOC
+			ResultNode->ValueType := MakeType(pState->void, 1)
+			
+			i32 OldOffset := pState->GlobalOffset
+			
+			pState->GlobalOffset += Parameters[0]->IntegerValue
+			
+			Parameters[0]->IntegerValue := OldOffset
 		}
 		else {
 			TokenError(NameToken, "Builtin function not found.")
@@ -1171,7 +1182,7 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	return false
 }
 
-define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+define Token* ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
 	
@@ -1187,9 +1198,11 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 		IWriteLine(pState->tState->TokenIndex) */
 		
 		UnfreezeParser(pState, FrozenState)
+		
+		return false
 	}
 	
-	return Matches
+	return NextToken
 }
 
 define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
@@ -2280,7 +2293,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		/* Else if the next token is an identifier */
 		
 		/* This check is fine, since x:(y) is never valid, nor is x:y */
-		i8 IsBuiltin := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+		i8 IsBuiltin := (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON) != 0)
 		
 		if (IsBuiltin) {
 			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, NextToken~>Context)
@@ -2361,7 +2374,35 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, Result~>Context)
 		}
 		else {
-			Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
+			if (NextToken->Value = OPERATOR_AND) {
+				i8* ErrorMessage := 0
+				
+				i32 Frozen := FreezeParser(pState)
+				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFER, 0, "Dummy", &ErrorMessage)
+				
+				if (MaybeFunction && !ErrorMessage) {
+					HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, MaybeFunction->StringValue)
+					
+					if (FoundFunction) {
+						FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+						
+						FoundDefine->CallCount += 1
+						
+						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(pState->void, 1))
+						MergeContexts(NextToken~>Context, MaybeFunction~>Context, Result~>Context)
+					}
+					else {
+						UnfreezeParser(pState, Frozen)
+					}
+				}
+				else {
+					UnfreezeParser(pState, Frozen)
+				}
+			}
+			
+			if !(Result) {
+				Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
+			}
 			
 			Result := MakeUnary(pState, NextToken, Result)
 		}

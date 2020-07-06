@@ -56,15 +56,5 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	IWrite(Q~>A = A~>A)
 	IWrite(Q~>A = T~>A)
 	
-	WriteCharacter(',')
-	
-	Test2 V
-	
-	IWrite((V~>B) as i64 % 8)
-	
-	Test3 W
-	
-	IWrite((W~>B) as i64 % 8)
-	
 	return 0
 }

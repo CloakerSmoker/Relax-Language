@@ -686,6 +686,11 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				continue
 			}
+			else if (SafeStringEqualsAString(DirectiveText, "Standalone")) {
+				BUILDING_STANDALONE := true
+				
+				continue
+			}
 			else {
 				tState->SourceIndex := StartingIndex + 1
 				
