@@ -665,7 +665,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				return GetNextToken(tState)
 			}
-			else if (SafeStringEqualsAString(DirectiveText, "Imagebase")) {
+			else if (SafeStringEqualsAString(DirectiveText, "ImageBase")) {
 				if !(IsWhiteSpace(GetNextCharacter(tState))) {
 					AWriteLine("Expected whitespace after #ImageBase.")
 					Exit(1)

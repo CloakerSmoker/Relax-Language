@@ -55,6 +55,10 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 		}
 		else {
 			RM := ForOperand->RegisterNumber
+			
+			if (RM = RSP) {
+				SIB := MakeSIB(1, RSP, RSP)
+			}
 		}
 		
 		if (ForOperand->DispSize) {
@@ -176,28 +180,38 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 	if (MemoryOperand) {
 		EmitAssembly(cState, Base, MemoryOperand, OtherOperand)
 	}
-	else if (Base->Flags & E_LABEL) {
-		PushOpcode(cState, Base)
-		UseLabel(cState, OperandOne->LabelNumber)
-	}
-	else if (Base->Flags & E_REG_IN_OPCODE) {
-		i8 TargetRegister := OperandOne->RegisterNumber
-		
-		PushByte(cState, REX)
-		PushByte(cState, Base->Opcode + ClampRegisterNumber(TargetRegister))
-		
-		if (Base->Flags & E_IMM8) {
-			PushByte(cState, OperandTwo->IntegerValue As i8)
+	else {		
+		if (Base->Flags & E_LABEL) {
+			if (Base->Flags & E_REX_W) {
+				PushByte(cState, REX)
+			}
+			
+			PushOpcode(cState, Base)
+			UseLabel(cState, OperandOne->LabelNumber)
 		}
-		else if (Base->Flags & E_IMM32) {
-			PushI32(cState, OperandTwo->IntegerValue As i32)
+		else if (Base->Flags & E_REG_IN_OPCODE) {
+			i8 TargetRegister := OperandOne->RegisterNumber
+			
+			PushByte(cState, REX)
+			PushByte(cState, Base->Opcode + ClampRegisterNumber(TargetRegister))
+			
+			if (Base->Flags & E_IMM8) {
+				PushByte(cState, OperandTwo->IntegerValue As i8)
+			}
+			else if (Base->Flags & E_IMM32) {
+				PushI32(cState, OperandTwo->IntegerValue As i32)
+			}
+			else if (Base->Flags & E_IMM64) {
+				PushI64(cState, OperandTwo->IntegerValue)
+			}
 		}
-		else if (Base->Flags & E_IMM64) {
-			PushI64(cState, OperandTwo->IntegerValue)
+		else {
+			if (Base->Flags & E_REX_W) {
+				PushByte(cState, REX)
+			}
+			
+			PushOpcode(cState, Base)
 		}
-	}
-	else {
-		PushOpcode(cState, Base)
 	}
 }
 

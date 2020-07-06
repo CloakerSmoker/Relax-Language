@@ -1182,7 +1182,7 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	return false
 }
 
-define Token* ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
 	
@@ -1202,7 +1202,7 @@ define Token* ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue
 		return false
 	}
 	
-	return NextToken
+	return true
 }
 
 define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {

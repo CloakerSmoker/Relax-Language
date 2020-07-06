@@ -22,7 +22,11 @@ define i32 Abc(i64 a) {
 	}
 }
 define i32 IncRAX() asm {
-	inc, rax
+	push, rax
+	xchg, rbx, {rsp} as i64*
+	inc, rbx
+	xchg, rbx, {rsp} as i64*
+	pop, rax
 	ret
 }
 

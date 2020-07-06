@@ -53,6 +53,7 @@ i16 E_BYTE_OPCODE_N1 := 512 /* The byte opcode for this instruction is not the r
 i16 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
 i16 E_LABEL := 2048			/* The operand is a label */
 i16 E_2_BYTE_OPCODE := 4096 /* The instruction has a two byte opcode */
+i16 E_REX_W := 8192			/* The instruction needs REX.W */
 
 define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i16 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
@@ -145,6 +146,31 @@ define void SetupAssembly(ParserState* pState) {
 	HashMapASet(I, "test", Test)
 	
 	Instruction* Cmp := MakeInstruction(0, 0x83, (OP_HR | OP_M) | (OP_I8 << 16), E_RM_IS_OP1, 0)
+	
+	/* Misc (again) */
+
+	/* XChg */
+	Instruction* XChg := MakeInstruction(0, 0x87, O_MR, E_RM_IS_OP1, 0) /* XChg, memory, register */
+	MakeInstruction(XChg, 0x87, O_RM, E_RM_IS_OP2, 0) /* XChg, register, memory */
+	HashMapASet(I, "xchg", XChg) /* Yes, I know both of these encode to the same thing, but I'm not adding another encoding flag just for this single instruction where operand order doesn't matter */
+	
+	/* IRet */
+	HashMapASet(I, "iret", MakeInstruction(0, 0xCF, 0, E_NO_RM | E_REX_W, 0))
+	
+	/* Lea */
+	HashMapASet(I, "lea", MakeInstruction(0, 0x8D, O_RM, E_RM_IS_OP2, 0))
+	
+	/* Stack */
+	
+	/* Push */
+	Instruction* Push := MakeInstruction(0, 0x50, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
+	MakeInstruction(Push, 0xFF, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 6)
+	HashMapASet(I, "push", Push)
+	
+	/* Pop */
+	Instruction* Pop := MakeInstruction(0, 0x58, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
+	MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 0)
+	HashMapASet(I, "pop", Pop)
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
@@ -261,6 +287,26 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 			/* No suffix, backtrack by one */
 			Offset -= 1
 			RegisterSize := 8
+		}
+	}
+	else if ((FirstCharacter = 's' || FirstCharacter = 'b') && SecondCharacter = 'p') {
+		/* For sp/bp */
+		
+		Offset += 2 /* Advance past the register name */
+		RegisterNumber := 4 + (FirstCharacter = 'b') /* Numbers 4 and 5, 4 for SP, 5 for BP */
+		
+		SecondCharacter := GetCharacter(NameString, Offset)
+		
+		if !(RegisterSize) {
+			/* Custom 'x' suffix for the word version of each */
+			if (SecondCharacter = 'x') {
+				Offset += 1
+				RegisterSize := 2
+			}
+			else {
+				/* sp/bp = 8 bit, spx/bpx = 16 bit, esp/ebp = 32 bit, rsp/rbp = 64 bit */
+				RegisterSize := 1
+			}
 		}
 	}
 	else if ((FirstCharacter = 's' || FirstCharacter = 'd') && SecondCharacter = 'i') {
