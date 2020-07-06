@@ -411,27 +411,30 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 
 declare void CompileExpression(CompilerState*, i8, ASTNode*)
 declare void CompileBlock(CompilerState*, Block*)
+declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
+	
+	cState->RegisterStackIndex := 0
+	
+	SetLabel(cState, FunctionToCompile->LabelNumber)
+	
+	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
+		CompileAssembly(cState, FunctionToCompile->AssemblyBody)
+		return 0
+	}
 	
 	if (FunctionToCompile->Body->StatementCount = 0) {
 		EmitReturn(cState)
 		return 0
 	}
 	
-	cState->RegisterStackIndex := 0
-	
 	/* Store the current return type so return can cast values to it */
 	
 	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
 	
-	i32 ReturnLabel := NextLabel(cState)
-	cState->CurrentFunctionReturnLabel := ReturnLabel
-	
-	SetLabel(cState, FunctionToCompile->LabelNumber)
-	
-	i8 USE_SYSTEMV := cState->OutputELF
+	i8 USE_SYSTEMV := true /* cState->OutputELF */
 	
 	/* Assume 4 register parameters, and 0 stack parameters */
 	i8 MAX_REGISTER_PARAMETERS := 4
@@ -626,7 +629,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	EmitLeave(cState)
 	
-	if (IsMain && USE_SYSTEMV) {
+	if (IsMain && cState->OutputELF) {
 		EmitMove_R64_R64(cState, RDI, RAX)
 		EmitMove_R32_I32(cState, RAX, 60)
 		EmitSysCall(cState)
@@ -658,8 +661,6 @@ declare void CompileUnary(CompilerState*, i8, Type, UnaryExpression*, i8)
 declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
 declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
 declare void CompileCall(CompilerState*, i8, CallExpression*)
-
-declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
@@ -989,7 +990,9 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	i32 StackParameterCount := 0
 	i8 ExtraPadding := false
 	
-	i8 USE_SYSTEMV := cState->OutputELF
+	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
+	
+	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (cState->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
 	
 	i8 REGISTER_PARAMETER_COUNT := 4
 	

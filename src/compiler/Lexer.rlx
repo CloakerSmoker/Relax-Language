@@ -100,7 +100,6 @@ i8 OPERATOR_TILDE_GREATER := 28
 i8 OPERATOR_COLON := 29
 i8 OPERATOR_POUND := 30
 
-
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
 
@@ -110,6 +109,7 @@ i8 PUNCTUATION_CLOSE_BRACE := 3
 i8 PUNCTUATION_CLOSE_BRACKET := 4
 
 i8 PUNCTUATION_COMMA := 5
+i8 PUNCTUATION_AT := 6
 
 
 i8 KEYWORD_DECLARE := 0
@@ -533,6 +533,9 @@ define Token* GetNextToken(TokenizerState* tState) {
 		}
 		else if (NextCharacter = ',') {
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+		}
+		else if (NextCharacter = '@') {
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)
 		}
 		else if (NextCharacter = '"') {
 			NextCharacter := 0

@@ -79,6 +79,9 @@ define void SetupAssembly(ParserState* pState) {
 	
 	I->IgnoreCase := true
 	
+	/* Ret */
+	HashMapASet(I, "ret", MakeInstruction(0, 0xC3, 0, E_NO_RM, 0))
+	
 	/* Not */
 	HashMapASet(I, "not", MakeInstruction(0, 0xF7, O_M, E_RM_IS_OP1 | E_OP_EXT, 2)) /* Not, memory */
 	
@@ -127,6 +130,12 @@ define void SetupAssembly(ParserState* pState) {
 	Instruction* JNE := MakeInstruction(0, 0x0F85, O_L, E_LABEL | E_2_BYTE_OPCODE, 0)
 	HashMapASet(I, "jne", JNE)
 	HashMapASet(I, "jnz", JNE)
+	
+	/* Call */
+	Instruction* Call := MakeInstruction(0, 0xE8, O_L, E_LABEL, 0) /* Call, :label */
+	MakeInstruction(Call, 0xFF, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 2) /* Call, memory64 */
+	HashMapASet(I, "call", Call)
+	
 	
 	/* Comparisons */
 	
@@ -496,6 +505,26 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		
 		Next->IntegerValue := NextToken->IntegerValue
 		CopyContext(NextToken~>Context, Next~>Context)
+	}
+	else if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)) {
+		Next->Type := O_L
+		
+		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected label name.")
+		SafeWideString* FunctionName := FunctionToken->StringValue
+		
+		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, FunctionName)
+		
+		if !(FoundFunction) {
+			TokenError(FunctionToken, "Function definition/declaration not found.")
+		}
+		
+		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+		
+		FoundDefine->CallCount += 1
+		
+		Next->LabelNumber := FoundDefine->LabelNumber
+		
+		MergeContexts(NextToken~>Context, FunctionToken~>Context, Next~>Context)
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 		Next->Type := O_L
