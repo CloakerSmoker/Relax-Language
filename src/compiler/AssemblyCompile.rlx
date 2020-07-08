@@ -122,7 +122,7 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 	
 	EmitModRM(cState, Mode, Reg, RM)
 	
-	if (RM = 4) {
+	if (RM = 4 && SIB != 0) {
 		PushByte(cState, SIB)
 	}
 	

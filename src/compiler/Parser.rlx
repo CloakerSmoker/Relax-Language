@@ -740,7 +740,8 @@ struct VariableInfo {
 	Type Type,
 	i32 StackOffset,
 	i8 IsGlobal,
-	i8 IsParameter
+	i8 IsParameter,
+	i8 IsVariadic
 }
 
 define VariableInfo* AllocateNewVariableInfo() {
@@ -1115,18 +1116,25 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
 		
-		if (FoundDefine->ParameterCount != ParameterCount) {
+		if (FoundDefine->Attribute = OPERATOR_DOT) {
+			/* Dummy branch */
+		}
+		else if (FoundDefine->ParameterCount != ParameterCount) {
 			/* Ensure the parameter counts match */
 			ASTError(ResultNode, "Wrong number of parameters passed to function.")
 		}
 		
-		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
-			/* And that the parameter types are compatible */
+		if (FoundDefine->Attribute != OPERATOR_DOT) {
+			/* TODO: Figure out how to type check a variable number of parameters */
 			
-			VariableInfo* ExpectedParameter := FoundDefine->Parameters[ParameterIndex]
-			ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
-			
-			CheckTypes(ActualParameter->ValueType, ExpectedParameter->Type, ActualParameter)
+			for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
+				/* And that the parameter types are compatible */
+				
+				VariableInfo* ExpectedParameter := FoundDefine->Parameters[ParameterIndex]
+				ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
+				
+				CheckTypes(ActualParameter->ValueType, ExpectedParameter->Type, ActualParameter)
+			}
 		}
 	}
 	
@@ -1945,6 +1953,35 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			/* Insert the VariableInfo structure into the parameter list */
 			ParameterList[ParameterCount] := NextParameter
 			
+			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+				Token* Start := ParserCurrentToken(pState)
+				
+				Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+				Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+				
+				MergeContexts(Start~>Context, ParserCurrentToken(pState)~>Context, Start~>Context)
+				
+				if (ParameterCount > 4) {
+					TokenError(Start, "Only 4 regular paremeters can be passed with a variable argument.")
+				}
+				
+				NewDefine->Attribute := OPERATOR_DOT
+				
+				Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+				
+				NextParameter->Name := VariadicName->StringValue
+				NextParameter->Type := MakeType(pState->void, 1)
+				NextParameter->IsVariadic := true
+				NextParameter->IsParameter := true
+				NextParameter->StackOffset := (ParameterCount * 8)
+				
+				ParserAddLocal(pState, NextParameter, VariadicName)
+				
+				ParameterCount += 1
+				
+				break
+			}
+			
 			/* Parse the parameter type */
 			NextParameter->Type := ParseTypeName(pState)
 			
@@ -1952,7 +1989,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 			
 			/* Populate the VariableInfo structure */
-			NextParameter->Name := (NextParameterNameToken->Value) As SafeWideString*
+			NextParameter->Name := NextParameterNameToken->StringValue
 			NextParameter->IsGlobal := false
 			NextParameter->IsParameter := true
 			NextParameter->StackOffset := (ParameterCount * 8)

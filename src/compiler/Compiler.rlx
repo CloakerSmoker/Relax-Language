@@ -990,6 +990,17 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	}
 }
 
+define i8 GetSystemVRegister(i32 Index) {
+	if (Index = 5) {return R9}
+	else if (Index = 4) {return R8}
+	else if (Index = 3) {return RCX}
+	else if (Index = 2) {return RDX}
+	else if (Index = 1) {return RSI}
+	else if (Index = 0) {return RDI}
+	
+	return RBX
+}
+
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
@@ -1057,8 +1068,13 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	}
 	
 	i8 ParameterRegister := RBX
+	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attribute = OPERATOR_DOT)
 	
-	if (ParameterCount != 0) {
+	if (ParameterCount != 0) {		
+		if (IS_VARIADIC) {
+			ParameterCount := TargetFunction->ParameterCount - 1
+		}
+		
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
 			i16 ExpectedSize := 8
 			
@@ -1080,13 +1096,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 				else if (ParameterIndex = 1) {ThisParameterRegister := RDI}
 				else if (ParameterIndex = 0) {ThisParameterRegister := RAX}
 			}
-			else if (USE_SYSTEMV) {
-				if (ParameterIndex = 5) {ThisParameterRegister := R9}
-				else if (ParameterIndex = 4) {ThisParameterRegister := R8}
-				else if (ParameterIndex = 3) {ThisParameterRegister := RCX}
-				else if (ParameterIndex = 2) {ThisParameterRegister := RDX}
-				else if (ParameterIndex = 1) {ThisParameterRegister := RSI}
-				else if (ParameterIndex = 0) {ThisParameterRegister := RDI}
+			else if (USE_SYSTEMV) {				
+				ThisParameterRegister := GetSystemVRegister(ParameterIndex As i8)
 			}
 			else {
 				if (ParameterIndex = 3) {ThisParameterRegister := R9}
@@ -1107,6 +1118,27 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 				EmitPush_R64(cState, ThisParameterRegister)
 			}
 		}
+		
+		if (IS_VARIADIC) {
+			i8 VariadicCount := ((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1
+			i8 VariadicBase := ParameterCount
+			
+			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
+				IWriteLine(VariadicBase + VariadicIndex)
+				
+				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
+				
+				CompileExpression(cState, RBX, NextVariadic)
+				EmitPush_R64(cState, RBX)
+			}
+			
+			EmitMove_R32_I32(cState, RBX, VariadicCount)
+			EmitPush_R64(cState, RBX)
+			
+			i8 VariadicRegister := GetSystemVRegister(VariadicBase)
+			
+			EmitLea_R64_SIB(cState, VariadicRegister, 1, RSP, RSP)
+		}
 	}
 
 	cState->NoClobberCD89 := OldNoClobberCD89
@@ -1125,6 +1157,10 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitSub_R64_I8(cState, RSP, 0x20) /* Shadown space */
 		EmitCall_Label(cState, TargetFunction->LabelNumber)
 		EmitAdd_R64_I8(cState, RSP, 0x20)
+	}
+	
+	if (IS_VARIADIC) {
+		EmitAdd_R64_I8(cState, RSP, (VariadicCount * 0x8) As i8)
 	}
 	
 	if (OldNoClobberCD89) {

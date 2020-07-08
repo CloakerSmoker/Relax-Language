@@ -2,6 +2,25 @@
 #Include ./src/lib/String.rlx
 #Include ./src/lib/Console.rlx
 
+define void VATest(i64 T, ... Args) {
+	IWriteHex(T)
+	WriteLiteral(', ')
+	IWriteHex(Args[0])
+	WriteLiteral(' ')
+	
+	i32 C := Args[0] As i32
+	Args += 8
+	
+	for (i32 I := 0, I < C, I += 1) {
+		IWriteHex(Args[I])
+		
+		if (C - 1 != I) {
+			WriteLiteral(', ')
+		}
+	}
+}
+
+
 define i32 Main() {
 	IWriteHex('aaaaaaaa')
 	WriteLiteral(', ')
@@ -16,6 +35,10 @@ define i32 Main() {
 	IWriteHex('aa')
 	WriteLiteral(', ')
 	IWriteHex('a')
+	
+	WriteLiteral(' ')
+	
+	VATest(10, 1, 2, 3)
 	
 	return 0
 }

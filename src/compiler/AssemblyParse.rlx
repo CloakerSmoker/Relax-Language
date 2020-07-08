@@ -54,6 +54,7 @@ i16 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
 i16 E_LABEL := 2048			/* The operand is a label */
 i16 E_2_BYTE_OPCODE := 4096 /* The instruction has a two byte opcode */
 i16 E_REX_W := 8192			/* The instruction needs REX.W */
+i16 E_NO_REX := 8192			/* The instruction needs REX.W */
 
 define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i16 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
@@ -160,6 +161,12 @@ define void SetupAssembly(ParserState* pState) {
 	/* Lea */
 	HashMapASet(I, "lea", MakeInstruction(0, 0x8D, O_RM, E_RM_IS_OP2, 0))
 	
+	/* Xor */
+	Instruction* Xor := MakeInstruction(0, 0x81, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 6)
+	MakeInstruction(Xor, 0x31, O_MR, E_RM_IS_OP1, 0)
+	MakeInstruction(Xor, 0x33, O_RM, E_RM_IS_OP2, 0)
+	HashMapASet(I, "xor", Xor)
+	
 	/* Stack */
 	
 	/* Push */
@@ -171,6 +178,20 @@ define void SetupAssembly(ParserState* pState) {
 	Instruction* Pop := MakeInstruction(0, 0x58, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
 	MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 0)
 	HashMapASet(I, "pop", Pop)
+	
+	/* IO */
+	
+	/* In */
+	HashMapASet(I, "inb", MakeInstruction(0, 0xEC, 0, E_NO_RM, 0))
+	
+	/* Out */
+	HashMapASet(I, "outb", MakeInstruction(0, 0xEE, 0, E_NO_RM, 0))
+	
+	/* Uh */
+	
+	HashMapASet(I, "lidt", MakeInstruction(0, 0x0F01, OP_M64, E_RM_IS_OP1 | E_OP_EXT | E_2_BYTE_OPCODE, 3))
+	HashMapASet(I, "cli", MakeInstruction(0, 0xFA, 0, E_NO_RM, 0))
+	HashMapASet(I, "sti", MakeInstruction(0, 0xFB, 0, E_NO_RM, 0))
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
