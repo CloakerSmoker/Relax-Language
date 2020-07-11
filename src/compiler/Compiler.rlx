@@ -61,6 +61,41 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
+
+define void DumpGlobals(CompilerState* cState) {
+	ParserState* pState := cState->pState
+	void* Elements := pState->Globals->Elements
+	i32 Max := pState->GlobalOffset
+	i32 Base := cState->GlobalBase
+	i32 LastOffset := 0
+	
+	for (i32 ElementIndex := 0, ElementIndex < (pState->Globals->BufferMaxCount), ElementIndex += 1) {
+		if (Elements[ElementIndex]) {
+			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+			
+			while (FoundElement) {
+				VariableInfo* NextGlobal := FoundElement->Value
+				i32 ThisOffset := NextGlobal->StackOffset
+				
+				if (LastOffset != 0) {
+					AWrite(" ")
+					IWriteHexLine(ThisOffset - LastOffset)
+				}
+				
+				PrintSafeString(NextGlobal->Name)
+				AWrite(": ")
+				IWriteHex(Base + ThisOffset)
+				
+				LastOffset := ThisOffset
+				FoundElement := FoundElement->NextElement
+			}
+		}
+	}
+	
+	AWrite(" ")
+	IWriteHexLine(Max - LastOffset)
+}
+
 define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF, i8 DumpFunctionBytes) {
 	CompilerState C
 	
@@ -97,6 +132,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		C.Builder->ImportFixupBase := C.CodeBuffer
 		C.GlobalBase := DEFAULT_IMAGE_BASE + C.Builder->NextRVA
 	}
+	
+	DumpGlobals(&C)
+	
 	
 	i32 MainOffset := 0
 	i8 FoundMain := false
@@ -339,7 +377,7 @@ define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {
 
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
+		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 	}
 	else {
@@ -358,10 +396,10 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
+		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
-		EmitMove_RX_RIX(cState, ResultRegister, RBX, TargetSize)
+		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetSize)
 	}
 	else {
 		if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
@@ -518,8 +556,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
 		*/
 		
-		EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
-		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
+		if !(BUILDING_STANDALONE) {
+			EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
+			EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
+		}
 	}
 	
 	EmitSub_R64_IX(cState, RSP, LocalSpace)
@@ -1124,8 +1164,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			i8 VariadicBase := ParameterCount
 			
 			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
-				IWriteLine(VariadicBase + VariadicIndex)
-				
 				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
 				
 				CompileExpression(cState, RBX, NextVariadic)
@@ -1138,6 +1176,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			i8 VariadicRegister := GetSystemVRegister(VariadicBase)
 			
 			EmitLea_R64_SIB(cState, VariadicRegister, 1, RSP, RSP)
+			
+			VariadicCount += 1
 		}
 	}
 
@@ -1159,8 +1199,14 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitAdd_R64_I8(cState, RSP, 0x20)
 	}
 	
+	i32 StackAdd := StackParameterCount
+	
 	if (IS_VARIADIC) {
-		EmitAdd_R64_I8(cState, RSP, (VariadicCount * 0x8) As i8)
+		StackAdd += VariadicCount
+	}
+	
+	if (StackAdd) {
+		EmitAdd_R64_I32(cState, RSP, StackAdd * 8)
 	}
 	
 	if (OldNoClobberCD89) {
@@ -1179,9 +1225,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	if (ResultRegister != RAX) {
 		EmitMove_R64_RX(cState, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType) As i8)
 	}
-/* 	if (cState->NoClobberA) {
-		EmitMove_R64_R64(cState, RAX, R12)
-	} */
 	
 	cState->RegisterStackIndex := RegisterStackIndex
 }
