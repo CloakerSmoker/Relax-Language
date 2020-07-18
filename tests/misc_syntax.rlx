@@ -20,6 +20,21 @@ define void VATest(i64 T, ... Args) {
 	}
 }
 
+i64{20} GlobalArray
+
+define void Dummy() {
+	WriteLiteral(',')
+	IWrite(GlobalArray[10])
+}
+
+struct Test {
+	i64 A,
+	i64 B
+}
+
+struct ExtraText {
+	i8{200} Text
+}
 
 define i32 Main() {
 	IWriteHex('aaaaaaaa')
@@ -39,6 +54,24 @@ define i32 Main() {
 	WriteLiteral(' ')
 	
 	VATest(10, 1, 2, 3)
+	
+	WriteLiteral(' ')
+	
+	i8{90} test_array
+	
+	test_array[2] := 90
+	
+	IWriteHex(test_array[2])
+	
+	test_array[89] := 20
+	WriteLiteral(',')
+	IWrite(test_array[89])
+	
+	GlobalArray[10] := 10
+	Dummy()
+	
+	WriteLiteral(',')
+	IWrite(#ExtraText)
 	
 	return 0
 }

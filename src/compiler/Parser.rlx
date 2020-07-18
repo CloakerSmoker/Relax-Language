@@ -16,7 +16,9 @@ struct TypeInfo {
 
 bits Type As i64 {
 	[0:47] BaseType,
-	[48:63] PointerDepth
+	[48:52] PointerDepth,
+	[53:54] IsArray,
+	[54:63] ArraySize
 }
 
 define TypeInfo* GetBaseType(Type T) {
@@ -29,6 +31,18 @@ define i16 GetTypeSize(Type T) {
 	else {
 		return GetBaseType(T)->Size
 	}
+}
+
+define i32 GetTypeStorageSize(Type T) {
+	i32 RegularSize := GetTypeSize(T)
+	
+	if (T.IsArray) {
+		RegularSize := GetBaseType(T)->Size
+	
+		return RegularSize * (T.ArraySize As i32)
+	}
+	
+	return RegularSize
 }
 define i32 GetPointerDepth(Type T) {
 	return T.PointerDepth As i32
@@ -423,6 +437,7 @@ i8 TYPE_REGULAR := 1
 i8 TYPE_STRUCT := 2
 i8 TYPE_INCOMPLETE := 4
 i8 TYPE_BITS := 8
+i8 TYPE_ARRAY := 16
 
 define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
@@ -1322,7 +1337,7 @@ define i32 ParserAddVariable(HashMap* ToScope, VariableInfo* NewVariable, i32 Of
 	
 	NewVariable->StackOffset := Offset
 	
-	i16 NewVariableSize := GetTypeSize(NewVariable->Type)
+	i16 NewVariableSize := GetTypeStorageSize(NewVariable->Type)
 	
 	if (NewVariableSize <= 8) {
 		return 8
@@ -1354,7 +1369,7 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* S
 ==========================================
 */
 
-define Type TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
+define Type TryParseTypeName(ParserState* pState, i8 AllowArrayType, i8** ErrorMessage) {
 	/* Parses a type name, and returns a Type struct representing that type */
 	
 	/* Find the base type name */
@@ -1374,14 +1389,29 @@ define Type TryParseTypeName(ParserState* pState, i8** ErrorMessage) {
 	}
 	
 	/* Get (and return) a type (which might be incomplete) using the parsed info */
-	return TryGetType(pState, Name, PointerDepth, ErrorMessage)
+	Type Result := TryGetType(pState, Name, PointerDepth, ErrorMessage)
+	
+	if (AllowArrayType && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+		Result := IncrementPointerType(pState, Result)
+		
+		Token* SizeToken := TryConsume(pState, TOKEN_TYPE_INTEGER, 0, "Expected array type size", ErrorMessage)
+		
+		if !(*(ErrorMessage)) {
+			Result.ArraySize := (SizeToken->IntegerValue) As i16
+			Result.IsArray := true
+		}
+		
+		TryConsume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
+	}
+	
+	return Result
 }
 
 define Type ParseTypeName(ParserState* pState) {
 	i8* ErrorMessage := 0
 	i32 Frozen := FreezeParser(pState)
 	
-	Type Result := TryParseTypeName(pState, &ErrorMessage)
+	Type Result := TryParseTypeName(pState, false, &ErrorMessage)
 	
 	if (ErrorMessage) {
 		UnfreezeParser(pState, Frozen)
@@ -1435,7 +1465,7 @@ define void ParseProgram(ParserState* pState) {
 			
 			i8* ErrorMessage := 0
 			
-			Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
 			
 			if ((PotentialType != 0) && (ErrorMessage = 0)) {
 				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
@@ -1511,7 +1541,12 @@ define void ParseAndAddStruct(ParserState* pState) {
 		}
 		
 		/* Parse the type of the field */
-		NextField->ValueType := ParseTypeName(pState)
+		i8* ErrorMessage := 0
+		NextField->ValueType := TryParseTypeName(pState, true, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			TokenError(ParserCurrentToken(pState), ErrorMessage)
+		}
 		
 		/* Get the name of the field */
 		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
@@ -1519,7 +1554,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 		
 		HashMapAddValue(Fields, FieldName, NextField As void)
 		
-		i16 FieldSize := GetTypeSize(NextField->ValueType)
+		i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
 		
 		NextField->Name := FieldName
 		
@@ -1527,6 +1562,9 @@ define void ParseAndAddStruct(ParserState* pState) {
 			/* Dummy branch */
 		}
 		else if (InUnion || IsUnaligned) {
+			/* Dummy branch */
+		}
+		else if (NextField->ValueType.IsArray) {
 			/* Dummy branch */
 		}
 		else if (NextFieldOffset % FieldSize) {
@@ -2063,16 +2101,24 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
 			
-			/* Parse the expression to return */
-			ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
-			
-			/* Get the type of the return expression, and the current function's return type */
-			Type ActualReturnType := DowncastIntegerType(pState, ExpressionToReturn)
-			Type ExpectedReturnType := pState->CurrentFunction->ReturnType
-			
-			CheckTypes(ActualReturnType, ExpectedReturnType, ExpressionToReturn)
-			
-			Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+			if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				/* If there isn't an expression to return, just pretend it is `return 0` */
+				
+				Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i8, 0))
+				Result := AllocateNewASTNode(NODE_TYPE_RETURN, Result, TYPE_NONE)
+			}
+			else {
+				/* Parse the expression to return */
+				ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
+				
+				/* Get the type of the return expression, and the current function's return type */
+				Type ActualReturnType := DowncastIntegerType(pState, ExpressionToReturn)
+				Type ExpectedReturnType := pState->CurrentFunction->ReturnType
+				
+				CheckTypes(ActualReturnType, ExpectedReturnType, ExpressionToReturn)
+				
+				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+			}
 		}
 		else if (NextKeyword = KEYWORD_IF) {
 			Result := ParseIf(pState)
@@ -2105,7 +2151,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
 			i8* ErrorMessage := 0
-			Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
 			
 			if ((PotentialType != 0) && (ErrorMessage = 0)) {
 				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
@@ -2198,7 +2244,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 		UnfreezeParser(pState, InitializerStart)
 		
 		i8* ErrorMessage := 0
-		Type PotentialType := TryParseTypeName(pState, &ErrorMessage)
+		Type PotentialType := TryParseTypeName(pState, false, &ErrorMessage)
 		
 		if ((PotentialType != 0) && (ErrorMessage = 0)) {
 			i32 ExpressionStart := FreezeParser(pState)

@@ -54,7 +54,7 @@ i16 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
 i16 E_LABEL := 2048			/* The operand is a label */
 i16 E_2_BYTE_OPCODE := 4096 /* The instruction has a two byte opcode */
 i16 E_REX_W := 8192			/* The instruction needs REX.W */
-i16 E_NO_REX := 8192			/* The instruction needs REX.W */
+i16 E_NEEDS_66 := 16384		/* The instruction needs the 0x66 prefix */
 
 define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i16 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
@@ -183,15 +183,21 @@ define void SetupAssembly(ParserState* pState) {
 	
 	/* In */
 	HashMapASet(I, "inb", MakeInstruction(0, 0xEC, 0, E_NO_RM, 0))
+	HashMapASet(I, "inw", MakeInstruction(0, 0xED, 0, E_NO_RM | E_NEEDS_66, 0))
+	HashMapASet(I, "ind", MakeInstruction(0, 0xED, 0, E_NO_RM, 0))
 	
 	/* Out */
 	HashMapASet(I, "outb", MakeInstruction(0, 0xEE, 0, E_NO_RM, 0))
+	HashMapASet(I, "outw", MakeInstruction(0, 0xEF, 0, E_NO_RM | E_NEEDS_66, 0))
+	HashMapASet(I, "outd", MakeInstruction(0, 0xEF, 0, E_NO_RM, 0))
 	
 	/* Uh */
 	
 	HashMapASet(I, "lidt", MakeInstruction(0, 0x0F01, OP_M64, E_RM_IS_OP1 | E_OP_EXT | E_2_BYTE_OPCODE, 3))
 	HashMapASet(I, "cli", MakeInstruction(0, 0xFA, 0, E_NO_RM, 0))
 	HashMapASet(I, "sti", MakeInstruction(0, 0xFB, 0, E_NO_RM, 0))
+	
+	/* Prefixes (which are actually considered instr */
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {

@@ -587,6 +587,11 @@ define void EmitSub_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 define void EmitNeg_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
 	EmitBasicInstruction(cState, 0xF7, MODE_RTOR, Size, 3, TargetRegister)
 }
+
+define void EmitDec_RX(CompilerState* cState, i8 TargetRegister, i8 Size) {
+	EmitBasicInstruction(cState, 0xFF, MODE_RTOR, Size, 1, TargetRegister)
+}
+
 /*
 ==========================================
 	Mul/div

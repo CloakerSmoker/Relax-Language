@@ -206,6 +206,9 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 			}
 		}
 		else {
+			if (Base->Flags & E_NEEDS_66) {
+				PushByte(cState, 0x66)
+			}
 			if (Base->Flags & E_REX_W) {
 				PushByte(cState, REX)
 			}

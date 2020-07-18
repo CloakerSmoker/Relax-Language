@@ -240,6 +240,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		
 		BinaryBytes[0] := 0xE9
 		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
+		((Binary + 8) As i64*)[0] := DEFAULT_IMAGE_BASE
 		
 		for (i32 CodeIndex := 0, CodeIndex < C.Index, CodeIndex += 1) {
 			BinaryBytes[CodeBase + CodeIndex] := C.CodeBuffer[CodeIndex]
@@ -394,6 +395,10 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 }
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
+	
+	if (TargetVariable->Type.IsArray) {
+		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
+	}
 	
 	if (TargetVariable->IsGlobal) {
 		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
@@ -811,32 +816,50 @@ define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression
 	
 	if (ConditionType = NODE_TYPE_BINARY && IsComparison(BinaryNode->Operator)) {
 		/* Compile the expression without a result being stored into RAX, since we use the value in EFLAGS */
-		CompileBinary(cState, RAX, ConditionExpression->ValueType, BinaryNode, true)
 		
 		i8 Operator := BinaryNode->Operator->Value As i8
 		
-		/* Use inverted conditions to decide if this branch had a false condition, and to jump past it or not */
+		ASTNode* Right := BinaryNode->Right
+		i8 IsEquals := (Operator = OPERATOR_EQUAL || Operator = OPERATOR_BANG_EQUAL)
 		
-		if (Operator = OPERATOR_EQUAL) {
-			EmitJNZ_Label(cState, JumpToLabel)
+		if (IsEquals && (Right->NodeType = NODE_TYPE_INTEGER && Right->IntegerValue = 0)) {
+			CompileExpression(cState, RAX, BinaryNode->Left)
+			
+			EmitOr_RX_RX(cState, RAX, RAX, GetTypeSize(BinaryNode->Left->ValueType) As i8)
+			
+			if (Operator = OPERATOR_EQUAL) {
+				EmitJNZ_Label(cState, JumpToLabel)
+			}
+			else {
+				EmitJEZ_Label(cState, JumpToLabel)
+			}
 		}
-		else if (Operator = OPERATOR_BANG_EQUAL) {
-			EmitJEZ_Label(cState, JumpToLabel)
-		}
-		else if (Operator = OPERATOR_LESS) {
-			EmitJGE_Label(cState, JumpToLabel)
-		}
-		else if (Operator = OPERATOR_LESS_EQAUL) {
-			EmitJGT_Label(cState, JumpToLabel)
-		}
-		else if (Operator = OPERATOR_GREATER) {
-			EmitJLE_Label(cState, JumpToLabel)
-		}
-		else if (Operator = OPERATOR_GREATER_EQAUL) {
-			EmitJLT_Label(cState, JumpToLabel)
-		}
-		else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
-			EmitJEZ_Label(cState, JumpToLabel)
+		else {
+			CompileBinary(cState, RAX, ConditionExpression->ValueType, BinaryNode, true)
+			
+			/* Use inverted conditions to decide if this branch had a false condition, and to jump past it or not */
+			
+			if (Operator = OPERATOR_EQUAL) {
+				EmitJNZ_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_BANG_EQUAL) {
+				EmitJEZ_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_LESS) {
+				EmitJGE_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_LESS_EQAUL) {
+				EmitJGT_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_GREATER) {
+				EmitJLE_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_GREATER_EQAUL) {
+				EmitJLT_Label(cState, JumpToLabel)
+			}
+			else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+				EmitJEZ_Label(cState, JumpToLabel)
+			}
 		}
 	}
 	else if (ConditionType = NODE_TYPE_UNARY && (UnaryNode->Operator->Value As i8) = OPERATOR_BANG) {
