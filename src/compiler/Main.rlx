@@ -109,6 +109,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextArg, "--function-bytes") || StringEquals(NextArg, "-fb")) {
 			DumpFunctionBytes := true
 		}
+		else if (StringEquals(NextArg, "--global-bytes")) {
+			DumpFunctionBytes := DumpFunctionBytes | 0x2
+		}
 		else if (StringEquals(NextArg, "--no-colors")) {
 			NO_COLORS := true
 		}

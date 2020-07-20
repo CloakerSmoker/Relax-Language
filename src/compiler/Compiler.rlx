@@ -42,6 +42,8 @@ struct CompilerState {
 	i8 RegisterStackIndex,
 	
 	i8 NoClobberCD89,
+	i32 ParameterRegistersMaxSave,
+	i32 ParameterRegistersMinSave,
 	i8 NoClobberA,
 	
 	i8 OutputELF,
@@ -133,8 +135,12 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		C.GlobalBase := DEFAULT_IMAGE_BASE + C.Builder->NextRVA
 	}
 	
-	DumpGlobals(&C)
+	if (DumpFunctionBytes & 0x2) {
+		DumpGlobals(&C)
+	}
 	
+	C.ParameterRegistersMaxSave := 0
+	C.ParameterRegistersMinSave := 0
 	
 	i32 MainOffset := 0
 	i8 FoundMain := false
@@ -149,7 +155,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				i32 FunctionOffset := C.Index
 				
-				if (DumpFunctionBytes) {
+				if (DumpFunctionBytes & 1) {
 					IWriteHex(CODE_BASE + FunctionOffset)
 					AWrite(" - ")
 				}
@@ -176,7 +182,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 					}
 				}
 				
-				if (DumpFunctionBytes) {
+				if (DumpFunctionBytes & 1) {
 					IWrite(C.Index - FunctionOffset)
 					
 					AWrite("	(")
@@ -202,7 +208,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	
 	ResolveAllLabels(&C)
 	
-	if (DumpFunctionBytes) {
+	if (DumpFunctionBytes & 1) {
 		TextColor(Blue)
 		
 		AWrite("	Globals use ")
@@ -371,14 +377,21 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
-define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {
+define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {	
 	FitsDisp8[0] := (TargetVariable->StackOffset < 112)
+	
+	if (TargetVariable->IsGlobal) {
+		return TargetVariable->StackOffset
+	}
+	
 	return -(TargetVariable->StackOffset + 8)
 }
 
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
+		EmitLea_R64_R64_DISPX(cState, ResultRegister, R15, TargetVariable->StackOffset)
+		
+		/* EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset)) */
 		AddCodeRelocation(cState, (cState->Index) - 4)
 	}
 	else {
@@ -400,13 +413,13 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 	}
 	
-	if (TargetVariable->IsGlobal) {
+	/* if (TargetVariable->IsGlobal) {
 		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
 		AddCodeRelocation(cState, (cState->Index) - 4)
 		
 		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetSize)
 	}
-	else {
+	else { */
 		if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
 			/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
 				So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
@@ -419,14 +432,24 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 			i8 UseDisp8 := false
 			i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
 			
+			i8 BaseRegister := RBP
+			
+			if (TargetVariable->IsGlobal) {
+				BaseRegister := R15
+			}
+			
 			if (UseDisp8) {
-				EmitMove_RX_RIX_DISP8(cState, ResultRegister, RBP, Offset As i8, TargetSize)
+				EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
 			}
 			else {
-				EmitMove_RX_RIX_DISP32(cState, ResultRegister, RBP, Offset, TargetSize)
+				EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
+			}
+			
+			if (BaseRegister = R15) {
+				AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
 			}
 		}
-	}
+	/* } */
 }
 define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
@@ -568,12 +591,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	EmitSub_R64_IX(cState, RSP, LocalSpace)
-	/* EmitEnter_I16(cState, LocalSpace) */
-	
-/* 	EmitPush_R64(cState, RBX)
-	EmitPush_R64(cState, R13)
-	EmitPush_R64(cState, R14)
-	EmitPush_R64(cState, R15) */
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -610,11 +627,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		(But actually, it goes unused in every function ever, so there's no point in handling it UNLESS: 
 			this function is called by windows/external code, which isn't possible right now)
 	*/
-	
-	/* if (USE_SYSTEMV) {
-		SystemV doesn't have shadow space, so the stack parameters are actually at right before the saved return address
-		StackParameterOffset := 0x8
-	} */
 	
 	for (i8 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
 		/* For each stack parameter */
@@ -669,6 +681,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 				EmitMove_RIX_DISP32_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32, 8)
 			}
 		}
+	}
+	
+	if (FunctionToCompile->UsesGlobals) {
+		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
 	}
 	
 	/* Compile the body of the function */
@@ -752,9 +768,7 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 		CompileWhile(cState, NodeToCompile->WhileNode)
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
-		i8 IsContinue := NodeToCompile->IsContinue
-		
-		if (IsContinue) {
+		if (NodeToCompile->IsContinue) {
 			EmitJump_Label(cState, cState->CurrentLoopContinueLabel)
 		}
 		else {
@@ -912,10 +926,30 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 	SetLabel(cState, EndLabel)
 }
 
-define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
-	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
-	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
+/* Helpers to save/restore the current loop's continue/break labels (for nested loops) */
+
+bits LoopLables As i64 {
+	[0:31] ContinueLabel,
+	[32:63] BreakLabel
+}
+define i64 EnterLoop(CompilerState* cState, i32 ContinueLabel, i32 BreakLabel) {
+	LoopLables Result := cState->CurrentLoopContinueLabel
+	Result.BreakLabel := cState->CurrentLoopBreakLabel
 	
+	cState->CurrentLoopContinueLabel := ContinueLabel
+	cState->CurrentLoopBreakLabel := BreakLabel
+	
+	return Result As i64
+}
+define void ExitLoop(CompilerState* cState, LoopLables LoopState) {
+	cState->CurrentLoopContinueLabel := LoopState.ContinueLabel
+	cState->CurrentLoopBreakLabel := LoopState.BreakLabel
+}
+
+
+/* Actual loop compiling functions */
+
+define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	CompileExpression(cState, RAX, ForToCompile->Initializer)
 	
 	i32 StartLabel := NextLabel(cState)
@@ -926,10 +960,9 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	
 	CompileCondition(cState, ForToCompile->Condition, EndLabel)
 	
-	/* Prelude stuff done, condition is checked, so now we can compile the body */
-	
-	cState->CurrentLoopContinueLabel := ContinueLabel
-	cState->CurrentLoopBreakLabel := EndLabel
+	i64 LoopState := EnterLoop(cState, ContinueLabel, EndLabel)
+
+	/* Prelude stuff done, condition is checked, so now we can compile the body */	
 	
 	CompileBlock(cState, ForToCompile->Body)
 	
@@ -940,19 +973,14 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	
 	SetLabel(cState, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
 	
-	cState->CurrentLoopContinueLabel := OldContinueLabel
-	cState->CurrentLoopBreakLabel := OldBreakLabel
+	ExitLoop(cState, LoopState)
 }
 
 define void CompileLoop(CompilerState* cState, Block* LoopBody) {
-	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
-	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
-	
 	i32 StartLabel := NextLabel(cState)
 	i32 EndLabel := NextLabel(cState)
 	
-	cState->CurrentLoopContinueLabel := StartLabel
-	cState->CurrentLoopBreakLabel := EndLabel
+	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
 	
 	SetLabel(cState, StartLabel)
 	
@@ -961,19 +989,14 @@ define void CompileLoop(CompilerState* cState, Block* LoopBody) {
 	EmitJump_Label(cState, StartLabel)
 	SetLabel(cState, EndLabel)
 	
-	cState->CurrentLoopContinueLabel := OldContinueLabel
-	cState->CurrentLoopBreakLabel := OldBreakLabel
+	ExitLoop(cState, LoopState)
 }
 
 define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
-	i32 OldContinueLabel := cState->CurrentLoopContinueLabel
-	i32 OldBreakLabel := cState->CurrentLoopBreakLabel
-	
 	i32 StartLabel := NextLabel(cState)
 	i32 EndLabel := NextLabel(cState)
 	
-	cState->CurrentLoopContinueLabel := StartLabel
-	cState->CurrentLoopBreakLabel := EndLabel
+	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
 	
 	SetLabel(cState, StartLabel)
 	
@@ -983,8 +1006,7 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	EmitJump_Label(cState, StartLabel)
 	SetLabel(cState, EndLabel)
 	
-	cState->CurrentLoopContinueLabel := OldContinueLabel
-	cState->CurrentLoopBreakLabel := OldBreakLabel
+	ExitLoop(cState, LoopState)
 }
 
 define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
@@ -1121,14 +1143,18 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 	i8 OldNoClobberCD89 := cState->NoClobberCD89
 	cState->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
 	
-	if (OldNoClobberCD89) {
-		EmitPush_R64(cState, RDI)
-		EmitPush_R64(cState, RSI)
-		EmitPush_R64(cState, R9)
-		EmitPush_R64(cState, R8)
-		EmitPush_R64(cState, RDX)
-		EmitPush_R64(cState, RCX)
+	i32 OldMaxSave := cState->ParameterRegistersMaxSave
+	i32 OldMinSave := cState->ParameterRegistersMinSave
+	i8 ShouldSaveRegisters := OldMaxSave != OldMinSave
+	
+	if (ShouldSaveRegisters) {
+		for (i32 SaveIndex := OldMinSave, SaveIndex < OldMaxSave, SaveIndex += 1) {
+			EmitPush_R64(cState, GetSystemVRegister(SaveIndex))
+		}
 	}
+	
+	i32 RegisterParameterCount := ParameterCount - StackParameterCount
+	cState->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
 	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attribute = OPERATOR_DOT)
@@ -1151,13 +1177,12 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			i8 ThisParameterRegister := ParameterRegister
 			
 			if (IS_SYSCALL) {
-				if (ParameterIndex = 6) {ThisParameterRegister := R9}
-				else if (ParameterIndex = 5) {ThisParameterRegister := R8}
-				else if (ParameterIndex = 4) {ThisParameterRegister := RCX}
-				else if (ParameterIndex = 3) {ThisParameterRegister := RDX}
-				else if (ParameterIndex = 2) {ThisParameterRegister := RSI}
-				else if (ParameterIndex = 1) {ThisParameterRegister := RDI}
-				else if (ParameterIndex = 0) {ThisParameterRegister := RAX}
+				if (ParameterIndex = 0) {
+					ThisParameterRegister := RAX
+				}
+				else {
+					ThisParameterRegister := GetSystemVRegister(ParameterIndex - 1 As i8)
+				}
 			}
 			else if (USE_SYSTEMV) {				
 				ThisParameterRegister := GetSystemVRegister(ParameterIndex As i8)
@@ -1169,6 +1194,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 				else if (ParameterIndex = 0) {ThisParameterRegister := RCX}
 			}
 			
+			cState->ParameterRegistersMinSave := ParameterIndex + 1
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
 			i16 ActualSize := GetTypeSize(NextParameterValue->ValueType)
@@ -1206,10 +1232,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 
 	cState->NoClobberCD89 := OldNoClobberCD89
 	
-/* 	if (cState->NoClobberA) {
-		EmitMove_R64_R64(cState, R12, RAX)
-	} */
-	
 	if (IS_SYSCALL) {
 		EmitSysCall(cState)
 	}
@@ -1232,14 +1254,14 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		EmitAdd_R64_I32(cState, RSP, StackAdd * 8)
 	}
 	
-	if (OldNoClobberCD89) {
-		EmitPop_R64(cState, RCX)
-		EmitPop_R64(cState, RDX)
-		EmitPop_R64(cState, R8)
-		EmitPop_R64(cState, R9)
-		EmitPop_R64(cState, RSI)
-		EmitPop_R64(cState, RDI)
+	if (ShouldSaveRegisters) {
+		for (SaveIndex := OldMaxSave, SaveIndex > OldMinSave, SaveIndex -= 1) {
+			EmitPop_R64(cState, GetSystemVRegister(SaveIndex - 1))
+		}
 	}
+	
+	cState->ParameterRegistersMaxSave := OldMaxSave
+	cState->ParameterRegistersMinSave := OldMinSave
 	
 	if (ExtraPadding) {
 		EmitPop_R64(cState, RBX)

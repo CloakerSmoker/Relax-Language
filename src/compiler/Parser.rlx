@@ -168,7 +168,8 @@ struct FunctionDefine {
 	i32 LabelNumber,
 	i32 StringBufferSize,
 	
-	i32 CallCount
+	i32 CallCount,
+	i8 UsesGlobals
 }
 
 i8 BUILTIN_NONE := 0
@@ -1310,6 +1311,10 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	if !(FoundVariable) {
 		/* If we didn't find the variable in the locals, then check the globals */
 		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
+		
+		if (pState->CurrentFunction != 0) {
+			pState->CurrentFunction->UsesGlobals := true
+		}
 	}
 	
 	if !(FoundVariable) {
@@ -1968,6 +1973,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
 	
 	pState->CurrentFunction := NewDefine
+	NewDefine->UsesGlobals := false
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")

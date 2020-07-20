@@ -40,28 +40,31 @@ struct Instruction {
 	i32 EncodingMask
 }
 
-i16 E_NO_RM := 1			/* The instruction does not use the ModRM byte */
-i16 E_RM_IS_OP1 := 2		/* The RM field of the ModRM byte encodes the first operand */
-i16 E_RM_IS_OP2 := 4		/* The RM field of the ModRM byte encodes the second operand */
-i16 E_OP_EXT := 8			/* The Reg field of the ModRM byte is an opcode extension contained in Instruction.Extra */
-i16 E_IMM8 := 16			/* Encode a 8 bit immediate value */
-i16 E_IMM32 := 32			/* Encode a 32 bit immediate value */
-i16 E_IMM64 := 64			/* Encode a 64 bit immediate value */
-i16 E_REG_IN_OPCODE := 128	/* Encode the register operand in the opcode */
-i16 E_DIF_SIZES := 256 		/* Allow two different register sizes to be used */
-i16 E_BYTE_OPCODE_N1 := 512 /* The byte opcode for this instruction is not the regular opcode minus 1 */
-i16 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
-i16 E_LABEL := 2048			/* The operand is a label */
-i16 E_2_BYTE_OPCODE := 4096 /* The instruction has a two byte opcode */
-i16 E_REX_W := 8192			/* The instruction needs REX.W */
-i16 E_NEEDS_66 := 16384		/* The instruction needs the 0x66 prefix */
+i32 E_NO_RM := 1			/* The instruction does not use the ModRM byte */
+i32 E_RM_IS_OP1 := 2		/* The RM field of the ModRM byte encodes the first operand */
+i32 E_RM_IS_OP2 := 4		/* The RM field of the ModRM byte encodes the second operand */
+i32 E_OP_EXT := 8			/* The Reg field of the ModRM byte is an opcode extension contained in Instruction.Extra */
+i32 E_IMM8 := 16			/* Encode a 8 bit immediate value */
+i32 E_IMM32 := 32			/* Encode a 32 bit immediate value */
+i32 E_IMM64 := 64			/* Encode a 64 bit immediate value */
+i32 E_REG_IN_OPCODE := 128	/* Encode the register operand in the opcode */
+i32 E_DIF_SIZES := 256 		/* Allow two different register sizes to be used */
+i32 E_BYTE_OPCODE_N1 := 512 /* The byte opcode for this instruction is not the regular opcode minus 1 */
+i32 E_IMM_X := 1024			/* The immediate operand is the size of the operand  */
+i32 E_LABEL := 2048			/* The operand is a label */
+i32 E_2_BYTE_OPCODE := 4096 /* The instruction has a two byte opcode */
+i32 E_REX_W := 8192			/* The instruction needs REX.W */
+i32 E_NEEDS_66 := 16384		/* The instruction needs the 0x66 prefix */
 
-define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i16 Flags, i8 Extra) {
+i32 E_1OP_WEXT := E_RM_IS_OP1 | E_OP_EXT /* The instruction has one operand, and an opcode extension */
+i32 E_CJMP := E_2_BYTE_OPCODE | E_LABEL
+
+define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i32 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
 	
 	Next->Opcode := Opcode As i16
 	Next->EncodingMask := Encoding
-	Next->Flags := Flags
+	Next->Flags := Flags As i16
 	Next->Extra := Extra
 	
 	if (Base) {
@@ -85,10 +88,10 @@ define void SetupAssembly(ParserState* pState) {
 	HashMapASet(I, "ret", MakeInstruction(0, 0xC3, 0, E_NO_RM, 0))
 	
 	/* Not */
-	HashMapASet(I, "not", MakeInstruction(0, 0xF7, O_M, E_RM_IS_OP1 | E_OP_EXT, 2)) /* Not, memory */
+	HashMapASet(I, "not", MakeInstruction(0, 0xF7, O_M, E_1OP_WEXT, 2)) /* Not, memory */
 	
 	/* Neg */
-	HashMapASet(I, "neg", MakeInstruction(0, 0xF7, O_M, E_RM_IS_OP1 | E_OP_EXT, 3)) /* Neg, memory */
+	HashMapASet(I, "neg", MakeInstruction(0, 0xF7, O_M, E_1OP_WEXT, 3)) /* Neg, memory */
 	
 	/* And */
 	Instruction* And := MakeInstruction(0, 0x23, O_RM, E_RM_IS_OP2, 0) /* And, register, memory  */
@@ -105,44 +108,44 @@ define void SetupAssembly(ParserState* pState) {
 	HashMapASet(I, "mov", Mov)
 	
 	/* Inc */
-	HashMapASet(I, "inc", MakeInstruction(0, 0xFF, O_M, E_RM_IS_OP1 | E_OP_EXT, 0)) /* Inc, memory */
+	HashMapASet(I, "inc", MakeInstruction(0, 0xFF, O_M, E_1OP_WEXT, 0)) /* Inc, memory */
 	
 	/* Dec */
-	HashMapASet(I, "dec", MakeInstruction(0, 0xFF, O_M, E_RM_IS_OP1 | E_OP_EXT, 1)) /* Dec, memory */
+	HashMapASet(I, "dec", MakeInstruction(0, 0xFF, O_M, E_1OP_WEXT, 1)) /* Dec, memory */
 	
 	/* Jumps (including conditionals) */
 	
 	/* Jmp */
 	Instruction* Jmp := MakeInstruction(0, 0xE9, O_L, E_LABEL, 0) /* Jmp, :label */
-	MakeInstruction(Jmp, 0xFF, O_M, E_RM_IS_OP1 | E_OP_EXT, 4) /* Jmp, register */
+	MakeInstruction(Jmp, 0xFF, O_M, E_1OP_WEXT, 4) /* Jmp, register */
 	HashMapASet(I, "jmp", Jmp)
 	
 	/* Je */
-	Instruction* JE := MakeInstruction(0, 0x0F84, O_L, E_LABEL | E_2_BYTE_OPCODE, 0)
+	Instruction* JE := MakeInstruction(0, 0x0F84, O_L, E_CJMP, 0)
 	HashMapASet(I, "je", JE)
 	HashMapASet(I, "jz", JE)
 	
 	/* Jcc */
-	HashMapASet(I, "jgt", MakeInstruction(0, 0x0F8F, O_L, E_LABEL | E_2_BYTE_OPCODE, 0))
-	HashMapASet(I, "jge", MakeInstruction(0, 0x0F8D, O_L, E_LABEL | E_2_BYTE_OPCODE, 0))
-	HashMapASet(I, "jlt", MakeInstruction(0, 0x0F8C, O_L, E_LABEL | E_2_BYTE_OPCODE, 0))
-	HashMapASet(I, "jle", MakeInstruction(0, 0x0F8E, O_L, E_LABEL | E_2_BYTE_OPCODE, 0))
+	HashMapASet(I, "jgt", MakeInstruction(0, 0x0F8F, O_L, E_CJMP, 0))
+	HashMapASet(I, "jge", MakeInstruction(0, 0x0F8D, O_L, E_CJMP, 0))
+	HashMapASet(I, "jlt", MakeInstruction(0, 0x0F8C, O_L, E_CJMP, 0))
+	HashMapASet(I, "jle", MakeInstruction(0, 0x0F8E, O_L, E_CJMP, 0))
 	
 	/* Jne */
-	Instruction* JNE := MakeInstruction(0, 0x0F85, O_L, E_LABEL | E_2_BYTE_OPCODE, 0)
+	Instruction* JNE := MakeInstruction(0, 0x0F85, O_L, E_CJMP, 0)
 	HashMapASet(I, "jne", JNE)
 	HashMapASet(I, "jnz", JNE)
 	
 	/* Call */
 	Instruction* Call := MakeInstruction(0, 0xE8, O_L, E_LABEL, 0) /* Call, :label */
-	MakeInstruction(Call, 0xFF, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 2) /* Call, memory64 */
+	MakeInstruction(Call, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 2) /* Call, memory64 */
 	HashMapASet(I, "call", Call)
 	
 	
 	/* Comparisons */
 	
 	/* Test */
-	Instruction* Test := MakeInstruction(0, 0xF7, O_M | (O_I << 16), E_RM_IS_OP1 | E_OP_EXT, 0) /* Test, memory, immX */
+	Instruction* Test := MakeInstruction(0, 0xF7, O_M | (O_I << 16), E_1OP_WEXT, 0) /* Test, memory, immX */
 	MakeInstruction(Test, 0x85, O_MR, E_RM_IS_OP1, 0) /* Test, memory, register */
 	HashMapASet(I, "test", Test)
 	
@@ -171,12 +174,12 @@ define void SetupAssembly(ParserState* pState) {
 	
 	/* Push */
 	Instruction* Push := MakeInstruction(0, 0x50, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
-	MakeInstruction(Push, 0xFF, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 6)
+	MakeInstruction(Push, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 6)
 	HashMapASet(I, "push", Push)
 	
 	/* Pop */
 	Instruction* Pop := MakeInstruction(0, 0x58, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
-	MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_RM_IS_OP1 | E_OP_EXT, 0)
+	MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_1OP_WEXT, 0)
 	HashMapASet(I, "pop", Pop)
 	
 	/* IO */
@@ -193,7 +196,7 @@ define void SetupAssembly(ParserState* pState) {
 	
 	/* Uh */
 	
-	HashMapASet(I, "lidt", MakeInstruction(0, 0x0F01, OP_M64, E_RM_IS_OP1 | E_OP_EXT | E_2_BYTE_OPCODE, 3))
+	HashMapASet(I, "lidt", MakeInstruction(0, 0x0F01, OP_M64, E_1OP_WEXT | E_2_BYTE_OPCODE, 3))
 	HashMapASet(I, "cli", MakeInstruction(0, 0xFA, 0, E_NO_RM, 0))
 	HashMapASet(I, "sti", MakeInstruction(0, 0xFB, 0, E_NO_RM, 0))
 	

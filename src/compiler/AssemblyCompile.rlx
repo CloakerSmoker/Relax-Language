@@ -222,4 +222,10 @@ define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
 	for (i32 InstructionIndex := 0, InstructionIndex < ToCompile->InstructionCount, InstructionIndex += 1) {
 		CompileInstruction(cState, ToCompile->Instructions[InstructionIndex])
 	}
+	
+	FunctionDefine* CurrentFunction := cState->CurrentFunction
+	
+	if (CurrentFunction && CurrentFunction->UsesGlobals) {
+		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
+	}
 }
