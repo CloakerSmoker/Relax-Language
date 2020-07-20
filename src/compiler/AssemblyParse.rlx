@@ -466,7 +466,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 		/* A memory reference, through a register or SIB (plus displacements) */
 		
-		Token* MaybeBase := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected register name.")
+		Token* MaybeBase := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name.")
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
 			/* Register[ = SIB, so parse the SIB */
@@ -474,7 +474,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 			Next->HasSIB := true
 			Next->SIBValue.BaseRegister := LookupRegister(pState, MaybeBase, 8) As i8
 			
-			Token* Index := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected index register name.")
+			Token* Index := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected index register name.")
 			
 			Next->SIBValue.IndexRegister := LookupRegister(pState, Index, 8) As i8
 			
@@ -530,7 +530,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for operand.")
 		Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' for memory operand size.")
 		
-		Token* TypeNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected memory operand type name.")
+		Token* TypeNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected memory operand type name.")
 		Token* PointerStar := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR, "Expected '*' after operand type name.")
 		
 		MergeContexts(NextToken~>Context, PointerStar~>Context, Next~>Context)
@@ -563,7 +563,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		
 		Next->Size := Next->Type << OP_M_OFFSET
 	}
-	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFER, 0)) {
+	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFIER, 0)) {
 		i32 Register := LookupRegister(pState, NextToken, 0)
 		
 		Next->Size := ((Register >> 8) & 0x0F)
@@ -585,7 +585,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	else if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)) {
 		Next->Type := O_L
 		
-		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected label name.")
+		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* FunctionName := FunctionToken->StringValue
 		
 		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, FunctionName)
@@ -605,7 +605,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	else if (TokenMatches(NextToken, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 		Next->Type := O_L
 		
-		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected label name.")
+		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
 		HashMapElement* FoundLabelElement := HashMapGetValue(ThisBlock->Labels, LabelName)
@@ -637,7 +637,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 	InstructionNode* Result := 0
 	
 	if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected label name.")
+		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
 		HashMapElement* FoundLabelElement := HashMapGetValue(ThisBlock->Labels, LabelName)
@@ -665,7 +665,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 	else {
 		Result := Alloc(#InstructionNode)
 		
-		Token* InstructionToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected instruction name.")
+		Token* InstructionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected instruction name.")
 		SafeWideString* InstructionName := InstructionToken->StringValue
 		
 		i32 OperandTypes := 0

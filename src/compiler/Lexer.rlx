@@ -29,7 +29,7 @@ struct TokenizerState {
 i8 TOKEN_TYPE_EOF := 0
 i8 TOKEN_TYPE_NONE := 100
 i8 TOKEN_TYPE_OPERATOR := 1
-i8 TOKEN_TYPE_IDENTIFER := 2
+i8 TOKEN_TYPE_IDENTIFIER := 2
 i8 TOKEN_TYPE_INTEGER := 3
 i8 TOKEN_TYPE_STRING := 4
 i8 TOKEN_TYPE_PUNCTUATION := 5
@@ -594,7 +594,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 			}
 			else {
 				/* Otherwise, make an identifier token */
-				return MakeToken(tState, StartingIndex, TOKEN_TYPE_IDENTIFER, TokenText As void*)
+				return MakeToken(tState, StartingIndex, TOKEN_TYPE_IDENTIFIER, TokenText As void*)
 			}
 		}
 		else if (NextCharacter = '#') {

@@ -1191,7 +1191,7 @@ define Token* ParserCurrentToken(ParserState* pState) {
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	/* Compares two tokens using type/value */
 	
-	if (TokenType = TOKEN_TYPE_IDENTIFER || TokenType = TOKEN_TYPE_STRING || TokenType = TOKEN_TYPE_INTEGER) {
+	if (TokenType = TOKEN_TYPE_IDENTIFIER || TokenType = TOKEN_TYPE_STRING || TokenType = TOKEN_TYPE_INTEGER) {
 		/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
 		
 		if (TokenToTest->Type = TokenType) {
@@ -1378,7 +1378,7 @@ define Type TryParseTypeName(ParserState* pState, i8 AllowArrayType, i8** ErrorM
 	/* Parses a type name, and returns a Type struct representing that type */
 	
 	/* Find the base type name */
-	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
+	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
 	
 	if *(ErrorMessage) {
 		return 0
@@ -1463,7 +1463,7 @@ define void ParseProgram(ParserState* pState) {
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
 		}
-		else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
 			UnfreezeParser(pState, FrozenState)
@@ -1477,7 +1477,7 @@ define void ParseProgram(ParserState* pState) {
 				i32 DefaultValueExpressionStart := FreezeParser(pState)
 				Token* PotentialName := ParserNextToken(pState)
 				
-				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, 0)) {
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, 0)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
 
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
@@ -1514,7 +1514,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 	/* Parses a struct type, and adds it to pState */
 	
 	/* Gets the type name */
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
 	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
@@ -1554,7 +1554,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 		}
 		
 		/* Get the name of the field */
-		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected identifier for struct field name")
+		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (FieldNameToken->Value) As SafeWideString*
 		
 		HashMapAddValue(Fields, FieldName, NextField As void)
@@ -1634,7 +1634,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 }
 
 define void ParseAndAddBits(ParserState* pState) {
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected name for bits type.")
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected name for bits type.")
 	SafeWideString* BitsName := NameToken->Value As SafeWideString*
 	
 	Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
@@ -1698,7 +1698,7 @@ define void ParseAndAddBits(ParserState* pState) {
 			TokenError(OpenBracket, "Field size can not be negative, or bigger than the backing type.")
 		}
 		
-		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Expected bit field name.")->Value
+		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected bit field name.")->Value
 		
 		NextField->Name := FieldName
 		NextField->Offset := BackingTypeSize
@@ -1759,7 +1759,7 @@ define void ParseAndAddBits(ParserState* pState) {
 define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
 	Type ReturnType := ParseTypeName(pState)
 	
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	SafeWideString* Name := NameToken->StringValue
 	
 	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
@@ -1945,15 +1945,15 @@ define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
 	if (IsImported) {
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
 		
-		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file name expected")->Value
+		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file name expected")->Value
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
-			Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source file extension expected")
+			Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file extension expected")
 		}
 		
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
 		
-		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Import source function name expected")->Value
+		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source function name expected")->Value
 		
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
 		
@@ -2011,7 +2011,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 				
 				NewDefine->Attribute := OPERATOR_DOT
 				
-				Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+				Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 				
 				NextParameter->Name := VariadicName->StringValue
 				NextParameter->Type := MakeType(pState->void, 1)
@@ -2030,7 +2030,7 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			NextParameter->Type := ParseTypeName(pState)
 			
 			/* Get the parameter name */
-			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 			
 			/* Populate the VariableInfo structure */
 			NextParameter->Name := NextParameterNameToken->StringValue
@@ -2153,7 +2153,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		
 		UnfreezeParser(pState, FrozenState)
 		
-		if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+		if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
 			i8* ErrorMessage := 0
@@ -2164,7 +2164,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				i32 DefaultValueExpressionStart := FreezeParser(pState)
 				Token* PotentialName := ParserNextToken(pState)
 				
-				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
 					
@@ -2246,7 +2246,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 	
 	i32 InitializerStart := FreezeParser(pState)
 	
-	if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+	if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
 		UnfreezeParser(pState, InitializerStart)
 		
 		i8* ErrorMessage := 0
@@ -2256,7 +2256,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 			i32 ExpressionStart := FreezeParser(pState)
 			Token* PotentialName := ParserNextToken(pState)
 			
-			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFER, TOKEN_TYPE_NONE)) {
+			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
 				if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
 					
@@ -2325,7 +2325,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		
 		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
-	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFER) {
+	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFIER) {
 		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
 		
 		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
@@ -2378,7 +2378,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		
 		MergeContexts(NextToken~>Context, CloseParen~>Context, Result~>Context)
 	}
-	else if (NextToken->Type = TOKEN_TYPE_IDENTIFER) {
+	else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
 		/* Else if the next token is an identifier */
 		
 		/* This check is fine, since x:(y) is never valid, nor is x:y */
@@ -2467,7 +2467,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				i8* ErrorMessage := 0
 				
 				i32 Frozen := FreezeParser(pState)
-				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFER, 0, "Dummy", &ErrorMessage)
+				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Dummy", &ErrorMessage)
 				
 				if (MaybeFunction && !ErrorMessage) {
 					HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, MaybeFunction->StringValue)
@@ -2538,7 +2538,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 		}
 		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
-			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFER, 0, "Struct field name expected")
+			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(pState->i64, 0))
 			CopyContext(Right~>Context, Operand~>Context)
