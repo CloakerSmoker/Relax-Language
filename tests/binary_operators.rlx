@@ -64,5 +64,37 @@ define i32 Main() {
 	WriteCharacter(',')
 	IWrite(#DumbTest)
 	
+	
+	WriteCharacter(' ')
+	
+	i32 Com := 0
+	
+	Com += 5
+	Com -= 3
+	
+	IWrite(Com) /* 2 */
+	WriteCharacter(',')
+	
+	Com *= 10 	/* 20 */
+	Com /= 5	/* 4 */
+	
+	IWrite(Com)
+	WriteCharacter(',')
+	
+	Com %= 3	/* 1 */
+	
+	IWrite(Com)
+	WriteCharacter(',')
+	
+	Com |= 0xFF02	/* 0xFF03 */
+	Com &= 0xFF		/* 3 */
+	IWrite(Com)
+	WriteCharacter(',')
+	
+	Com ^= 1	/* 2 */
+	IWrite(Com)
+	
+	/* Assignment operators result in: 2, 4, 1, 3, 2 */
+	
 	return 1 >> 127
 }

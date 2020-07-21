@@ -387,23 +387,27 @@ define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {
 	return -(TargetVariable->StackOffset + 8)
 }
 
+/* Todo: Merge these three functions into one */
+
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
+	i8 UseDisp8 := false
+	i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
+	
+	i8 BaseRegister := RBP
+	
 	if (TargetVariable->IsGlobal) {
-		EmitLea_R64_R64_DISPX(cState, ResultRegister, R15, TargetVariable->StackOffset)
-		
-		/* EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset)) */
-		AddCodeRelocation(cState, (cState->Index) - 4)
+		BaseRegister := R15
+	}
+	
+	if (UseDisp8) {
+		EmitLea_R64_R64_DISP8(cState, ResultRegister, BaseRegister, Offset As i8)
 	}
 	else {
-		i8 UseDisp8 := false
-		i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
-		
-		if (UseDisp8) {
-			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, Offset As i8)
-		}
-		else {
-			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, Offset)
-		}
+		EmitLea_R64_R64_DISP32(cState, ResultRegister, BaseRegister, Offset)
+	}
+	
+	if (BaseRegister = R15) {
+		AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
 	}
 }
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
@@ -413,63 +417,57 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 	}
 	
-	/* if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, ResultRegister, cState->GlobalBase + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 4)
+	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
+		/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
+			So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
+			Any time this could be abused *should* be caught by type checking 
+		*/
 		
-		EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetSize)
-	}
-	else { */
-		if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
-			/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
-				So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
-				Any time this could be abused *should* be caught by type checking 
-			*/
-			
-			CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
-		}
-		else {
-			i8 UseDisp8 := false
-			i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
-			
-			i8 BaseRegister := RBP
-			
-			if (TargetVariable->IsGlobal) {
-				BaseRegister := R15
-			}
-			
-			if (UseDisp8) {
-				EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
-			}
-			else {
-				EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
-			}
-			
-			if (BaseRegister = R15) {
-				AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
-			}
-		}
-	/* } */
-}
-define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
-	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
-	
-	if (TargetVariable->IsGlobal) {
-		EmitMove_R32_I32(cState, RBX, cState->GlobalBase + (TargetVariable->StackOffset))
-		AddCodeRelocation(cState, (cState->Index) - 4)
-		
-		EmitMove_RIX_RX(cState, RBX, SourceRegister, TargetSize)
+		CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 	}
 	else {
 		i8 UseDisp8 := false
 		i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
 		
+		i8 BaseRegister := RBP
+		
+		if (TargetVariable->IsGlobal) {
+			BaseRegister := R15
+		}
+		
 		if (UseDisp8) {
-			EmitMove_RIX_DISP8_RX(cState, RBP, SourceRegister, Offset As i8, TargetSize)
+			EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
 		}
 		else {
-			EmitMove_RIX_DISP32_RX(cState, RBP, SourceRegister, Offset, TargetSize)
+			EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
 		}
+		
+		if (BaseRegister = R15) {
+			AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
+		}
+	}
+}
+define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
+	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
+	
+	i8 UseDisp8 := false
+	i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
+	
+	i8 BaseRegister := RBP
+	
+	if (TargetVariable->IsGlobal) {
+		BaseRegister := R15
+	}
+	
+	if (UseDisp8) {
+		EmitMove_RIX_DISP8_RX(cState, BaseRegister, SourceRegister, Offset As i8, TargetSize)
+	}
+	else {
+		EmitMove_RIX_DISP32_RX(cState, BaseRegister, SourceRegister, Offset, TargetSize)
+	}
+	
+	if (BaseRegister = R15) {
+		AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
 	}
 }
 
@@ -1531,6 +1529,93 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type ResultTy
 	}
 }
 
+define void CompileBinaryOperator(CompilerState* cState, i8 Operator, i8 ResultSize, i8 LeftRegister, i8 RightRegister) {
+	i8 ResultRegister := LeftRegister
+	
+	if (Operator = OPERATOR_PLUS) {
+		EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+	}
+	else if (Operator = OPERATOR_MINUS) {
+		EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+	}
+	else if (Operator = OPERATOR_STAR) {
+		if (ResultSize = 1) {
+			/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
+			EmitIMul_RX_RX(cState, LeftRegister, RightRegister, 2)
+			Cast(cState, LeftRegister, 1)
+		}
+		else {	
+			EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		}
+	}
+	else if (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
+		if (LeftRegister != RAX) {
+			EmitMove_R64_R64(cState, RBX, RAX)
+			EmitMove_R64_R64(cState, RAX, LeftRegister)
+		}
+		if (cState->NoClobberCD89) {
+			EmitPush_R64(cState, RDX)
+		}
+		
+		if (ResultSize = 1) {
+			/* Handle 8 bit division through a 16 bit operation, which will have a result casted down 
+				(8 bit IDIV uses AL/AH, which CodeGen isn't set up to encode)
+			*/
+			EmitCXX(cState, 2)
+			EmitIDiv_RAX_RX(cState, RightRegister, 2)
+		}
+		else {
+			EmitCXX(cState, ResultSize)
+			EmitIDiv_RAX_RX(cState, RightRegister, ResultSize)
+		}
+		
+		if (Operator = OPERATOR_SLASH && ResultRegister != RAX) {
+			EmitMove_RX_RX(cState, ResultRegister, RAX, ResultSize)
+		}
+		else if (Operator = OPERATOR_PERCENT && ResultRegister != RDX) {
+			EmitMove_RX_RX(cState, ResultRegister, RDX, ResultSize)
+		}
+		
+		if (cState->NoClobberCD89) {
+			EmitPop_R64(cState, RDX)
+		}
+		if (LeftRegister != RAX) {
+			EmitMove_R64_R64(cState, RAX, RBX)
+		}
+		
+		if (ResultSize = 1) {
+			Cast(cState, ResultRegister, 1)
+		}
+	}
+	else if (Operator = OPERATOR_EQUAL) {
+		EmitSetE_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_BANG_EQUAL) {
+		EmitSetNE_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_LESS) {
+		EmitSetL_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_LESS_EQAUL) {
+		EmitSetLE_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_GREATER) {
+		EmitSetG_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_GREATER_EQAUL) {
+		EmitSetGE_R8(cState, ResultRegister)
+	}
+	else if (Operator = OPERATOR_XOR) {
+		EmitXor_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+	}
+	else if (Operator = OPERATOR_AND) {
+		EmitAnd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+	}
+	else if (Operator = OPERATOR_OR) {
+		EmitOr_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+	}
+}
+
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
@@ -1580,7 +1665,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 				Cast(cState, WorkRegister, RightSize)
 			}
 			
-			/* Prelude to get old value of all valid left side expressions */
+			/* Get old value of left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
 				CompileGetVariableValue(cState, ResultRegister, TargetVariable)
@@ -1592,16 +1677,18 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 				CompileGetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, false)
 			}
 			
-			/* Actual operator implementation */
-			
-			if (Operator = OPERATOR_PLUS_EQUAL) {
-				EmitAdd_RX_RX(cState, ResultRegister, WorkRegister, ResultSize)
+			/* Translate X= operators into just X operators, so CompileBinaryOperator does the correct operation */
+			if (Operator <= OPERATOR_PERCENT_EQUAL) {	
+				Operator += OPERATOR_PLUS - OPERATOR_PLUS_EQUAL
 			}
-			else if (Operator = OPERATOR_MINUS_EQUAL) {
-				EmitSub_RX_RX(cState, ResultRegister, WorkRegister, ResultSize)
+			else {
+				Operator += OPERATOR_AND - OPERATOR_AND_EQUAL
 			}
 			
-			/* Epilog to store the new value for each valid left side */
+			/* Do the actual operation */
+			CompileBinaryOperator(cState, Operator, ResultSize, ResultRegister, WorkRegister)
+			
+			/* Store the new value for each valid left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
 				CompileSetVariableValue(cState, TargetVariable, ResultRegister)
@@ -1767,87 +1854,8 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 					 expression out of FLAGS.
 				*/
 			}
-			else if (Operator = OPERATOR_PLUS) {
-				EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
-			}
-			else if (Operator = OPERATOR_MINUS) {
-				EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
-			}
-			else if (Operator = OPERATOR_STAR) {
-				if (ResultSize = 1) {
-					/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
-					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, 2)
-					Cast(cState, LeftRegister, 1)
-				}
-				else {	
-					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
-				}
-			}
-			else if (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
-				if (LeftRegister != RAX) {
-					EmitMove_R64_R64(cState, RBX, RAX)
-					EmitMove_R64_R64(cState, RAX, LeftRegister)
-				}
-				if (cState->NoClobberCD89) {
-					EmitPush_R64(cState, RDX)
-				}
-				
-				if (ResultSize = 1) {
-					/* Handle 8 bit division through a 16 bit operation, which will have a result casted down 
-						(8 bit IDIV uses AL/AH, which CodeGen isn't set up to encode)
-					*/
-					EmitCXX(cState, 2)
-					EmitIDiv_RAX_RX(cState, RightRegister, 2)
-				}
-				else {
-					EmitCXX(cState, ResultSize)
-					EmitIDiv_RAX_RX(cState, RightRegister, ResultSize)
-				}
-				
-				if (Operator = OPERATOR_SLASH && ResultRegister != RAX) {
-					EmitMove_RX_RX(cState, ResultRegister, RAX, ResultSize)
-				}
-				else if (Operator = OPERATOR_PERCENT && ResultRegister != RDX) {
-					EmitMove_RX_RX(cState, ResultRegister, RDX, ResultSize)
-				}
-				
-				if (cState->NoClobberCD89) {
-					EmitPop_R64(cState, RDX)
-				}
-				if (LeftRegister != RAX) {
-					EmitMove_R64_R64(cState, RAX, RBX)
-				}
-				
-				if (ResultSize = 1) {
-					Cast(cState, ResultRegister, 1)
-				}
-			}
-			else if (Operator = OPERATOR_EQUAL) {
-				EmitSetE_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_BANG_EQUAL) {
-				EmitSetNE_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_LESS) {
-				EmitSetL_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_LESS_EQAUL) {
-				EmitSetLE_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_GREATER) {
-				EmitSetG_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_GREATER_EQAUL) {
-				EmitSetGE_R8(cState, ResultRegister)
-			}
-			else if (Operator = OPERATOR_XOR) {
-				EmitXor_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
-			}
-			else if (Operator = OPERATOR_AND) {
-				EmitAnd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
-			}
-			else if (Operator = OPERATOR_OR) {
-				EmitOr_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+			else {
+				CompileBinaryOperator(cState, Operator, ResultSize, LeftRegister, RightRegister)
 			}
 			
 			PopRegisterStack(cState) /* Pop the right register */
