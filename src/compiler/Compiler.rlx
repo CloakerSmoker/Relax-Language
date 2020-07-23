@@ -1214,6 +1214,14 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
 				
 				CompileExpression(cState, RBX, NextVariadic)
+				
+				i16 NextVariadicSize := GetTypeSize(NextVariadic->ValueType)
+				
+				if (NextVariadicSize <= 4) {
+					/* Any parameter which is smaller than 4 bytes will not 0 the upper 32 bits of a register, so we manually cast them up */
+					Cast(cState, RBX, NextVariadicSize As i8)
+				}
+				
 				EmitPush_R64(cState, RBX)
 			}
 			

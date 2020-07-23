@@ -1092,25 +1092,37 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
 		
-		if (FoundDefine->Attribute = OPERATOR_DOT) {
-			/* Dummy branch */
+		i8 IS_VARIADIC := FoundDefine->Attribute = OPERATOR_DOT
+		
+		if (IS_VARIADIC) {
+			i32 VariadicStart := FoundDefine->ParameterCount - 1
+			
+			if (ParameterCount < VariadicStart) {
+				ASTError(ResultNode, "Not enough parameters passed to function.")
+			}
+			
+			Type VariadicParameterType := MakeType(pState->void, 1)
 		}
 		else if (FoundDefine->ParameterCount != ParameterCount) {
 			/* Ensure the parameter counts match */
 			ASTError(ResultNode, "Wrong number of parameters passed to function.")
 		}
 		
-		if (FoundDefine->Attribute != OPERATOR_DOT) {
-			/* TODO: Figure out how to type check a variable number of parameters */
+		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
+			/* And that the parameter types are compatible */
 			
-			for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
-				/* And that the parameter types are compatible */
-				
-				VariableInfo* ExpectedParameter := FoundDefine->Parameters[ParameterIndex]
-				ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
-				
-				CheckTypes(ActualParameter->ValueType, ExpectedParameter->Type, ActualParameter)
+			Type ExpectedType := 0
+			
+			if (IS_VARIADIC && ParameterIndex >= VariadicStart) {
+				ExpectedType := VariadicParameterType
 			}
+			else {
+				ExpectedType := FoundDefine->Parameters[ParameterIndex]->Type
+			}
+			
+			ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
+			
+			CheckTypes(ActualParameter->ValueType, ExpectedType, ActualParameter)
 		}
 	}
 	
