@@ -142,6 +142,7 @@ struct WhileLoop {
 struct FunctionDefine {
 	ErrorContext Context,
 	
+	FunctionDefine* Next,
 	SafeWideString* Name,
 	
 	i16 ParameterCount,
@@ -735,6 +736,67 @@ define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* Vari
 	
 	return 0 As VariableInfo*
 }
+
+
+/*
+==========================================
+	Function overloading helpers
+==========================================
+*/
+
+
+define i64 GetTypeSignature(FunctionDefine* ForFunction) {
+	i64 Signature := ForFunction->ReturnType As i64
+	
+	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
+		
+		
+	}
+	
+}
+
+define i8 CheckFunctionTypes(Type Left, Type Right, i8 AllowImplicitCasts) {
+	if (AllowImplicitCasts) {
+		return CheckTypes(Left, Right, false)
+	}
+	
+	return Left = Right
+}
+
+define i8 CheckTypeSignature(FunctionDefine* ForFunction, CallExpression* AgainstCaller, i8 AllowImplicitCasts) {
+	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
+		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
+		Type ActualNext := AgainstCaller->Parameters[ParameterIndex]->ValueType
+		
+		if !(CheckFunctionTypes(ExpectedNext, ActualNext, false)) {
+			return false
+		}
+	}
+	
+	return true
+}
+
+
+define FunctionDefine* MatchFunction(FunctionDefine* BaseFunction, CallExpression* Caller) {
+	if (BaseFunction->Next = 0) {
+		if (CheckTypeSignature(BaseFunction, Caller, true)) {
+			return BaseFunction
+		}
+		
+		return false
+	}
+	
+	while (BaseFunction) {
+		if (CheckTypeSignature(BaseFunction, Caller, false)) {
+			return BaseFunction
+		}
+		
+		BaseFunction := BaseFunction->Next
+	}
+	
+	return BaseFunction
+}
+
 
 /*
 ==========================================
@@ -1401,11 +1463,7 @@ define Type ParseTypeName(ParserState* pState) {
 	return Result
 }
 
-i8 IS_NOT_IMPORT := 0
-i8 IS_IMPORT := 1
-
-declare void ParseAndAddDefine(ParserState*)
-declare void ParseAndAddDeclare(ParserState*, i8)
+declare FunctionDefine* ParseFunction(ParserState*, i8)
 declare void ParseAndAddStruct(ParserState*)
 declare void ParseAndAddBits(ParserState*)
 declare ASTNode* ParseExpression(ParserState*, i8)
@@ -1416,15 +1474,16 @@ define void ParseProgram(ParserState* pState) {
 	loop {
 		i32 FrozenState := FreezeParser(pState)
 		Token* NextToken := ParserNextToken(pState)
+		i8 NextType := NextToken->Type
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
-			ParseAndAddDefine(pState)
+			ParseFunction(pState, KEYWORD_DEFINE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-			ParseAndAddDeclare(pState, IS_NOT_IMPORT)
+			ParseFunction(pState, KEYWORD_DECLARE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
-			ParseAndAddDeclare(pState, IS_IMPORT)
+			ParseFunction(pState, KEYWORD_DLLIMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 			ParseAndAddStruct(pState)
@@ -1435,7 +1494,7 @@ define void ParseProgram(ParserState* pState) {
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
 		}
-		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
+		else if (NextType = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
 			UnfreezeParser(pState, FrozenState)
@@ -1728,44 +1787,6 @@ define void ParseAndAddBits(ParserState* pState) {
 	}
 }
 
-define FunctionDefine* ParseFunctionInfo(ParserState* pState) {
-	Type ReturnType := ParseTypeName(pState)
-	
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
-	SafeWideString* Name := NameToken->StringValue
-	
-	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
-	
-	FunctionDefine* NewDefine := 0
-	
-	if (FoundFunctionElement) {
-		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
-		
-		if (FoundFunction->HasFullDefinition) {
-			TokenError(NameToken, "Duplicate function definition")
-		}
-		
-		NewDefine := FoundFunction
-	}
-	else {
-		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
-		
-		HashMapAddValue(pState->Functions, Name, NewDefine As void)
-		
-		NewDefine->LabelNumber := ParserNextLabel(pState)
-		pState->FunctionCount += 1
-	}
-	
-	NewDefine->ReturnType := ReturnType
-	NewDefine->Name := Name
-	NewDefine->Locals := NewHashMap()
-	NewDefine->LocalOffset := 0
-	
-	CopyContext(NameToken~>Context, NewDefine~>Context)
-	
-	return NewDefine
-}
-
 declare ASTNode* ParseStatement(ParserState*)
 
 define void ConsumeAndIgnoreBlock(ParserState* pState) {
@@ -1875,77 +1896,52 @@ define Block* ParseBlock(ParserState* pState) {
 	return NewBlock
 }
 
-define ASTNode* ParseAndAddDeclare(ParserState* pState, i8 IsImported) {
-	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
-	
-	Token* OpenParen := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
-	
-	i8 ParameterCount := 0
-	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
-	
-	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-		loop {
-			VariableInfo* NextParameter := AllocateNewVariableInfo()
-			
-			if (ParameterCount >= 16) {
-				TokenError(ParserNextToken(pState), "Max parameter limit reached")
-			}
-			
-			ParameterList[ParameterCount] := NextParameter
-			
-			NextParameter->Type := ParseTypeName(pState)
-			NextParameter->Name := NewDefine->Name /* Dummy value, it will never be used */
-			NextParameter->IsGlobal := false
-			NextParameter->IsParameter := true
-			NextParameter->StackOffset := (ParameterCount * 8)
-			
-			/* Update the parameter count */
-			ParameterCount += 1
-			
-			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
-				break
-			}
-		}
-		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for parameter list")
-	}
-	
-	NewDefine->Parameters := ParameterList
-	NewDefine->ParameterCount := ParameterCount
-	
-	if (IsImported) {
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
-		
-		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file name expected")->Value
-		
-		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
-			Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file extension expected")
-		}
-		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
-		
-		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source function name expected")->Value
-		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
-		
-		NewDefine->IsImported := true
-		NewDefine->ImportFileName := FileName
-		NewDefine->ImportFunctionName := FunctionName
-	}
-	
-	NewDefine->HasFullDefinition := false
-}
-
 declare ASTNode* ParseAssembly(ParserState*)
 
-define ASTNode* ParseAndAddDefine(ParserState* pState) {
-	/* Parses a 'define' statement */
-
-	FunctionDefine* NewDefine := ParseFunctionInfo(pState)
+define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
+	i8 ForDefine := Mode = KEYWORD_DEFINE
+	i8 ForImport := Mode = KEYWORD_DLLIMPORT
 	
-	pState->CurrentFunction := NewDefine
-	NewDefine->UsesGlobals := false
+	Type ReturnType := ParseTypeName(pState)
+	
+	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	SafeWideString* Name := NameToken->StringValue
+	
+	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
+	
+	FunctionDefine* NewDefine := 0
+	
+	if (FoundFunctionElement) {
+		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
+		
+		if (FoundFunction->HasFullDefinition) {
+			TokenError(NameToken, "Duplicate function definition")
+		}
+		
+		NewDefine := FoundFunction
+	}
+	else {
+		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
+		
+		HashMapAddValue(pState->Functions, Name, NewDefine As void)
+		
+		NewDefine->LabelNumber := ParserNextLabel(pState)
+		pState->FunctionCount += 1
+		
+	}
+	
+	if (ForDefine) {
+		NewDefine->Locals := NewHashMap()
+		NewDefine->LocalOffset := 0
+		
+		pState->CurrentFunction := NewDefine
+		NewDefine->UsesGlobals := false
+	}
+	
+	NewDefine->ReturnType := ReturnType
+	NewDefine->Name := Name
+	
+	CopyContext(NameToken~>Context, NewDefine~>Context)
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
@@ -1982,16 +1978,17 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 				}
 				
 				NewDefine->Attribute := OPERATOR_DOT
-				
-				Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
-				
-				NextParameter->Name := VariadicName->StringValue
 				NextParameter->Type := MakeType(pState->void, 1)
+				
+				if (ForDefine) {
+					Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+					NextParameter->Name := VariadicName->StringValue
+					ParserAddLocal(pState, NextParameter, VariadicName)
+				}
+				
 				NextParameter->IsVariadic := true
 				NextParameter->IsParameter := true
 				NextParameter->StackOffset := (ParameterCount * 8)
-				
-				ParserAddLocal(pState, NextParameter, VariadicName)
 				
 				ParameterCount += 1
 				
@@ -2001,17 +1998,16 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 			/* Parse the parameter type */
 			NextParameter->Type := ParseTypeName(pState)
 			
-			/* Get the parameter name */
-			Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+			if (ForDefine) {
+				/* Get the parameter name */
+				Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+				NextParameter->Name := NextParameterNameToken->StringValue
+				ParserAddLocal(pState, NextParameter, NextParameterNameToken)
+			}
 			
-			/* Populate the VariableInfo structure */
-			NextParameter->Name := NextParameterNameToken->StringValue
 			NextParameter->IsGlobal := false
 			NextParameter->IsParameter := true
 			NextParameter->StackOffset := (ParameterCount * 8)
-			
-			/* Add the parameter as a local */
-			ParserAddLocal(pState, NextParameter, NextParameterNameToken)
 			
 			/* Update the parameter count */
 			ParameterCount += 1
@@ -2029,25 +2025,48 @@ define ASTNode* ParseAndAddDefine(ParserState* pState) {
 		}
 	}
 	
-	/* Update the function's parameter list/count */
-	
 	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
 	
-	/* Parse the body of the function */
-	NewDefine->HasFullDefinition := true
+	if (ForImport) {
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+		
+		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file name expected")->Value
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+			Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file extension expected")
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
+		
+		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source function name expected")->Value
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+		
+		NewDefine->IsImported := true
+		NewDefine->ImportFileName := FileName
+		NewDefine->ImportFunctionName := FunctionName
+	}
 	
-	if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
-		NewDefine->Attribute := KEYWORD_ASSEMBLY
+	NewDefine->HasFullDefinition := false
+	
+	if (ForDefine) {
+		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
+			NewDefine->Attribute := KEYWORD_ASSEMBLY
+			
+			NewDefine->AssemblyBody := ParseAssembly(pState)->AssemblyValue
+		}
+		else {
+			NewDefine->StringBuffer := Alloc(4) As i8*
+			NewDefine->StringBufferSize := 0
+			
+			NewDefine->Body := ParseBlock(pState)
+		}
 		
-		NewDefine->AssemblyBody := ParseAssembly(pState)->AssemblyValue
+		NewDefine->HasFullDefinition := true
 	}
-	else {
-		NewDefine->StringBuffer := Alloc(4) As i8*
-		NewDefine->StringBufferSize := 0
-		
-		NewDefine->Body := ParseBlock(pState)
-	}
+	
+	return NewDefine
 }
 
 declare ASTNode* ParseIf(ParserState*)
@@ -2283,7 +2302,6 @@ define ASTNode* ParseWhile(ParserState* pState) {
 	
 	return AllocateNewASTNode(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
 }
-
 
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
 	/* Translates some kind of token in an AST node which contains the actual version of the token */
