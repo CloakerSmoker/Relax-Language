@@ -1,3 +1,7 @@
+define void* Alloc(i64 A, void** B) {
+	return 0
+}
+
 #Include ./src/lib/Memory.rlx
 #Include ./src/lib/String.rlx
 #Include ./src/lib/Console.rlx

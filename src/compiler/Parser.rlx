@@ -170,7 +170,9 @@ struct FunctionDefine {
 	i32 StringBufferSize,
 	
 	i32 CallCount,
-	i8 UsesGlobals
+	i8 UsesGlobals,
+	
+	i8 TempValue
 }
 
 i8 BUILTIN_NONE := 0
@@ -594,6 +596,23 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 	ASTError(AtNode, 0)
 }
 
+define i32 GetGenericRating(Type ForType) {
+	TypeInfo* BaseType := GetBaseType(ForType)
+	i16 PointerDepth := GetPointerDepth(ForType)
+	
+	i32 Result := 0
+	
+	if !(BaseType->IsBuiltin) {
+		Result += 10
+	}
+	
+	if (PointerDepth) {
+		Result += (10 - PointerDepth) * 2
+	}
+	
+	return Result
+}
+
 define i8 CheckTypes(Type Source, Type Target, ASTNode* SourceNode) {
 	if (SourceNode) {
 		Source := SourceNode->ValueType
@@ -755,20 +774,12 @@ define i64 GetTypeSignature(FunctionDefine* ForFunction) {
 	
 }
 
-define i8 CheckFunctionTypes(Type Left, Type Right, i8 AllowImplicitCasts) {
-	if (AllowImplicitCasts) {
-		return CheckTypes(Left, Right, false)
-	}
-	
-	return Left = Right
-}
-
-define i8 CheckTypeSignature(FunctionDefine* ForFunction, CallExpression* AgainstCaller, i8 AllowImplicitCasts) {
+define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** AgainstParameters) {
 	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
 		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
-		Type ActualNext := AgainstCaller->Parameters[ParameterIndex]->ValueType
+		Type ActualNext := AgainstParameters[ParameterIndex]->Type
 		
-		if !(CheckFunctionTypes(ExpectedNext, ActualNext, false)) {
+		if (ActualNext != ExpectedNext) {
 			return false
 		}
 	}
@@ -777,25 +788,130 @@ define i8 CheckTypeSignature(FunctionDefine* ForFunction, CallExpression* Agains
 }
 
 
-define FunctionDefine* MatchFunction(FunctionDefine* BaseFunction, CallExpression* Caller) {
-	if (BaseFunction->Next = 0) {
-		if (CheckTypeSignature(BaseFunction, Caller, true)) {
-			return BaseFunction
-		}
+define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFunction, ASTNode* Caller) {
+	CallExpression* AgainstCaller := Caller->CallNode
+	i32 CallerParameterCount := AgainstCaller->ParameterCount
+	
+	FunctionDefine* Next := BaseFunction
+	
+	/* Running rating of the last conpatible function's "generic rating", aka how specific the parameters are (as in, i64 vs SomeStruct*) */
+	i32 BestFitRating := 200000
+	FunctionDefine* BestFit := 0
+	
+	loop {
+		i32 NextParameterCount := Next->ParameterCount
 		
-		return false
+		if (NextParameterCount = CallerParameterCount) {
+			i32 ThisFunctionRating := 0
+			i8 BrokeInner := false
+			
+			for (i32 ParameterIndex := 0, ParameterIndex < Next->ParameterCount, ParameterIndex += 1) {
+				Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
+				
+				ASTNode* NextNode := DowncastIntegerType(pState, AgainstCaller->Parameters[ParameterIndex])
+				Type ActualNext := NextNode->ValueType
+				
+				if (CheckTypes(ActualNext, ExpectedNext, false)) {
+					BrokeInner := true
+					
+					Next->TempValue := ParameterIndex
+					break
+				}
+				
+				ThisFunctionRating += GetGenericRating(ExpectedNext)
+			}
+			
+			if !(BrokeInner) {
+				if (ThisFunctionRating < BestFitRating) {
+					BestFitRating := ThisFunctionRating
+					BestFit := Next
+				}
+			}
+		}
+		/* 
+		TODO: Variadic overloads
+		
+		else if (Next->Attribute = OPERATOR_DOT) {
+			if (CallerParameterCount < NextParameterCount - 1) {
+				
+				if (BestFitRating > 100000
+			}
+			
+		} */
+		
+		Next := Next->Next
+		
+		if !(Next) {
+			break
+		}
 	}
 	
-	while (BaseFunction) {
-		if (CheckTypeSignature(BaseFunction, Caller, false)) {
-			return BaseFunction
-		}
-		
-		BaseFunction := BaseFunction->Next
+	if (BestFit && BestFitRating < 200000) {
+		return BestFit
 	}
 	
-	return BaseFunction
+	SwapOutputStream()
+	AWriteLine("No matching overload found for:")
+	
+	PrettyError(Caller~>Context, 0, Red | Bright)
+	
+	Next := BaseFunction
+	
+	while (Next) {
+		i32 LastNonMatchingParameter := Next->TempValue
+		
+		AWrite("Parameter ") 
+		IWrite(LastNonMatchingParameter + 1)
+		AWrite(" should be an ")
+		
+		if (LastNonMatchingParameter < Next->ParameterCount) {
+			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
+		}
+		else {
+			AWrite("<none>")
+		}
+		
+		AWrite(" for overload, not ")
+		
+		if (LastNonMatchingParameter < CallerParameterCount) {
+			PrintType(AgainstCaller->Parameters[LastNonMatchingParameter]->ValueType)
+		}
+		else {
+			AWrite("<none>")
+		}
+		
+		WriteNewLine()
+		PrettyError(Next~>Context, 0, Red | Bright)
+		
+		Next := Next->Next
+	}
+	
+	SwapOutputStream()
+	Exit(0)
 }
+/* 
+
+When building a call node:
+	Remember a "high water mark" for the last parameter which failed to match (for error reporting)
+	
+	Go through each definition for a the called name:
+		For each parameter, check if the types are compatible:
+			if compatible:
+				if at end of parameter lists:
+					return this definition
+				else:
+					continue
+			else:
+				if parameter index higher than high water mark:
+					set high water mark to parameter index
+	
+	if this point is reached:
+		error on Call->Parameters[High water mark], no function overload matches parameter type X
+
+
+
+
+ */
 
 
 /*
@@ -1149,12 +1265,14 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
 		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 		
+		FoundDefine := MatchFunction(pState, FoundDefine, ResultNode)
+		
 		FoundDefine->CallCount += 1
 		
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
 		
-		i8 IS_VARIADIC := FoundDefine->Attribute = OPERATOR_DOT
+		/* i8 IS_VARIADIC := FoundDefine->Attribute = OPERATOR_DOT
 		
 		if (IS_VARIADIC) {
 			i32 VariadicStart := FoundDefine->ParameterCount - 1
@@ -1166,13 +1284,10 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 			Type VariadicParameterType := MakeType(pState->void, 1)
 		}
 		else if (FoundDefine->ParameterCount != ParameterCount) {
-			/* Ensure the parameter counts match */
 			ASTError(ResultNode, "Wrong number of parameters passed to function.")
 		}
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
-			/* And that the parameter types are compatible */
-			
 			Type ExpectedType := 0
 			
 			if (IS_VARIADIC && ParameterIndex >= VariadicStart) {
@@ -1185,7 +1300,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 			ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
 			
 			CheckTypes(ActualParameter->ValueType, ExpectedType, ActualParameter)
-		}
+		} */
 	}
 	
 	return ResultNode
@@ -1899,6 +2014,8 @@ define Block* ParseBlock(ParserState* pState) {
 declare ASTNode* ParseAssembly(ParserState*)
 
 define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
+	Token* StartToken := ParserCurrentToken(pState)
+	
 	i8 ForDefine := Mode = KEYWORD_DEFINE
 	i8 ForImport := Mode = KEYWORD_DLLIMPORT
 	
@@ -1907,41 +2024,16 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	SafeWideString* Name := NameToken->StringValue
 	
-	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
-	
-	FunctionDefine* NewDefine := 0
-	
-	if (FoundFunctionElement) {
-		FunctionDefine* FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
-		
-		if (FoundFunction->HasFullDefinition) {
-			TokenError(NameToken, "Duplicate function definition")
-		}
-		
-		NewDefine := FoundFunction
-	}
-	else {
-		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
-		
-		HashMapAddValue(pState->Functions, Name, NewDefine As void)
-		
-		NewDefine->LabelNumber := ParserNextLabel(pState)
-		pState->FunctionCount += 1
-		
-	}
-	
 	if (ForDefine) {
-		NewDefine->Locals := NewHashMap()
-		NewDefine->LocalOffset := 0
+		HashMap* Locals := NewHashMap()
 		
-		pState->CurrentFunction := NewDefine
-		NewDefine->UsesGlobals := false
+		FunctionDefine TempDefine
+		
+		TempDefine.Locals := Locals
+		TempDefine.LocalOffset := 0
+		
+		pState->CurrentFunction := &TempDefine
 	}
-	
-	NewDefine->ReturnType := ReturnType
-	NewDefine->Name := Name
-	
-	CopyContext(NameToken~>Context, NewDefine~>Context)
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
@@ -1949,6 +2041,8 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	/* Set up a buffer for parameters */
 	i8 ParameterCount := 0
 	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
+	
+	i8 Attribute := 0
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
@@ -1977,7 +2071,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 					TokenError(Start, "Only 4 regular paremeters can be passed with a variable argument.")
 				}
 				
-				NewDefine->Attribute := OPERATOR_DOT
+				Attribute := OPERATOR_DOT
 				NextParameter->Type := MakeType(pState->void, 1)
 				
 				if (ForDefine) {
@@ -2025,8 +2119,66 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		}
 	}
 	
+	
+	
+	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
+	
+	FunctionDefine* FoundFunction := 0
+	FunctionDefine* NewDefine := 0
+	i8 ActuallyFound := false
+	
+	if (FoundFunctionElement) {
+		FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
+		
+		loop {
+		
+		
+			if (FoundFunction->ParameterCount = ParameterCount) {
+				if (CheckTypeSignature(FoundFunction, ParameterList)) {
+					ActuallyFound := true
+					break
+				}
+			}
+			
+			if !(FoundFunction->Next) {
+				break
+			}
+			
+			FoundFunction := FoundFunction->Next
+		}
+		
+		if (ActuallyFound && FoundFunction->HasFullDefinition) {
+			TokenError(NameToken, "Duplicate function definition")
+		}
+	}
+	
+	if (ActuallyFound) {
+		NewDefine := FoundFunction
+	}
+	else {
+		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
+		
+		if (FoundFunction) {
+			FoundFunction->Next := NewDefine
+		}
+		else {
+			HashMapAddValue(pState->Functions, Name, NewDefine As void)
+		}
+		
+		NewDefine->LabelNumber := ParserNextLabel(pState)
+		pState->FunctionCount += 1
+	}
+	
+	MergeContexts(StartToken~>Context, ParserCurrentToken(pState)~>Context, NewDefine~>Context)
+	NewDefine->Name := Name
+	NewDefine->ReturnType := ReturnType
+	NewDefine->Attribute := Attribute
+	NewDefine->Locals := Locals
+	NewDefine->LocalOffset := TempDefine.LocalOffset
 	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
+	
+	pState->CurrentFunction := NewDefine
 	
 	if (ForImport) {
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")

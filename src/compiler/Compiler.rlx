@@ -98,6 +98,70 @@ define void DumpGlobals(CompilerState* cState) {
 	IWriteHexLine(Max - LastOffset)
 }
 
+define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
+	IWriteHex(CODE_BASE + FunctionOffset)
+	AWrite(" - ")
+	
+	IWrite(cState->Index - FunctionOffset)
+	
+	AWrite("	(")
+	IWrite(TargetFunction->CallCount)
+	AWrite(")	")
+	
+	PrintSafeString(TargetFunction->Name)
+	
+	if (IsOverload) {
+		WriteCharacter('(')
+		
+		for (i32 ParameterIndex := 0, ParameterIndex < TargetFunction->ParameterCount, ParameterIndex += 1) {
+			PrintType(TargetFunction->Parameters[ParameterIndex]->Type)
+			
+			if (ParameterIndex + 1 != TargetFunction->ParameterCount) {
+				WriteCharacter(',')
+				WriteCharacter(' ')
+			}
+		}
+		
+		WriteCharacter(')')
+	}
+	
+	WriteNewLine()
+}
+
+define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i8 DoDump, i32* MainOffset, i8* FoundMain) {
+	i32 FunctionOffset := cState->Index
+	
+	if (BaseFunction->IsImported) {
+		if !(cState->OutputELF) {
+			CompileImportStub(cState, BaseFunction)
+		}
+	}
+	else if !(BaseFunction->HasFullDefinition) {
+		ContextError(BaseFunction~>Context, "Function is declared, but never defined.")
+	}
+	else {
+		i8 IsMain := SafeStringEqualsAString(BaseFunction->Name, "Main")
+		
+		if (IsMain) {
+			FoundMain[0] := true
+			MainOffset[0] := FunctionOffset
+			BaseFunction->CallCount += 1
+		}
+		
+		if (BaseFunction->CallCount != 0) {
+			CompileFunction(cState, BaseFunction, IsMain)
+		}
+	}
+	
+	if (DoDump & 1) {
+		PrintFunction(cState, BaseFunction, FunctionOffset, CODE_BASE, !!BaseFunction->Next || IsOverload)
+	}
+	
+	if (BaseFunction->Next) {
+		CompileOverload(cState, BaseFunction->Next, true, CODE_BASE, DoDump, MainOffset, FoundMain)
+	}
+}
+
 define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF, i8 DumpFunctionBytes) {
 	CompilerState C
 	
@@ -153,45 +217,8 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 			
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
-				i32 FunctionOffset := C.Index
 				
-				if (DumpFunctionBytes & 1) {
-					IWriteHex(CODE_BASE + FunctionOffset)
-					AWrite(" - ")
-				}
-				
-				if (NextFunction->IsImported) {
-					if !(OutputELF) {
-						CompileImportStub(&C, NextFunction)
-					}
-				}
-				else if !(NextFunction->HasFullDefinition) {
-					ContextError(NextFunction~>Context, "Function is declared, but never defined.")
-				}
-				else {
-					i8 IsMain := SafeStringEqualsAString(NextFunction->Name, "Main")
-					
-					if (IsMain) {
-						FoundMain := true
-						MainOffset := C.Index
-						NextFunction->CallCount += 1
-					}
-					
-					if (NextFunction->CallCount != 0) {
-						CompileFunction(&C, NextFunction, IsMain)
-					}
-				}
-				
-				if (DumpFunctionBytes & 1) {
-					IWrite(C.Index - FunctionOffset)
-					
-					AWrite("	(")
-					IWrite(NextFunction->CallCount)
-					AWrite(")	")
-					
-					PrintSafeString(NextFunction->Name)
-					WriteNewLine()
-				}
+				CompileOverload(&C, NextFunction, false, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
 				
 				/* Update the current element to be the next element in the linked list */
 				FoundElement := FoundElement->NextElement
