@@ -600,14 +600,10 @@ define i32 GetGenericRating(Type ForType) {
 	TypeInfo* BaseType := GetBaseType(ForType)
 	i16 PointerDepth := GetPointerDepth(ForType)
 	
-	i32 Result := 0
+	i32 Result := -PointerDepth
 	
 	if !(BaseType->IsBuiltin) {
 		Result += 10
-	}
-	
-	if (PointerDepth) {
-		Result += (10 - PointerDepth) * 2
 	}
 	
 	return Result
@@ -798,14 +794,24 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	i32 BestFitRating := 200000
 	FunctionDefine* BestFit := 0
 	
+	/* TODO: Rework this to have better casting rules */
+	
 	loop {
 		i32 NextParameterCount := Next->ParameterCount
 		
-		if (NextParameterCount = CallerParameterCount) {
-			i32 ThisFunctionRating := 0
+		i32 ThisFunctionRating := 0
+		
+		if (Next->Attribute = OPERATOR_DOT) {
+			i8 IS_VARIADIC := true
+			ThisFunctionRating := 100000
+			
+			NextParameterCount -= 1
+		}
+		
+		if (NextParameterCount = CallerParameterCount || IS_VARIADIC) {
 			i8 BrokeInner := false
 			
-			for (i32 ParameterIndex := 0, ParameterIndex < Next->ParameterCount, ParameterIndex += 1) {
+			for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
 				Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
 				
 				ASTNode* NextNode := DowncastIntegerType(pState, AgainstCaller->Parameters[ParameterIndex])
@@ -818,7 +824,15 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 					break
 				}
 				
-				ThisFunctionRating += GetGenericRating(ExpectedNext)
+				i32 ExpectedRating := GetGenericRating(ExpectedNext)
+				i32 ActualRating := GetGenericRating(ActualNext)
+				
+				if (ActualRating > ExpectedRating) {
+					ThisFunctionRating += ActualRating
+				}
+				else {
+					ThisFunctionRating += ExpectedRating
+				}
 			}
 			
 			if !(BrokeInner) {
@@ -828,16 +842,6 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 				}
 			}
 		}
-		/* 
-		TODO: Variadic overloads
-		
-		else if (Next->Attribute = OPERATOR_DOT) {
-			if (CallerParameterCount < NextParameterCount - 1) {
-				
-				if (BestFitRating > 100000
-			}
-			
-		} */
 		
 		Next := Next->Next
 		
@@ -860,24 +864,28 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	while (Next) {
 		i32 LastNonMatchingParameter := Next->TempValue
 		
-		AWrite("Parameter ") 
-		IWrite(LastNonMatchingParameter + 1)
-		AWrite(" should be an ")
 		
-		if (LastNonMatchingParameter < Next->ParameterCount) {
+		if (CallerParameterCount < Next->ParameterCount) {
+			AWrite("Is missing required parameters for overload")
+		}
+		else if (CallerParameterCount > Next->ParameterCount) {
+			AWrite("Has too many paramters for overload")
+		}
+		else {
+			AWrite("Parameter ") 
+			IWrite(LastNonMatchingParameter + 1)
+			AWrite(" should be an ")
+			
 			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
-		}
-		else {
-			AWrite("<none>")
-		}
-		
-		AWrite(" for overload, not ")
-		
-		if (LastNonMatchingParameter < CallerParameterCount) {
-			PrintType(AgainstCaller->Parameters[LastNonMatchingParameter]->ValueType)
-		}
-		else {
-			AWrite("<none>")
+			
+			AWrite(" for overload, not ")
+			
+			if (LastNonMatchingParameter < CallerParameterCount) {
+				PrintType(AgainstCaller->Parameters[LastNonMatchingParameter]->ValueType)
+			}
+			else {
+				AWrite("<none>")
+			}
 		}
 		
 		WriteNewLine()

@@ -1,0 +1,43 @@
+#Include ./src/lib/Memory.rlx
+#Include ./src/lib/String.rlx
+#Include ./src/lib/Console.rlx
+
+/* E: 0 */
+define void Conflict(i32 Q) {
+	AWrite("i32 ")
+}
+
+/* E: 1 */
+define void Conflict(i64* Q) {
+	AWrite("i64* ")
+}
+
+define void Conflict(i64 P, i64 Q) {
+	AWrite("Con 2")
+}
+define void Conflict(i64 P, i64 Q, i64 Z, i64 O) {
+	AWrite("Con 2")
+}
+define void Conflict(i64 P, i64 Q, i8 G) {
+	AWrite("Con 2")
+}
+
+struct D {
+	i32 P
+}
+
+define i32 Main() {
+	i32 A := 0
+	
+	/* TODO: Unfuck this logic */
+	
+	Conflict(A)		/* A is an i32, directly calls the i32 overload */
+	Conflict(&A)	/* &A is a pointer, with no i64/void parmeter, so it calls the i64* overload */
+	
+	D T
+	
+	Conflict(&T)	/* &T is a pointer, with no specific overload, so it calls the generic i64* overload */
+	/* Uncomment for the an incredible looking stream of errors: Conflict(1, 2, 300000) */
+	
+	return 0
+}

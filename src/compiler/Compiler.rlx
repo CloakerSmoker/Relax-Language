@@ -114,7 +114,14 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		WriteCharacter('(')
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < TargetFunction->ParameterCount, ParameterIndex += 1) {
-			PrintType(TargetFunction->Parameters[ParameterIndex]->Type)
+			VariableInfo* NextParameter := TargetFunction->Parameters[ParameterIndex]
+			
+			if (NextParameter->IsVariadic) {
+				AWrite("...")
+			}
+			else {
+				PrintType(NextParameter->Type)
+			}
 			
 			if (ParameterIndex + 1 != TargetFunction->ParameterCount) {
 				WriteCharacter(',')

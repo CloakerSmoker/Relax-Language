@@ -2,6 +2,10 @@
 #Include ./src/lib/String.rlx
 #Include ./src/lib/Console.rlx
 
+define void VATest(i32 T, i8 Q) {
+	AWrite("Ocall ")
+}
+
 define void VATest(i64 T, ... Args) {
 	IWriteHex(T)
 	WriteLiteral(', ')
@@ -53,6 +57,7 @@ define i32 Main() {
 	
 	WriteLiteral(' ')
 	
+	VATest(10, 1)
 	VATest(10, 1, 2, 3)
 	
 	WriteLiteral(' ')
