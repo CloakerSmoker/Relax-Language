@@ -677,6 +677,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
 	}
 	
+	if (FunctionToCompile->UsesGlobals || IsMain) {
+		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
+	}
+	
 	if (IsMain) {
 		ASTNode** GlobalDefaults := cState->pState->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
@@ -713,10 +717,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 				EmitMove_RIX_DISP32_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32, 8)
 			}
 		}
-	}
-	
-	if (FunctionToCompile->UsesGlobals) {
-		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
 	}
 	
 	/* Compile the body of the function */

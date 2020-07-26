@@ -1469,8 +1469,8 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 		/* If we didn't find the variable in the locals, then check the globals */
 		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
 		
-		if (pState->CurrentFunction != 0) {
-			pState->CurrentFunction->UsesGlobals := true
+		if (CurrentFunction) {
+			CurrentFunction->UsesGlobals := true
 		}
 	}
 	
@@ -1522,6 +1522,7 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* S
 	/* Adds a local variable to the current function */
 	
 	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	
 	CurrentFunction->LocalOffset += ParserAddVariable(CurrentFunction->Locals, NewLocal, CurrentFunction->LocalOffset, SourceToken)
 }
 
@@ -2032,8 +2033,10 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	SafeWideString* Name := NameToken->StringValue
 	
+	HashMap* Locals := 0x6969
+	
 	if (ForDefine) {
-		HashMap* Locals := NewHashMap()
+		Locals := NewHashMap()
 		
 		FunctionDefine TempDefine
 		
@@ -2138,7 +2141,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	if (FoundFunctionElement) {
 		FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
 		
-		loop {
+		while (FoundFunction) {
 		
 		
 			if (FoundFunction->ParameterCount = ParameterCount) {
@@ -2167,6 +2170,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
 		
 		if (FoundFunction) {
+			NewDefine->Next := FoundFunction->Next
 			FoundFunction->Next := NewDefine
 		}
 		else {
@@ -2181,12 +2185,14 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	NewDefine->Name := Name
 	NewDefine->ReturnType := ReturnType
 	NewDefine->Attribute := Attribute
-	NewDefine->Locals := Locals
-	NewDefine->LocalOffset := TempDefine.LocalOffset
+	
+	if (ForDefine) {
+		NewDefine->Locals := Locals
+		NewDefine->LocalOffset := TempDefine.LocalOffset
+	}
+	
 	NewDefine->Parameters := ParameterList
 	NewDefine->ParameterCount := ParameterCount
-	
-	pState->CurrentFunction := NewDefine
 	
 	if (ForImport) {
 		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
@@ -2211,6 +2217,8 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	NewDefine->HasFullDefinition := false
 	
 	if (ForDefine) {
+		pState->CurrentFunction := NewDefine
+		
 		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
 			NewDefine->Attribute := KEYWORD_ASSEMBLY
 			
@@ -2224,6 +2232,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		}
 		
 		NewDefine->HasFullDefinition := true
+		pState->CurrentFunction := false
 	}
 	
 	return NewDefine

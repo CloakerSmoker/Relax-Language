@@ -75,6 +75,17 @@ define i32 AWriteLine(i8* AString) {
 	WriteNewLine()
 }
 
+define i32 Write(i8* AString) {
+	return 0
+}
+define i32 Write(i16 AString) {
+	return 0
+}
+
+define i32 IWrite(i32** N) {
+	return 0
+}
+
 define i32 Write(i16* WString) {
 	i32 BytesWritten := 0
 	i32 Index := 0
