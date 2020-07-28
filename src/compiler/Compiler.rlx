@@ -169,6 +169,27 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 	}
 }
 
+define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map, i64 CODE_BASE, i8 DoDump, i32* MainOffset, i8* FoundMain) {
+	/* Compiles a hashmap containing FunctionDefine*'s as if it were a linear array */
+	
+	void* Elements := Map->Elements
+	
+	for (i32 ElementIndex := 0, ElementIndex < (Map->BufferMaxCount), ElementIndex += 1) {
+		if (Elements[ElementIndex]) {
+			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+			
+			while (FoundElement) {
+				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+				
+				CompileOverload(cState, NextFunction, false, CODE_BASE, DoDump, MainOffset, FoundMain)
+				
+				/* Update the current element to be the next element in the linked list */
+				FoundElement := FoundElement->NextElement
+			}
+		}
+	}
+}
+
 define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF, i8 DumpFunctionBytes) {
 	CompilerState C
 	
@@ -216,18 +237,24 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	i32 MainOffset := 0
 	i8 FoundMain := false
 	
-	void* Elements := pState->Functions->Elements
+	/* Compile all regular functions */
+	CompileFunctionHashMap(&C, pState->Functions, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
 	
-	for (i32 ElementIndex := 0, ElementIndex < (pState->Functions->BufferMaxCount), ElementIndex += 1) {
+	/* Loop through each custom type */
+	void* Elements := pState->Types->Elements
+	
+	for (i32 ElementIndex := 0, ElementIndex < (pState->Types->BufferMaxCount), ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
 			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
 			
 			while (FoundElement) {
-				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
 				
-				CompileOverload(&C, NextFunction, false, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
+				/* If the type is a struct, and it has methods, compiled the methods */
+				if (NextType->IsStructType && NextType->StructMethods != 0) {
+					CompileFunctionHashMap(&C, NextType->StructMethods, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
+				}
 				
-				/* Update the current element to be the next element in the linked list */
 				FoundElement := FoundElement->NextElement
 			}
 		}

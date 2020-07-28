@@ -953,6 +953,7 @@ define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightTy
 }
 
 declare Token* ParserCurrentToken(ParserState*)
+declare ASTNode** ParseParameterList(ParserState*, i8*)
 
 define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
 	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_STRUCT_ACCESS */
@@ -1177,7 +1178,7 @@ declare i32 FreezeParser(ParserState*)
 declare void UnfreezeParser(ParserState*, i32)
 declare Token* ParserNextToken(ParserState*)
 
-define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount, i8 IsBuiltin) {
+define ASTNode* MakeCall(ParserState* pState, HashMap* Namespace, Token* NameToken, ASTNode** Parameters, i32 ParameterCount, i8 IsBuiltin) {
 	/* Builds a NODE_TYPE_CALL with the given Name/Parameters */
 	
 	UnfreezeParser(pState, FreezeParser(pState) - 1) /* Manually backtrack and consume the closing ')' for this call */
@@ -1219,7 +1220,7 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		}
 	}
 	else {
-		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+		HashMapElement* FoundFunction := HashMapGetValue(Namespace, Name)
 		
 		if !(FoundFunction) {
 			/* And if the function was not found, then error out */
@@ -1240,6 +1241,9 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	}
 	
 	return ResultNode
+}
+define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount, i8 IsBuiltin) {
+	return MakeCall(pState, pState->Functions, NameToken, Parameters, ParameterCount, IsBuiltin)
 }
 
 /*
@@ -1980,6 +1984,12 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	SafeWideString* Name := NameToken->StringValue
 	
+	/* Set up a buffer for parameters */
+	i8 ParameterCount := 0
+	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
+	
+	i8 Attribute := 0
+	
 	HashMap* Locals := 0x6969
 	
 	if (ForDefine) {
@@ -2008,17 +2018,14 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			
 			/* ParserCurrentToken is just a dummy, this will never error without a much more noticeable problem */
 			ParserAddLocal(pState, ThisParameter, ParserCurrentToken(pState))
+			
+			ParameterList[0] := ThisParameter
+			ParameterCount += 1
 		}
 	}
 	
 	/* Consume the parameter list opening '(' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
-	
-	/* Set up a buffer for parameters */
-	i8 ParameterCount := 0
-	VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
-	
-	i8 Attribute := 0
 	
 	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
@@ -2458,7 +2465,7 @@ define ASTNode* ParseWhile(ParserState* pState) {
 }
 
 define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
-	/* Translates some kind of token in an AST node which contains the actual version of the token */
+	/* Translates a token into an AST node with an eqaul value */
 	
 	ASTNode* Result := 0
 	
@@ -2507,6 +2514,31 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	return Result
 }
 
+define ASTNode** ParseParameterList(ParserState* pState, i8* OutParameterCount) {
+	i8 ParameterIndex := *OutParameterCount
+	ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
+	
+	/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
+	
+	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+		i8 IsFirstParameter := true
+		
+		while (IsFirstParameter || ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			Parameters[ParameterIndex] := ParseExpression(pState, 0)
+			ParameterIndex += 1
+			
+			IsFirstParameter := false
+		}
+		
+		/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
+	}
+	
+	OutParameterCount[0] := ParameterIndex
+	return Parameters
+}
+
 define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	/* Parses and returns a single operand of an expression */
 	
@@ -2535,27 +2567,12 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If the next-next token is an (, then this is a function call */
 			
-			i8 ParameterIndex := 0
-			ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
-			
-			/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
-			
-			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-				while (ParameterIndex = 0 || ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-					Parameters[ParameterIndex] := ParseExpression(pState, 0)
-					ParameterIndex += 1
-				}
-				
-				/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
-				
-				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
-			}
+			i8 ParameterCount := 0
+			ASTNode** Parameters := ParseParameterList(pState, &ParameterCount)
 			
 			/* Make a NODE_TYPE_CALL node for the function call */
 			
-			Result := MakeCall(pState, NextToken, Parameters, ParameterIndex, IsBuiltin)
-			
-			/* CopyContext(NextToken As ErrorContext*, Result As ErrorContext*) */
+			Result := MakeCall(pState, NextToken, Parameters, ParameterCount, IsBuiltin)
 		}
 		else {
 			/* Else, this isn't a function call, and is just a normal variable */
@@ -2667,6 +2684,8 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		ASTNode* Operand := 0
 		i8 Operator := (OperatorToken->Value) As i8
 		
+		i8 CouldBeMethodCall := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER
+		
 		if (Operator = OPERATOR_OPEN_BRACKET) {
 			/* If the next operator is [, then parse the index expression (for the right operand) and consume the closing ] */
 			
@@ -2681,7 +2700,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 		}
-		else if (Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER) {
+		else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
 			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(pState->i64, 0))
@@ -2695,9 +2714,32 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		
 		/* Fold the left/operator/right into just the left */
 		
-		Result := MakeBinary(pState, Result, OperatorToken, Operand)
-		
-		/* MergeContexts(Result As ErrorContext*, Operand As ErrorContext*, StructNode As ErrorContext*) */
+		if (CouldBeMethodCall && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			Type LeftType := Result->ValueType
+			TypeInfo* LeftBase := GetBaseType(LeftType)
+			i16 LeftDepth := GetPointerDepth(LeftType)
+			
+			if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
+				TokenError(OperatorToken, "Wrong operator for left side pointer depth")
+			}
+			else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
+				TokenError(OperatorToken, "Can't call method on non-struct or incomplete types")
+			}
+			
+			if (LeftDepth = 0) {
+				Result->ValueType := IncrementPointerType(pState, Result->ValueType)
+			}
+			
+			i8 ParameterCount := 1
+			ASTNode** Parameters := ParseParameterList(pState, &ParameterCount)
+			
+			Parameters[0] := Result
+			
+			Result := MakeCall(pState, LeftBase->StructMethods, Right, Parameters, ParameterCount, false)
+		}
+		else {
+			Result := MakeBinary(pState, Result, OperatorToken, Operand)
+		}
 		
 		/* Update where to restore the parser to once the expression ends */
 		FrozenState := FreezeParser(pState)

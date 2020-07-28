@@ -16,5 +16,27 @@ define i32 Main() {
 	
 	Test* T := Alloc(#Test)
 	
+	IWrite(T->GetValue())
+	
+	T->SetValue(20059)
+	
+	WriteCharacter(',')
+	
+	IWrite(T->GetValue())
+	
+	WriteCharacter(' ')
+	
+	Test L
+	
+	L.SetValue(0)
+	
+	IWrite(L.GetValue())
+	
+	WriteCharacter(',')
+	
+	L.SetValue(20060)
+	
+	IWrite(L.GetValue())
+	
 	return 0
 }
