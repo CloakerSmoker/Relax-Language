@@ -754,6 +754,11 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	else {
 		EmitReturn(cState)
 	}
+	
+	
+	if (cState->RegisterStackIndex != 0) {
+		ContextError(FunctionToCompile~>Context, "Register stack not empty")
+	}
 }
 
 declare void Compile(CompilerState*, ASTNode*)
@@ -1108,6 +1113,8 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 }
 
 define i8 GetSystemVRegister(i32 Index) {
+	/* Translates a parameter number into which register (should) contain said parameter according to SystemV */
+	
 	if (Index = 5) {return R9}
 	else if (Index = 4) {return R8}
 	else if (Index = 3) {return RCX}
@@ -1352,7 +1359,6 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(cState, ResultRegister, TargetAccess->Left)
-		/* EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize) */
 		
 		TargetFieldSize := FieldOffset
 		
@@ -1398,8 +1404,6 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
-		
-		/* EmitMove_RX_RIX(cState, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) */
 		
 		TargetFieldSize := TargetField->Offset
 		

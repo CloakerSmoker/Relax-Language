@@ -759,17 +759,6 @@ define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* Vari
 ==========================================
 */
 
-
-define i64 GetTypeSignature(FunctionDefine* ForFunction) {
-	i64 Signature := ForFunction->ReturnType As i64
-	
-	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
-		
-		
-	}
-	
-}
-
 define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** AgainstParameters) {
 	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
 		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
@@ -897,30 +886,6 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	SwapOutputStream()
 	Exit(0)
 }
-/* 
-
-When building a call node:
-	Remember a "high water mark" for the last parameter which failed to match (for error reporting)
-	
-	Go through each definition for a the called name:
-		For each parameter, check if the types are compatible:
-			if compatible:
-				if at end of parameter lists:
-					return this definition
-				else:
-					continue
-			else:
-				if parameter index higher than high water mark:
-					set high water mark to parameter index
-	
-	if this point is reached:
-		error on Call->Parameters[High water mark], no function overload matches parameter type X
-
-
-
-
- */
-
 
 /*
 ==========================================
@@ -1013,10 +978,6 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	if (Operator = OPERATOR_AS) {
 		/* OPERATOR_AS does nothing, just switches the result type of the expression */
-		
-		/* SwapOutputStream()
-		PrettyError(OperatorToken As ErrorContext*, "Test123", Red | Bright)
-		Exit(1) */
 		
 		ResultType := RightType
 	}
@@ -1273,42 +1234,13 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 		/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
 		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 		
+		/* And walk the FunctionDefine* linked list, looking for an overload which matches our parameters */
 		FoundDefine := MatchFunction(pState, FoundDefine, ResultNode)
 		
 		FoundDefine->CallCount += 1
 		
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
-		
-		/* i8 IS_VARIADIC := FoundDefine->Attribute = OPERATOR_DOT
-		
-		if (IS_VARIADIC) {
-			i32 VariadicStart := FoundDefine->ParameterCount - 1
-			
-			if (ParameterCount < VariadicStart) {
-				ASTError(ResultNode, "Not enough parameters passed to function.")
-			}
-			
-			Type VariadicParameterType := MakeType(pState->void, 1)
-		}
-		else if (FoundDefine->ParameterCount != ParameterCount) {
-			ASTError(ResultNode, "Wrong number of parameters passed to function.")
-		}
-		
-		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
-			Type ExpectedType := 0
-			
-			if (IS_VARIADIC && ParameterIndex >= VariadicStart) {
-				ExpectedType := VariadicParameterType
-			}
-			else {
-				ExpectedType := FoundDefine->Parameters[ParameterIndex]->Type
-			}
-			
-			ASTNode* ActualParameter := DowncastIntegerType(pState, Parameters[ParameterIndex])
-			
-			CheckTypes(ActualParameter->ValueType, ExpectedType, ActualParameter)
-		} */
 	}
 	
 	return ResultNode
@@ -1367,17 +1299,11 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
 	i32 FrozenState := FreezeParser(pState)
 	
-	/* AWrite("Frozen at: ")
-	IWriteLine(FrozenState) */
-	
 	Token* NextToken := ParserNextToken(pState)
 	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
 	
 	if !(Matches) {
 		/* Backtrack if the next token didn't match */
-		/* AWrite("Unfreezing from: ")
-		IWriteLine(pState->tState->TokenIndex) */
-		
 		UnfreezeParser(pState, FrozenState)
 		
 		return false
@@ -1914,7 +1840,9 @@ define void ParseAndAddBits(ParserState* pState) {
 declare ASTNode* ParseStatement(ParserState*)
 
 define void ConsumeAndIgnoreBlock(ParserState* pState) {
-	/* Used for linux/windows statements */
+	/* Used for linux/windows statements to ignore code for the opposite OS.
+		This allows for syntax errors inside of !ThisOS code, but that doesn't really matter.
+	*/
 	
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
 	
@@ -1966,6 +1894,7 @@ define Block* ParseBlock(ParserState* pState) {
 			
 			Token* NextToken := ParserNextToken(pState)
 			
+			/* Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the blocks following them */
 			if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
 				if (pState->OutputELF) {
 					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
@@ -1997,6 +1926,8 @@ define Block* ParseBlock(ParserState* pState) {
 			i8 BreakOuter := false
 			
 			while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				/* Only break the outer loop once all opening `{` for this block have been matched with a closing `}` */
+				
 				Depth -= 1
 				
 				BreakOuter := Depth = 0
@@ -2023,6 +1954,13 @@ define Block* ParseBlock(ParserState* pState) {
 declare ASTNode* ParseAssembly(ParserState*)
 
 define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
+	/* Parses:
+		 Define statements
+		 Declare statements
+		 DllImport statements
+		Since (Define|Declare|DllImport) all have ~4 tokens in common, along with a (mostly) common list of parameters
+	*/
+	
 	Token* StartToken := ParserCurrentToken(pState)
 	
 	i8 ForDefine := Mode = KEYWORD_DEFINE
@@ -2036,6 +1974,12 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	HashMap* Locals := 0x6969
 	
 	if (ForDefine) {
+		/* For define statements, the parameters are added as locals, so pState->CurrentFunction needs to be set so
+			calling `ParserAddLocal` inside of the parameter list parsing loop won't crash.
+			`Locals` is copied onto the actual `FunctionDefine*` for this function after the parameters have been
+			parsed, and the matching overload has been found (if it exists)
+		*/
+		
 		Locals := NewHashMap()
 		
 		FunctionDefine TempDefine
@@ -2130,8 +2074,6 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		}
 	}
 	
-	
-	
 	HashMapElement* FoundFunctionElement := HashMapGetValue(pState->Functions, Name)
 	
 	FunctionDefine* FoundFunction := 0
@@ -2139,11 +2081,13 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 	i8 ActuallyFound := false
 	
 	if (FoundFunctionElement) {
+		/* If this function already has at least one definition */
+		
 		FoundFunction := (FoundFunctionElement->Value) As FunctionDefine*
 		
 		while (FoundFunction) {
-		
-		
+			/* Loop through all definitions, and find any which match the type signature of this definition */
+			
 			if (FoundFunction->ParameterCount = ParameterCount) {
 				if (CheckTypeSignature(FoundFunction, ParameterList)) {
 					ActuallyFound := true
@@ -2155,25 +2099,36 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 				break
 			}
 			
+			/* Or, find the last definition for the function (which we append this definition onto) */
 			FoundFunction := FoundFunction->Next
 		}
 		
 		if (ActuallyFound && FoundFunction->HasFullDefinition) {
+			/* If we found a definition matching the type signature, and it already has a body, then this is a duplicate definition */
+			
 			TokenError(NameToken, "Duplicate function definition")
 		}
 	}
 	
 	if (ActuallyFound) {
+		/* If we found `declare %Name%(Exact same type signature as this definition)`, use `FoundFunction` for this definition instead of making a new `FunctionDefine` */
+		
 		NewDefine := FoundFunction
 	}
 	else {
+		/* In this case, we can't reuse an existing `FunctionDefine`, so we need to allocate a new one */
+		
 		NewDefine := Alloc(#FunctionDefine) As FunctionDefine*
 		
 		if (FoundFunction) {
+			/* However, if we did find a previous definition for this function, then we need to insert `NewDefine` into the linked list of this function's overloads			*/
+			
 			NewDefine->Next := FoundFunction->Next
 			FoundFunction->Next := NewDefine
 		}
 		else {
+			/* If this is the very first definition for this function, it needs to be inserted into the function hashmap */
+			
 			HashMapAddValue(pState->Functions, Name, NewDefine As void)
 		}
 		
@@ -2181,12 +2136,17 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		pState->FunctionCount += 1
 	}
 	
+	/* Copy info parsed from the first part of this function into `NewDefine`, which is 100% correctly set by now */
+	
+	/* `(define|declare|dllimport) name(params)` will all get captured into `NewDefine~>Context`, which displays nicely */
 	MergeContexts(StartToken~>Context, ParserCurrentToken(pState)~>Context, NewDefine~>Context)
 	NewDefine->Name := Name
 	NewDefine->ReturnType := ReturnType
 	NewDefine->Attribute := Attribute
 	
 	if (ForDefine) {
+		/* If we are parsing a `define` statement, we need to copy the locals hashmap which already contains the parameters, along with size of the stack space needed for locals */
+		
 		NewDefine->Locals := Locals
 		NewDefine->LocalOffset := TempDefine.LocalOffset
 	}
@@ -2214,6 +2174,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, i8 Mode) {
 		NewDefine->ImportFunctionName := FunctionName
 	}
 	
+	/* Assume any function only has a partial definition */
 	NewDefine->HasFullDefinition := false
 	
 	if (ForDefine) {

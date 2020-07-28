@@ -36,6 +36,7 @@ i8 TOKEN_TYPE_PUNCTUATION := 5
 i8 TOKEN_TYPE_KEYWORD := 6
 i8 TOKEN_TYPE_DEBUG_CHARACTER := 7
 
+/* TODO: Bit shifts need to be higher precedence than bitwise operations */
 
 i8 OPERATOR_FIRST_ASSIGNMENT := 0
 i8 PRECEDENCE_1 := 0
