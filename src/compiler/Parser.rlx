@@ -1648,8 +1648,8 @@ define void ParseAndAddStruct(ParserState* pState) {
 				
 				InUnion := true
 			}
-			else if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
-				ParseFunction(pState, Methods, KEYWORD_DEFINE, NewType)
+			else if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
+				ParseFunction(pState, Methods, ParserCurrentToken(pState)->Value As i8, NewType)
 				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 					break
@@ -2007,21 +2007,27 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		TempDefine.LocalOffset := 0
 		
 		pState->CurrentFunction := &TempDefine
+	}
+	
+	if (ThisType != 0) {
+		/* If we are defining a method, then we need to build the `this` parameter, and set it to the first parameters */
 		
-		if (ThisType != 0) {
-			SafeWideString* ThisName := AToS("this")
+		/* Note: All of this is technically a memory leak, but that doesn't really matter */
+		SafeWideString* ThisName := AToS("this")
+		
+		VariableInfo* ThisParameter := AllocateNewVariableInfo()
+		ThisParameter->Name := ThisName
+		ThisParameter->Type := MakeType(ThisType, 1)	/* TypeOf(this) = PointerTo(ThisStructType) */
+		ThisParameter->IsParameter := true
+		
+		if (ForDefine) {
+			/* Only actually add `this` as a local when we are defining a full function, and have pState->CurrentFunction set */
 			
-			VariableInfo* ThisParameter := AllocateNewVariableInfo()
-			ThisParameter->Name := ThisName
-			ThisParameter->Type := MakeType(ThisType, 1)
-			ThisParameter->IsParameter := true
-			
-			/* ParserCurrentToken is just a dummy, this will never error without a much more noticeable problem */
 			ParserAddLocal(pState, ThisParameter, ParserCurrentToken(pState))
-			
-			ParameterList[0] := ThisParameter
-			ParameterCount += 1
 		}
+		
+		ParameterList[0] := ThisParameter
+		ParameterCount += 1
 	}
 	
 	/* Consume the parameter list opening '(' */
@@ -2715,26 +2721,40 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		/* Fold the left/operator/right into just the left */
 		
 		if (CouldBeMethodCall && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			/* If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call */
+			
 			Type LeftType := Result->ValueType
 			TypeInfo* LeftBase := GetBaseType(LeftType)
 			i16 LeftDepth := GetPointerDepth(LeftType)
 			
+			/* If a local struct is accessed using `->`, it is an error. 
+				Or If a pointed-to structure is accessed via `.`, it is an error .
+			*/
 			if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
 				TokenError(OperatorToken, "Wrong operator for left side pointer depth")
 			}
 			else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
+				/* Or, if the accessed type is not a struct, or is incomplete, it is an error */
+				
 				TokenError(OperatorToken, "Can't call method on non-struct or incomplete types")
 			}
 			
 			if (LeftDepth = 0) {
+				/* If the left side is a local struct, we can simply change the result type to a struct pointer,
+					and the compiler will take the hint that we're after the address of the local struct
+				*/
+				
 				Result->ValueType := IncrementPointerType(pState, Result->ValueType)
 			}
 			
+			/* The first parameter is `this`, so we any actual parameters are offset by 1 */
 			i8 ParameterCount := 1
 			ASTNode** Parameters := ParseParameterList(pState, &ParameterCount)
 			
+			/* Result = the left side of the struct access, which is passed as the `this` parameter */
 			Parameters[0] := Result
 			
+			/* Build an actual CallExpression, using LeftBase->StructMethods as the namespace */
 			Result := MakeCall(pState, LeftBase->StructMethods, Right, Parameters, ParameterCount, false)
 		}
 		else {

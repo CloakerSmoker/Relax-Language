@@ -4,11 +4,27 @@
 
 struct Test {
 	i64 Value,
+	
+	declare void Test(),
+	
 	define i64 GetValue() {
 		return this->Value
 	},
+	define i64 GetValue(i8 Pass) {
+		return Pass
+	},
 	define void SetValue(i64 New) {
 		this->Value := New
+	},
+	
+	define void Test() {
+		return 0
+	}
+}
+
+struct BadIdea {
+	define i64 What() {
+		return 90
 	}
 }
 
@@ -37,6 +53,14 @@ define i32 Main() {
 	L.SetValue(20060)
 	
 	IWrite(L.GetValue())
+	
+	WriteCharacter(' ')
+	BadIdea* B := 0
+	IWrite(B->What())
+	
+	WriteCharacter(' ')
+	
+	IWrite(L.GetValue(90))
 	
 	return 0
 }
