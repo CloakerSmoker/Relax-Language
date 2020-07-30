@@ -210,11 +210,11 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
-	i64 CODE_BASE := 0x3000
+	i64 CODE_BASE := DEFAULT_IMAGE_BASE + 0x3000
 	
 	if (BUILDING_STANDALONE) {
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 0x10
-		CODE_BASE := pState->GlobalOffset + 0x10
+		CODE_BASE := DEFAULT_IMAGE_BASE + pState->GlobalOffset + 0x10
 	}
 	else if (OutputELF) {
 		C.ELF := BuildELFBuilder()
@@ -613,7 +613,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	/* Set up the stack frame for this function */
 	i16 LocalSpace := FunctionToCompile->LocalOffset
 	
-	if (FunctionToCompile->StringBufferSize) {
+/* 	if (FunctionToCompile->StringBufferSize) {
 		i32 RoundedStringSize := (FunctionToCompile->StringBufferSize) As i16
 		i32 StringRemainder := RoundedStringSize % 8
 		
@@ -622,7 +622,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 		
 		LocalSpace += RoundedStringSize As i16
-	}
+	} */
 	
 	i16 LocalSpaceRemainder := LocalSpace % 16
 	
@@ -718,7 +718,15 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	if (FunctionToCompile->StringBufferSize) {
-		i32 StringBufferOffset := FunctionToCompile->LocalOffset
+		i32 StringsStart := NextLabel(cState)
+		i32 StringsEnd := NextLabel(cState)
+		
+		EmitJump_Label(cState, StringsEnd)
+		SetLabel(cState, StringsStart)
+		
+		cState->CurrentFunctionStringBufferOffset := StringsStart
+		
+		/* i32 StringBufferOffset := FunctionToCompile->LocalOffset
 		i32 StringBufferSize := FunctionToCompile->StringBufferSize
 		
 		i32 ChunkCount := StringBufferSize / 8
@@ -743,7 +751,13 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			else {
 				EmitMove_RIX_DISP32_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32, 8)
 			}
+		} */
+		
+		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
+			PushByte(cState, FunctionToCompile->StringBuffer[CharacterIndex])
 		}
+		
+		SetLabel(cState, StringsEnd)
 	}
 	
 	/* Compile the body of the function */
@@ -1128,14 +1142,18 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	else if (ExpressionType = NODE_TYPE_STRING) {
 		i32 StringOffset := ExpressionToCompile->StringOffsetValue
 		
-		i32 RBPOffect := (cState->CurrentFunctionStringBufferOffset) - StringOffset
+		/* i32 RBPOffect := (cState->CurrentFunctionStringBufferOffset) - StringOffset */
 		
-		if (RBPOffect < 112) {
+		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringBufferOffset)
+		OffsetLabel(cState, StringOffset)
+		/* EmitAdd_R64_IX(cState, ResultRegister, StringOffset) */
+		
+		/* if (RBPOffect < 112) {
 			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(RBPOffect) As i8)
 		}
 		else {
 			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(RBPOffect) As i32)
-		}
+		} */
 	}
 }
 

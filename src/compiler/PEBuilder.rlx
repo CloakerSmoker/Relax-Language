@@ -231,7 +231,7 @@ define void WritePEHeader(void* IntoBuffer) {
 	COFFHeader* NewCOFF := (IntoBuffer + COFF_HEADER_OFFSET) As COFFHeader*
 	
 	NewCOFF->MachineType := MACHINE_AMD64 As i16
-	NewCOFF->NumberOfSections := 4
+	NewCOFF->NumberOfSections := 3
 	
 	NewCOFF->SizeOfOptionalHeader := PE_HEADER_SIZE
 	NewCOFF->Characteristics := (COFF_EXECUTABLE_IMAGE | COFF_LARGE_ADDRESS_AWARE)
@@ -249,7 +249,7 @@ define void WritePEHeader(void* IntoBuffer) {
 	NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
 	
 	NewPE->Subsystem := IMAGE_SUBSYSTEM_WINDOWS_CUI
-	NewPE->DllCharacteristics := (DLL_DYNAMIC_BASE | DLL_HIGH_ENTROPY_VA)
+	NewPE->DllCharacteristics := (DLL_HIGH_ENTROPY_VA)
 	
 	NewPE->SizeOfStackReserve := DEFAULT_RESERVE
 	NewPE->SizeOfStackCommit := DEFAULT_COMMIT
@@ -420,7 +420,7 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 	BuilderToReAlloc->COFF := (Buffer + COFF_HEADER_OFFSET) As COFFHeader*
 	BuilderToReAlloc->PE := (Buffer + PE_HEADER_OFFSET) As PEHeader*
 	
-	BuilderToReAlloc->RelocHeader := (Buffer + RELOC_OFFSET) As SectionHeader*
+	/* BuilderToReAlloc->RelocHeader := (Buffer + RELOC_OFFSET) As SectionHeader* */
 	BuilderToReAlloc->IDataHeader := (Buffer + IDATA_OFFSET) As SectionHeader*
 	BuilderToReAlloc->DataHeader := (Buffer + DATA_OFFSET) As SectionHeader*
 	BuilderToReAlloc->TextHeader := (Buffer + TEXT_OFFSET) As SectionHeader*
@@ -451,7 +451,7 @@ define PEBuilder* BuildBuilder() {
 	
 	/* Write all the sections (out of order, since they are moved around via changing XXXXX_OFFSET */
 	
-	NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+	/* NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE) */
 	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
 	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
 	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
@@ -576,6 +576,9 @@ i16 RELOCATION_HIGHLOW := 3 * 0x1000
 i16 RELOCATION_DIR64 := 10 * 0x1000
 
 define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
+	
+	return 0
+	
 	i32 Type := RELOCATION_HIGHLOW
 	
 	if (Is64Bit) {
@@ -594,6 +597,8 @@ define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8
 
 define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
 	/* Adds a relocation for PageRVA + OffsetInPage for either a 32 or 64 bit value */
+	
+	return 0 
 	
 	ToBuilder->RelocationCount += 1
 	
@@ -630,6 +635,8 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
+	
+	return 0
 	
 	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (#RelocationBlockHeader + 32)
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
@@ -939,7 +946,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 define void FinalizeBuilder(PEBuilder* Builder) {
 	/* Updates any header fields which need to be done before the file is "done" */
 	
-	FinalizeRelocations(Builder)
+	/* FinalizeRelocations(Builder) */
 	
 	/* Pad the file so the last section ends on a DEFAULT_FILE_ALIGNMENT boundry (this is required) */
 	i32 FileSize := RoundTo(Builder->BufferSize, DEFAULT_FILE_ALIGNMENT)
@@ -951,6 +958,6 @@ define void FinalizeBuilder(PEBuilder* Builder) {
 	IWriteLine(Builder->PE->BaseRelocationTableRVA) */
 	
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
-	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + (Builder->RelocHeader->Size) + (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
+	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + /* (Builder->RelocHeader->Size) + */ (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
 	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
 }

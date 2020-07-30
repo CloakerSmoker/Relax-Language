@@ -35,6 +35,11 @@ define void UseLabel(CompilerState* cState, i32 LabelNumber) {
 	(cState->Labels)[cState->LabelCount] := NewLabel
 	cState->LabelCount += 1
 }
+define void OffsetLabel(CompilerState* cState, i32 Offset) {
+	/* Adds an offset of Offset to the last label used */
+	
+	cState->CodeBuffer[cState->Index - 4] += Offset
+}
 
 define Label* SetLabel(CompilerState* cState, i32 LabelNumber) {
 	/* Creates a new label which points to the current cState->Index */
@@ -61,7 +66,7 @@ define void ResolveLabel(CompilerState* cState, i32 LabelNumber, i32 Value) {
 		
 		if (NextLabel->LabelNumber = LabelNumber && NextLabel->IsPlaceholder) {
 			i32* ActualPlaceholder := ((cState->CodeBuffer) + (NextLabel->OffsetToReplace)) As i32*
-			ActualPlaceholder[0] := Value - ((NextLabel->OffsetToReplace) + 4)
+			ActualPlaceholder[0] += Value - ((NextLabel->OffsetToReplace) + 4)
 		}
 	}
 }
@@ -770,6 +775,10 @@ define void EmitInB(CompilerState* cState) {
 define void EmitLea_RAX_Label(CompilerState* cState, i32 Label) {
 	PushByte(cState, 0x8D)
 	EmitModRM(cState, 0, RAX, 5)
+	UseLabel(cState, Label)
+}
+define void EmitLea_R64_Label(CompilerState* cState, i8 TargetRegister, i32 Label) {
+	EmitBasicInstruction(cState, 0x8D, 0, 4, TargetRegister, 5)
 	UseLabel(cState, Label)
 }
 define void EmitXCHG_R64_RI64(CompilerState* cState, i8 Register, i8 PointerRegister) {
