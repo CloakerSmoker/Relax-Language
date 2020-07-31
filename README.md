@@ -1,5 +1,9 @@
 # Relax, a basic compiled programming language.
 
+![Linux Tests](https://github.com/CloakerSmoker/Relax-Language/workflows/Linux%20Tests/badge.svg)
+
+![Windows Tests](https://github.com/CloakerSmoker/Relax-Language/workflows/Windows%20Tests/badge.svg)
+
 Note: The compiler is now implemented in Relax itself, it used to be implemented in AutoHotkey. Yes, I regret that.
 
 For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
