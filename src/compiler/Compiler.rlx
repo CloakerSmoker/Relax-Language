@@ -1,6 +1,6 @@
 /*
 ==========================================
-	aaaaaaaaaaaaa
+	Backing compiler state
 ==========================================
 */
 
@@ -13,48 +13,58 @@ struct Label {
 
 struct CompilerState {
 	ParserState* pState,
+	FunctionDefine* CurrentFunction,
 	
-	PEBuilder* Builder,
-	ELFBuilder* ELF,
+	union {
+		/* Output file builders */
+		
+		PEBuilder* PE,
+		ELFBuilder* ELF
+	},
 	
+	/* Address (in loaded output file) where globals will live */
 	i32 GlobalBase,
 	
+	/* Buffer containing assembled (but not linked) code */
 	i8* CodeBuffer,
 	i32 CodeBufferSize,
 	i32 Index,
 	
+	/* Array of relocations */
 	i32* CodeRelocations,
 	i32 CodeRelocationCount,
 	
-	LabelPlaceholder** Labels,
+	/* Record of label definitions/usages inside of CodeBuffer, for actually linking labels */
+	Label** Labels,
 	i32 LabelCount,
 	i32 LabelBufferCapacity,
 	
 	i32 LabelIndex,
 	
-	i32 CurrentFunctionReturnLabel,
+	/* Labels for `continue` and `break` statements to jump to */
 	i32 CurrentLoopContinueLabel,
 	i32 CurrentLoopBreakLabel,
 	
-	Type CurrentFunctionReturnType,
-	i32 CurrentFunctionStringBufferOffset,
+	/* Label for the current function's buffer of strings used */
+	i32 CurrentFunctionStringsLabel,
 	
+	/* Next free register number for expression evaluation/whatever */
 	i8 RegisterStackIndex,
 	
+	/* Flags to ensure that certain registers are not clobbered */
 	i8 NoClobberCD89,
 	i32 ParameterRegistersMaxSave,
 	i32 ParameterRegistersMinSave,
 	i8 NoClobberA,
 	
+	/* Flags to ensure the correct ABI is used, along with the correct return sequence for `Main()` */
 	i8 OutputELF,
-	i8 CompilingMain,
-	
-	FunctionDefine* CurrentFunction
+	i8 CompilingMain
 }
 
 /*
 ==========================================
-	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	High-ish level compiling functions, along with global/function dumping
 ==========================================
 */
 
@@ -65,6 +75,8 @@ declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
 
 define void DumpGlobals(CompilerState* cState) {
+	/* Walk the globals hashmap and print the offset/size of each */
+	
 	ParserState* pState := cState->pState
 	void* Elements := pState->Globals->Elements
 	i32 Max := pState->GlobalOffset
@@ -99,6 +111,11 @@ define void DumpGlobals(CompilerState* cState) {
 }
 
 define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
+	/* Print a function in the format:
+			Address Of Function - Size of function (Call count of function) Name
+		With the type signature of the function optionally printed afterwards, if the function is overloaded.
+	*/
+	
 	IWriteHex(CODE_BASE + FunctionOffset)
 	AWrite(" - ")
 	
@@ -136,6 +153,11 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 }
 
 define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i8 DoDump, i32* MainOffset, i8* FoundMain) {
+	/* Compiles either:
+		A single function (BaseFunction)
+		Or an entire linked list of function overloads, starting with BaseFunction
+	*/
+	
 	i32 FunctionOffset := cState->Index
 	
 	if (BaseFunction->IsImported) {
@@ -150,9 +172,11 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 		i8 IsMain := SafeStringEqualsAString(BaseFunction->Name, "Main")
 		
 		if (IsMain) {
+			/* If we found the main function, let the callee know for linking's sake. */
+			
 			FoundMain[0] := true
 			MainOffset[0] := FunctionOffset
-			BaseFunction->CallCount += 1
+			BaseFunction->CallCount += 1	/* Since `Main()` should never be called, ensure it isn't optimized away due to being called 0 times */
 		}
 		
 		if (BaseFunction->CallCount != 0) {
@@ -161,10 +185,17 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 	}
 	
 	if (DoDump & 1) {
+		/* If we're dumping a function in an overload chain, then print it as an overload
+			Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
+			 and still need to print it as an overload
+		*/
+		
 		PrintFunction(cState, BaseFunction, FunctionOffset, CODE_BASE, !!BaseFunction->Next || IsOverload)
 	}
 	
 	if (BaseFunction->Next) {
+		/* Recursively compile an entire overload chain */
+		
 		CompileOverload(cState, BaseFunction->Next, true, CODE_BASE, DoDump, MainOffset, FoundMain)
 	}
 }
@@ -222,9 +253,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
 	}
 	else {
-		C.Builder := BuildBuilder()
-		C.Builder->ImportFixupBase := C.CodeBuffer
-		C.GlobalBase := DEFAULT_IMAGE_BASE + C.Builder->NextRVA
+		C.PE := BuildBuilder()
+		C.PE->ImportFixupBase := C.CodeBuffer
+		C.GlobalBase := DEFAULT_IMAGE_BASE + C.PE->NextRVA
 	}
 	
 	if (DumpFunctionBytes & 0x2) {
@@ -250,7 +281,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 			while (FoundElement) {
 				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
 				
-				/* If the type is a struct, and it has methods, compiled the methods */
+				/* If the type is a struct, and it has methods, compile the methods */
 				if (NextType->IsStructType && NextType->StructMethods != 0) {
 					CompileFunctionHashMap(&C, NextType->StructMethods, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
 				}
@@ -327,9 +358,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		BytesWritten := C.ELF->BufferSize
 	}
 	else {
-		AddData(C.Builder, C.pState->GlobalOffset)
+		AddData(C.PE, C.pState->GlobalOffset)
 		
-		i64 TextRVA := AddCode(C.Builder, C.CodeBuffer, C.Index, MainOffset)
+		i64 TextRVA := AddCode(C.PE, C.CodeBuffer, C.Index, MainOffset)
 		
 		for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
 			i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
@@ -339,14 +370,14 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 			
 			/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
 			
-			AddRelocation(C.Builder, PageRVA, OffsetInPage, false)
+			AddRelocation(C.PE, PageRVA, OffsetInPage, false)
 		}
 		
-		FinalizeBuilder(C.Builder)
+		FinalizeBuilder(C.PE)
 		
-		/* WriteBuilder(C.Builder, OutputFilePath) */
-		Result := FileWrite(OutputFileHandle, C.Builder->Buffer, C.Builder->BufferSize)
-		BytesWritten := C.Builder->BufferSize
+		/* WriteBuilder(C.PE, OutputFilePath) */
+		Result := FileWrite(OutputFileHandle, C.PE->Buffer, C.PE->BufferSize)
+		BytesWritten := C.PE->BufferSize
 	}
 	
 	if (Result < 0) {
@@ -417,7 +448,7 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
 		
 		if !(cState->OutputELF) {
-			cState->Builder->ImportFixupBase := cState->CodeBuffer
+			cState->PE->ImportFixupBase := cState->CodeBuffer
 		}
 	}
 }
@@ -550,7 +581,7 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 	
 	EmitMove_R64_I64(cState, RBX, 0)
 	
-	AddImport(cState->Builder, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, (cState->Index) - 8)
+	AddImport(cState->PE, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, (cState->Index) - 8)
 	AddCodeRelocation(cState, cState->Index - 8)
 	
 	EmitJump_RI64(cState, RBX)
@@ -568,20 +599,20 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
+		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
+		
 		CompileAssembly(cState, FunctionToCompile->AssemblyBody)
 		return 0
 	}
 	
 	if (FunctionToCompile->Body->StatementCount = 0) {
+		/* Empty functions don't deserve any prelude code. */
+		
 		EmitReturn(cState)
 		return 0
 	}
 	
 	cState->CurrentFunction := FunctionToCompile
-	
-	/* Store the current return type so return can cast values to it */
-	
-	cState->CurrentFunctionReturnType := FunctionToCompile->ReturnType
 	
 	i8 USE_SYSTEMV := true /* cState->OutputELF */
 	
@@ -612,18 +643,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	/* Set up the stack frame for this function */
 	i16 LocalSpace := FunctionToCompile->LocalOffset
-	
-/* 	if (FunctionToCompile->StringBufferSize) {
-		i32 RoundedStringSize := (FunctionToCompile->StringBufferSize) As i16
-		i32 StringRemainder := RoundedStringSize % 8
-		
-		if (StringRemainder) {
-			RoundedStringSize += 8 - StringRemainder
-		}
-		
-		LocalSpace += RoundedStringSize As i16
-	} */
-	
 	i16 LocalSpaceRemainder := LocalSpace % 16
 	
 	if (LocalSpaceRemainder) {
@@ -649,7 +668,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 	}
 	
-	EmitSub_R64_IX(cState, RSP, LocalSpace)
+	if (LocalSpace) {
+		/* Only emit an instruction to allocate space for locals when we have locals */
+		EmitSub_R64_IX(cState, RSP, LocalSpace)
+	}
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
 		/* For each register parameter */
@@ -657,16 +679,11 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		/* Get the VariableInfo structure for the parameter */
 		VariableInfo* NextParameter := (FunctionToCompile->Parameters)[RegisterParameterIndex]
 		
-		/* And which register it is in (RCX/RDX/R8/R9) */
+		/* And which register it is in (according to the target ABI) */
 		i8 NextParameterRegister := 0
 		
 		if (USE_SYSTEMV) {
-			if (RegisterParameterIndex = 5) {NextParameterRegister := R9}
-			else if (RegisterParameterIndex = 4) {NextParameterRegister := R8}
-			else if (RegisterParameterIndex = 3) {NextParameterRegister := RCX}
-			else if (RegisterParameterIndex = 2) {NextParameterRegister := RDX}
-			else if (RegisterParameterIndex = 1) {NextParameterRegister := RSI}
-			else if (RegisterParameterIndex = 0) {NextParameterRegister := RDI}
+			NextParameterRegister := GetSystemVRegister(RegisterParameterIndex)
 		}
 		else {
 			NextParameterRegister := RegisterParameterIndex + 1
@@ -680,22 +697,15 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextParameter, NextParameterRegister)
 	}
 	
-	i8 StackParameterOffset := 0x8
-	
-	/* Shadow space is a dumb concept, which was invented by microsoft to increase RAM usage and to get you to buy more RAM from big memory. 
-		(But actually, it goes unused in every function ever, so there's no point in handling it UNLESS: 
-			this function is called by windows/external code, which isn't possible right now)
-	*/
-	
 	for (i8 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
 		/* For each stack parameter */
 		
 		/* Get the VariableInfo structure for the parameter */
 		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + MAX_REGISTER_PARAMETERS]
 		
-		/* Load RAX with the parameter's value (using RBX as a base) */
+		/* Load RAX with the parameter's value (using RBX/old RSP as a base) */
 		
-		i8 NextParameterOffset := StackParameterOffset + (StackParameterIndex * 8)
+		i8 NextParameterOffset := (StackParameterIndex + 1) * 8
 		i8 NextParameterSize := GetTypeSize(NextStackParameter->Type) As i8
 		
 		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, NextParameterOffset, NextParameterSize)
@@ -724,34 +734,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitJump_Label(cState, StringsEnd)
 		SetLabel(cState, StringsStart)
 		
-		cState->CurrentFunctionStringBufferOffset := StringsStart
-		
-		/* i32 StringBufferOffset := FunctionToCompile->LocalOffset
-		i32 StringBufferSize := FunctionToCompile->StringBufferSize
-		
-		i32 ChunkCount := StringBufferSize / 8
-		i32 Remainder := StringBufferSize % 8
-		
-		if (Remainder) {
-			ChunkCount += 1
-		}
-		
-		cState->CurrentFunctionStringBufferOffset := StringBufferOffset + (ChunkCount * 8)
-		i64* ChunkBuffer := (FunctionToCompile->StringBuffer) As i64*
-		
-		for (i32 ChunkIndex := 0, ChunkIndex < ChunkCount, ChunkIndex += 1) {
-			i64 NextChunk := ChunkBuffer[ChunkIndex]
-			EmitMove_R64_I64(cState, RAX, NextChunk)
-			
-			i32 ThisChunkOffset := StringBufferOffset + ((ChunkCount - 1 - ChunkIndex) * 8)
-			
-			if (ThisChunkOffset < 112) {
-				EmitMove_RIX_DISP8_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i8, 8)
-			}
-			else {
-				EmitMove_RIX_DISP32_RX(cState, RBP, RAX, -(ThisChunkOffset + 8) As i32, 8)
-			}
-		} */
+		cState->CurrentFunctionStringsLabel := StringsStart
 		
 		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
 			PushByte(cState, FunctionToCompile->StringBuffer[CharacterIndex])
@@ -767,7 +750,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	ASTNode* ReturnExpression := 0
 	
 	if (BodyCount >= 1) {
-		/* If the last statement of the function body is a return, then don't emit a Leave;Ret combo for it */
+		/* If the last statement of the function body is a return, then don't emit a Leave;Ret combo for it 
+			since every function automatically gets Leave;Ret emitted for it.
+		*/
 		
 		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
@@ -796,9 +781,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitReturn(cState)
 	}
 	
-	
 	if (cState->RegisterStackIndex != 0) {
-		ContextError(FunctionToCompile~>Context, "Register stack not empty")
+		ContextError(FunctionToCompile~>Context, "[INTERNAL] Register stack not empty")
 	}
 }
 
@@ -867,7 +851,7 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	CompileExpression(cState, RAX, ReturnExpression)
 	
 	i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
-	i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunctionReturnType)
+	i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunction->ReturnType)
 	
 	/* And cast it up to (at least) 4 bytes, to ensure no garbage is left in RAX */
 	
@@ -1139,35 +1123,10 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		
 		CompileCall(cState, ResultRegister, CallNode)
 	}
-	else if (ExpressionType = NODE_TYPE_STRING) {
-		i32 StringOffset := ExpressionToCompile->StringOffsetValue
-		
-		/* i32 RBPOffect := (cState->CurrentFunctionStringBufferOffset) - StringOffset */
-		
-		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringBufferOffset)
-		OffsetLabel(cState, StringOffset)
-		/* EmitAdd_R64_IX(cState, ResultRegister, StringOffset) */
-		
-		/* if (RBPOffect < 112) {
-			EmitLea_R64_R64_DISP8(cState, ResultRegister, RBP, -(RBPOffect) As i8)
-		}
-		else {
-			EmitLea_R64_R64_DISP32(cState, ResultRegister, RBP, -(RBPOffect) As i32)
-		} */
+	else if (ExpressionType = NODE_TYPE_STRING) {		
+		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringsLabel)
+		OffsetLabel(cState, ExpressionToCompile->StringOffsetValue)
 	}
-}
-
-define i8 GetSystemVRegister(i32 Index) {
-	/* Translates a parameter number into which register (should) contain said parameter according to SystemV */
-	
-	if (Index = 5) {return R9}
-	else if (Index = 4) {return R8}
-	else if (Index = 3) {return RCX}
-	else if (Index = 2) {return RDX}
-	else if (Index = 1) {return RSI}
-	else if (Index = 0) {return RDI}
-	
-	return RBX
 }
 
 define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
@@ -1282,6 +1241,14 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
 			
 			i16 ActualSize := GetTypeSize(NextParameterValue->ValueType)
+			
+			if (NextParameterValue->NodeType = NODE_TYPE_INTEGER) {
+				i64 ParameterInteger := NextParameterValue->IntegerValue
+				
+				if (ActualSize = 4 && ParameterInteger As i32 > 0) {
+					ActualSize := ExpectedSize
+				}
+			}
 			
 			if (ActualSize < ExpectedSize) {
 				Cast(cState, ThisParameterRegister, ActualSize As i8)

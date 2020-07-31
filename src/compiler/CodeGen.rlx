@@ -192,6 +192,19 @@ i8 MODE_PTOR_DISP32 := 2
 
 i8 MODE_RTOR := 3
 
+define i8 GetSystemVRegister(i32 Index) {
+	/* Translates a parameter number into which register (should) contain said parameter according to the SystemV ABI */
+	
+	if (Index = 5) {return R9}
+	else if (Index = 4) {return R8}
+	else if (Index = 3) {return RCX}
+	else if (Index = 2) {return RDX}
+	else if (Index = 1) {return RSI}
+	else if (Index = 0) {return RDI}
+	
+	return RBX
+}
+
 /*
 ==========================================
 	REX/ModRM/SIB helpers
