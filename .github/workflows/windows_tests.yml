@@ -34,7 +34,8 @@ jobs:
     - name: Install dependencies
       run: |
         pip install colorama
+    # Apparently some fucking genius decided that $GITHUB_WORKSPACE shouldn't be correct, hopefully this is always on the D drive.
     - name: Run Tests
       run: |
-        cd $GITHUB_WORKSPACE
-        python ./tools/test_bootstrap.py 5
+        cd D:\a\Relax-Language\Relax-Language
+        python .\tools\test_bootstrap.py 5
