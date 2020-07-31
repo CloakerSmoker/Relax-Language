@@ -19,45 +19,37 @@ define void EnsureLabelBufferCapacity(CompilerState* cState) {
 	}
 }
 
-define void UseLabel(CompilerState* cState, i32 LabelNumber) {
-	/* Registers a label as being used, and writes a placeholder value into CodeBuffer for the label */
-	
+define Label* AppendLabel(CompilerState* cState, i32 LabelNumber, i8 IsPlaceholder) {
 	EnsureLabelBufferCapacity(cState)
 	
 	Label* NewLabel := Alloc(#Label) As Label*
 	
 	NewLabel->LabelNumber := LabelNumber
 	NewLabel->OffsetToReplace := cState->Index
-	NewLabel->IsPlaceholder := true
+	NewLabel->IsPlaceholder := IsPlaceholder
 	
-	cState->Index += 4
-	
-	(cState->Labels)[cState->LabelCount] := NewLabel
+	cState->Labels[cState->LabelCount] := NewLabel
 	cState->LabelCount += 1
+	
+	return NewLabel
+}
+
+define void UseLabel(CompilerState* cState, i32 LabelNumber) {
+	/* Registers a label as being used, and writes a placeholder value into CodeBuffer for the label */
+	
+	AppendLabel(cState, LabelNumber, true)
+	cState->Index += 4
 }
 define void OffsetLabel(CompilerState* cState, i32 Offset) {
 	/* Adds an offset of Offset to the last label used */
 	
-	cState->CodeBuffer[cState->Index - 4] += Offset
+	(cState->CodeBuffer As i32* + cState->Index - 4)[0] += Offset
 }
 
 define Label* SetLabel(CompilerState* cState, i32 LabelNumber) {
 	/* Creates a new label which points to the current cState->Index */
 	
-	EnsureLabelBufferCapacity(cState)
-	
-	Label* NewLabel := Alloc(#Label) As Label*
-	
-	NewLabel->LabelNumber := LabelNumber
-	NewLabel->OffsetToReplace := cState->Index
-	NewLabel->IsPlaceholder := false
-	
-	i32 Index := cState->LabelCount
-	
-	cState->LabelCount += 1
-	(cState->Labels)[Index] := NewLabel
-	
-	return NewLabel
+	return AppendLabel(cState, LabelNumber, false)
 }
 
 define void ResolveLabel(CompilerState* cState, i32 LabelNumber, i32 Value) {

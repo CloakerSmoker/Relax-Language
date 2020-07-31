@@ -210,7 +210,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
-	i64 CODE_BASE := DEFAULT_IMAGE_BASE + 0x3000
+	i64 CODE_BASE := 0x3000
 	
 	if (BUILDING_STANDALONE) {
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 0x10
