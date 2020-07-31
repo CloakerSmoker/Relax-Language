@@ -55,7 +55,7 @@ for i in range(0, recursion_count):
     stdout_text = compile_result.stdout.decode('UTF-8')
 
     if compile_result.returncode != expected_returncode or len(stderr_text) != 0:
-        print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stderr_text}\n\n{stdout_text}', file=sys.stderr)
+        print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stdout_text}\n\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
     test_script = path_join(tools_dir, 'test_compiler.py')

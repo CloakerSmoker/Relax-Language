@@ -10,12 +10,21 @@ define void Exit(i32 ExitCode) {
 	}
 }
 
-bits Terror As i8 {
-	[0:1] Dummy
-}
+i8 OUTPUT_PE := 0
+i8 OUTPUT_ELF := 1
+i8 OUTPUT_BIN := 2
 
-define void ForceTypeError(Terror T) {
-	return 0
+i8 ABI_X64 := 1
+i8 ABI_SYSTEMV := 2
+
+i8 DUMP_FUNCTIONS := 1
+i8 DUMP_GLOBALS := 2
+
+struct BuildConfig {
+	i64 ImageBase,
+	i8 OutputFormat,
+	i8 TargetABI,
+	i8 DumpInfo
 }
 
 #Include ./src/lib/Memory.rlx
@@ -29,7 +38,6 @@ define void ForceTypeError(Terror T) {
 declare i16* OpenAndRead(i8*, i32*)
 
 i64 DEFAULT_IMAGE_BASE := 0x40000000
-i8 BUILDING_STANDALONE := false
 
 #Include ./src/compiler/Utility.rlx
 #Include ./src/compiler/Lexer.rlx
@@ -86,11 +94,15 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 define i32 Main(i64 ArgC, i8** ArgV) {	
 	GetArgs(&ArgC, &ArgV) /* NOP on Linux */
 	
+	BuildConfig* Config := Alloc(#BuildConfig)
+	
+	Config->DumpInfo := DUMP_FUNCTIONS
+	
 	windows {
-		i8 OutputELF := false
+		Config->OutputFormat := OUTPUT_PE
 	}
 	linux {
-		i8 OutputELF := true
+		Config->OutputFormat := OUTPUT_ELF
 	}
 	
 	i8* InputFilePath := 0
@@ -101,28 +113,31 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		i8* NextArg := ArgV[Index]
 		
 		if (StringEquals(NextArg, "--elf")) {
-			OutputELF := true
+			Config->OutputFormat := OUTPUT_ELF
 		}
 		else if (StringEquals(NextArg, "--pe")) {
-			OutputELF := false
+			Config->OutputFormat := OUTPUT_PE
 		}
-		else if (StringEquals(NextArg, "--function-bytes") || StringEquals(NextArg, "-fb")) {
-			DumpFunctionBytes := true
+		else if (StringEquals(NextArg, "--bin")) {
+			Config->OutputFormat := OUTPUT_BIN
 		}
-		else if (StringEquals(NextArg, "--global-bytes")) {
-			DumpFunctionBytes := DumpFunctionBytes | 0x2
+		else if (StringEquals(NextArg, "--functions")) {
+			Config->DumpInfo |= DUMP_FUNCTIONS
+		}
+		else if (StringEquals(NextArg, "--globals")) {
+			Config->DumpInfo |= DUMP_GLOBALS
 		}
 		else if (StringEquals(NextArg, "--no-colors")) {
 			NO_COLORS := true
 		}
-		else if (StringEquals(NextArg, "-i")) {			
+		else if (StringEquals(NextArg, "-i") && !InputFilePath) {			
 			Index += 1
 			InputFilePath := ArgV[Index]
 			
 			AWrite("Input File: ")
 			AWriteLine(InputFilePath)
 		}
-		else if (StringEquals(NextArg, "-o")) {
+		else if (StringEquals(NextArg, "-o") && !OutputFilePath) {
 			Index += 1
 			OutputFilePath := ArgV[Index]
 		
@@ -143,11 +158,15 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 	}
 	
-	i32 SourceLength := 0
+	Config->TargetABI := ABI_SYSTEMV
+	Config->ImageBase := DEFAULT_IMAGE_BASE
 	
+	i32 SourceLength := 0
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
 	
-	TokenizerState* T := NewTokenizer(AToS(InputFilePath), Source, SourceLength)
-	ParserState* P := ParserStart(T, OutputELF)
-	CompilerStart(P, OutputFilePath, OutputELF, DumpFunctionBytes)
+	TokenizerState* Tokenizer := NewTokenizer(Config, AToS(InputFilePath), Source, SourceLength)
+	
+	ParserState* Parser := ParserStart(Config, Tokenizer)
+	
+	CompilerStart(Config, Parser, OutputFilePath)
 }

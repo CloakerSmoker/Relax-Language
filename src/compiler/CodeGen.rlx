@@ -689,10 +689,8 @@ define void EmitCall_Label(CompilerState* cState, i32 LabelNumber) {
 }
 
 define void EmitSysCall(CompilerState* cState) {
-	if !(BUILDING_STANDALONE) {
-		PushByte(cState, 0x0F)
-		PushByte(cState, 0x05)
-	}
+	PushByte(cState, 0x0F)
+	PushByte(cState, 0x05)
 }
 
 /*

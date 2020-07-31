@@ -11,6 +11,7 @@ struct Token {
 }
 
 struct TokenizerState {
+	BuildConfig* Config,
 	SafeWideString* SourceFilePath,
 	i16* Source,
 	i32 SourceIndex,
@@ -144,8 +145,10 @@ i8 KEYWORD_LINUX := 16
 
 i8 KEYWORD_ASSEMBLY := 17
 
-define TokenizerState* NewTokenizer(SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
+define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
+	
+	NewState->Config := Config
 	
 	NewState->SourceFilePath := SourceFilePath
 	
@@ -660,14 +663,14 @@ define Token* GetNextToken(TokenizerState* tState) {
 				i32 EndIndex := IncludePath->Length
 				i16 OldFollowingCharacter := (IncludePath->Buffer)[EndIndex]
 				
-				(IncludePath->Buffer)[EndIndex] := 0 /* Insert a null terminator into the source */
+				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 				
 				i32 IncludeFileSize := 0
 				i16* IncludeFileText := OpenAndRead(WToA(IncludePath->Buffer), &IncludeFileSize)
 				
-				(IncludePath->Buffer)[EndIndex] := OldFollowingCharacter /* Restore the old character */
+				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				
-				TokenizerState* IncludeTokenizer := NewTokenizer(IncludePath, IncludeFileText, IncludeFileSize)
+				TokenizerState* IncludeTokenizer := NewTokenizer(tState->Config, IncludePath, IncludeFileText, IncludeFileSize)
 				
 				loop {
 					Token* NextIncludeToken := GetNextToken(IncludeTokenizer)
@@ -703,12 +706,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 					TokenError(ErrorToken, "Invalid Image Base")
 				}
 				
-				DEFAULT_IMAGE_BASE := NewImageBase
-				
-				continue
-			}
-			else if (SafeStringEqualsAString(DirectiveText, "Standalone")) {
-				BUILDING_STANDALONE := true
+				tState->Config->ImageBase := NewImageBase
 				
 				continue
 			}

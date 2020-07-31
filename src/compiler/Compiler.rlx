@@ -12,6 +12,7 @@ struct Label {
 }
 
 struct CompilerState {
+	BuildConfig* Config,
 	ParserState* pState,
 	FunctionDefine* CurrentFunction,
 	
@@ -57,8 +58,7 @@ struct CompilerState {
 	i32 ParameterRegistersMinSave,
 	i8 NoClobberA,
 	
-	/* Flags to ensure the correct ABI is used, along with the correct return sequence for `Main()` */
-	i8 OutputELF,
+	/* Flags the correct return sequence for `Main()` is used when Config->OutputFormat = OUTPUT_ELF */
 	i8 CompilingMain
 }
 
@@ -91,9 +91,12 @@ define void DumpGlobals(CompilerState* cState) {
 				VariableInfo* NextGlobal := FoundElement->Value
 				i32 ThisOffset := NextGlobal->StackOffset
 				
-				if (LastOffset != 0) {
+				if (LastOffset) {
 					AWrite(" ")
 					IWriteHexLine(ThisOffset - LastOffset)
+				}
+				else {
+					WriteNewLine()
 				}
 				
 				PrintSafeString(NextGlobal->Name)
@@ -152,16 +155,17 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 	WriteNewLine()
 }
 
-define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i8 DoDump, i32* MainOffset, i8* FoundMain) {
+define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i32* MainOffset) {
 	/* Compiles either:
 		A single function (BaseFunction)
 		Or an entire linked list of function overloads, starting with BaseFunction
 	*/
 	
 	i32 FunctionOffset := cState->Index
+	i8 Result := false
 	
 	if (BaseFunction->IsImported) {
-		if !(cState->OutputELF) {
+		if (Config->OutputFormat = OUTPUT_PE) {
 			CompileImportStub(cState, BaseFunction)
 		}
 	}
@@ -174,7 +178,7 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 		if (IsMain) {
 			/* If we found the main function, let the callee know for linking's sake. */
 			
-			FoundMain[0] := true
+			Result := true
 			MainOffset[0] := FunctionOffset
 			BaseFunction->CallCount += 1	/* Since `Main()` should never be called, ensure it isn't optimized away due to being called 0 times */
 		}
@@ -184,7 +188,7 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 		}
 	}
 	
-	if (DoDump & 1) {
+	if (Config->DumpInfo & DUMP_FUNCTIONS) {
 		/* If we're dumping a function in an overload chain, then print it as an overload
 			Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
 			 and still need to print it as an overload
@@ -196,13 +200,18 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 	if (BaseFunction->Next) {
 		/* Recursively compile an entire overload chain */
 		
-		CompileOverload(cState, BaseFunction->Next, true, CODE_BASE, DoDump, MainOffset, FoundMain)
+		Result |= CompileOverload(Config, cState, BaseFunction->Next, true, CODE_BASE, MainOffset)
 	}
+	
+	return Result
 }
 
-define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map, i64 CODE_BASE, i8 DoDump, i32* MainOffset, i8* FoundMain) {
-	/* Compiles a hashmap containing FunctionDefine*'s as if it were a linear array */
+define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, HashMap* Map, i64 CODE_BASE, i32* MainOffset) {
+	/* Compiles a hashmap containing FunctionDefine*'s as if it were a linear array 
+		Returns true if the main function was found
+	*/
 	
+	i8 Result := false
 	void* Elements := Map->Elements
 	
 	for (i32 ElementIndex := 0, ElementIndex < (Map->BufferMaxCount), ElementIndex += 1) {
@@ -212,20 +221,22 @@ define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map, i64 CODE
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				CompileOverload(cState, NextFunction, false, CODE_BASE, DoDump, MainOffset, FoundMain)
+				Result |= CompileOverload(Config, cState, NextFunction, false, CODE_BASE, MainOffset)
 				
 				/* Update the current element to be the next element in the linked list */
 				FoundElement := FoundElement->NextElement
 			}
 		}
 	}
+	
+	return Result
 }
 
-define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF, i8 DumpFunctionBytes) {
+define void CompilerStart(BuildConfig* Config, ParserState* pState, i16* OutputFilePath) {
 	CompilerState C
 	
+	C.Config := Config
 	C.pState := pState
-	C.OutputELF := OutputELF
 	
 	C.CodeBufferSize := 0x10000
 	C.CodeBuffer := Alloc(0x10000) As i8*
@@ -241,35 +252,36 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	C.LabelIndex := (pState->FunctionCount) + 1
 	C.RegisterStackIndex := 0
 	
+	C.ParameterRegistersMaxSave := 0
+	C.ParameterRegistersMinSave := 0
+		
 	i64 CODE_BASE := 0x3000
 	
-	if (BUILDING_STANDALONE) {
+	if (Config->OutputFormat = OUTPUT_BIN) {
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 0x10
 		CODE_BASE := DEFAULT_IMAGE_BASE + pState->GlobalOffset + 0x10
 	}
-	else if (OutputELF) {
+	else if (Config->OutputFormat = OUTPUT_ELF) {
 		C.ELF := BuildELFBuilder()
 		C.GlobalBase := DEFAULT_IMAGE_BASE + 64 + 0x1000
 		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
 	}
-	else {
+	else if (Config->OutputFormat = OUTPUT_PE) {
 		C.PE := BuildBuilder()
 		C.PE->ImportFixupBase := C.CodeBuffer
 		C.GlobalBase := DEFAULT_IMAGE_BASE + C.PE->NextRVA
 	}
 	
-	if (DumpFunctionBytes & 0x2) {
-		DumpGlobals(&C)
+	CompilerState* cState := &C
+
+	if (Config->DumpInfo & DUMP_GLOBALS) {
+		DumpGlobals(cState)
 	}
 	
-	C.ParameterRegistersMaxSave := 0
-	C.ParameterRegistersMinSave := 0
-	
 	i32 MainOffset := 0
-	i8 FoundMain := false
-	
+		
 	/* Compile all regular functions */
-	CompileFunctionHashMap(&C, pState->Functions, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
+	i8 FoundMain := CompileFunctionHashMap(Config, cState, pState->Functions, CODE_BASE, &MainOffset)
 	
 	/* Loop through each custom type */
 	void* Elements := pState->Types->Elements
@@ -283,7 +295,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 				
 				/* If the type is a struct, and it has methods, compile the methods */
 				if (NextType->IsStructType && NextType->StructMethods != 0) {
-					CompileFunctionHashMap(&C, NextType->StructMethods, CODE_BASE, DumpFunctionBytes, &MainOffset, &FoundMain)
+					CompileFunctionHashMap(Config, cState, NextType->StructMethods, CODE_BASE, &MainOffset)
 				}
 				
 				FoundElement := FoundElement->NextElement
@@ -298,9 +310,9 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		Exit(1)
 	}
 	
-	ResolveAllLabels(&C)
+	ResolveAllLabels(cState)
 	
-	if (DumpFunctionBytes & 1) {
+	if (Config->DumpInfo & DUMP_FUNCTIONS) {
 		TextColor(Blue)
 		
 		AWrite("	Globals use ")
@@ -314,6 +326,8 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		
 		ResetColors()
 	}
+	
+	FileDelete(OutputFilePath)
 	
 	/* Actual compiling is done, time to build the output file */
 	
@@ -329,7 +343,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 	i32 Result := 0
 	i32 BytesWritten := 0
 	
-	if (BUILDING_STANDALONE) {
+	if (Config->OutputFormat = OUTPUT_BIN) {
 		i32 CodeBase := pState->GlobalOffset + 0x10
 		i32 FileSize := CodeBase + C.Index
 		
@@ -347,7 +361,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		Result := FileWrite(OutputFileHandle, Binary, FileSize)
 		BytesWritten := FileSize
 	}
-	else if (OutputELF) {
+	else if (Config->OutputFormat = OUTPUT_ELF) {
 		AddDataSection(C.ELF, C.pState->GlobalOffset)
 		AddCodeSection(C.ELF, C.CodeBuffer, C.Index)
 		
@@ -357,7 +371,7 @@ define void CompilerStart(ParserState* pState, i16* OutputFilePath, i8 OutputELF
 		Result := FileWrite(OutputFileHandle, C.ELF->Buffer, C.ELF->BufferSize)
 		BytesWritten := C.ELF->BufferSize
 	}
-	else {
+	else if (Config->OutputFormat = OUTPUT_PE) {
 		AddData(C.PE, C.pState->GlobalOffset)
 		
 		i64 TextRVA := AddCode(C.PE, C.CodeBuffer, C.Index, MainOffset)
@@ -447,7 +461,7 @@ define void EnsureCodeBufferSize(CompilerState* cState) {
 		cState->CodeBufferSize += 0x5000
 		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
 		
-		if !(cState->OutputELF) {
+		if (cState->Config->OutputFormat = OUTPUT_PE) {
 			cState->PE->ImportFixupBase := cState->CodeBuffer
 		}
 	}
@@ -652,7 +666,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	EmitPush_R64(cState, RBP)
 	EmitMove_R64_R64(cState, RBP, RSP)
 	
-	if (IsMain && USE_SYSTEMV && ParameterCount <= 2) {
+	if (IsMain && cState->Config->OutputFormat = OUTPUT_ELF  && ParameterCount <= 2) {
 		/* When compiling main for SystemV, load the first two parameter registers (if they exist) 
 			With ArgC and ArgV loaded from the stack since:
 				RBP + 0 = ArgC
@@ -662,10 +676,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
 		*/
 		
-		if !(BUILDING_STANDALONE) {
-			EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
-			EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
-		}
+		EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
+		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
 	}
 	
 	if (LocalSpace) {
@@ -714,7 +726,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
 	}
 	
-	if (FunctionToCompile->UsesGlobals || IsMain) {
+	if (cState->pState->GlobalOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
 		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
 	}
 	
@@ -772,7 +784,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	EmitLeave(cState)
 	
-	if (IsMain && cState->OutputELF) {
+	if (IsMain && cState->Config->OutputFormat = OUTPUT_ELF) {
 		EmitMove_R64_R64(cState, RDI, RAX)
 		EmitMove_R32_I32(cState, RAX, 60)
 		EmitSysCall(cState)
@@ -861,7 +873,7 @@ define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	
 	EmitLeave(cState)
 	
-	if (cState->CompilingMain && cState->OutputELF) {
+	if (cState->CompilingMain && cState->Config->OutputFormat = OUTPUT_ELF) {
 		/* If returning from Main() on Linux, actually call sys_exit() to ensure that the program exits correctly. */
 		
 		EmitMove_R64_R64(cState, RDI, RAX)
@@ -1148,8 +1160,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		
 		return 0
 	}
-	else if (cState->OutputELF && TargetFunction->IsImported) {
-		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Calls to DllImported functions are not allowed when compiling to .elf")
+	else if (cState->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
+		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Calls to DllImported functions are not allowed when the target output format is not PE.")
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
 		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")

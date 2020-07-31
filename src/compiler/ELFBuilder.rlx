@@ -100,7 +100,7 @@ struct ELFBuilder {
 	i32 DataSize
 }
 
-i8 ABI_SYSTEMV := 0x00
+i8 ELF_ABI_SYSTEMV := 0x00
 i16 FILETYPE_EXEC := 0x02
 i16 FILETYPE_DYN := 0x03
 i16 ELF_MACHINE_AMD64 := 0x3E
@@ -112,7 +112,7 @@ define void WriteELFHeader(void* IntoBuffer) {
 	NewHeader->Bitness := 2 /* 1 = 32 bit, 2 = 64 bit */
 	NewHeader->Endianness := 1 /* 1 = little endian */
 	NewHeader->UseCurrentVersion := 1 /* Not well documented, 0 = invalid */
-	NewHeader->TargetABI := ABI_SYSTEMV
+	NewHeader->TargetABI := ELF_ABI_SYSTEMV
 	NewHeader->ABIVersion := 0 /* Unused? */
 	NewHeader->FileType := FILETYPE_EXEC /* An executable file */
 	NewHeader->MachineType := ELF_MACHINE_AMD64

@@ -249,7 +249,7 @@ define void WritePEHeader(void* IntoBuffer) {
 	NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
 	
 	NewPE->Subsystem := IMAGE_SUBSYSTEM_WINDOWS_CUI
-	NewPE->DllCharacteristics := (DLL_HIGH_ENTROPY_VA)
+	NewPE->DllCharacteristics := DLL_HIGH_ENTROPY_VA
 	
 	NewPE->SizeOfStackReserve := DEFAULT_RESERVE
 	NewPE->SizeOfStackCommit := DEFAULT_COMMIT

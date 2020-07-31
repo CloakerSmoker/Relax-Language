@@ -189,6 +189,7 @@ struct CallExpression {
 }
 
 struct ParserState {
+	BuildConfig* Config,
 	TokenizerState* tState,
 	
 	HashMap* Functions,
@@ -217,7 +218,6 @@ struct ParserState {
 	i16 TypeCount,
 	
 	i8 InLoop,
-	i8 OutputELF,
 	
 	i32 LabelCount
 }
@@ -1200,6 +1200,10 @@ define ASTNode* MakeCall(ParserState* pState, HashMap* Namespace, Token* NameTok
 		if (SafeStringEqualsAString(Name, "syscall")) {
 			Result->BuiltinID := BUILTIN_SYSCALL
 			ResultNode->ValueType := MakeType(pState->i64, 0)
+			
+			if (pState->Config->OutputFormat = OUTPUT_PE) {
+				ASTWarn(ResultNode, "Windows syscall numbers change near-constantly, using the native API is a bad idea.")
+			}
 		}
 		else if (SafeStringEqualsAString(Name, "breakpoint") && ParameterCount = 0) {
 			Result->BuiltinID := BUILTIN_BREAKPOINT
@@ -1350,10 +1354,12 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 declare void ParseProgram(ParserState*)
 declare void SetupAssembly(ParserState*)
 
-define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
+define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
 	/* Initializes pState and uses tState to parse a program */
 	
 	ParserState* P := Alloc(#ParserState) As ParserState*
+	
+	P->Config := Config
 	P->tState := tState
 	
 	P->Globals := NewHashMap()
@@ -1367,8 +1373,6 @@ define ParserState* ParserStart(TokenizerState* tState, i8 OutputELF) {
 	
 	P->Types := NewHashMap()
 	P->TypeCount := 0
-	
-	P->OutputELF := OutputELF
 	
 	CreateDefaultTypes(P)
 	SetupAssembly(P)
@@ -1909,7 +1913,7 @@ define Block* ParseBlock(ParserState* pState) {
 			
 			/* Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the blocks following them */
 			if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
-				if (pState->OutputELF) {
+				if (pState->Config->OutputFormat = OUTPUT_ELF) {
 					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
 					Depth += 1
 				}
@@ -1918,7 +1922,7 @@ define Block* ParseBlock(ParserState* pState) {
 				}
 			}
 			else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
-				if !(pState->OutputELF) {
+				if (pState->Config->OutputFormat = OUTPUT_PE) {
 					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
 					Depth += 1
 				}
@@ -2494,10 +2498,10 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 			Result->IntegerValue := 0
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "windows")) {
-			Result->IntegerValue := !pState->OutputELF
+			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_PE
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->Value, "linux")) {
-			Result->IntegerValue := pState->OutputELF
+			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_ELF
 		}
 		else {
 			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
