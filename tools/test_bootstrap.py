@@ -25,13 +25,13 @@ running_on = platform.system()
 
 compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}"'
 platform_extension = 'exe'
-python = 'python'
+python = sys.executable
 expected_returncode = 1
 
 if running_on == 'Linux':
     compile_command_format = f'{compile_command_format} --elf'
     platform_extension = 'elf'
-    python = '/usr/bin/python3.8'
+    #python = '/usr/bin/python3.8'
     expected_returncode = 0
 elif running_on != 'Windows':
     print('Unsupported platform.', file=sys.stderr)
