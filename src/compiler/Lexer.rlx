@@ -222,6 +222,9 @@ define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 Po
 define Token* MakeToken(TokenizerState* tState, i32 PositionInSource, i8 Type, void* Value) {
 	return PushToken(tState, Value, tState->Source, PositionInSource, (tState->SourceIndex) - PositionInSource, Type)
 }
+define Token* MakeToken(TokenizerState* tState, i32 PositionInSource, i8 Type, i64 Value) {
+	return PushToken(tState, Value As void*, tState->Source, PositionInSource, (tState->SourceIndex) - PositionInSource, Type)
+}
 
 define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
 	/* Makes a SafeWideString from tState and returns it as a void* to fit into Token->Value */
@@ -582,7 +585,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
 		else if (IsNumeric(NextCharacter)) {			
-			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, 0))
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, null))
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			if (NextCharacter = 'a') {

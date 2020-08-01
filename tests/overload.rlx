@@ -21,6 +21,9 @@ define void Conflict(i64 P, i64 Q, i64 Z, i64 O) {
 define void Conflict(i64 P, i64 Q, i8 G) {
 	AWrite("Con 2")
 }
+define void Conflict(void* Misc) {
+	AWrite("void* ")
+}
 
 struct D {
 	i32 P

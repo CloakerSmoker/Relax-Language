@@ -31,7 +31,7 @@ define void WriteNewLine() {
 		i32 BytesWritten := 0
 		i16 NewLine := 0x0A0D
 		
-		WriteFile(STDOUT, &NewLine, 2, &BytesWritten, 0)
+		WriteFile(STDOUT, (&NewLine) As i8*, 2, &BytesWritten, 0)
 	}
 	linux {
 		i8 NewLine := 0x0A
@@ -74,13 +74,21 @@ define i32 AWriteLine(i8* AString) {
 	AWrite(AString)
 	WriteNewLine()
 }
+/* define void Write(i8 Character) {
+	WriteCharacter(Character)
+} */
+/* define void Write(i8* AString) {
+	WriteCharacters(AString, ALen(AString))
+} */
+/* define void Write(i64 Number) {
+	i8* AString := IToA(Number)
+	
+	i32 Result := AWrite(AString)
 
-define i32 Write(i8* AString) {
-	return 0
-}
-define i32 Write(i16 AString) {
-	return 0
-}
+	Free(AString)
+	
+	return Result
+} */
 
 define i32 IWrite(i32** N) {
 	return 0

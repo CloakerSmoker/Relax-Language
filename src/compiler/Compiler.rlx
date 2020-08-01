@@ -128,6 +128,11 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 	IWrite(TargetFunction->CallCount)
 	AWrite(")	")
 	
+	if (TargetFunction->MethodOfTypeName) {
+		PrintSafeString(TargetFunction->MethodOfTypeName)
+		WriteCharacter('.')
+	}
+	
 	PrintSafeString(TargetFunction->Name)
 	
 	if (IsOverload) {
@@ -819,7 +824,7 @@ declare void CompileWhile(CompilerState*, WhileLoop*)
 declare void CompileUnary(CompilerState*, i8, Type, UnaryExpression*, i8)
 declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
 declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
-declare void CompileCall(CompilerState*, i8, CallExpression*)
+declare void CompileCall(CompilerState*, i8, ASTNode*)
 
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
@@ -1015,7 +1020,9 @@ define i64 EnterLoop(CompilerState* cState, i32 ContinueLabel, i32 BreakLabel) {
 	
 	return Result As i64
 }
-define void ExitLoop(CompilerState* cState, LoopLables LoopState) {
+define void ExitLoop(CompilerState* cState, i64 PackedLoopState) {
+	LoopLables LoopState := PackedLoopState As LoopLables
+	
 	cState->CurrentLoopContinueLabel := LoopState.ContinueLabel
 	cState->CurrentLoopBreakLabel := LoopState.BreakLabel
 }
@@ -1131,9 +1138,7 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		CompileGetStructAccess(cState, ResultRegister, AccessNode)
 	}
 	else if (ExpressionType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := ExpressionToCompile->CallNode
-		
-		CompileCall(cState, ResultRegister, CallNode)
+		CompileCall(cState, ResultRegister, ExpressionToCompile)
 	}
 	else if (ExpressionType = NODE_TYPE_STRING) {		
 		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringsLabel)
@@ -1141,7 +1146,8 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	}
 }
 
-define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression* CallNode) {
+define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node) {
+	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
 	i8 BuiltinID := CallNode->BuiltinID
@@ -1161,10 +1167,10 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, CallExpression
 		return 0
 	}
 	else if (cState->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
-		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Calls to DllImported functions are not allowed when the target output format is not PE.")
+		ASTError(Node, "Calls to DllImported functions are not allowed when the target output format is not PE.")
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
-		ASTError(AllocateNewASTNode(NODE_TYPE_CALL, CallNode, 0), "Called function is only declared, and never defined")
+		ASTError(Node, "Called function is only declared, and never defined")
 	}
 	
 	i32 ParameterCount := CallNode->ParameterCount

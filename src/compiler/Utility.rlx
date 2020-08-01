@@ -32,7 +32,7 @@ define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext*
 	}
 }
 
-define void FindLastLine(i16* Base, i32 Offset) {
+define i16* FindLastLine(i16* Base, i32 Offset) {
 	i32 Index := 0
 	i16* WString := Base + Offset
 	
@@ -130,6 +130,9 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	ResetColors()
 	
 	WriteNewLine()
+}
+define void PrettyError(ErrorContext* At, i8 Color) {
+	PrettyError(At, null, Color)
 }
 
 define void ContextError(ErrorContext* At, i8* Message) {

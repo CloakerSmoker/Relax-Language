@@ -164,6 +164,8 @@ struct FunctionDefine {
 		SafeWideString* ImportFunctionName
 	},
 	
+	SafeWideString* MethodOfTypeName,
+	
 	i8 Attribute,
 	i16 LocalOffset,
 	i8 HasFullDefinition,
@@ -295,6 +297,11 @@ define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type N
 	
 	return NewNode
 }
+
+define ASTNode* AllocateNewASTNode(i8 NewNodeType, i64 NewNodeValue, Type NewNodeValueType) {
+	return AllocateNewASTNode(NewNodeType, NewNodeValue As void*, NewNodeValueType)
+}
+
 define void FreeASTNode(ASTNode* NodeToFree) {
 	Free(NodeToFree As void*)
 }
@@ -445,16 +452,19 @@ define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
 
 	return NewType
 }
+define Type MakeType(i64 BackingType, i16 PointerDepth) {
+	return MakeType(BackingType As TypeInfo*, PointerDepth)
+}
 
 define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the standard types, only called once */
 	
 	/* All standard types are not structs, and are not incomplete */
-	pState->i8 := AddType(pState, AToS("i8"), 0, 1, TYPE_REGULAR)
-	pState->i16 := AddType(pState, AToS("i16"), 0, 2, TYPE_REGULAR)
-	pState->i32 := AddType(pState, AToS("i32"), 0, 4, TYPE_REGULAR)
-	pState->i64 := AddType(pState, AToS("i64"), 0, 8, TYPE_REGULAR)
-	pState->void := AddType(pState, AToS("void"), 0, 8, TYPE_REGULAR)
+	pState->i8 := AddType(pState, AToS("i8"), null, 1, TYPE_REGULAR)
+	pState->i16 := AddType(pState, AToS("i16"), null, 2, TYPE_REGULAR)
+	pState->i32 := AddType(pState, AToS("i32"), null, 4, TYPE_REGULAR)
+	pState->i64 := AddType(pState, AToS("i64"), null, 8, TYPE_REGULAR)
+	pState->void := AddType(pState, AToS("void"), null, 8, TYPE_REGULAR)
 }
 
 define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
@@ -479,7 +489,7 @@ define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 Pointe
 		}
 		else {
 			/* We didn't find a type with the name, build an incomplete type for it */
-			FoundTypeInfo := AddType(pState, TypeName, 0, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+			FoundTypeInfo := AddType(pState, TypeName, null, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
 		}
 	}
 	
@@ -589,7 +599,7 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 	AWrite(", got ")
 	PrintType(AtNode->ValueType)
 	
-	ASTError(AtNode, 0)
+	ASTError(AtNode, null)
 }
 
 define i32 GetGenericRating(Type ForType) {
@@ -605,7 +615,7 @@ define i32 GetGenericRating(Type ForType) {
 	return Result
 }
 
-define i8 CheckTypes(Type Source, Type Target, ASTNode* SourceNode) {
+define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* SourceNode) {
 	if (SourceNode) {
 		Source := SourceNode->ValueType
 	}
@@ -619,51 +629,31 @@ define i8 CheckTypes(Type Source, Type Target, ASTNode* SourceNode) {
 	i16 SourceSize := GetTypeSize(Source)
 	i16 TargetSize := GetTypeSize(Target)
 	
-	if (SourceSize = 8 && (TargetDepth <= 1 && TargetBase->IsBuiltin && TargetSize = 8)) {
-		/* Allow any 8 byte type to be casted to void/void pointer/i64/i64 pointer */
-		
-		return 0
-	}
-	else if (TargetSize = 8 && (SourceDepth <= 1 && SourceBase->IsBuiltin)) {
-		/* Allow any void/void pointer/i64/i64 pointer to be casted to any 8 byte type */
-		
-		return 0
-	}
-	else if (SourceDepth = TargetDepth) {
+	i8 SourceIsVoid := SourceBase = pState->void
+	i8 TargetIsVoid := TargetBase = pState->void
+	
+	if (SourceDepth = TargetDepth) {
 		if (SourceBase = TargetBase) {
 			return 0
 		}
-		else if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
+		else if (TargetDepth = 1) {
+			if (SourceIsVoid || TargetIsVoid) {
+				return 0
+			}
+		}
+		
+		if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
 			if (SourceSize <= TargetSize) {
 				return 0
 			}
-			
-			return TypeError(SourceNode, Target, "Incompatible types")
-		}
-		else {
-			if (SourceDepth && TargetDepth) {
-				if (CheckTypes(MakeType(SourceBase, 0), MakeType(TargetBase, 0), 0)) {
-					return TypeError(SourceNode, Target, "Incompatible pointed-to types")
-				}
-				
-				return 0
-			}
-			
-			return TypeError(SourceNode, Target, "Incompatible types")
-		}
-	}
-	else if (SourceDepth || TargetDepth) {
-		if (TargetDepth && (SourceDepth = 1 && SourceBase->IsBuiltin)) {
-			/* Allow for i64/void pointers to be casted to any kind of pointer  */
-			
-			return 0
-		}
-		else if (SourceDepth && (TargetDepth = 1 && TargetBase->IsBuiltin)) {
-			/* Allow for any kind of pointer to be casted to a void/i64 pointer */
-			
-			return 0
 		}
 		
+		return TypeError(SourceNode, Target, "Incompatible types")
+	}
+	else if (SourceDepth && TargetIsVoid && TargetDepth = 1) {
+		return 0
+	}
+	else if (SourceDepth || TargetDepth) {
 		return TypeError(SourceNode, Target, "Incompatible pointer depths")
 	}
 	else if (SourceBase->IsStructType || TargetBase->IsStructType) {
@@ -802,7 +792,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 				ASTNode* NextNode := DowncastIntegerType(pState, AgainstCaller->Parameters[ParameterIndex])
 				Type ActualNext := NextNode->ValueType
 				
-				if (CheckTypes(ActualNext, ExpectedNext, false)) {
+				if (CheckTypes(pState, ActualNext, ExpectedNext, null)) {
 					BrokeInner := true
 					
 					Next->TempValue := ParameterIndex
@@ -842,7 +832,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	SwapOutputStream()
 	AWriteLine("No matching overload found for:")
 	
-	PrettyError(Caller~>Context, 0, Red | Bright)
+	PrettyError(Caller~>Context, Red | Bright)
 	
 	Next := BaseFunction
 	
@@ -874,7 +864,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		}
 		
 		WriteNewLine()
-		PrettyError(Next~>Context, 0, Red | Bright)
+		PrettyError(Next~>Context, Red | Bright)
 		
 		Next := Next->Next
 	}
@@ -981,7 +971,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
 		DowncastIntegerType(pState, Right)
 		
-		CheckTypes(Right->ValueType, MakeType(pState->i8, 0), Right)
+		CheckTypes(pState, Right->ValueType, MakeType(pState->i8, 0), Right)
 		
 		if (LeftSize < 4) {
 			ResultType := MakeType(pState->i32, 0)
@@ -1067,7 +1057,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		else if (LeftSize < RightSize) {
 			/* Warn of the right side being truncated to fit the left */
 			
-			if !(Right->NodeType = NODE_TYPE_INTEGER && (LeftSize >= GetNumberSize(Right->TrueNode))) {
+			if !(Right->NodeType = NODE_TYPE_INTEGER && (LeftSize >= GetNumberSize(Right->IntegerValue))) {
 				/* If the right operand is a number, and the actual size of the number is less than the variable size, don't show this warning */
 				
 				ASTWarn(Right, "Right side operand of ':=' is bigger than left, right side will be truncated")
@@ -1469,7 +1459,7 @@ define Type TryParseTypeName(ParserState* pState, i8 AllowArrayType, i8** ErrorM
 	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
 	
 	if *(ErrorMessage) {
-		return 0
+		return 0 As Type
 	}
 	
 	SafeWideString* Name := NameToken->StringValue
@@ -1653,7 +1643,9 @@ define void ParseAndAddStruct(ParserState* pState) {
 				InUnion := true
 			}
 			else if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-				ParseFunction(pState, Methods, ParserCurrentToken(pState)->Value As i8, NewType)
+				FunctionDefine* Method := ParseFunction(pState, Methods, ParserCurrentToken(pState)->Value As i8, NewType)
+				
+				Method->MethodOfTypeName := Name
 				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 					break
@@ -2283,7 +2275,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				Type ActualReturnType := DowncastIntegerType(pState, ExpressionToReturn)
 				Type ExpectedReturnType := pState->CurrentFunction->ReturnType
 				
-				CheckTypes(ActualReturnType, ExpectedReturnType, ExpressionToReturn)
+				CheckTypes(pState, ActualReturnType, ExpectedReturnType, ExpressionToReturn)
 				
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 			}
@@ -2482,7 +2474,7 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
 		
-		Type ResultType := GetNumberType(pState, TokenToTranslate->Value)
+		Type ResultType := GetNumberType(pState, TokenToTranslate->IntegerValue)
 		
 		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
@@ -2491,18 +2483,23 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		
 		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
 		
-		if (SafeStringEqualsAString(TokenToTranslate->Value, "true")) {
+		if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
 			Result->IntegerValue := 1
 		}
-		else if (SafeStringEqualsAString(TokenToTranslate->Value, "false")) {
+		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "false")) {
 			Result->IntegerValue := 0
 		}
-		else if (SafeStringEqualsAString(TokenToTranslate->Value, "windows")) {
+		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "windows")) {
 			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_PE
 		}
-		else if (SafeStringEqualsAString(TokenToTranslate->Value, "linux")) {
+		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
 			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_ELF
 		}
+		/* TODO: Uncomment once you read this */
+		/* else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
+			Result->IntegerValue := 0
+			Result->ValueType := MakeType(pState->void, 1)
+		} */
 		else {
 			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
 			/* Using the found variable's type as the node type */

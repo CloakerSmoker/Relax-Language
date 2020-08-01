@@ -1,5 +1,5 @@
 define void* Alloc(i64 A, void** B) {
-	return 0
+	return 0 as void*
 }
 
 #Include ./src/lib/Memory.rlx

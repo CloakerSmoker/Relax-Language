@@ -151,6 +151,12 @@ define void HashMapUpsert(HashMap* TargetMap, i64 KeyHash, void Value) {
 define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
 	HashMapUpsert(TargetMap, HashString(Key, TargetMap->IgnoreCase), Value)
 }
+define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void* Value) {
+	HashMapUpsert(TargetMap, HashString(Key, TargetMap->IgnoreCase), Value As void)
+}
 define void HashMapASet(HashMap* TargetMap, i8* Key, void Value) {
 	HashMapUpsert(TargetMap, HashAString(Key, TargetMap->IgnoreCase), Value)
+}
+define void HashMapASet(HashMap* TargetMap, i8* Key, void* Value) {
+	HashMapUpsert(TargetMap, HashAString(Key, TargetMap->IgnoreCase), Value As void)
 }
