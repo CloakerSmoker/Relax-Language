@@ -15,7 +15,7 @@ define SafeWideString* AToS(i8* SourceString) {
 	
 	SafeWideString* NewString := AllocateNewSafeString()
 	
-	i32 Length := ALen(SourceString)
+	i32 Length := StringLength(SourceString)
 	
 	NewString->Buffer := AToW(SourceString, Length)
 	NewString->Length := Length
@@ -63,7 +63,7 @@ define void PrintSafeString(SafeWideString* StringToPrint) {
 	for (i32 Index := 0, Index < (StringToPrint->Length), Index += 1) {
 		i16 NextCharacter := StringToPrint->Buffer[Index] 
 		
-		WriteCharacter(NextCharacter As i8)
+		PrintCharacter(NextCharacter As i8)
 	}
 }
 

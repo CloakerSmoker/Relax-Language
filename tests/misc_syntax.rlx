@@ -3,23 +3,20 @@
 #Include ./src/lib/Console.rlx
 
 define void VATest(i32 T, i8 Q) {
-	AWrite("Ocall ")
+	Print("Ocall ")
 }
 
 define void VATest(i64 T, ... Args) {
-	IWriteHex(T)
-	WriteLiteral(', ')
-	IWriteHex(Args[0])
-	WriteLiteral(' ')
+	Print("%x, %x ", T, Args[0])
 	
 	i32 C := Args[0] As i32
 	Args += 8
 	
 	for (i32 I := 0, I < C, I += 1) {
-		IWriteHex(Args[I])
+		PrintHex(Args[I])
 		
 		if (C - 1 != I) {
-			WriteLiteral(', ')
+			PrintLiteral(', ')
 		}
 	}
 }
@@ -27,8 +24,7 @@ define void VATest(i64 T, ... Args) {
 i64{20} GlobalArray
 
 define void Dummy() {
-	WriteLiteral(',')
-	IWrite(GlobalArray[10])
+	Print(",%i", GlobalArray[10])
 }
 
 struct Test {
@@ -41,42 +37,38 @@ struct ExtraText {
 }
 
 define i32 Main() {
-	IWriteHex('aaaaaaaa')
-	WriteLiteral(', ')
-	IWriteHex('aaaaaaa')
-	WriteLiteral(', ')
-	IWriteHex('aaaaa')
-	WriteLiteral(', ')
-	IWriteHex('aaaa')
-	WriteLiteral(', ')
-	IWriteHex('aaa')
-	WriteLiteral(', ')
-	IWriteHex('aa')
-	WriteLiteral(', ')
-	IWriteHex('a')
+	PrintHex('aaaaaaaa')
+	PrintLiteral(', ')
+	PrintHex('aaaaaaa')
+	PrintLiteral(', ')
+	PrintHex('aaaaa')
+	PrintLiteral(', ')
+	PrintHex('aaaa')
+	PrintLiteral(', ')
+	PrintHex('aaa')
+	PrintLiteral(', ')
+	PrintHex('aa')
+	PrintLiteral(', ')
+	PrintHex('a')
 	
-	WriteLiteral(' ')
+	PrintLiteral(' ')
 	
 	VATest(10, 1)
 	VATest(10, 1, 2, 3)
 	
-	WriteLiteral(' ')
+	PrintCharacter(' ')
 	
 	i8{90} test_array
 	
 	test_array[2] := 90
-	
-	IWriteHex(test_array[2])
-	
 	test_array[89] := 20
-	WriteLiteral(',')
-	IWrite(test_array[89])
+	
+	Print("%x,%i", test_array[2], test_array[89])
 	
 	GlobalArray[10] := 10
 	Dummy()
 	
-	WriteLiteral(',')
-	IWrite(#ExtraText)
+	Print(",%i", #ExtraText)
 	
 	return 0
 }

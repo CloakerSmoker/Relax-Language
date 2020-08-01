@@ -24,14 +24,14 @@ define i32 Main() {
 	E.test2 := 20
 	E.test3 := 0
 	
-	IWrite(E As i64)
-	WriteCharacter(',')
+	Print(E As i64)
+	PrintCharacter(',')
 	
 	Example2 E2 := 0x4000000090009000
 	
-	IWriteHex(E2.low_32)
-	WriteCharacter(',')
-	IWriteHex(E2.high_32)
+	PrintHex(E2.low_32 & 0xFFFFFFFF)
+	PrintCharacter(',')
+	PrintHex(E2.high_32)
 	
 	Example3 E3 := 0
 	i64 Test := 52893
@@ -39,12 +39,12 @@ define i32 Main() {
 	E3.a_pointer := &Test
 	E3.a_tag := 30
 	
-	WriteCharacter(',')
-	IWrite(E3.a_pointer = &Test)
+	PrintCharacter(',')
+	Print(E3.a_pointer = &Test)
 	
 	Test := 9000
 	
-	IWrite(*(E3.a_pointer As i64*) = Test)
+	Print(*(E3.a_pointer As i64*) = Test)
 	
 	return E As i32
 }

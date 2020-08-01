@@ -683,11 +683,14 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 					}
 					else {
 						SwapOutputStream()
-						AWrite("Incompatible operand size, expected a ")
+						
+						Print("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand.\n", OperandSize * 8, Next->Size * 8)
+						
+						/* AWrite("Incompatible operand size, expected a ")
 						IWrite(OperandSize * 8)
 						AWrite(" bit operand, got a ")
 						IWrite(Next->Size * 8)
-						AWriteLine(" bit operand.")
+						AWriteLine(" bit operand.") */
 						
 						ContextError(Next~>Context, null)
 					}
@@ -712,8 +715,8 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		
 		if !(Found) {
 			SwapOutputStream()
-			IWriteHexLine(OperandTypes)
-			AWriteLine("No encoding for operand type(s).")
+			/* IWriteHexLine(OperandTypes) */
+			Print("No encoding for operand type(s).")
 			
 			ContextError(Result~>Context, null)
 		}

@@ -487,7 +487,7 @@ define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 Pointe
 		*/
 		
 		if (PointerDepth = 0) {
-			ErrorMessage[0] := HeapString("Incomplete types can only be used with pointers")
+			ErrorMessage[0] := "Incomplete types can only be used with pointers"
 			return 0 As Type
 		}
 		else {
@@ -546,7 +546,7 @@ define void PrintType(Type TypeToPrint) {
 	i16 Depth := GetPointerDepth(TypeToPrint)
 	
 	for (i32 Index := 0, Index < Depth, Index += 1) {
-		WriteCharacter('*')
+		PrintCharacter('*')
 	}
 }
 
@@ -591,15 +591,14 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 	
 	SwapOutputStream()
 	
-	WriteNewLine()
-	AWrite(Message)
+	Print("\n%s", Message)
 	
 	if ((Expected) As i64) != 0 {
-		AWrite(", expected ")
+		Print(", expected ")
 		PrintType(Expected)
 	}
 	
-	AWrite(", got ")
+	Print(", got ")
 	PrintType(AtNode->ValueType)
 	
 	ASTError(AtNode, null)
@@ -646,8 +645,15 @@ define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* Sou
 		}
 		
 		if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
-			if (SourceSize <= TargetSize) {
-				return 0
+			if (TargetDepth) {
+				if (SourceBase->Size >= TargetBase->Size) {
+					return 0
+				}
+			}
+			else {
+				if (SourceSize <= TargetSize) {
+					return 0
+				}
 			}
 		}
 		
@@ -700,13 +706,13 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 		SwapOutputStream()
 	}
 	
-	WriteNewLine()
+	PrintNewLine()
 	
 	PrettyError(BadNode~>Context, ErrorMessage, Red | Bright)
 	Exit(1)
 }
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
-	WriteNewLine()
+	PrintNewLine()
 	PrettyError(BadNode~>Context, WarnMessage, Red | Green)
 }
 
@@ -833,7 +839,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	}
 	
 	SwapOutputStream()
-	AWriteLine("No matching overload found for:")
+	Print("No matching overload found for:")
 	
 	PrettyError(Caller~>Context, Red | Bright)
 	
@@ -844,29 +850,31 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		
 		
 		if (CallerParameterCount < Next->ParameterCount) {
-			AWrite("Is missing required parameters for overload")
+			Print("Is missing required parameters for overload")
 		}
 		else if (CallerParameterCount > Next->ParameterCount) {
-			AWrite("Has too many paramters for overload")
+			Print("Has too many paramters for overload")
 		}
 		else {
-			AWrite("Parameter ") 
+			/* AWrite("Parameter ") 
 			IWrite(LastNonMatchingParameter + 1)
-			AWrite(" should be an ")
+			AWrite(" should be an ") */
+			
+			Print("Parameter %i should be an ", LastNonMatchingParameter + 1)
 			
 			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
 			
-			AWrite(" for overload, not ")
+			Print(" for overload, not ")
 			
 			if (LastNonMatchingParameter < CallerParameterCount) {
 				PrintType(AgainstCaller->Parameters[LastNonMatchingParameter]->ValueType)
 			}
 			else {
-				AWrite("<none>")
+				Print("<none>")
 			}
 		}
 		
-		WriteNewLine()
+		PrintNewLine()
 		PrettyError(Next~>Context, Red | Bright)
 		
 		Next := Next->Next
@@ -894,7 +902,7 @@ define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type Righ
 	if (LeftDepth && RightDepth) {
 		/* If we are dealing with two pointer types, something's wrong */
 		
-		ErrorMessage := HeapString("Operations involving two pointers are disallowed.")
+		ErrorMessage := "Operations involving two pointers are disallowed."
 	}
 	else if (LeftDepth) {
 		/* Eles if the left side is a pointer */
@@ -902,7 +910,7 @@ define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type Righ
 		if (RightBaseType->IsStructType) {
 			/* And the right type is a.. struct? Then something's real funky */
 			
-			ErrorMessage := HeapString("Invalid operation types1.")
+			ErrorMessage := "Invalid operation types1."
 		}
 		
 		/* Otherwise, right type is a normal type, so return the pointer type */
@@ -912,7 +920,7 @@ define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type Righ
 		/* Same as above, just in the opposite direction */
 		
 		if (LeftBaseType->IsStructType) {
-			ErrorMessage := HeapString("Invalid operation types2.")
+			ErrorMessage := "Invalid operation types2."
 		}
 		
 		return RightType
@@ -920,7 +928,7 @@ define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type Righ
 	else {
 		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
 			/* If both types are structs, then something even more funky is going on */
-			ErrorMessage := HeapString("Invalid operation types3.")
+			ErrorMessage := "Invalid operation types3."
 		}
 		
 		/* Otherwise, two normal types, just pick the bigger of the two */
@@ -1316,12 +1324,11 @@ define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* R
 	
 	if (NextToken->Type = TOKEN_TYPE_EOF) {
 		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
-		ErrorMessage[0] := HeapString("Unexpected EOF")
+		ErrorMessage[0] := "Unexpected EOF"
 	}
 	
 	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
-		/* Warning: This is technically a memory leak */
-		ErrorMessage[0] := HeapString(Reason)
+		ErrorMessage[0] := Reason
 	}
 	
 	return NextToken

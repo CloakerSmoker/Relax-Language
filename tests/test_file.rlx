@@ -7,7 +7,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
 	if (ArgC != 3) {
-		AWrite("Wrong argc")
+		Print("Wrong argc")
 		return 0
 	}
 	
@@ -17,14 +17,14 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i64 F := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
 	
-	FileWrite(F, TextToWrite, ALen(TextToWrite))
+	FileWrite(F, TextToWrite, StringLength(TextToWrite))
 	
 	FileClose(F)
 	
 	
 	i64 F2 := FileOpen(FilePath, FILE_READ)
 	
-	AWrite(FileReadAll(F2))
+	Print(FileReadAll(F2) As i8*)
 	
 	FileClose(F2)
 	

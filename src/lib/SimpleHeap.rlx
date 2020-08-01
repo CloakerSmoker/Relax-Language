@@ -24,13 +24,6 @@ define SimpleHeap* SimpleHeapInit() {
 
 SimpleHeap* ProcessHeap := SimpleHeapInit()
 
-declare void AWrite(i8*)
-declare void AWriteLine(i8*)
-declare void IWriteLine(i64)
-declare void IWriteHexLine(i64)
-declare void IWrite(i64)
-declare void IWriteHex(i64)
-
 define void SimpleHeapGrow() {	
 	linux {
 		ProcessHeap->End := syscall:(12, ProcessHeap->End + DEFAULT_HEAP_SIZE)

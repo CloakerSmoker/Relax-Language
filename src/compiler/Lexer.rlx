@@ -641,7 +641,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 				StartingIndex := tState->SourceIndex
 				
 				if !(IsWhiteSpace(GetNextCharacter(tState))) {
-					AWriteLine("Fuck off")
+					Print("Fuck off")
 					Exit(1)
 				}
 				
@@ -659,9 +659,9 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				SafeWideString* IncludePath := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 				
-				AWrite("Including file: ")
+				Print("Including file: ")
 				PrintSafeString(IncludePath)
-				WriteNewLine()
+				PrintNewLine()
 				
 				i32 EndIndex := IncludePath->Length
 				i16 OldFollowingCharacter := (IncludePath->Buffer)[EndIndex]
@@ -686,7 +686,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 					CopyContext(NextIncludeToken~>Context, IncludeToken~>Context)
 				}
 				
-				AWriteLine("Done including file")
+				Print("Done including file\n")
 				
 				tState->TokenIndex -= 1
 				
@@ -694,7 +694,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 			}
 			else if (SafeStringEqualsAString(DirectiveText, "ImageBase")) {
 				if !(IsWhiteSpace(GetNextCharacter(tState))) {
-					AWriteLine("Expected whitespace after #ImageBase.")
+					Print("Expected whitespace after #ImageBase.")
 					Exit(1)
 				}
 				

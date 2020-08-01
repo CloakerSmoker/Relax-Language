@@ -8,91 +8,91 @@ struct DumbTest {
 }
 
 define i32 Main() {
-	IWrite(20 + 10)
-	WriteCharacter(',')
-	IWrite(20 - 10)
-	WriteCharacter(',')
-	IWrite(20 * 10)
-	WriteCharacter(',')
-	IWrite(20 / 10)
-	WriteCharacter(',')
-	IWrite(22 % 10)
-	WriteCharacter(',')
-	IWrite(20 & 30)
-	WriteCharacter(',')
-	IWrite(20 | 10)
-	WriteCharacter(',')
-	IWrite(20 ^ 10)
-	WriteCharacter(',')
-	IWrite(0 && 0)
-	IWrite(0 && 1)
-	IWrite(1 && 0)
-	IWrite(1 && 1)
-	WriteCharacter(',')
-	IWrite(0 || 0)
-	IWrite(0 || 1)
-	IWrite(1 || 0)
-	IWrite(1 || 1)
-	WriteCharacter(',')
-	IWrite(1 << 20)
-	WriteCharacter(',')
-	IWrite(1 << 20 >> 20)
-	WriteCharacter(',')
+	Print(20 + 10)
+	PrintCharacter(',')
+	Print(20 - 10)
+	PrintCharacter(',')
+	Print(20 * 10)
+	PrintCharacter(',')
+	Print(20 / 10)
+	PrintCharacter(',')
+	Print(22 % 10)
+	PrintCharacter(',')
+	Print(20 & 30)
+	PrintCharacter(',')
+	Print(20 | 10)
+	PrintCharacter(',')
+	Print(20 ^ 10)
+	PrintCharacter(',')
+	Print(0 && 0)
+	Print(0 && 1)
+	Print(1 && 0)
+	Print(1 && 1)
+	PrintCharacter(',')
+	Print(0 || 0)
+	Print(0 || 1)
+	Print(1 || 0)
+	Print(1 || 1)
+	PrintCharacter(',')
+	Print(1 << 20)
+	PrintCharacter(',')
+	Print(1 << 20 >> 20)
+	PrintCharacter(',')
 	
 	/* Todo: Write unary_operators.rlx and move these into that file */
-	IWrite(~0)
-	WriteCharacter(',')
-	IWrite(~90 + 1)
+	Print(~0)
+	PrintCharacter(',')
+	Print(~90 + 1)
 	
 	DumbTest D
 	DumbTest* DP := &D
 	
-	WriteCharacter(',')
-	IWrite(DP->IdiotField || false)
-	IWrite(DP->IdiotField && true)
+	PrintCharacter(',')
+	Print(DP->IdiotField || false)
+	Print(DP->IdiotField && true)
 	
-	WriteCharacter(',')
-	IWrite(#i8)
-	WriteCharacter(',')
-	IWrite(#i16)
-	WriteCharacter(',')
-	IWrite(#i32)
-	WriteCharacter(',')
-	IWrite(#i64)
-	WriteCharacter(',')
-	IWrite(#i8*)
-	WriteCharacter(',')
-	IWrite(#DumbTest)
+	PrintCharacter(',')
+	Print(#i8)
+	PrintCharacter(',')
+	Print(#i16)
+	PrintCharacter(',')
+	Print(#i32)
+	PrintCharacter(',')
+	Print(#i64)
+	PrintCharacter(',')
+	Print(#i8*)
+	PrintCharacter(',')
+	Print(#DumbTest)
 	
 	
-	WriteCharacter(' ')
+	PrintCharacter(' ')
 	
 	i32 Com := 0
 	
 	Com += 5
 	Com -= 3
 	
-	IWrite(Com) /* 2 */
-	WriteCharacter(',')
+	Print(Com) /* 2 */
+	PrintCharacter(',')
 	
 	Com *= 10 	/* 20 */
 	Com /= 5	/* 4 */
 	
-	IWrite(Com)
-	WriteCharacter(',')
+	Print(Com)
+	PrintCharacter(',')
 	
 	Com %= 3	/* 1 */
 	
-	IWrite(Com)
-	WriteCharacter(',')
+	Print(Com)
+	PrintCharacter(',')
 	
 	Com |= 0xFF02	/* 0xFF03 */
 	Com &= 0xFF		/* 3 */
-	IWrite(Com)
-	WriteCharacter(',')
+	Print(Com)
+	PrintCharacter(',')
 	
 	Com ^= 1	/* 2 */
-	IWrite(Com)
+	Print(Com)
 	
 	/* Assignment operators result in: 2, 4, 1, 3, 2 */
 	

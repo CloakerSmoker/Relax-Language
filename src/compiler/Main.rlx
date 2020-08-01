@@ -27,8 +27,6 @@ struct BuildConfig {
 	i8 DumpInfo
 }
 
-/* void* null := 0 as void* */
-
 #Include ./src/lib/Memory.rlx
 #Include ./src/lib/File.rlx
 
@@ -53,13 +51,15 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	if (FileHandle < 0) {
 		SwapOutputStream()
-		AWrite("Could not open file: ")
-		AWriteLine(FilePath)
+		/* AWrite("Could not open file: ")
+		AWriteLine(FilePath) */
 		
-		AWrite("Error code: ")
+		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		
+		/* AWrite("Error code: ")
 		IWriteLine(FileGetError(FileHandle))
 		
-		AWriteLine("Aborting")
+		AWriteLine("Aborting") */
 		Exit(1)
 	}
 	
@@ -75,13 +75,16 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	if (ReadResult < 0) {
 		SwapOutputStream()
-		AWrite("Could not read file: ")
+		/* AWrite("Could not read file: ")
 		AWriteLine(FilePath)
 		
 		AWrite("Error code: ")
 		IWriteLine(FileGetError(ReadResult))
 		
-		AWriteLine("Aborting")
+		AWriteLine("Aborting") */
+		
+		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		
 		Exit(1)
 	}
 	
@@ -136,15 +139,17 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Index += 1
 			InputFilePath := ArgV[Index]
 			
-			AWrite("Input File: ")
-			AWriteLine(InputFilePath)
+			/* AWrite("Input File: ")
+			AWriteLine(InputFilePath) */
+			Print("Input File: '%s'\n", InputFilePath)
 		}
 		else if (StringEquals(NextArg, "-o") && !OutputFilePath) {
 			Index += 1
 			OutputFilePath := ArgV[Index]
 		
-			AWrite("Output File: ")
-			AWriteLine(OutputFilePath)
+			/* AWrite("Output File: ")
+			AWriteLine(OutputFilePath) */
+			Print("Output File: '%s'\n", OutputFilePath)
 		}
 	}
 
@@ -155,7 +160,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 		else {
 			SwapOutputStream()
-			AWriteLine("No input+output file, aborting")
+			Print("No input+output file, aborting")
 			Exit(1)
 		}
 	}

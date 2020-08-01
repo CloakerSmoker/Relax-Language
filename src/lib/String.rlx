@@ -1,11 +1,11 @@
 /* generics when? */
-define i32 ALen(i8* AString) {
-	for (i32 Length := 0, AString[Length] != 0, Length += 1) {}
+define i32 StringLength(i8* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
 	
 	return Length
 }
-define i32 WLen(i16* WString) {
-	for (i32 Length := 0, WString[Length] != 0, Length += 1) {}
+define i32 WLen(i16* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
 	
 	return Length
 }
@@ -27,17 +27,6 @@ define i8* WToA(i16* WString) {
 	
 	for (i32 Index := 0, Index < Length, Index += 1) {
 		Buffer[Index] := WString[Index]
-	}
-	
-	return Buffer
-}
-
-define i8* HeapString(i8* StringToCopy) {
-	i32 Length := ALen(StringToCopy)
-	i8* Buffer := Alloc(Length)
-	
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		Buffer[Index] := StringToCopy[Index]
 	}
 	
 	return Buffer
@@ -127,24 +116,12 @@ define i8 IsWhiteSpace(i16 Character) {
 	return false
 }
 
-define void AReverse(i8* Buffer) {
-	i32 Length := ALen(Buffer)
-	
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		i8 Temp := Buffer[Index]
-		Buffer[Index] := Buffer[Length - 1]
-		Buffer[Length - 1] := Temp
-		
-		Length -= 1
-	}
-}
-
-/* define i8 NumberToCharacter(i8 Number) {
+define i8 NumberToCharacter(i8 Number) {
 	if (Number < 10) {
 		return (Number + '0') As i8
 	}
 	else {
-		return (Number - 10 + 'a') As i8
+		return (Number - 10 + 'A') As i8
 	}
 }
 define i8 GetCharacterValue(i8 Character) {
@@ -181,7 +158,7 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 			Number := -Number
 		}
 		else if (Base = 16) {
-			Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string
+			/* Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string */
 			
 			Number := Number & 0x7FFFFFFFFFFFFFFF
 		}
@@ -200,6 +177,7 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 	if (Sign) {
 		if (Base = 10) {
 			Buffer[Index] := '-'
+			Index += 1
 		}
 		else if (Base = 16) {
 			i8 Last := GetCharacterValue(Buffer[Index - 1])
@@ -208,7 +186,11 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 		}
 	}
 	
-	Buffer[Index + 1] := 0
+	if (Base = 16) {
+		Buffer[Index] := 'x'
+		Buffer[Index + 1] := '0'
+		Index += 2
+	}
 	
 	MemoryReverse(Buffer, Index)
 	
@@ -219,86 +201,14 @@ define i8* IToA(i64 Number, i64 Base) {
 }
 define i8* IToA(i64 Number) {
 	return IToA(Number, 10, null)
-} */
-
-define i8* IToA(i64 Number) {
-	i8* Buffer := Alloc(100) As i8*
-	i8 Sign := 0
-	
-	if (Number = 0) {
-		Buffer[0] := '0'
-		return Buffer
-	}
-	
-	if (Number < 0) {
-		Sign := true
-		Number := -Number
-	}
-	
-	for (i32 Index := 0, Number > 0, Index += 1) {
-		Buffer[Index] := (Number % 10) + '0'
-		Number := Number / 10
-	}
-	
-	if (Sign) {
-		Buffer[Index] := '-'
-	}
-	
-	Buffer[Index + 1] := 0
-	
-	AReverse(Buffer)
-	
-	return Buffer
 }
-
-define i8 NumberToHex(i8 Number) {
-	if (Number <= 9) {
-		Number := Number + '0'
-	}
-	else {
-		Number := (Number - 10) + 'A'
-	}
-	
-	return Number
-}
-
 define i8* IToAH(i64 Number) {
-	i8* Buffer := Alloc(100) As i8*
-	
-	if (Number = 0) {
-		Buffer[0] := '0'
-		return Buffer
-	}
-	
-	if ((Number >> 32) As i32 = 0xFFFFFFFF As i32) {
-		/* If a number is looking like a negative i32, print it as a positive i32
-			Todo: Function overloading, so this isn't needed
-		*/
-		
-		Number := Number & 0xFFFFFFFF
-	}
-	
-	if (Number < 0) {
-		Number := -Number
-	}
-	
-	for (i32 Index := 0, Number > 0, Index += 1) {
-		Buffer[Index] := NumberToHex((Number % 0x10) As i8)
-		Number := Number / 0x10
-	}
-	
-	Buffer[Index + 0] := 'x'
-	Buffer[Index + 1] := '0'
-	Buffer[Index + 2] := 0
-	
-	AReverse(Buffer)
-	
-	return Buffer
+	return IToA(Number, 16, null)
 }
 
 define i16* IToW(i64 Number) {
 	i8* AString := IToA(Number)
-	i16* WString := AToW(AString, ALen(AString))
+	i16* WString := AToW(AString, StringLength(AString))
 	
 	Free(AString As void*)
 	
@@ -306,7 +216,7 @@ define i16* IToW(i64 Number) {
 }
 define i16* IToWH(i64 Number) {
 	i8* AString := IToAH(Number)
-	i16* WString := AToW(AString, ALen(AString))
+	i16* WString := AToW(AString, StringLength(AString))
 	
 	Free(AString As void*)
 	
@@ -348,7 +258,7 @@ define i64 WToI(i16* WString) {
 	return Result
 }
 define i64 AToI(i8* AString) {
-	i16* WString := AToW(AString, ALen(AString))
+	i16* WString := AToW(AString, StringLength(AString))
 	
 	i64 Result := WToI(WString)
 	

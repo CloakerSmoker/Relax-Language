@@ -151,7 +151,7 @@ define ELFSectionHeader* AppendSectionHeader(ELFBuilder* ToBuilder) {
 }
 define void AppendString(ELFBuilder* ToBuilder, i8* Text) {
 	i64 StartingIndex := ToBuilder->StringSection->FileSize
-	i32 TextLength := ALen(Text)
+	i32 TextLength := StringLength(Text)
 	i32 NewSize := StartingIndex + TextLength + 1
 	
 	ToBuilder->StringBuffer := ReAlloc(ToBuilder->StringBuffer, NewSize)

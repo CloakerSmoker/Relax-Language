@@ -36,22 +36,22 @@ define i64 Main(i64 ArgC, i8** ArgV) {
 	test.oi.ib := 50
 	test.ob := 60
 	
-	IWrite(testp->oa)
-	WriteCharacter(' ')
-	IWrite(test.oi.ia)
-	WriteCharacter(' ')
-	IWrite(testp->oi.ii.iia)
-	WriteCharacter(' ')
-	IWrite(test.oi.ii.iib)
-	WriteCharacter(' ')
-	IWrite(testp->oi.ib)
-	WriteCharacter(' ')
-	IWrite(test.ob)
-	WriteCharacter(' ')
+	Print(testp->oa)
+	PrintCharacter(' ')
+	Print(test.oi.ia)
+	PrintCharacter(' ')
+	Print(testp->oi.ii.iia)
+	PrintCharacter(' ')
+	Print(test.oi.ii.iib)
+	PrintCharacter(' ')
+	Print(testp->oi.ib)
+	PrintCharacter(' ')
+	Print(test.ob)
+	PrintCharacter(' ')
 	
 	test.ou := 70
 	
-	IWrite(test.oi.ia)
+	Print(test.oi.ia)
 	
 	return 0
 }

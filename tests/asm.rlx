@@ -39,13 +39,13 @@ define i32 ReturnAddNumber(i32 Number) asm {
 define i32 Main() {
 	i64 B := ReturnAddNumber(696968)
 	
-	IWrite(B)
-	WriteCharacter(',')
-	IWrite(ReturnParam(9000000, &B))
-	WriteCharacter(',')
-	IWrite(B)
-	WriteCharacter(',')
-	IWrite(Abc(1))
+	Print(B)
+	PrintCharacter(',')
+	Print(ReturnParam(9000000, &B))
+	PrintCharacter(',')
+	Print(B)
+	PrintCharacter(',')
+	Print(Abc(1))
 	
 	asm {mov, rax, 0}
 }

@@ -92,16 +92,18 @@ define void DumpGlobals(CompilerState* cState) {
 				i32 ThisOffset := NextGlobal->StackOffset
 				
 				if (LastOffset) {
-					AWrite(" ")
-					IWriteHexLine(ThisOffset - LastOffset)
+					Print(" %x\n", ThisOffset - LastOffset)
+					/* IWriteHexLine() */
 				}
 				else {
-					WriteNewLine()
+					PrintNewLine()
 				}
 				
-				PrintSafeString(NextGlobal->Name)
+				Print("%s: %x", NextGlobal->Name, Base + ThisOffset)
+				
+				/* PrintSafeString(NextGlobal->Name)
 				AWrite(": ")
-				IWriteHex(Base + ThisOffset)
+				IWriteHex(Base + ThisOffset) */
 				
 				LastOffset := ThisOffset
 				FoundElement := FoundElement->NextElement
@@ -109,8 +111,9 @@ define void DumpGlobals(CompilerState* cState) {
 		}
 	}
 	
-	AWrite(" ")
-	IWriteHexLine(Max - LastOffset)
+	Print(" %x\n", Max - LastOffset)
+	/* AWrite(" ")
+	IWriteHexLine(Max - LastOffset) */
 }
 
 define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
@@ -119,45 +122,48 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
 	*/
 	
-	IWriteHex(CODE_BASE + FunctionOffset)
+	/* IWriteHex(CODE_BASE + FunctionOffset)
 	AWrite(" - ")
 	
-	IWrite(cState->Index - FunctionOffset)
+	Print(cState->Index - FunctionOffset)
 	
-	AWrite("	(")
-	IWrite(TargetFunction->CallCount)
-	AWrite(")	")
+	Print("	(")
+	Print(TargetFunction->CallCount)
+	Print(")	") */
+	
+	Print("%x - %i	(%i)	", CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
 	
 	if (TargetFunction->MethodOfTypeName) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
-		WriteCharacter('.')
+		PrintCharacter('.')
 	}
 	
 	PrintSafeString(TargetFunction->Name)
 	
 	if (IsOverload) {
-		WriteCharacter('(')
+		PrintCharacter('(')
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < TargetFunction->ParameterCount, ParameterIndex += 1) {
 			VariableInfo* NextParameter := TargetFunction->Parameters[ParameterIndex]
 			
 			if (NextParameter->IsVariadic) {
-				AWrite("...")
+				PrintLiteral('...')
 			}
 			else {
 				PrintType(NextParameter->Type)
 			}
 			
 			if (ParameterIndex + 1 != TargetFunction->ParameterCount) {
-				WriteCharacter(',')
-				WriteCharacter(' ')
+/* 				WriteCharacter(',')
+				WriteCharacter(' ') */
+				PrintLiteral(', ')
 			}
 		}
 		
-		WriteCharacter(')')
+		PrintCharacter(')')
 	}
 	
-	WriteNewLine()
+	PrintNewLine()
 }
 
 define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i32* MainOffset) {
@@ -237,7 +243,7 @@ define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, Has
 	return Result
 }
 
-define void CompilerStart(BuildConfig* Config, ParserState* pState, i16* OutputFilePath) {
+define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
 	CompilerState C
 	
 	C.Config := Config
@@ -310,26 +316,28 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i16* OutputF
 	
 	if !(FoundMain) {
 		SwapOutputStream()
-		TextColor(Red | Bright)
-		AWriteLine("Main function not found, aborting.")
+		/* TextColor(Red | Bright) */
+		Print("^50Main function not found, aborting.^F0")
 		Exit(1)
 	}
 	
 	ResolveAllLabels(cState)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		TextColor(Blue)
+		/* TextColor(Blue)
 		
 		AWrite("	Globals use ")
 		IWrite(C.pState->GlobalOffset)
-		AWriteLine(" bytes")
+		AWriteLine(" bytes") */
 		
-		WriteCharacter('	')
+		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", C.pState->GlobalOffset, C.Index)
+		
+		/* WriteCharacter('	')
 		IWrite(C.Index)
 		AWriteLine(" total bytes of code generated.")
 		WriteCharacter('	')
 		
-		ResetColors()
+		ResetColors() */
 	}
 	
 	FileDelete(OutputFilePath)
@@ -339,9 +347,12 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i16* OutputF
 	i64 OutputFileHandle := FileOpen(OutputFilePath, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
 	
 	if (OutputFileHandle < 0) {
-		AWrite("Could not open output file, error code: ")
+		Print("Could not open output file, error code: %i\nAborting", FileGetError(OutputFileHandle))
+		
+		
+		/* AWrite("Could not open output file, error code: ")
 		IWriteLine(FileGetError(OutputFileHandle))
-		AWriteLine("Aborting")
+		AWriteLine("Aborting") */
 		Exit(1)
 	}
 	
@@ -400,17 +411,21 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i16* OutputF
 	}
 	
 	if (Result < 0) {
-		AWrite("Error writing output file: ")
+		Print("Error writing output file, error code: %i\nAborting", FileGetError(Result))
+		
+		/* AWrite("Error writing output file: ")
 		IWriteLine(FileGetError(Result))
-		AWriteLine("Aborting")
+		AWriteLine("Aborting") */
 		Exit(1)
 	}
 	
-	TextColor(Blue)
+	/* TextColor(Blue)
 	AWrite("Done writing output file, ")
 	IWrite(BytesWritten)
 	AWriteLine(" bytes written.")
-	ResetColors()
+	ResetColors() */
+	
+	Print("^10Done writing output file, %i bytes written^F0", BytesWritten)
 	
 	FileClose(OutputFileHandle)
 }
@@ -1226,6 +1241,27 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	if (ParameterCount != 0) {		
 		if (IS_VARIADIC) {
 			ParameterCount := TargetFunction->ParameterCount - 1
+			
+			i8 VariadicCount := ((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1
+			i8 VariadicBase := ParameterCount
+			
+			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
+				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
+				
+				CompileExpression(cState, RBX, NextVariadic)
+				
+				i16 NextVariadicSize := GetTypeSize(NextVariadic->ValueType)
+				
+				if (NextVariadicSize <= 4) {
+					/* Any parameter which is smaller than 4 bytes will not 0 the upper 32 bits of a register, so we manually cast them up */
+					Cast(cState, RBX, NextVariadicSize As i8)
+				}
+				
+				EmitPush_R64(cState, RBX)
+			}
+			
+			EmitMove_R32_I32(cState, RBX, VariadicCount)
+			EmitPush_R64(cState, RBX)
 		}
 		
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
@@ -1280,28 +1316,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 			}
 		}
 		
-		if (IS_VARIADIC) {
-			i8 VariadicCount := ((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1
-			i8 VariadicBase := ParameterCount
-			
-			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
-				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
-				
-				CompileExpression(cState, RBX, NextVariadic)
-				
-				i16 NextVariadicSize := GetTypeSize(NextVariadic->ValueType)
-				
-				if (NextVariadicSize <= 4) {
-					/* Any parameter which is smaller than 4 bytes will not 0 the upper 32 bits of a register, so we manually cast them up */
-					Cast(cState, RBX, NextVariadicSize As i8)
-				}
-				
-				EmitPush_R64(cState, RBX)
-			}
-			
-			EmitMove_R32_I32(cState, RBX, VariadicCount)
-			EmitPush_R64(cState, RBX)
-			
+		if (IS_VARIADIC) {			
 			i8 VariadicRegister := GetSystemVRegister(VariadicBase)
 			
 			EmitLea_R64_SIB(cState, VariadicRegister, 1, RSP, RSP)

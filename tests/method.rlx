@@ -32,35 +32,35 @@ define i32 Main() {
 	
 	Test* T := Alloc(#Test)
 	
-	IWrite(T->GetValue())
+	Print(T->GetValue())
 	
 	T->SetValue(20059)
 	
-	WriteCharacter(',')
+	PrintCharacter(',')
 	
-	IWrite(T->GetValue())
+	Print(T->GetValue())
 	
-	WriteCharacter(' ')
+	PrintCharacter(' ')
 	
 	Test L
 	
 	L.SetValue(0)
 	
-	IWrite(L.GetValue())
+	Print(L.GetValue())
 	
-	WriteCharacter(',')
+	PrintCharacter(',')
 	
 	L.SetValue(20060)
 	
-	IWrite(L.GetValue())
+	Print(L.GetValue())
 	
-	WriteCharacter(' ')
+	PrintCharacter(' ')
 	BadIdea* B := 0
-	IWrite(B->What())
+	Print(B->What())
 	
-	WriteCharacter(' ')
+	PrintCharacter(' ')
 	
-	IWrite(L.GetValue(90))
+	Print(L.GetValue(90))
 	
 	return 0
 }

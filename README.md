@@ -32,19 +32,26 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i8 Operator := ArgV[2][0]
 	
-	/* IWrite boils down to `WriteFile(STDOUT, NumberAsString)` on Windows, and `sys_write(STDOUT, NumberAsString)` on Linux */
+	/* The `Print` function is overloaded, with the `i64` version implemented as
+		 Print(IToA(Number))
+		with the `i8*`/string overload of the `Print` function working as
+		 WriteFile(StdOut, String)
+		when compiled for Windows, and 
+		 sys_write(StdOut, String)
+		when compiled for Linux
+	 */
 
 	if (Operator = '+') {
-		IWrite(Left + Right)
+		Print(Left + Right)
 	}
 	else if (Operator = '-') {
-		IWrite(Left - Right)
+		Print(Left - Right)
 	}
 	else if (Operator = '*') {
-		IWrite(Left * Right)
+		Print(Left * Right)
 	}
 	else if (Operator = '/') {
-		IWrite(Left / Right)
+		Print(Left / Right)
 	}
 	
 	return 0 /* Returns from `Main()` like normal on Windows, calls `sys_exit(0)` on Linux */

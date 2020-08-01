@@ -7,7 +7,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i64 N := AToI(ArgV[1])
 	
-	IWrite(N + 1)
+	Print(N + 1)
 	
 	return 0
 }

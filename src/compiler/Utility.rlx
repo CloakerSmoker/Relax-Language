@@ -52,31 +52,36 @@ define i16* FindLastLine(i16* Base, i32 Offset) {
 
 define void PrintSpaces(i32 Count) {
 	while (Count != 0) {
-		WriteCharacter(' ')
+		PrintCharacter(' ')
 		Count -= 1
 	}
 }
 
 define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {	
 	i8* LineNumberString := IToA(At->LineNumber)
-	i32 LineNumberLength := ALen(LineNumberString)
+	i32 LineNumberLength := StringLength(LineNumberString)
 	
 	if (Message) {
 		TextColor(Color)
-		AWriteLine(Message)
+		Print(Message)
+		PrintNewLine()
 		ResetColors()
 	}
 	
 	PrintSpaces(LineNumberLength + 1) 
-	AWrite(" [ ")
-	TextColor(Blue | Bright)
+	/* AWrite(" [ ")
+	TextColor(Blue | Bright) */
+	Print(" [^90")
 	PrintSafeString(At->SourceFilePath)
-	ResetColors()
+	
+	Print(" ^F0]\n %s | ", LineNumberString)
+	
+	/* ResetColors()
 	AWriteLine(" ]")
 	
 	WriteCharacter(' ')
 	AWrite(LineNumberString)
-	AWrite(" | ")
+	AWrite(" | ") */
 	
 	i32 OffsetInSource := At->PositionInSource * 2
 	
@@ -93,7 +98,7 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 			DashCount += 4
 		}
 		else {
-			WriteCharacter(NextLeftCharacter As i8)
+			PrintCharacter(NextLeftCharacter As i8)
 			DashCount += 1
 		}
 	}
@@ -107,29 +112,29 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 			break
 		}
 		
-		WriteCharacter(NextCharacter As i8)
+		PrintCharacter(NextCharacter As i8)
 		RightIndex += 1
 	}
 	
-	WriteNewLine()
+	PrintNewLine()
 	
 	PrintSpaces(LineNumberLength + 1)
 	
-	AWrite(" |-")
+	Print(" |-")
 	
 	for (i32 DashIndex := 0, DashIndex < DashCount, DashIndex += 1) {
-		WriteCharacter('-')
+		PrintCharacter('-')
 	}
 	
 	TextColor(Color)
 	
 	for (i32 ArrowIndex := 0, ArrowIndex < At->LengthInSource, ArrowIndex += 1) {
-		WriteCharacter('^')
+		PrintCharacter('^')
 	}
 	
 	ResetColors()
 	
-	WriteNewLine()
+	PrintNewLine()
 }
 define void PrettyError(ErrorContext* At, i8 Color) {
 	PrettyError(At, null, Color)

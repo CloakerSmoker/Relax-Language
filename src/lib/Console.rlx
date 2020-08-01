@@ -26,7 +26,8 @@ define void SwapOutputStream() {
 	STDOUT := STDERR
 	STDERR := Temp
 }
-define void WriteNewLine() {
+
+define void PrintNewLine() {
 	windows {
 		i32 BytesWritten := 0
 		i16 NewLine := 0x0A0D
@@ -38,7 +39,7 @@ define void WriteNewLine() {
 		syscall:(1, STDOUT, &NewLine, 1)
 	}
 }
-define void WriteCharacters(i8* Characters, i32 Count) {
+define void PrintCharacters(i8* Characters, i32 Count) {
 	windows {
 		i32 BytesWritten := 0
 		
@@ -48,109 +49,94 @@ define void WriteCharacters(i8* Characters, i32 Count) {
 		syscall:(1, STDOUT, Characters, Count)
 	}
 }
-define void WriteLiteral(i64 PackedCharacters) {
+
+define void PrintLiteral(i64 PackedCharacters) {
 	i8* Characters := (&PackedCharacters) As i8*
 	
 	for (i32 Length := 0, (Length < 8) && (Characters[Length] != 0), Length += 1) {}
 	
-	WriteCharacters(Characters, Length)
+	PrintCharacters(Characters, Length)
 }
-define void WriteCharacter(i8 Character) {
-	WriteCharacters(&Character, 1)
+define void PrintCharacter(i8 Character) {
+	PrintCharacters(&Character, 1)
 }
-define i32 AWrite(i8* AString) {
-	WriteCharacters(AString, ALen(AString))
-/* 	
-	windows {
-		i32 BytesWritten := 0
-		
-		WriteFile(STDOUT, AString As i8*, ALen(AString), &BytesWritten, 0)
+
+
+i8* PrintBuffer := StaticAllocate:(96)
+
+define void PrintString(i8* AString) {
+	PrintCharacters(AString, StringLength(AString))
+}
+
+define void ClearPrintBuffer() {
+	for (i32 Index := 0, Index < 12, Index += 1) {
+		(PrintBuffer As i64*)[Index] := 0
 	}
-	linux {
-		syscall:(1, STDOUT, AString, ALen(AString))
-	} */
-}
-define i32 AWriteLine(i8* AString) {
-	AWrite(AString)
-	WriteNewLine()
-}
-
-define i32 IWrite(i32** N) {
-	return 0
-}
-
-define i32 Write(i16* WString) {
-	i32 BytesWritten := 0
-	i32 Index := 0
-	
-	while (WString[Index] != 0) {
-		WriteCharacter(WString[Index] As i8)
-		Index += 1
-	}
-}
-define i32 WriteLine(i16* WString) {
-	Write(WString)
-	WriteNewLine()
-}
-
-define i32 IWrite(i64 Number) {
-	i8* AString := IToA(Number)
-	
-	i32 Result := AWrite(AString)
-
-	Free(AString)
-	
-	return Result
-}
-define i32 IWriteLine(i64 Number) {
-	i8* AString := IToA(Number)
-	
-	i32 Result := AWriteLine(AString)
-	
-	Free(AString)
-	
-	return Result
-}
-
-define i32 IWriteHex(i64 Number) {
-	i8* AString := IToAH(Number)
-	
-	i32 Result := AWrite(AString)
-
-	Free(AString)
-	
-	return Result
-}
-define i32 IWriteHexLine(i64 Number) {
-	i8* AString := IToAH(Number)
-	
-	i32 Result := AWriteLine(AString)
-	
-	Free(AString)
-	
-	return Result
-}
-
-define void Print(i8 Character) {
-	WriteCharacter(Character)
-}
-define void Print(i8* AString) {
-	WriteCharacters(AString, ALen(AString))
-}
-define void Print(i8* FormatString, ... Args) {
-
 }
 define void Print(i64 Number) {
-	i8* AString := IToA(Number)
-	
-	i32 Result := AWrite(AString)
-
-	Free(AString)
-	
-	return Result
+	ClearPrintBuffer()
+	PrintString(IToA(Number, 10, PrintBuffer))
+}
+define void PrintHex(i64 Number) {
+	ClearPrintBuffer()
+	PrintString(IToA(Number, 16, PrintBuffer))
 }
 
+declare void SetColor(i8, i8)
+declare void ResetColors()
 
+define void Print(i8* Format, ... Args) {
+	i32 Length := StringLength(Format)
+	i32 ArgIndex := 1
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Next := Format[Index]
+		
+		if (Next = '%') {
+			Index += 1
+			Next := Format[Index]
+			void NextArg := Args[ArgIndex]
+			
+			if (Next = 'i') {
+				Print(NextArg As i64)
+			}
+			else if (Next = 'x') {
+				PrintHex(NextArg As i64)
+			}
+			else if (Next = 'c') {
+				PrintCharacter(NextArg As i8)
+			}
+			else if (Next = 's') {
+				PrintString(NextArg As i8*)
+			}
+			
+			ArgIndex += 1
+		}
+		else if (Next = '\') {
+			Index += 1
+			Next := Format[Index]
+			
+			if (Next = 'n') {
+				PrintNewLine()
+			}
+			else {
+				PrintCharacter(Next)
+			}
+		}
+		else if (Next = '^') {
+			Index += 2
+			i8 Fore := GetCharacterValue(Format[Index - 1])
+			i8 Back := GetCharacterValue(Format[Index])
+			
+			SetColor(Fore, Back)
+		}
+		else {
+			PrintCharacter(Next)
+		}
+	}
+	
+	ResetColors()
+}
 
 
 
@@ -178,18 +164,20 @@ define i8 TranslateWindowsColor(i8 Color) {
 	}
 }
 
-define void WriteANSIEscape(i8 Foreground, i8 Background) {
+define void PrintANSIEscape(i8 Foreground, i8 Background) {
 	/* Writes a pair of ANSI escape sequences to change the terminal colors to Foreground/Background */
 	
-	WriteCharacter(0x1B)
-	WriteCharacter('[')
-	IWrite(TranslateWindowsColor(Foreground))
-	WriteCharacter('m')
+	PrintCharacter(0x1B)
+	/* PrintCharacter('[')
+	IWrite(TranslateWindowsColor(Foreground)) */
+	Print("[%im", TranslateWindowsColor(Foreground))
+	/* PrintCharacter('m') */
 	
-	WriteCharacter(0x1B)
-	WriteCharacter('[')
-	IWrite(TranslateWindowsColor(Background) + 10)
-	WriteCharacter('m')
+	PrintCharacter(0x1B)
+	/* PrintCharacter('[')
+	Print(TranslateWindowsColor(Background) + 10) */
+	Print("[%im", TranslateWindowsColor(Background) + 10)
+	/* PrintCharacter('m') */
 }
 
 i8 NO_COLORS := false
@@ -200,7 +188,7 @@ define void SetColor(i8 Foreground, i8 Background) {
 	}
 	
 	linux {
-		WriteANSIEscape(Foreground, Background)
+		PrintANSIEscape(Foreground, Background)
 	}
 	windows {
 		Background := Background << 4
@@ -228,7 +216,7 @@ define i16* ReadLine(i32 MaxLength) {
 
 /* Basic command line to argv parser since CommandLineToArgvW has no ascii version, and ArgV needs to be ASCII  */
 define void ParseCommandLine(i8* CommandLine, i64* ArgC, i8*** ArgV) {
-	i32 Length := ALen(CommandLine)
+	i32 Length := StringLength(CommandLine)
 	i32 ArgCount := 0
 	i8** Args := Alloc(32 * 8) /* 32 max params */
 	
