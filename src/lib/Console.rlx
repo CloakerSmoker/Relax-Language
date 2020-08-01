@@ -88,6 +88,7 @@ declare void ResetColors()
 define void Print(i8* Format, ... Args) {
 	i32 Length := StringLength(Format)
 	i32 ArgIndex := 1
+	i8 ColorsChanged := false
 	
 	for (i32 Index := 0, Index < Length, Index += 1) {
 		i8 Next := Format[Index]
@@ -124,6 +125,8 @@ define void Print(i8* Format, ... Args) {
 			}
 		}
 		else if (Next = '^') {
+			ColorsChanged := true
+			
 			Index += 2
 			i8 Fore := GetCharacterValue(Format[Index - 1])
 			i8 Back := GetCharacterValue(Format[Index])
@@ -135,7 +138,9 @@ define void Print(i8* Format, ... Args) {
 		}
 	}
 	
-	ResetColors()
+	if (ColorsChanged) {
+		ResetColors()
+	}
 }
 
 
@@ -168,16 +173,14 @@ define void PrintANSIEscape(i8 Foreground, i8 Background) {
 	/* Writes a pair of ANSI escape sequences to change the terminal colors to Foreground/Background */
 	
 	PrintCharacter(0x1B)
-	/* PrintCharacter('[')
-	IWrite(TranslateWindowsColor(Foreground)) */
-	Print("[%im", TranslateWindowsColor(Foreground))
-	/* PrintCharacter('m') */
+	PrintCharacter('[')
+	Print(TranslateWindowsColor(Foreground))
+	PrintCharacter('m')
 	
 	PrintCharacter(0x1B)
-	/* PrintCharacter('[')
-	Print(TranslateWindowsColor(Background) + 10) */
-	Print("[%im", TranslateWindowsColor(Background) + 10)
-	/* PrintCharacter('m') */
+	PrintCharacter('[')
+	Print(TranslateWindowsColor(Background) + 10)
+	PrintCharacter('m')
 }
 
 i8 NO_COLORS := false
