@@ -1115,6 +1115,9 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 			EmitMove_RX_IX(cState, ResultRegister, IntegerValue, ResultSize)
 		}
 	}
+	else if (ExpressionType = NODE_TYPE_ZERO) {
+		EmitXor_RX_RX(cState, ResultRegister, ResultRegister, 4)
+	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
 		VariableInfo* TargetVariable := ExpressionToCompile->VariableValue
 		

@@ -74,21 +74,6 @@ define i32 AWriteLine(i8* AString) {
 	AWrite(AString)
 	WriteNewLine()
 }
-/* define void Write(i8 Character) {
-	WriteCharacter(Character)
-} */
-/* define void Write(i8* AString) {
-	WriteCharacters(AString, ALen(AString))
-} */
-/* define void Write(i64 Number) {
-	i8* AString := IToA(Number)
-	
-	i32 Result := AWrite(AString)
-
-	Free(AString)
-	
-	return Result
-} */
 
 define i32 IWrite(i32** N) {
 	return 0
@@ -145,6 +130,29 @@ define i32 IWriteHexLine(i64 Number) {
 	
 	return Result
 }
+
+define void Print(i8 Character) {
+	WriteCharacter(Character)
+}
+define void Print(i8* AString) {
+	WriteCharacters(AString, ALen(AString))
+}
+define void Print(i8* FormatString, ... Args) {
+
+}
+define void Print(i64 Number) {
+	i8* AString := IToA(Number)
+	
+	i32 Result := AWrite(AString)
+
+	Free(AString)
+	
+	return Result
+}
+
+
+
+
 
 i8 Bright := 0x08
 i8 Red := 0x04

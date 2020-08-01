@@ -93,6 +93,9 @@ i8 NODE_TYPE_IDENTIFIER := 20
 
 i8 NODE_TYPE_ASSEMBLY := 21
 
+/* Dedicated zero node type, to ensure that the actual ValueType of the zero doesn't get optimized */
+i8 NODE_TYPE_ZERO := 22
+
 /*
 ==========================================
 	True AST node types
@@ -2495,11 +2498,10 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
 			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_ELF
 		}
-		/* TODO: Uncomment once you read this */
-		/* else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
-			Result->IntegerValue := 0
+		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
 			Result->ValueType := MakeType(pState->void, 1)
-		} */
+			Result->NodeType := NODE_TYPE_ZERO
+		}
 		else {
 			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
 			/* Using the found variable's type as the node type */

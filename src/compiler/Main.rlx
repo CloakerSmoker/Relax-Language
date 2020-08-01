@@ -27,7 +27,7 @@ struct BuildConfig {
 	i8 DumpInfo
 }
 
-void* null := 0 as void*
+/* void* null := 0 as void* */
 
 #Include ./src/lib/Memory.rlx
 #Include ./src/lib/File.rlx

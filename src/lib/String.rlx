@@ -139,6 +139,88 @@ define void AReverse(i8* Buffer) {
 	}
 }
 
+/* define i8 NumberToCharacter(i8 Number) {
+	if (Number < 10) {
+		return (Number + '0') As i8
+	}
+	else {
+		return (Number - 10 + 'a') As i8
+	}
+}
+define i8 GetCharacterValue(i8 Character) {
+	Character := Lower(Character)
+	
+	if (Character >= 'a') {
+		return ((Character - 'a') + 10) As i8
+	}
+	
+	return (Character - '0') As i8
+}
+
+define void MemoryReverse(i8* Buffer, i32 Length) {
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Temp := Buffer[Index]
+		Buffer[Index] := Buffer[Length - 1]
+		Buffer[Length - 1] := Temp
+		
+		Length -= 1
+	}
+}
+
+define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
+	if (Buffer = null) {
+		Buffer := Alloc(100)
+	}
+	
+	i8 Sign := 0
+	
+	if (Number < 0) {
+		Sign := true
+		
+		if (Base = 10) {
+			Number := -Number
+		}
+		else if (Base = 16) {
+			Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string
+			
+			Number := Number & 0x7FFFFFFFFFFFFFFF
+		}
+	}
+	
+	for (i32 Index := 0, Number != 0, Index += 1) {
+		Buffer[Index] := NumberToCharacter((Number % Base) As i8)
+		Number := Number / Base
+	}
+	
+	if (Index = 0) {
+		Buffer[0] := '0'
+		Index := 1
+	}
+	
+	if (Sign) {
+		if (Base = 10) {
+			Buffer[Index] := '-'
+		}
+		else if (Base = 16) {
+			i8 Last := GetCharacterValue(Buffer[Index - 1])
+			Last := Last | 0x8
+			Buffer[Index - 1] := NumberToCharacter(Last)
+		}
+	}
+	
+	Buffer[Index + 1] := 0
+	
+	MemoryReverse(Buffer, Index)
+	
+	return Buffer
+}
+define i8* IToA(i64 Number, i64 Base) {
+	return IToA(Number, Base, null)
+}
+define i8* IToA(i64 Number) {
+	return IToA(Number, 10, null)
+} */
+
 define i8* IToA(i64 Number) {
 	i8* Buffer := Alloc(100) As i8*
 	i8 Sign := 0
