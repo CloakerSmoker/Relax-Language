@@ -405,7 +405,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		
 		FinalizeBuilder(C.PE)
 		
-		/* WriteBuilder(C.PE, OutputFilePath) */
 		Result := FileWrite(OutputFileHandle, C.PE->Buffer, C.PE->BufferSize)
 		BytesWritten := C.PE->BufferSize
 	}
@@ -413,17 +412,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	if (Result < 0) {
 		Print("Error writing output file, error code: %i\nAborting", FileGetError(Result))
 		
-		/* AWrite("Error writing output file: ")
-		IWriteLine(FileGetError(Result))
-		AWriteLine("Aborting") */
 		Exit(1)
 	}
-	
-	/* TextColor(Blue)
-	AWrite("Done writing output file, ")
-	IWrite(BytesWritten)
-	AWriteLine(" bytes written.")
-	ResetColors() */
 	
 	Print("^10Done writing output file, %i bytes written^F0", BytesWritten)
 	

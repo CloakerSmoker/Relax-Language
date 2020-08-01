@@ -36,10 +36,17 @@ struct ExtraText {
 	i8{200} Text
 }
 
+/* /* Nested */ comment /* c /* o /* m /* m */ e */ n */ t */ */
+
+; /* /* Nested */ comment /* c /* o /* m /* m */ e */ n */ t */ */
+;;;;;;;;;;;;; coment
+
+/* /* Nested */ comment ;;;;;;; /* c /* o /* m /* m */ e */ n */ t */ */
+
 define i32 Main() {
-	PrintHex('aaaaaaaa')
+	PrintHex('aaaaaaaa') ; This flavor of comment should work
 	PrintLiteral(', ')
-	PrintHex('aaaaaaa')
+	PrintHex('aaaaaaa');even without the whitespace
 	PrintLiteral(', ')
 	PrintHex('aaaaa')
 	PrintLiteral(', ')

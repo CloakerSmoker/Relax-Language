@@ -69,19 +69,10 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	}
 	
 	PrintSpaces(LineNumberLength + 1) 
-	/* AWrite(" [ ")
-	TextColor(Blue | Bright) */
 	Print(" [^90")
 	PrintSafeString(At->SourceFilePath)
 	
 	Print(" ^F0]\n %s | ", LineNumberString)
-	
-	/* ResetColors()
-	AWriteLine(" ]")
-	
-	WriteCharacter(' ')
-	AWrite(LineNumberString)
-	AWrite(" | ") */
 	
 	i32 OffsetInSource := At->PositionInSource * 2
 	

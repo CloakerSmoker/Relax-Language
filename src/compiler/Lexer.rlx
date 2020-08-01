@@ -68,7 +68,7 @@ i8 OPERATOR_FIRST_COMPARISON := 11
 	i8 OPERATOR_GREATER_EQAUL := 16
 i8 OPERATOR_LAST_COMPARISON := 16
 
-/* Precedence level 4 is for prefix operators &/*. */
+/* Precedence level 4 is for prefix operators *& */
 
 i8 PRECEDENCE_5 := 17
 i8 OPERATOR_AS := 17
@@ -475,13 +475,32 @@ define Token* GetNextToken(TokenizerState* tState) {
 		else if (NextCharacter = '*') {
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
 		}
+		else if (NextCharacter = ';') {
+			i32 StartingLine := tState->CurrentLineNumber
+			
+			while (tState->CurrentLineNumber = StartingLine && !TokenizerAtEnd(tState)) {
+				GetNextCharacter(tState)
+			}
+		}
 		else if (NextCharacter = '/') {
 			if (NextCharacterMatches(tState, '*')) {
+				i8 Depth := 1
+				
 				loop {
 					NextCharacter := GetNextCharacter(tState)
 					
 					if (NextCharacter = '*' && PeekNextCharacter(tState) = '/') {
 						GetNextCharacter(tState)
+						
+						Depth -= 1
+					}
+					else if (NextCharacter = '/' && PeekNextCharacter(tState) = '*') {
+						GetNextCharacter(tState)
+						
+						Depth += 1
+					}
+					
+					if (Depth = 0) {
 						break
 					}
 					
