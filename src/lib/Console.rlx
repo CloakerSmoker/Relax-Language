@@ -88,7 +88,6 @@ declare void ResetColors()
 define void Print(i8* Format, ... Args) {
 	i32 Length := StringLength(Format)
 	i32 ArgIndex := 1
-	i8 ColorsChanged := false
 	
 	for (i32 Index := 0, Index < Length, Index += 1) {
 		i8 Next := Format[Index]
@@ -125,8 +124,6 @@ define void Print(i8* Format, ... Args) {
 			}
 		}
 		else if (Next = '^') {
-			ColorsChanged := true
-			
 			Index += 2
 			i8 Fore := GetCharacterValue(Format[Index - 1])
 			i8 Back := GetCharacterValue(Format[Index])
@@ -136,10 +133,6 @@ define void Print(i8* Format, ... Args) {
 		else {
 			PrintCharacter(Next)
 		}
-	}
-	
-	if (ColorsChanged) {
-		ResetColors()
 	}
 }
 

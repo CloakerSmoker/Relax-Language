@@ -325,8 +325,11 @@ define i8 GetPrecedence(Token* ForOperator) {
 	
 	i8 Operator := (ForOperator->Value) As i8
 	
-	if (Operator >= PRECEDENCE_11) {
-		return 11
+	if (Operator >= PRECEDENCE_13) {
+		return 13
+	}
+	else if (Operator >= PRECEDENCE_12) {
+		return 12
 	}
 	else if (Operator >= PRECEDENCE_10) {
 		return 10
@@ -343,8 +346,8 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator >= PRECEDENCE_6) {
 		return 6
 	}
-	else if (Operator >= PRECEDENCE_5) {
-		return 5
+	else if (Operator >= PRECEDENCE_4) {
+		return 4
 	}
 	else if (Operator >= PRECEDENCE_3) {
 		return 3
@@ -363,19 +366,19 @@ define i8 GetPrefixPrecedence(Token* ForOperator) {
 	i8 Operator := (ForOperator->Value) As i8
 	
 	if (Operator = OPERATOR_STAR) {
-		return 4
+		return 5
 	}
 	else if (Operator = OPERATOR_AND) {
-		return 4
+		return 5
 	}
 	else if (Operator = OPERATOR_BANG) {
-		return 10
+		return 11
 	}
 	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
-		return 10
+		return 11
 	}
 	else if (Operator = OPERATOR_POUND) {
-		return 12
+		return 13
 	}
 	
 	return 0 /* Returns 0 when the operator is not a prefix operator */
@@ -708,7 +711,7 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	
 	PrintNewLine()
 	
-	PrettyError(BadNode~>Context, ErrorMessage, Red | Bright)
+	PrettyError(BadNode~>Context, ErrorMessage, Red)
 	Exit(1)
 }
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {

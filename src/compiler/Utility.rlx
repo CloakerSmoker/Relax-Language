@@ -69,7 +69,7 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	}
 	
 	PrintSpaces(LineNumberLength + 1) 
-	Print(" [^90")
+	Print(" [^90 ")
 	PrintSafeString(At->SourceFilePath)
 	
 	Print(" ^F0]\n %s | ", LineNumberString)

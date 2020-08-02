@@ -43,6 +43,15 @@ struct ExtraText {
 
 /* /* Nested */ comment ;;;;;;; /* c /* o /* m /* m */ e */ n */ t */ */
 
+define void* Test() {
+	i32 L := 0
+	
+	return &L As void*
+}
+define i32 Test2() {
+	return 1 << 2 & 10000000
+}
+
 define i32 Main() {
 	PrintHex('aaaaaaaa') ; This flavor of comment should work
 	PrintLiteral(', ')

@@ -316,7 +316,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	if !(FoundMain) {
 		SwapOutputStream()
-		/* TextColor(Red | Bright) */
 		Print("^50Main function not found, aborting.^F0")
 		Exit(1)
 	}
@@ -324,20 +323,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	ResolveAllLabels(cState)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		/* TextColor(Blue)
-		
-		AWrite("	Globals use ")
-		IWrite(C.pState->GlobalOffset)
-		AWriteLine(" bytes") */
-		
 		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", C.pState->GlobalOffset, C.Index)
-		
-		/* WriteCharacter('	')
-		IWrite(C.Index)
-		AWriteLine(" total bytes of code generated.")
-		WriteCharacter('	')
-		
-		ResetColors() */
 	}
 	
 	FileDelete(OutputFilePath)
@@ -347,12 +333,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	i64 OutputFileHandle := FileOpen(OutputFilePath, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
 	
 	if (OutputFileHandle < 0) {
-		Print("Could not open output file, error code: %i\nAborting", FileGetError(OutputFileHandle))
-		
-		
-		/* AWrite("Could not open output file, error code: ")
-		IWriteLine(FileGetError(OutputFileHandle))
-		AWriteLine("Aborting") */
+		SwapOutputStream()
+		Print("Could not open output file, error code: %i\nAborting\n", FileGetError(OutputFileHandle))
 		Exit(1)
 	}
 	
@@ -383,7 +365,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		
 		FinalizeELFBuilder(C.ELF, MainOffset)
 		
-		/* WriteELFBuilder(C.ELF, OutputFilePath) */
 		Result := FileWrite(OutputFileHandle, C.ELF->Buffer, C.ELF->BufferSize)
 		BytesWritten := C.ELF->BufferSize
 	}
@@ -410,12 +391,12 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	}
 	
 	if (Result < 0) {
-		Print("Error writing output file, error code: %i\nAborting", FileGetError(Result))
-		
+		SwapOutputStream()
+		Print("Error writing output file, error code: %i\nAborting\n", FileGetError(Result))
 		Exit(1)
 	}
 	
-	Print("^10Done writing output file, %i bytes written^F0", BytesWritten)
+	Print("^10Done writing output file, %i bytes written^F0\n", BytesWritten)
 	
 	FileClose(OutputFileHandle)
 }
