@@ -267,7 +267,7 @@ define ELFBuilder* BuildELFBuilder() {
 	return NewBuilder
 }
 
-define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
+define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset, i64 ImageBase) {
 	i32 ProgramHeadersSize := TargetBuilder->ELF->ProgramHeaderEntryCount * #ELFProgramHeader
 	i32 SectionHeadersSize := TargetBuilder->ELF->SectionHeaderEntryCount * #ELFSectionHeader
 	i32 CodeSize := TargetBuilder->CodeProgramHeader->FileSize
@@ -326,17 +326,17 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset) {
 	if (TargetBuilder->DataProgramHeader) {
 		/* Update the data segment/section. Todo: If 1kb of globals are used, push the code segment down another page */
 		TargetBuilder->DataProgramHeader->FileOffset := DataOffset
-		TargetBuilder->DataProgramHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset + 0x1000
-		TargetBuilder->DataSectionHeader->VirtualAddress := DEFAULT_IMAGE_BASE + DataOffset + 0x1000
+		TargetBuilder->DataProgramHeader->VirtualAddress := ImageBase + DataOffset + 0x1000
+		TargetBuilder->DataSectionHeader->VirtualAddress := ImageBase + DataOffset + 0x1000
 	}
 	
 	/* Update the segments to use the imagebase, otherwise they'd be mapped into address 0 */
-	TargetBuilder->PHDR->VirtualAddress += DEFAULT_IMAGE_BASE
-	TargetBuilder->LoadPHDR->VirtualAddress += DEFAULT_IMAGE_BASE
-	TargetBuilder->StringSection->VirtualAddress += DEFAULT_IMAGE_BASE
+	TargetBuilder->PHDR->VirtualAddress += ImageBase
+	TargetBuilder->LoadPHDR->VirtualAddress += ImageBase
+	TargetBuilder->StringSection->VirtualAddress += ImageBase
 	
 	/* Update the code segment + section with the code file offset, and entrypoint */
-	i64 CodeBase := DEFAULT_IMAGE_BASE + 0x2000 + CodeOffset
+	i64 CodeBase := ImageBase + 0x2000 + CodeOffset
 	i64 EntryPoint := CodeBase + MainOffset
 	
 	TargetBuilder->ELF->EntryPoint := EntryPoint

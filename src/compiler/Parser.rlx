@@ -842,7 +842,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 	}
 	
 	SwapOutputStream()
-	Print("No matching overload found for:")
+	Print("No matching overload found for:\n")
 	
 	PrettyError(Caller~>Context, Red | Bright)
 	
@@ -1631,6 +1631,9 @@ define void ParseAndAddStruct(ParserState* pState) {
 		NewType := AddType(pState, Name, Fields, 0, TYPE_STRUCT)
 	}
 	
+	NewType->StructMethods := Methods
+	NewType->StructFields := Fields
+	
 	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
 	
 	/* Consumes the opening '{' */
@@ -1729,8 +1732,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 	
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
 	
-	NewType->StructMethods := Methods
-	NewType->StructFields := Fields
 	NewType->Size := TotalSize
 	NewType->IsStructType := true
 	NewType->IsIncomplete := false

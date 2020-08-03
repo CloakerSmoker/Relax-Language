@@ -99,7 +99,8 @@ define void DumpGlobals(CompilerState* cState) {
 					PrintNewLine()
 				}
 				
-				Print("%s: %x", NextGlobal->Name, Base + ThisOffset)
+				PrintSafeString(NextGlobal->Name)
+				Print(": %x", Base + ThisOffset)
 				
 				/* PrintSafeString(NextGlobal->Name)
 				AWrite(": ")
@@ -265,22 +266,27 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	C.ParameterRegistersMaxSave := 0
 	C.ParameterRegistersMinSave := 0
+	
+	C.CurrentFunction := null
 		
 	i64 CODE_BASE := 0x3000
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		C.GlobalBase := DEFAULT_IMAGE_BASE + 0x10
-		CODE_BASE := DEFAULT_IMAGE_BASE + pState->GlobalOffset + 0x10
+		C.GlobalBase := Config->ImageBase + 0x10
+		CODE_BASE := Config->ImageBase + pState->GlobalOffset + 0x10
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		C.ELF := BuildELFBuilder()
-		C.GlobalBase := DEFAULT_IMAGE_BASE + 64 + 0x1000
+		C.GlobalBase := Config->ImageBase + 64 + 0x1000
 		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		C.PE := BuildBuilder()
+		
 		C.PE->ImportFixupBase := C.CodeBuffer
-		C.GlobalBase := DEFAULT_IMAGE_BASE + C.PE->NextRVA
+		C.PE->PE->ImageBase := Config->ImageBase
+		
+		C.GlobalBase := Config->ImageBase + C.PE->NextRVA
 	}
 	
 	CompilerState* cState := &C
@@ -290,7 +296,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	}
 	
 	i32 MainOffset := 0
-		
+	
 	/* Compile all regular functions */
 	i8 FoundMain := CompileFunctionHashMap(Config, cState, pState->Functions, CODE_BASE, &MainOffset)
 	
@@ -350,7 +356,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		
 		BinaryBytes[0] := 0xE9
 		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
-		((Binary + 8) As i64*)[0] := DEFAULT_IMAGE_BASE
+		((Binary + 8) As i64*)[0] := Config->ImageBase
 		
 		for (i32 CodeIndex := 0, CodeIndex < cState->Index, CodeIndex += 1) {
 			BinaryBytes[CodeBase + CodeIndex] := cState->CodeBuffer[CodeIndex]
@@ -363,7 +369,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		AddDataSection(cState->ELF, cState->pState->GlobalOffset)
 		AddCodeSection(cState->ELF, cState->CodeBuffer, cState->Index)
 		
-		FinalizeELFBuilder(cState->ELF, MainOffset)
+		FinalizeELFBuilder(cState->ELF, MainOffset, Config->ImageBase)
 		
 		Result := FileWrite(OutputFileHandle, cState->ELF->Buffer, cState->ELF->BufferSize)
 		BytesWritten := cState->ELF->BufferSize
@@ -787,6 +793,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	if (cState->RegisterStackIndex != 0) {
 		ContextError(FunctionToCompile~>Context, "[INTERNAL] Register stack not empty")
 	}
+	
+	cState->CurrentFunction := 0
 }
 
 declare void Compile(CompilerState*, ASTNode*)

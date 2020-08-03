@@ -7,6 +7,10 @@ struct Test {
 	
 	declare void Test(),
 	
+	define i64 Common() {
+		return 300
+	},
+	
 	define i64 GetValue() {
 		return this->Value
 	},
@@ -18,7 +22,7 @@ struct Test {
 	},
 	
 	define void Test() {
-		return 0
+		return this->Common()
 	}
 }
 
