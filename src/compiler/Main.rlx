@@ -51,15 +51,7 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	if (FileHandle < 0) {
 		SwapOutputStream()
-		/* AWrite("Could not open file: ")
-		AWriteLine(FilePath) */
-		
 		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
-		
-		/* AWrite("Error code: ")
-		IWriteLine(FileGetError(FileHandle))
-		
-		AWriteLine("Aborting") */
 		Exit(1)
 	}
 	
@@ -75,14 +67,6 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	if (ReadResult < 0) {
 		SwapOutputStream()
-		/* AWrite("Could not read file: ")
-		AWriteLine(FilePath)
-		
-		AWrite("Error code: ")
-		IWriteLine(FileGetError(ReadResult))
-		
-		AWriteLine("Aborting") */
-		
 		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
 		
 		Exit(1)

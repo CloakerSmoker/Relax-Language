@@ -323,7 +323,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	ResolveAllLabels(cState)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", C.pState->GlobalOffset, C.Index)
+		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", cState->pState->GlobalOffset, cState->Index)
 	}
 	
 	FileDelete(OutputFilePath)
@@ -343,7 +343,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		i32 CodeBase := pState->GlobalOffset + 0x10
-		i32 FileSize := CodeBase + C.Index
+		i32 FileSize := CodeBase + cState->Index
 		
 		void* Binary := Alloc(FileSize)
 		i8* BinaryBytes := Binary As i8*
@@ -352,42 +352,42 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
 		((Binary + 8) As i64*)[0] := DEFAULT_IMAGE_BASE
 		
-		for (i32 CodeIndex := 0, CodeIndex < C.Index, CodeIndex += 1) {
-			BinaryBytes[CodeBase + CodeIndex] := C.CodeBuffer[CodeIndex]
+		for (i32 CodeIndex := 0, CodeIndex < cState->Index, CodeIndex += 1) {
+			BinaryBytes[CodeBase + CodeIndex] := cState->CodeBuffer[CodeIndex]
 		}
 		
 		Result := FileWrite(OutputFileHandle, Binary, FileSize)
 		BytesWritten := FileSize
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		AddDataSection(C.ELF, C.pState->GlobalOffset)
-		AddCodeSection(C.ELF, C.CodeBuffer, C.Index)
+		AddDataSection(cState->ELF, cState->pState->GlobalOffset)
+		AddCodeSection(cState->ELF, cState->CodeBuffer, cState->Index)
 		
-		FinalizeELFBuilder(C.ELF, MainOffset)
+		FinalizeELFBuilder(cState->ELF, MainOffset)
 		
-		Result := FileWrite(OutputFileHandle, C.ELF->Buffer, C.ELF->BufferSize)
-		BytesWritten := C.ELF->BufferSize
+		Result := FileWrite(OutputFileHandle, cState->ELF->Buffer, cState->ELF->BufferSize)
+		BytesWritten := cState->ELF->BufferSize
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		AddData(C.PE, C.pState->GlobalOffset)
+		AddData(cState->PE, cState->pState->GlobalOffset)
 		
-		i64 TextRVA := AddCode(C.PE, C.CodeBuffer, C.Index, MainOffset)
+		i64 TextRVA := AddCode(cState->PE, cState->CodeBuffer, cState->Index, MainOffset)
 		
-		for (i32 RelocationIndex := 0, RelocationIndex < (C.CodeRelocationCount), RelocationIndex += 1) {
-			i32 NextRelocationOffset := (C.CodeRelocations)[RelocationIndex]
-			
-			i32 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
-			i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
-			
-			/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
-			
-			AddRelocation(C.PE, PageRVA, OffsetInPage, false)
-		}
+		; for (i32 RelocationIndex := 0, RelocationIndex < (cState->CodeRelocationCount), RelocationIndex += 1) {
+		; 	i32 NextRelocationOffset := (cState->CodeRelocations)[RelocationIndex]
+		; 	
+		; 	i32 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
+		; 	i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
+		; 	
+		; 	/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
+		; 	
+		; 	AddRelocation(cState->PE, PageRVA, OffsetInPage, false)
+		; }
 		
-		FinalizeBuilder(C.PE)
+		FinalizeBuilder(cState->PE)
 		
-		Result := FileWrite(OutputFileHandle, C.PE->Buffer, C.PE->BufferSize)
-		BytesWritten := C.PE->BufferSize
+		Result := FileWrite(OutputFileHandle, cState->PE->Buffer, cState->PE->BufferSize)
+		BytesWritten := cState->PE->BufferSize
 	}
 	
 	if (Result < 0) {
@@ -396,7 +396,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		Exit(1)
 	}
 	
-	Print("^10Done writing output file, %i bytes written^F0\n", BytesWritten)
+	Print("^10Done writing output file, %i bytes written, file format contains %i bytes of overhead^F0\n", BytesWritten, BytesWritten - cState->Index)
 	
 	FileClose(OutputFileHandle)
 }

@@ -27,7 +27,6 @@ define i64 FileOpen(i8* FilePath, i32 Mode) {
 		
 		i16 FILE_ATTRIBUTE_NORMAL := 128
 		
-		
 		i32 AccessMask := 0
 		i8 OpenMode := Mode & 0x03
 		

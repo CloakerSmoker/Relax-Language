@@ -575,122 +575,122 @@ define i64 AddCode(PEBuilder* ToBuilder, i8* CodeBytes, i32 CodeLength, i32 Entr
 i16 RELOCATION_HIGHLOW := 3 * 0x1000
 i16 RELOCATION_DIR64 := 10 * 0x1000
 
-define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
-	
-	return 0
-	
-	i32 Type := RELOCATION_HIGHLOW
-	
-	if (Is64Bit) {
-		Type := RELOCATION_DIR64
-	}
-	
-	/* Extend the RelocationHelper's buffer to hold another relocation */
-	
-	Helper->Entries := ReAlloc(Helper->Entries, ((Helper->EntryCount) + 1) * 2) As i16*
-	
-	/* Add the new relocation to the Helper's buffer */
-	
-	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
-	Helper->EntryCount += 1
-}
+; define void AddRelocationToHelper(RelocationHelper* Helper, i16 OffsetInPage, i8 Is64Bit) {
+; 	
+; 	return 0
+; 	
+; 	i32 Type := RELOCATION_HIGHLOW
+; 	
+; 	if (Is64Bit) {
+; 		Type := RELOCATION_DIR64
+; 	}
+; 	
+; 	/* Extend the RelocationHelper's buffer to hold another relocation */
+; 	
+; 	Helper->Entries := ReAlloc(Helper->Entries, ((Helper->EntryCount) + 1) * 2) As i16*
+; 	
+; 	/* Add the new relocation to the Helper's buffer */
+; 	
+; 	(Helper->Entries)[Helper->EntryCount] := Type + OffsetInPage
+; 	Helper->EntryCount += 1
+; }
 
-define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
-	/* Adds a relocation for PageRVA + OffsetInPage for either a 32 or 64 bit value */
-	
-	return 0 
-	
-	ToBuilder->RelocationCount += 1
-	
-	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
-		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
-		
-/* 		AWrite("	RelocationPages[")
-		IWrite(Index)
-		AWrite("] == ")
-		IWriteLine(NextPage) */
-		
-		if (NextPage->PageRVA = PageRVA) {
-			/* If a RelocationHelper already exists for this page, add the relocation to the found helper */
-			return AddRelocationToHelper(NextPage, OffsetInPage, Is64Bit)
-		}
-	}
-	
-	/* Otherwise, we need to build a new RelocationHelper for this page */
-	
-	RelocationHelper* NewHelper := Alloc(#RelocationHelper) As RelocationHelper*
-	NewHelper->PageRVA := PageRVA
-	NewHelper->Entries := Alloc(2) As i16*
-	
-	/* And add it to ToBuilder's relocation helper array */
-	
-	ToBuilder->RelocationPages := ReAlloc(ToBuilder->RelocationPages, ((ToBuilder->RelocationPageCount) + 1) * 8)
-	(ToBuilder->RelocationPages)[ToBuilder->RelocationPageCount] := NewHelper
-	ToBuilder->RelocationPageCount += 1
-	
-	/* Then we can add the relocation to the new helper */
-	
-	AddRelocationToHelper(NewHelper, OffsetInPage, Is64Bit)
-}
+; define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i8 Is64Bit) {
+; 	/* Adds a relocation for PageRVA + OffsetInPage for either a 32 or 64 bit value */
+; 	
+; 	return 0 
+; 	
+; 	ToBuilder->RelocationCount += 1
+; 	
+; 	for (i32 Index := 0, Index < (ToBuilder->RelocationPageCount), Index += 1) {
+; 		RelocationHelper* NextPage := (ToBuilder->RelocationPages)[Index]
+; 		
+; /* 		AWrite("	RelocationPages[")
+; 		IWrite(Index)
+; 		AWrite("] == ")
+; 		IWriteLine(NextPage) */
+; 		
+; 		if (NextPage->PageRVA = PageRVA) {
+; 			/* If a RelocationHelper already exists for this page, add the relocation to the found helper */
+; 			return AddRelocationToHelper(NextPage, OffsetInPage, Is64Bit)
+; 		}
+; 	}
+; 	
+; 	/* Otherwise, we need to build a new RelocationHelper for this page */
+; 	
+; 	RelocationHelper* NewHelper := Alloc(#RelocationHelper) As RelocationHelper*
+; 	NewHelper->PageRVA := PageRVA
+; 	NewHelper->Entries := Alloc(2) As i16*
+; 	
+; 	/* And add it to ToBuilder's relocation helper array */
+; 	
+; 	ToBuilder->RelocationPages := ReAlloc(ToBuilder->RelocationPages, ((ToBuilder->RelocationPageCount) + 1) * 8)
+; 	(ToBuilder->RelocationPages)[ToBuilder->RelocationPageCount] := NewHelper
+; 	ToBuilder->RelocationPageCount += 1
+; 	
+; 	/* Then we can add the relocation to the new helper */
+; 	
+; 	AddRelocationToHelper(NewHelper, OffsetInPage, Is64Bit)
+; }
 
-define void FinalizeRelocations(PEBuilder* TargetBuilder) {
-	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
-	
-	return 0
-	
-	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (#RelocationBlockHeader + 32)
-	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
-	
-	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
-	
-	void* Buffer := Alloc(RelocationSectionSize)
-	i32 BufferIndex := 0
-	
-	for (i32 PageIndex := 0, PageIndex < (TargetBuilder->RelocationPageCount), PageIndex += 1) {
-		/* For each page with relocations */
-		
-		RelocationBlockHeader* NextBlock := (Buffer + BufferIndex) As RelocationBlockHeader*
-		BufferIndex += 8
-		
-		/* Write a relocation block header into the buffer */
-		
-		RelocationHelper* NextHelper := (TargetBuilder->RelocationPages)[PageIndex]
-		
-		/* And get the list of relocations in the block */
-		
-		NextBlock->PageRVA := NextHelper->PageRVA
-		NextBlock->BlockSize := 8 + ((NextHelper->EntryCount) * 2)
-		
-		/* Set the block header's fields */
-		
-		for (i32 EntryIndex := 0, EntryIndex < (NextHelper->EntryCount), EntryIndex += 1) {
-			/* For each relocation inside of the current page, write it into the buffer */
-			
-			i16 NextEntry := (NextHelper->Entries)[EntryIndex]
-			
-			((Buffer + BufferIndex) As i16*)[0] := NextEntry
-			BufferIndex += 2
-		}
-		
-		i32 Remainder := BufferIndex % 32
-		
-		if (Remainder) {
-			BufferIndex += 32 - Remainder
-		}
-	}
-	
-	/* Update the PE data directory for relocations */
-	
-	TargetBuilder->PE->BaseRelocationTableRVA := TargetBuilder->NextRVA
-	TargetBuilder->PE->BaseRelocationTableSize := RelocationSectionSize
-	
-/* 	AWrite("BaseReloc: ")
-	IWriteLine(TargetBuilder->PE->BaseRelocationTableRVA) */
-	
-	/* Write the .reloc section */
-	
-	PopulateSection(TargetBuilder, TargetBuilder->RelocHeader, Buffer As i8*, RelocationSectionSize)
-}
+; define void FinalizeRelocations(PEBuilder* TargetBuilder) {
+; 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
+; 	
+; 	return 0
+; 	
+; 	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (#RelocationBlockHeader + 32)
+; 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
+; 	
+; 	i32 RelocationSectionSize := PageHeadersSize + PageEntriesSize
+; 	
+; 	void* Buffer := Alloc(RelocationSectionSize)
+; 	i32 BufferIndex := 0
+; 	
+; 	for (i32 PageIndex := 0, PageIndex < (TargetBuilder->RelocationPageCount), PageIndex += 1) {
+; 		/* For each page with relocations */
+; 		
+; 		RelocationBlockHeader* NextBlock := (Buffer + BufferIndex) As RelocationBlockHeader*
+; 		BufferIndex += 8
+; 		
+; 		/* Write a relocation block header into the buffer */
+; 		
+; 		RelocationHelper* NextHelper := (TargetBuilder->RelocationPages)[PageIndex]
+; 		
+; 		/* And get the list of relocations in the block */
+; 		
+; 		NextBlock->PageRVA := NextHelper->PageRVA
+; 		NextBlock->BlockSize := 8 + ((NextHelper->EntryCount) * 2)
+; 		
+; 		/* Set the block header's fields */
+; 		
+; 		for (i32 EntryIndex := 0, EntryIndex < (NextHelper->EntryCount), EntryIndex += 1) {
+; 			/* For each relocation inside of the current page, write it into the buffer */
+; 			
+; 			i16 NextEntry := (NextHelper->Entries)[EntryIndex]
+; 			
+; 			((Buffer + BufferIndex) As i16*)[0] := NextEntry
+; 			BufferIndex += 2
+; 		}
+; 		
+; 		i32 Remainder := BufferIndex % 32
+; 		
+; 		if (Remainder) {
+; 			BufferIndex += 32 - Remainder
+; 		}
+; 	}
+; 	
+; 	/* Update the PE data directory for relocations */
+; 	
+; 	TargetBuilder->PE->BaseRelocationTableRVA := TargetBuilder->NextRVA
+; 	TargetBuilder->PE->BaseRelocationTableSize := RelocationSectionSize
+; 	
+; /* 	AWrite("BaseReloc: ")
+; 	IWriteLine(TargetBuilder->PE->BaseRelocationTableRVA) */
+; 	
+; 	/* Write the .reloc section */
+; 	
+; 	PopulateSection(TargetBuilder, TargetBuilder->RelocHeader, Buffer As i8*, RelocationSectionSize)
+; }
 
 /*
 ==========================================

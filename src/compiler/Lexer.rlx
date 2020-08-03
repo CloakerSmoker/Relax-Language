@@ -680,9 +680,9 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				SafeWideString* IncludePath := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 				
-				Print("Including file: ")
+				Print("Including file: '")
 				PrintSafeString(IncludePath)
-				PrintNewLine()
+				Print("'\n")
 				
 				i32 EndIndex := IncludePath->Length
 				i16 OldFollowingCharacter := (IncludePath->Buffer)[EndIndex]
@@ -707,7 +707,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 					CopyContext(NextIncludeToken~>Context, IncludeToken~>Context)
 				}
 				
-				Print("Done including file\n")
+				; Print("Done including file\n")
 				
 				tState->TokenIndex -= 1
 				
