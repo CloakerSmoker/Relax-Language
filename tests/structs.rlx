@@ -2,9 +2,9 @@ define void* Alloc(i64 A, void** B) {
 	return 0 as void*
 }
 
-#Include ./src/lib/Memory.rlx
-#Include ./src/lib/String.rlx
-#Include ./src/lib/Console.rlx
+#Require ./src/lib/Memory.rlx
+#Require ./src/lib/String.rlx
+#Require ./src/lib/Console.rlx
 
 struct Test {
 	i8 A,

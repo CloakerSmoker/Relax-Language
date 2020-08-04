@@ -1,3 +1,5 @@
+#Require ./src/lib/Memory.rlx
+
 /* generics when? */
 define i32 StringLength(i8* String) {
 	for (i32 Length := 0, String[Length] != 0, Length += 1) {}

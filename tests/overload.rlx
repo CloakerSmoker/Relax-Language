@@ -1,6 +1,4 @@
-#Include ./src/lib/Memory.rlx
-#Include ./src/lib/String.rlx
-#Include ./src/lib/Console.rlx
+#Require ./src/lib/Console.rlx
 
 /* E: 0 */
 define void Conflict(i32 Q) {
@@ -31,8 +29,6 @@ struct D {
 
 define i32 Main() {
 	i32 A := 0
-	
-	/* TODO: Unfuck this logic */
 	
 	Conflict(A)		/* A is an i32, directly calls the i32 overload */
 	Conflict(&A)	/* &A is a pointer, with no i64/void parmeter, so it calls the i64* overload */

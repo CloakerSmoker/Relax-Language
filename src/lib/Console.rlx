@@ -1,8 +1,9 @@
 DllImport i64 _GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
-DllImport i8 WriteConsole(i64, i16*, i32, i32*, i64) {Kernel32.dll, WriteConsoleW}
-DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
 DllImport i8 SetConsoleTextAttribute(i64, i16) {Kernel32.dll, SetConsoleTextAttribute}
-DllImport i8 ReadConsole(i64, void*, i32, i32*, void) {Kernel32.dll, ReadConsoleW}
+
+#Require ./src/lib/Memory.rlx
+#Require ./src/lib/String.rlx
+#Require ./src/lib/File.rlx
 
 define i64 GetStdHandle(i32 HandleNumber) {
 	windows {
@@ -28,27 +29,18 @@ define void SwapOutputStream() {
 
 define void PrintNewLine() {
 	windows {
-		i32 BytesWritten := 0
 		i16 NewLine := 0x0A0D
 		
-		;FileWrite(STDOUT, &NewLine As void*, 2)
-		WriteFile(STDOUT, (&NewLine) As i8*, 2, &BytesWritten, 0)
+		FileWrite(STDOUT, &NewLine As void*, 2)
 	}
 	linux {
 		i8 NewLine := 0x0A
-		syscall:(1, STDOUT, &NewLine, 1)
-		;FileWrite(STDOUT, &NewLine As void*, 1)
+		FileWrite(STDOUT, &NewLine As void*, 1)
 	}
 }
 define void PrintCharacters(i8* Characters, i32 Count) {
-	windows {
-		i32 BytesWritten := 0
-		
-		WriteFile(STDOUT, Characters, Count, &BytesWritten, 0)
-	}
-	linux {
-		syscall:(1, STDOUT, Characters, Count)
-	}
+
+	FileWrite(STDOUT, Characters, Count)
 }
 
 define void PrintLiteral(i64 PackedCharacters) {
@@ -205,7 +197,7 @@ define i8* ReadLine(i32 MaxLength) {
 		i8* Buffer := Alloc(MaxLength * 2)
 		i32 CharactersRead := 0
 	
-		ReadConsole(STDIN, Buffer, MaxLength, &CharactersRead, 0)
+		;ReadConsole(STDIN, Buffer, MaxLength, &CharactersRead, 0)
 		
 		return Buffer
 	}
