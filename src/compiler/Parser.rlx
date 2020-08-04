@@ -1032,7 +1032,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 				
 				ResultType := TargetField->ValueType
 				
-				if (Operator = OPERATOR_TILDE_GREATER) {
+				if (Operator = OPERATOR_TILDE_GREATER && !ResultType.IsArray) {
 					ResultType := IncrementPointerType(pState, ResultType)
 				}
 				

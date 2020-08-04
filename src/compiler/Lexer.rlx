@@ -13,6 +13,8 @@ struct Token {
 struct TokenizerState {
 	BuildConfig* Config,
 	SafeWideString* SourceFilePath,
+	HashMap* IncludedFiles,
+	
 	i16* Source,
 	i32 SourceIndex,
 	i32 SourceLength,
@@ -147,12 +149,14 @@ i8 KEYWORD_LINUX := 16
 
 i8 KEYWORD_ASSEMBLY := 17
 
-define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
+define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceFilePath, HashMap* IncludedFiles, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
 	
 	NewState->Config := Config
 	
 	NewState->SourceFilePath := SourceFilePath
+	
+	NewState->IncludedFiles := IncludedFiles
 	
 	NewState->Source := Source
 	NewState->SourceLength := SourceLength
@@ -189,6 +193,9 @@ define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceF
 	HashMapASet(K, "asm", 		KEYWORD_ASSEMBLY)
 	
 	return NewState
+}
+define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
+	return NewTokenizer(Config, SourceFilePath, NewHashMap(), Source, SourceLength)
 }
 
 define Token* PushToken(TokenizerState* tState, void* Value, i16* Source, i32 PositionInSource, i32 LengthInSource, i8 Type) {
@@ -658,7 +665,9 @@ define Token* GetNextToken(TokenizerState* tState) {
 			
 			SafeWideString* DirectiveText := MakeSafeStringToken(tState, StartingIndex + 1) As SafeWideString*
 			
-			if (SafeStringEqualsAString(DirectiveText, "include")) {
+			i8 IsRequire := SafeStringEqualsAString(DirectiveText, "require")
+			
+			if (IsRequire || SafeStringEqualsAString(DirectiveText, "include")) {
 				StartingIndex := tState->SourceIndex
 				
 				if !(IsWhiteSpace(GetNextCharacter(tState))) {
@@ -680,6 +689,16 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				SafeWideString* IncludePath := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 				
+				if (IsRequire) {
+					HashMapElement* FoundFile := HashMapGetValue(tState->IncludedFiles, IncludePath)
+					
+					if (FoundFile) {
+						continue
+					}
+				}
+				
+				HashMapAddValue(tState->IncludedFiles, IncludePath, true)
+				
 				Print("Including file: '")
 				PrintSafeString(IncludePath)
 				Print("'\n")
@@ -694,7 +713,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				
-				TokenizerState* IncludeTokenizer := NewTokenizer(tState->Config, IncludePath, IncludeFileText, IncludeFileSize)
+				TokenizerState* IncludeTokenizer := NewTokenizer(tState->Config, IncludePath, tState->IncludedFiles, IncludeFileText, IncludeFileSize)
 				
 				loop {
 					Token* NextIncludeToken := GetNextToken(IncludeTokenizer)
