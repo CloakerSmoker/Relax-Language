@@ -668,18 +668,22 @@ define Token* GetNextToken(TokenizerState* tState) {
 			i8 IsRequire := SafeStringEqualsAString(DirectiveText, "require")
 			
 			if (IsRequire || SafeStringEqualsAString(DirectiveText, "include")) {
-				StartingIndex := tState->SourceIndex
+				StartingIndex := tState->SourceIndex + 1
 				
-				if !(IsWhiteSpace(GetNextCharacter(tState))) {
-					Print("Fuck off")
-					Exit(1)
-				}
-				
-				StartingIndex += 1
+				GetNextCharacter(tState)
 				
 				NextCharacter := PeekNextCharacter(tState)
 				
-				while (IsPath(NextCharacter)) {
+				i8 ExpectCloseQuote := false
+				
+				if (NextCharacter = '"') {
+					GetNextCharacter(tState)
+					NextCharacter := PeekNextCharacter(tState)
+					
+					StartingIndex += ExpectCloseQuote := true
+				}
+				
+				while (IsPath(NextCharacter, ExpectCloseQuote)) {
 					NextCharacter := GetNextCharacter(tState)
 				}
 				
@@ -688,6 +692,13 @@ define Token* GetNextToken(TokenizerState* tState) {
 				}
 				
 				SafeWideString* IncludePath := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
+				
+				if (ExpectCloseQuote) {
+					if !(NextCharacterMatches(tState, '"')) {
+						ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, PeekNextCharacter(tState))
+						TokenError(ErrorToken, "Expected closing quote for include/require path.")
+					}
+				}
 				
 				if (IsRequire) {
 					HashMapElement* FoundFile := HashMapGetValue(tState->IncludedFiles, IncludePath)

@@ -74,7 +74,7 @@ define i8 IsAlphaNumeric(i16 Character) {
 	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
 }
 
-define i8 IsPath(i16 Character) {
+define i8 IsPath(i16 Character, i8 AllowExtra) {
 	if (IsAlphaNumeric(Character)) {
 		return true
 	}
@@ -83,6 +83,11 @@ define i8 IsPath(i16 Character) {
 	}
 	else if (Character = '.') {
 		return true
+	}
+	else if (AllowExtra) {
+		if (Character = ' ') {
+			return true
+		}
 	}
 	
 	return false
