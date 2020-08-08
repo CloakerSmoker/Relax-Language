@@ -93,7 +93,8 @@ i8 NODE_TYPE_IDENTIFIER := 20
 
 i8 NODE_TYPE_ASSEMBLY := 21
 
-/* Dedicated zero node type, to ensure that the actual ValueType of the zero doesn't get optimized */
+; Dedicated zero node type, to ensure that the actual ValueType of a zero (inside of a NODE_TYPE_INTEGER) 
+;  doesn't get optimized into `i8`, since that's the smallest type that could hold `0`.
 i8 NODE_TYPE_ZERO := 22
 
 /*
@@ -177,6 +178,7 @@ struct FunctionDefine {
 	
 	i32 CallCount,
 	i8 UsesGlobals,
+	i8 IsMethod,
 	
 	i8 TempValue
 }
@@ -731,7 +733,8 @@ struct VariableInfo {
 	i32 StackOffset,
 	i8 IsGlobal,
 	i8 IsParameter,
-	i8 IsVariadic
+	i8 IsVariadic,
+	i8 IsThis
 }
 
 define VariableInfo* AllocateNewVariableInfo() {
@@ -1054,7 +1057,9 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	else if (Operator = OPERATOR_COLON_EQUAL) {
 		/* If this is an assignment do some extra type checking */
 		
-		i8 LeftNodeType := Left->NodeType
+		if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
+			ASTError(Left, "'this' can't be assigned")
+		}
 		
 		if (LeftDepth != 0 && LeftBaseType->IsStructType && RightDepth && RightSize = 8) {
 			/* If the LeftType is a struct pointer, and the right is a pointer of any type, the result is just struct-pointer type */
@@ -1066,7 +1071,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		else if (LeftDepth = 0 && LeftBaseType->IsStructType) {
 			/* Else if the left is a literal struct type, error out */
 			
-			ASTError(Left, "Local structs cannot be assigned")
+			ASTError(Left, "Local structs can't be assigned")
 		}
 		else if (LeftSize < RightSize) {
 			/* Warn of the right side being truncated to fit the left */
@@ -1661,6 +1666,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 			else if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
 				FunctionDefine* Method := ParseFunction(pState, Methods, ParserCurrentToken(pState)->Value As i8, NewType)
 				
+				Method->IsMethod := true
 				Method->MethodOfTypeName := Name
 				
 				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
@@ -2029,6 +2035,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		ThisParameter->Name := ThisName
 		ThisParameter->Type := MakeType(ThisType, 1)	/* TypeOf(this) = PointerTo(ThisStructType) */
 		ThisParameter->IsParameter := true
+		ThisParameter->IsThis := true
 		
 		if (ForDefine) {
 			/* Only actually add `this` as a local when we are defining a full function, and have pState->CurrentFunction set */
@@ -2754,9 +2761,8 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			}
 			
 			if (LeftDepth = 0) {
-				/* If the left side is a local struct, we can simply change the result type to a struct pointer,
-					and the compiler will take the hint that we're after the address of the local struct
-				*/
+				; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
+				;  and the compiler will make sure to pass the address of `this` instead of the value.
 				
 				Result->ValueType := IncrementPointerType(pState, Result->ValueType)
 			}

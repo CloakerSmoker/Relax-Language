@@ -1084,6 +1084,19 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	ExitLoop(cState, LoopState)
 }
 
+define void CompileGetStorageValue(CompilerState* cState, ASTNode* ValueToGet) { 
+	
+	
+}
+define void CompileSetStorageValue(CompilerState* cState, ASTNode* ValueToSet, i8 RegisterToSetTo) {
+	
+}
+
+define void CompileGetStorageValuePointer(CompilerState* cState, ASTNode* ValueToGet) {
+	
+}
+
+
 define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
 	
@@ -1353,12 +1366,16 @@ declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpre
 define void CompileStructAccessLeft(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	ASTNode* Left := TargetAccess->Left
 	
-	if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS && TargetAccess->Operator->Value = OPERATOR_DOT) {
-		CompileGetStructAccessPointer(cState, ResultRegister, Left->AccessNode)
+	if (TargetAccess->Operator->Value = OPERATOR_DOT) {
+		if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			return CompileGetStructAccessPointer(cState, ResultRegister, Left->AccessNode)
+		}
+		else if (Left->NodeType = NODE_TYPE_VARIABLE) {
+			return CompileGetVariableAddress(cState, ResultRegister, Left->VariableValue)
+		}
 	}
-	else {
-		CompileExpression(cState, ResultRegister, Left)
-	}
+	
+	CompileExpression(cState, ResultRegister, Left)
 }
 
 define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
