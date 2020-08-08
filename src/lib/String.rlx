@@ -230,40 +230,60 @@ define i16* IToWH(i64 Number) {
 	return WString
 }
 
-define i64 WToI(i16* WString) {
+define i8 IsNumeric(i8 Character, i64 Base) {
+	Character := Lower(Character)
+	Base -= 1
+	
+	if (Base > 9) {
+		if (Character >= 'a' && Character <= ('a' + Base)) {
+			return true
+		}
+	}
+	
+	return (Character >= '0') && (Character <= ('0' + Base))
+}
+
+define i64 WToI(i16* WString, i32 Length, i64 Base, i8* Success) {
 	i64 Result := 0
 	i64 Negative := 0
 	
-	i16 FirstCharacter := WString[0]
+	i8 FirstCharacter := WString[0] As i8
 	
 	if (FirstCharacter = '-') {
 		Negative := 1
 		WString += 2
-		FirstCharacter := WString[0]
+		FirstCharacter := WString[0] As i8
 	}
 	
-	if !(IsNumeric(FirstCharacter)) {
+	if !(IsNumeric(FirstCharacter, Base)) {
 		return 0
 	}
-	
-	i32 Length := WLen(WString)
-	
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		i16 NextCharacter := WString[Index]
 		
-		if !(IsNumeric(NextCharacter)) {
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 NextCharacter := WString[Index] As i8
+		
+		if !(IsNumeric(NextCharacter, Base)) {
 			Break
 		}
 		
-		Result := (Result * 10) + (NextCharacter - '0')
+		Result *= Base
+		Result += GetCharacterValue(NextCharacter)
 	}
 	
 	if (Negative) {
 		Result := -Result
 	}
 	
+	if (Success != null) {
+		Success[0] := Index = Length
+	}
+	
 	return Result
 }
+define i64 WToI(i16* WString) {
+	return WToI(WString, WLen(WString), 10, null)
+}
+
 define i64 AToI(i8* AString) {
 	i16* WString := AToW(AString, StringLength(AString))
 	

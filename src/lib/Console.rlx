@@ -192,17 +192,6 @@ define void TextColor(i8 Foreground) {
 	SetColor(Foreground, Black)
 }
 
-define i8* ReadLine(i32 MaxLength) {
-	windows {
-		i8* Buffer := Alloc(MaxLength * 2)
-		i32 CharactersRead := 0
-	
-		;ReadConsole(STDIN, Buffer, MaxLength, &CharactersRead, 0)
-		
-		return Buffer
-	}
-}
-
 /* Basic command line to argv parser since CommandLineToArgvW has no ascii version, and ArgV needs to be ASCII  */
 define void ParseCommandLine(i8* CommandLine, i64* ArgC, i8*** ArgV) {
 	i32 Length := StringLength(CommandLine)
@@ -252,5 +241,20 @@ define void GetArgs(i64* ArgC, i8*** ArgV) {
 	
 	windows {
 		ParseCommandLine(GetCommandLineA(), ArgC, ArgV)
+	}
+}
+
+define i8* ReadLine(i32 MaxLength) {
+	windows {
+		i8* Buffer := Alloc(MaxLength * 2)
+		i32 CharactersRead := 0
+	
+		;ReadConsole(STDIN, Buffer, MaxLength, &CharactersRead, 0)
+		
+		loop {
+			
+		}
+		
+		return Buffer
 	}
 }

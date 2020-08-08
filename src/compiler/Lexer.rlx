@@ -332,22 +332,9 @@ define i64 TokenizeNumber(TokenizerState* tState, i16 NextCharacter, i32 Startin
 	}
 	
 	/* Convert the number to string which we can then parse into a number */
-	SafeWideString* AsString := (MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*)
-	i8 NumberWasConverted := 0
+	SafeWideString* AsString := MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*
 	
-	if (Success = 0) {
-		Success := &NumberWasConverted
-	}
-	
-	i64 Result := 0
-	
-	/* Convert the hex/decimal number, and store the result in the token */
-	if (NumberIsHex) {
-		Result := SafeStringHexToI64(AsString, Success)
-	}
-	else {
-		Result := SafeStringToI64(AsString, Success)
-	}
+	i64 Result := WToI(AsString->Buffer, AsString->Length, 10 + (6 * NumberIsHex), Success)
 	
 	FreeSafeString(AsString)
 	
@@ -612,8 +599,16 @@ define Token* GetNextToken(TokenizerState* tState) {
 			/* And return the string as a TOKEN_TYPE_STRING */
 			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
 		}
-		else if (IsNumeric(NextCharacter)) {			
-			return MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, null))
+		else if (IsNumeric(NextCharacter)) {
+			i8 NumberIsValid := false
+			
+			ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, &NumberIsValid))
+			
+			if !(NumberIsValid) {
+				TokenError(ErrorToken, "Invalid numeric literal")
+			}
+			
+			return ErrorToken
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			if (NextCharacter = 'a') {
