@@ -480,8 +480,10 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
-define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {	
-	FitsDisp8[0] := (TargetVariable->StackOffset < 112)
+define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {
+	if (FitsDisp8 != null) {
+		FitsDisp8[0] := (TargetVariable->StackOffset <= 112)
+	}
 	
 	if (TargetVariable->IsGlobal) {
 		return TargetVariable->StackOffset
@@ -538,12 +540,14 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 			BaseRegister := R15
 		}
 		
-		if (UseDisp8) {
-			EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
-		}
-		else {
-			EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
-		}
+		;if (UseDisp8) {
+		;	EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
+		;}
+		;else {
+		;	EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
+		;}
+		
+		EmitMove_RX_RIX_DISPX(cState, ResultRegister, BaseRegister, Offset, UseDisp8, TargetSize)
 		
 		if (BaseRegister = R15) {
 			AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
@@ -673,7 +677,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
 		*/
 		
-		EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
+		;EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
+		EmitMove_RX_RIX_DISPX(cState, RDI, RBP, 8, true, 8)
 		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
 	}
 	
@@ -717,7 +722,8 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		i8 NextParameterOffset := (StackParameterIndex + 1) * 8
 		i8 NextParameterSize := GetTypeSize(NextStackParameter->Type) As i8
 		
-		EmitMove_RX_RIX_DISP8(cState, RAX, RBX, NextParameterOffset, NextParameterSize)
+		;EmitMove_RX_RIX_DISP8(cState, RAX, RBX, NextParameterOffset, NextParameterSize)
+		EmitMove_RX_RIX_DISPX(cState, RAX, RBX, NextParameterOffset, true, NextParameterSize)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
@@ -1427,11 +1433,12 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 		if (FieldOffset = 0 && ResultRegister != R13) {
 			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
 		}
-		else if (FieldOffset >= 112) {
-			EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
-		}
+		;else if (FieldOffset >= 112) {
+		;	EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+		;}
 		else {
-			EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset As i8, TargetFieldSize)
+			;EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset As i8, TargetFieldSize)
+			EmitMove_RX_RIX_DISPX(cState, ResultRegister, ResultRegister, FieldOffset, !(FieldOffset >= 112), TargetFieldSize) 
 		}
 	}
 }
@@ -1496,11 +1503,6 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 		i8 TargetSize := GetTypeSize(TargetField->ValueType) As i8
 		
 		if (FieldOffset = 0 && ResultPointerRegister != R13) {
-			/* 
-				Fuck x86_64. WHY would R13 be used as the magic "use RIP-relative" flag?
-				Was it not enough to use R12 for SIB encodings? Why couldn't this shit have been put into another prefix byte?
-			*/
-			
 			EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetSize)
 		}
 		else if (FieldOffset >= 112) {
@@ -1758,6 +1760,21 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			/* Get old value of left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
+				i32 Start := cState->Index
+				i32 Offset := GetVariableOffset(TargetVariable, null)
+				
+				if (Operator = OPERATOR_PLUS_EQUAL) {
+					EmitAdd_RIX_DISPX_RX(cState, RBP, WorkRegister, Offset, ResultSize)
+				}
+				else if (Operator = OPERATOR_MINUS_EQUAL) {
+					EmitSub_RIX_DISPX_RX(cState, RBP, WorkRegister, Offset, ResultSize)
+				}
+				
+				if (cState->Index != Start) {
+					PopRegisterStack(cState)
+					return 0
+				}
+				
 				CompileGetVariableValue(cState, ResultRegister, TargetVariable)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {

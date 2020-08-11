@@ -330,7 +330,16 @@ define void EmitBasicInstruction(CompilerState* cState, i16 Opcode, i8 Mode, i8 
 	
 	EmitInstruction(cState, &Instruction, DestinationRegister, SourceRegister)
 }
-
+define void EmitBasicInstructionDisplacement(CompilerState* cState, i16 Opcode, i8 Size, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 DisplacementSize) {
+	if (DisplacementSize = 1) {
+		EmitBasicInstruction(cState, Opcode, MODE_PTOR_DISP8, Size, DestinationRegister, SourceRegister)
+		PushByte(cState, Displacement As i8)
+	}
+	else {
+		EmitBasicInstruction(cState, Opcode, MODE_PTOR_DISP32, Size, DestinationRegister, SourceRegister)
+		PushI32(cState, Displacement)
+	}
+}
 /*
 ==========================================
 	Jumps
@@ -442,16 +451,8 @@ define void EmitMove_R64_RX(CompilerState* cState, i8 DestinationRegister, i8 So
 	}
 }
 
-define void EmitMove_RX_RIX_DISP32(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
-	EmitBasicInstruction(cState, 0x8B, MODE_PTOR_DISP32, Size, DestinationRegister, SourceRegister)
-	
-	PushI32(cState, Displacement)
-}
-
-define void EmitMove_RX_RIX_DISP8(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Displacement, i8 Size) {
-	EmitBasicInstruction(cState, 0x8B, MODE_PTOR_DISP8, Size, DestinationRegister, SourceRegister)
-	
-	PushByte(cState, Displacement)
+define void EmitMove_RX_RIX_DISPX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 DisplacementSize, i8 Size) {
+	EmitBasicInstructionDisplacement(cState, 0x8B, Size, DestinationRegister, SourceRegister, Displacement, DisplacementSize)
 }
 
 /* Move [register + displacement], register */
@@ -552,6 +553,9 @@ define void EmitLea_R64_SIB(CompilerState* cState, i8 DestinationRegister, i8 Sc
 define void EmitAdd_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(cState, 0x03, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
+define void EmitAdd_RIX_DISPX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i32 Displacement, i8 Size) {
+	EmitBasicInstructionDisplacement(cState, 0x01, Size, DestinationRegister, SourceRegister, Displacement, GetNumberSize(Displacement))
+}
 
 define void EmitAdd_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
 	EmitREXOpcodeModRM(cState, 0x83, MODE_RTOR, 0, TargetRegister, REX_W)
@@ -576,7 +580,9 @@ define void EmitAdd_R64_IX(CompilerState* cState, i8 TargetRegister, i32 Number)
 define void EmitSub_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(cState, 0x2B, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
-
+define void EmitSub_RIX_DISPX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i32 Displacement, i8 Size) {
+	EmitBasicInstructionDisplacement(cState, 0x29, Size, DestinationRegister, SourceRegister, Displacement, GetNumberSize(Displacement))
+}
 
 define void EmitSub_R64_I8(CompilerState* cState, i8 TargetRegister, i8 Number) {
 	EmitREXOpcodeModRM(cState, 0x83, MODE_RTOR, 5, TargetRegister, REX_W)
