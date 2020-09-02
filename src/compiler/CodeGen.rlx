@@ -674,6 +674,14 @@ define void EmitPop_R64(CompilerState* cState, i8 RegisterNumber) {
 	EmitREX(cState, NO_REGISTER, RegisterNumber, 0)
 	PushRegisterInOpcode(cState, 0x58, RegisterNumber)
 }
+define void EmitPush_R64_DISP8(CompilerState* cState, i8 RegisterNumber, i8 Displacement) {
+	EmitBasicInstruction(cState, 0xFF, MODE_PTOR_DISP8, 4, 6, RegisterNumber)
+	PushByte(cState, Displacement)
+}
+define void EmitPop_R64_DISP8(CompilerState* cState, i8 RegisterNumber, i8 Displacement) {
+	EmitBasicInstruction(cState, 0x8F, MODE_PTOR_DISP8, 4, 0, RegisterNumber)
+	PushByte(cState, Displacement)
+}
 
 /*
 ==========================================

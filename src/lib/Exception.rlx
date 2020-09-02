@@ -1,0 +1,32 @@
+define void RestoreHandlerContextAndTransferControl(i64 Code, void* Handler, void* OldRBP, void* OldRSP) asm {
+	; Restores the execution context to how the function containing the handler expects, and then
+	;  calls the handler passing the exception code
+	
+	mov, rbp, rdx
+	mov, rsp, rcx
+	jmp, rsi
+}
+
+struct StackFrame {
+	StackFrame* LastFrame,
+	i64* ReturnAddress
+}
+
+define i64* GetRBP() asm {
+	mov, rax, rbp
+	ret
+}
+
+define void Throw(i64 Code) {
+	; Walks up stack frames looking for one marked as an exception handler, and then calls said handler
+	
+	StackFrame* Last := GetRBP() As StackFrame*
+	
+	while (Last) {
+		if (Last->LastFrame & 1) {
+			RestoreHandlerContextAndTransferControl(Code, Last->ReturnAddress, Last, Last->LastFrame - 1)
+		}
+		
+		Last := Last->LastFrame
+	}
+}

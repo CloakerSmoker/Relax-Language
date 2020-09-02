@@ -820,6 +820,7 @@ declare void CompileIf(CompilerState*, IfGroup*)
 declare void CompileFor(CompilerState*, ForLoop*)
 declare void CompileLoop(CompilerState*, Block*)
 declare void CompileWhile(CompilerState*, WhileLoop*)
+declare void CompileTry(CompilerState*, TryCatch*)
 
 declare void CompileUnary(CompilerState*, i8, Type, UnaryExpression*, i8)
 declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
@@ -845,6 +846,9 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	}
 	else if (NodeType = NODE_TYPE_WHILE) {
 		CompileWhile(cState, NodeToCompile->WhileNode)
+	}
+	else if (NodeType = NODE_TYPE_TRY) {
+		CompileTry(cState, NodeToCompile->TryNode)
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
 		if (NodeToCompile->IsContinue) {
@@ -1970,6 +1974,49 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 		
 		cState->NoClobberA := OldClobberA
 	}
+}
+
+define void CompileTry(CompilerState* cState, TryCatch* TryToCompile) {
+	i32 AfterCatchLabel := NextLabel(cState)
+	i32 TryEndLabel := NextLabel(cState)
+	
+	; try {
+	EmitPush_R64_DISP8(cState, RBP, 8) ; Save the old stack frame
+	EmitPush_R64_DISP8(cState, RBP, 0)
+	
+	EmitMove_R64_R64(cState, RBX, RSP)		; Save (RSP | Magic) into stack frame
+	EmitAdd_R64_I8(cState, RBX, 1)
+	EmitMove_RIX_DISP8_RX(cState, RBP, RBX, 0, 8)
+	
+	EmitLea_R64_Label(cState, RBX, TryEndLabel)		; Save (CatchLocation) into stack frame
+	EmitMove_RIX_DISP8_RX(cState, RBP, RBX, 8, 8)
+	
+	CompileBlock(cState, TryToCompile->Body)
+	
+	EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
+	EmitPop_R64_DISP8(cState, RBP, 8)
+	; }
+	
+	if (TryToCompile->CatchBody) {
+		EmitJump_Label(cState, AfterCatchLabel)
+	}
+	
+	; catch {
+	SetLabel(cState, TryEndLabel)
+	
+	if (TryToCompile->CatchBody) {
+		EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
+		EmitPop_R64_DISP8(cState, RBP, 8)
+		
+		if (TryToCompile->CatchCodeVariable) {
+			CompileSetVariableValue(cState, TryToCompile->CatchCodeVariable, RDI)
+		}
+		
+		CompileBlock(cState, TryToCompile->CatchBody)
+		
+		SetLabel(cState, AfterCatchLabel)
+	}
+	; }
 }
 
 #Include ./src/compiler/AssemblyCompile.rlx

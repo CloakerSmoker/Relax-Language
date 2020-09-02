@@ -97,6 +97,8 @@ i8 NODE_TYPE_ASSEMBLY := 21
 ;  doesn't get optimized into `i8`, since that's the smallest type that could hold `0`.
 i8 NODE_TYPE_ZERO := 22
 
+i8 NODE_TYPE_TRY := 23
+
 /*
 ==========================================
 	True AST node types
@@ -142,6 +144,12 @@ struct ForLoop {
 struct WhileLoop {
 	ASTNode* Condition,
 	Block* Body
+}
+
+struct TryCatch {
+	Block* Body,
+	Block* CatchBody,
+	VariableInfo* CatchCodeVariable
 }
 
 struct FunctionDefine {
@@ -274,7 +282,8 @@ struct ASTNode {
 		Type TypeValue,
 		i32 StringOffsetValue,
 		
-		AssemblyBlock* AssemblyValue
+		AssemblyBlock* AssemblyValue,
+		TryCatch* TryNode
 	},
 	
 	Type ValueType,
@@ -2256,6 +2265,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 declare ASTNode* ParseIf(ParserState*)
 declare ASTNode* ParseFor(ParserState*)
 declare ASTNode* ParseWhile(ParserState*)
+declare ASTNode* ParseTry(ParserState*)
 
 define ASTNode* ParseStatement(ParserState* pState) {
 	/* Parses a single statement */
@@ -2320,6 +2330,9 @@ define ASTNode* ParseStatement(ParserState* pState) {
 		}
 		else if (NextKeyword = KEYWORD_ASSEMBLY) {
 			Result := ParseAssembly(pState)
+		}
+		else if (NextKeyword = KEYWORD_TRY) {
+			Result := ParseTry(pState)
 		}
 	}
 	
@@ -2791,6 +2804,58 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 	UnfreezeParser(pState, FrozenState)
 	
 	return Result
+}
+
+define ASTNode* ParseTry(ParserState* pState) {
+	TryCatch* Result := Alloc(#TryCatch)
+	
+	Result->Body := ParseBlock(pState)
+	
+	if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_CATCH)) {
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			i8* ErrorMessage := 0
+			
+			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
+			
+			if ((PotentialType != 0) && (ErrorMessage = 0)) {
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
+				Token* PotentialName := ParserNextToken(pState)
+				
+				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, 0)) {
+					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
+
+					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
+					SafeWideString* NameString := PotentialName->StringValue
+					
+					VariableInfo* CatchCodeVariable := AllocateNewVariableInfo()
+					
+					CatchCodeVariable->Name := NameString
+					CatchCodeVariable->Type := PotentialType
+					CatchCodeVariable->IsGlobal := True
+					CatchCodeVariable->IsParameter := False
+					
+					ParserAddLocal(pState, CatchCodeVariable, PotentialName)
+				}
+			}
+			else {
+				ASTNode* CatchCodeNode := TranslateTokenToNode(pState, ParserNextToken(pState))
+				
+				if (CatchCodeNode->NodeType != NODE_TYPE_VARIABLE) {
+					ASTError(CatchCodeNode, "Expected variable name")
+				}
+				
+				CatchCodeVariable := CatchCodeNode->VariableValue
+			}
+			
+			Result->CatchCodeVariable := CatchCodeVariable
+			
+			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for 'catch ('")
+		}
+		
+		Result->CatchBody := ParseBlock(pState)
+	}
+	
+	return AllocateNewASTNode(NODE_TYPE_TRY, Result, TYPE_NONE)
 }
 
 #Include ./src/compiler/AssemblyParse.rlx

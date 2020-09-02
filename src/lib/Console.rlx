@@ -108,6 +108,9 @@ define void Print(i8* Format, ... Args) {
 			else if (Next = 's') {
 				PrintString(NextArg As i8*)
 			}
+			else if (Next = 'l') {
+				PrintLiteral(NextArg As i64)
+			}
 			
 			ArgIndex += 1
 		}

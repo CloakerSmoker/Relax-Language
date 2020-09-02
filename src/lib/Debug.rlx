@@ -1,0 +1,23 @@
+#Require "./src/lib/Exception.rlx"
+
+define void DumpStack() {
+	StackFrame* Last := GetRBP() As StackFrame*
+	i32 Index := 1
+	
+	while (Last) {
+		if (Last->LastFrame & 1) {
+			StackFrame* Temp := Last->LastFrame - 1
+			
+			Print("Stack[%i] Try catch address = %x\n", Index, Last->ReturnAddress, Temp)
+			
+			Last := Temp
+		}
+		else {
+			Print("Stack[%i] Fn callsite = %x\n", Index, Last->ReturnAddress, Last->LastFrame)
+		
+			Last := Last->LastFrame
+		}
+		
+		Index += 1
+	}
+}
