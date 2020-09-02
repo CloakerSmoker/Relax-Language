@@ -17,16 +17,194 @@ define i64* GetRBP() asm {
 	ret
 }
 
-define void Throw(i64 Code) {
-	; Walks up stack frames looking for one marked as an exception handler, and then calls said handler
+/* 
+	`Try` will (With `ThisFrame := RBP As StackFrame*`):
+		1) Push `ThisFrame->LastFrame`		(saving it)
+		2) Push `ThisFrame->ReturnAddress`	(saving it)
+		
+		3) Set `ThisFrame->LastFrame := RSP | 1`
+		4) Set `ThisFrame->ReturnAddress := &CatchBlock`
+		
+	And `Throw` will:
+		1) Walk up `ThisFrame->LastFrame` as a singly linked list, looking for `ThisFrame->LastFrame & 1`
+			When `ThisFrame->LastFrame & 1` is true, we know that we've found a frame altered by `Try`
+			which will have set `ThisFrame->ReturnAddress` to the address of a `Catch` block
+		2) Set RBP to `ThisFrame`, restorting the base pointer for the function which contains 
+			the `Catch` block, restoring access to any local variables of the function
+		3) Set RSP to `ThisFrame->LastFrame - 1` which is equal to RSP inside of the `Try` block of the function
+		4) Jump to `ThisFrame->ReturnAddress`, transferring control to the `catch` block, passing the exception
+			code in RDI
 	
-	StackFrame* Last := GetRBP() As StackFrame*
+	The end of a `Try` (or the start of a `Catch`) will:
+		1) Pop the saved version of `ThisFrame->ReturnAddress` back into `ThisFrame->ReturnAddress`
+		2) Pop the saved version of `ThisFrame->LastFrame` back into `ThisFrame->LastFrame`
+		3) (If the catch block exists, and has a code variable) set the code variable to RDI passed by `Throw` 
+	
+	This *should* work in most cases, since `ThisFrame->LastFrame` (on all platforms) must be aligned to at least a 
+		multiple of 8, and shockingly enough, both 1 and 9 are not multiples of 8, so there will never be a valid
+		stack frame with `ThisFrame->LastFrame & 1` set (unless it is an exception handler).
+	
+	One potential problem is with outside software trying to walk the stack, but from what I've seen, all debuggers
+		couldn't figure out the braindead simple stack layout *before* exception handling was added, so it doesn't
+		really matter.
+	
+	Another problem is if a function `return`s while the stack frame is altered by one or more `try` blocks, which
+		would cause RBP to be set to a corrupted RSP, and the `ret` portion of the return would jump to garbage
+		memory (assuming the stack misalignment doesn't instantly crash everything)
+	
+	Really, the last problem applies to a `Try` stack frame modification ever being leaked, but without a funky
+		inline assembly jump which never runs the tail end of the `Try` statement, this shouldn't be possible.
+		
+		
+	Todo: Translate system errors/signals into native exceptions
+	
+*/
+
+define StackFrame* FindHandler(i64* StartingFrame) {
+	; Walks up stack frames looking for one marked as an exception handler
+	
+	StackFrame* Last := StartingFrame As StackFrame*
 	
 	while (Last) {
 		if (Last->LastFrame & 1) {
-			RestoreHandlerContextAndTransferControl(Code, Last->ReturnAddress, Last, Last->LastFrame - 1)
+			return Last
 		}
 		
 		Last := Last->LastFrame
 	}
+	
+	return null
 }
+
+define void Throw(i64 Code) {
+	; Calls the first exception handler found in the call stack
+	
+	StackFrame* Last := FindHandler(GetRBP())
+	
+	if (Last != null) {
+		RestoreHandlerContextAndTransferControl(Code, Last->ReturnAddress, Last, Last->LastFrame - 1)
+	}
+}
+
+
+
+struct WindowsExceptionRecord {
+	i32 ExceptionCode,
+	i32 ExceptionFlag,
+	WindowsExceptionRecord* ExceptionRecord,
+	void* ExceptionAddress,
+	i32 ExceptionParameters
+}
+
+struct WindowsContextRecord {
+    i64 P1Home,
+    i64 P2Home,
+    i64 P3Home,
+    i64 P4Home,
+    i64 P5Home,
+    i64 P6Home,
+
+    i32 ContextFlags,
+    i32 MxCsr,
+
+    i16 CS,
+    i16 DS,
+    i16 ES,
+    i16 FS,
+    i16 GS,
+    i16 SS,
+    i32 EFlags,
+
+    i64 DR0,
+    i64 DR1,
+    i64 DR2,
+    i64 DR3,
+    i64 DR6,
+    i64 DR7,
+
+    i64 RAX,
+    i64 RCX,
+    i64 RDX,
+    i64 RBX,
+    i64* RSP,
+    i64* RBP,
+    i64 RSI,
+    i64 RDI,
+    i64 R8,
+    i64 R9,
+    i64 R10,
+    i64 R11,
+    i64 R12,
+    i64 R13,
+    i64 R14,
+    i64 R15,
+	
+	void* RIP
+}
+
+struct WindowsExceptionPointers {
+	WindowsExceptionRecord* ExceptionRecord,
+	WindowsContextRecord* ContextRecord
+}
+
+define void PushX64Volitile() asm {
+	pop, rax
+	push, rbx
+	push, rdi
+	push, rsi
+	push, r12
+	push, r13
+	push, r14
+	push, r15
+	jmp, rax
+}
+define void PopX64Volitile() asm {
+	pop, rax
+	pop, r15
+	pop, r14
+	pop, r13
+	pop, r12
+	pop, rsi
+	pop, rdi
+	pop, rbx
+	jmp, rax
+}
+
+define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
+	windows {
+		PushX64Volitile()
+		
+		WindowsContextRecord* Context := ExceptionInfo->ContextRecord
+		StackFrame* Handler := FindHandler(Context->RBP)
+		i32 Result := 1
+		
+		if (Handler) {
+			Context->RBP := Handler
+			Context->RSP := Handler->LastFrame - 1
+			Context->RIP := Handler->ReturnAddress
+			Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
+			
+			Result := -1
+		}
+		
+		PopX64Volitile()
+		return Result
+	}
+}
+
+DllImport i8 SetErrorMode(i32) {Kernel32.dll, SetErrorMode}
+DllImport void* SetUnhandledExceptionFilter(void*) {Kernel32.dll, SetUnhandledExceptionFilter}
+DllImport void* AddVectoredExceptionHandler(i32, void*) {Kernel32.dll, AddVectoredExceptionHandler}
+
+define void* SetupWindowsExceptionTranslation() {
+	windows {
+		SetErrorMode(1)
+		
+		SetUnhandledExceptionFilter(&WindowsExceptionFilter)
+		AddVectoredExceptionHandler(1, &WindowsExceptionFilter)
+		
+		return null
+	}
+}
+
+void* OldWindowsExceptionFilter := SetupWindowsExceptionTranslation()

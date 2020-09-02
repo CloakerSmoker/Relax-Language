@@ -2246,6 +2246,10 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			NewDefine->AssemblyBody := ParseAssembly(pState)->AssemblyValue
 		}
 		else {
+			if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
+				NewDefine->Attribute := KEYWORD_X64
+			}
+			
 			NewDefine->StringBuffer := Alloc(4) As i8*
 			NewDefine->StringBufferSize := 0
 			
@@ -2831,7 +2835,7 @@ define ASTNode* ParseTry(ParserState* pState) {
 					
 					CatchCodeVariable->Name := NameString
 					CatchCodeVariable->Type := PotentialType
-					CatchCodeVariable->IsGlobal := True
+					CatchCodeVariable->IsGlobal := False
 					CatchCodeVariable->IsParameter := False
 					
 					ParserAddLocal(pState, CatchCodeVariable, PotentialName)

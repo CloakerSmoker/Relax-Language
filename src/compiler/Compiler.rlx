@@ -59,7 +59,13 @@ struct CompilerState {
 	i8 NoClobberA,
 	
 	/* Flags the correct return sequence for `Main()` is used when Config->OutputFormat = OUTPUT_ELF */
-	i8 CompilingMain
+	i8 CompilingMain,
+	
+	/* Count of `Try` statements logically 'wrapping' the current area in code 
+		With loops resetting ScopedTryDepth for Continue/Break
+	*/
+	i32 ScopedTryDepth,
+	i32 TotalTryDepth
 }
 
 /*
@@ -268,7 +274,10 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	C.ParameterRegistersMinSave := 0
 	
 	C.CurrentFunction := null
-		
+	
+	C.ScopedTryDepth := 0
+	C.TotalTryDepth := 0
+	
 	i64 CODE_BASE := 0x3000
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
@@ -631,6 +640,11 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	i8 USE_SYSTEMV := true /* cState->OutputELF */
 	
+	if (FunctionToCompile->Attribute = KEYWORD_X64) {
+		; Force a function to be compiled using the x64 ABI
+		USE_SYSTEMV := false
+	}
+	
 	/* Assume 4 register parameters, and 0 stack parameters */
 	i8 MAX_REGISTER_PARAMETERS := 4
 	
@@ -827,6 +841,8 @@ declare void CompileBinary(CompilerState*, i8, Type, BinaryExpression*, i8)
 declare void CompileGetStructAccess(CompilerState*, i8, StructAccessExpression*)
 declare void CompileCall(CompilerState*, i8, ASTNode*)
 
+declare void CompileUnwindTry(CompilerState*, i8)
+
 define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
@@ -851,6 +867,8 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 		CompileTry(cState, NodeToCompile->TryNode)
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
+		CompileUnwindTry(cState, false)
+		
 		if (NodeToCompile->IsContinue) {
 			EmitJump_Label(cState, cState->CurrentLoopContinueLabel)
 		}
@@ -868,6 +886,8 @@ define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
 
 define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
 	/* Compile the expression to return */
+	
+	CompileUnwindTry(cState, true)
 	
 	CompileExpression(cState, RAX, ReturnExpression)
 	
@@ -1045,6 +1065,8 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	
 	CompileCondition(cState, ForToCompile->Condition, EndLabel)
 	
+	i32 TryDepth := cState->ScopedTryDepth
+	cState->ScopedTryDepth := 0
 	i64 LoopState := EnterLoop(cState, ContinueLabel, EndLabel)
 
 	/* Prelude stuff done, condition is checked, so now we can compile the body */	
@@ -1059,12 +1081,15 @@ define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
 	SetLabel(cState, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
 	
 	ExitLoop(cState, LoopState)
+	cState->ScopedTryDepth := TryDepth
 }
 
 define void CompileLoop(CompilerState* cState, Block* LoopBody) {
 	i32 StartLabel := NextLabel(cState)
 	i32 EndLabel := NextLabel(cState)
 	
+	i32 TryDepth := cState->ScopedTryDepth
+	cState->ScopedTryDepth := 0
 	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
 	
 	SetLabel(cState, StartLabel)
@@ -1075,12 +1100,15 @@ define void CompileLoop(CompilerState* cState, Block* LoopBody) {
 	SetLabel(cState, EndLabel)
 	
 	ExitLoop(cState, LoopState)
+	cState->ScopedTryDepth := TryDepth
 }
 
 define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	i32 StartLabel := NextLabel(cState)
 	i32 EndLabel := NextLabel(cState)
 	
+	i32 TryDepth := cState->ScopedTryDepth
+	cState->ScopedTryDepth := 0
 	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
 	
 	SetLabel(cState, StartLabel)
@@ -1092,6 +1120,7 @@ define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
 	SetLabel(cState, EndLabel)
 	
 	ExitLoop(cState, LoopState)
+	cState->ScopedTryDepth := TryDepth
 }
 
 define void CompileGetStorageValue(CompilerState* cState, ASTNode* ValueToGet) { 
@@ -1976,6 +2005,23 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 	}
 }
 
+define void CompileUnwindTry(CompilerState* cState, i8 ForReturn) {
+	; Ensures that the current function's stack frame is restored
+	; 	For `return`, this means all `Try` stack frame modifications 
+	; 	For `continue`/`break`, this means only `Try` stack frame modifications inside of the current loop
+	
+	i32 Total := cState->ScopedTryDepth
+	
+	if (ForReturn) {
+		Total := cState->TotalTryDepth
+	}
+	
+	for (i32 Index := 0, Index < Total, Index += 1) {
+		EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
+		EmitPop_R64_DISP8(cState, RBP, 8)
+	}
+}
+
 define void CompileTry(CompilerState* cState, TryCatch* TryToCompile) {
 	i32 AfterCatchLabel := NextLabel(cState)
 	i32 TryEndLabel := NextLabel(cState)
@@ -1991,7 +2037,11 @@ define void CompileTry(CompilerState* cState, TryCatch* TryToCompile) {
 	EmitLea_R64_Label(cState, RBX, TryEndLabel)		; Save (CatchLocation) into stack frame
 	EmitMove_RIX_DISP8_RX(cState, RBP, RBX, 8, 8)
 	
+	cState->TotalTryDepth += 1
+	cState->ScopedTryDepth += 1
 	CompileBlock(cState, TryToCompile->Body)
+	cState->ScopedTryDepth -= 1
+	cState->TotalTryDepth -= 1
 	
 	EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
 	EmitPop_R64_DISP8(cState, RBP, 8)
