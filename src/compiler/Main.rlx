@@ -35,6 +35,8 @@ struct BuildConfig {
 #Require ./src/lib/SafeString.rlx
 #Require ./src/lib/HashMap.rlx
 
+;#Require ./src/lib/Exception.rlx
+
 declare i16* OpenAndRead(i8*, i32*)
 
 i64 DEFAULT_IMAGE_BASE := 0x40000000

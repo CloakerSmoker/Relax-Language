@@ -76,16 +76,40 @@ define StackFrame* FindHandler(i64* StartingFrame) {
 	return null
 }
 
+void* UnhandledExceptionHandler := null
+
+define void CallUnhandledExceptionFilter(i64 Code, void* Handler) asm {
+	jmp, rsi
+}
+
+DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
+DllImport void TerminateProcess(i64, i64) {Kernel32.dll, TerminateProcess}
+
+define void CallUnhandledExceptionHandler(i64 Code) {
+	if (UnhandledExceptionHandler != null) {
+		CallUnhandledExceptionFilter(Code, UnhandledExceptionHandler)
+	}
+	
+	windows {
+		TerminateProcess(GetCurrentProcess(), Code)
+	}
+	linux {
+		syscall:(60, ExitCode)
+	}
+}
+
 define void Throw(i64 Code) {
 	; Calls the first exception handler found in the call stack
 	
 	StackFrame* Last := FindHandler(GetRBP())
 	
-	if (Last != null) {
+	if (Last = null) {
+		CallUnhandledExceptionHandler(Code)
+	}
+	else {
 		RestoreHandlerContextAndTransferControl(Code, Last->ReturnAddress, Last, Last->LastFrame - 1)
 	}
 }
-
 
 
 struct WindowsExceptionRecord {
@@ -176,19 +200,20 @@ define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
 		
 		WindowsContextRecord* Context := ExceptionInfo->ContextRecord
 		StackFrame* Handler := FindHandler(Context->RBP)
-		i32 Result := 1
 		
-		if (Handler) {
+		Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
+		
+		if (Handler = null) {
+			Context->RIP := &CallUnhandledExceptionHandler
+		}
+		else {
 			Context->RBP := Handler
 			Context->RSP := Handler->LastFrame - 1
 			Context->RIP := Handler->ReturnAddress
-			Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
-			
-			Result := -1
 		}
 		
 		PopX64Volitile()
-		return Result
+		return -1
 	}
 }
 
@@ -207,4 +232,4 @@ define void* SetupWindowsExceptionTranslation() {
 	}
 }
 
-void* OldWindowsExceptionFilter := SetupWindowsExceptionTranslation()
+void* DummyNameForExceptionTranslation := SetupWindowsExceptionTranslation()

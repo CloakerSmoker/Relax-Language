@@ -1,6 +1,7 @@
+#Require "./src/lib/Console.rlx"
 #Require "./src/lib/Exception.rlx"
 
-define void DumpStack() {
+define void PrintStackDump(i32 IgnoreFrames) {
 	StackFrame* Last := GetRBP() As StackFrame*
 	i32 Index := 1
 	
@@ -8,16 +9,44 @@ define void DumpStack() {
 		if (Last->LastFrame & 1) {
 			StackFrame* Temp := Last->LastFrame - 1
 			
-			Print("Stack[%i] Try catch address = %x\n", Index, Last->ReturnAddress, Temp)
+			if (IgnoreFrames) {
+				IgnoreFrames -= 1
+			}
+			else {
+				Print("	^10Stack[%i]^F0 ^D0Try catch address^F0 = %x\n", Index, Last->ReturnAddress, Temp)
+				Index += 1
+			}
 			
 			Last := Temp
 		}
 		else {
-			Print("Stack[%i] Fn callsite = %x\n", Index, Last->ReturnAddress, Last->LastFrame)
-		
+			if (IgnoreFrames) {
+				IgnoreFrames -= 1
+			}
+			else {
+				Print("	^10Stack[%i]^F0 ^B0Fn callsite^F0 = %x\n", Index, Last->ReturnAddress, Last->LastFrame)
+				Index += 1
+			}
+			
 			Last := Last->LastFrame
 		}
-		
-		Index += 1
 	}
 }
+define void PrintStackDump() {
+	PrintStackDump(0)
+}
+
+define void UnhandledExceptionHandler(i64 Code) {
+	Print("\n\n^40----------------------^F0\n")
+	Print("^40Unhandled exception ^F0%x^40 with call stack:^F0\n", Code)
+	PrintStackDump(3)
+	Print("^40Aborting...^F0\n")
+	Print("^40----------------------^F0\n\n\n")
+}
+
+define void* DebugInsertUnhandledExceptionHandler() {
+	UnhandledExceptionHandler := &UnhandledExceptionHandler
+	return null
+}
+
+void* DummyDebugHandler := DebugInsertUnhandledExceptionHandler()
