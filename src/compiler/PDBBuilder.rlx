@@ -1,0 +1,133 @@
+
+#Require "./src/lib/Console.rlx"
+
+#Require "./src/lib/File.rlx"
+
+struct MSFSuperblock {
+	i8{20} Magic,
+	i32 BlockSize,			; Should be 4096
+	i32 FreeBlockMapBlock,	; Block index (only allowed to be 1 or 2)
+	i32 NumberOfBlocks,		; Total block count, (NumberOfBlocks * BlockSize) = FileSize
+	i32 NumberOfDirectoryBytes,	; Size of stream directory
+	i32 Unknown,
+	i32 BlockMapIndex	; Index of a block listing blocks which contain the stream directory
+	; Number of blocks inside of BlockMapIndex block = Ceil(NumberOfDirectoryBytes / BlockSize)
+}
+
+struct MSFStreamDirectory {
+	; Fuck this structure
+	
+	i32 NumberOfStreams,
+	
+	define i32* GetStreamSizesArray() {
+		return (this + 8) As i32*
+	},
+	define i32* GetStreamBlocksArray() {
+		return (this + 8 + this->NumberOfStreams) As i32*
+	},
+	define i32 GetStreamBlockCount(i32 StreamIndex) {
+		i32 Size := this->GetStreamSizesArray()[StreamIndex]
+		
+		i32 BlockCount := Size / 0x1000
+		i32 Remainder := Size % 0x1000
+		
+		if (Remainder) {
+			BlockCount += 1
+		}
+		
+		return BlockCount
+	},
+	define i32* GetStreamBlocks(i32 TargetStreamIndex) {
+		i32* Start := this->GetStreamBlocksArray()
+		
+		for (i32 StreamIndex := 0, StreamIndex < TargetStreamIndex, StreamIndex += 1) {
+			Start += this->GetStreamBlockCount(StreamIndex) * 4
+		}
+		
+		return Start
+	}
+}
+
+struct UUID {
+	i32 DataOne,
+	i16 DataTwo,
+	i16 DataThree,
+	i8{8} DataFour
+}
+
+struct PDBStreamHeader {
+	i32 Version,
+	i32 CreationTime,
+	i32 WriteCount,
+	UUID GUID
+}
+
+i32 PDB_VERSION_VC70 := 20000404
+
+struct MSFBuilder {
+	union {
+		void* Buffer,
+		MSFSuperblock* Superblock
+	},
+	
+	i32 Size,
+
+	declare void AllocateBlock(),
+	
+	define void Initialize() {
+		this->Size := 0x1000 * 3
+		this->Buffer := Alloc(this->Size)
+		
+		i8* MagicString := "Microsoft C/C++ MSF 7.00"
+		i8* MagicBuffer := this->Superblock~>Magic
+		
+		MoveMemory(MagicBuffer, MagicString, StringLength(MagicString))
+		(MagicBuffer + 24 As i64*)[0] := 0x53441a0a0d
+		
+		this->Superblock->BlockSize := 0x1000
+		this->Superblock->FreeBlockMapBlock := 1
+		
+		; Allocate the first 3 blocks in the file (for the superblock, and free block maps)
+		for (i32 Index := 0, Index < 3, Index += 1) {
+			this->AllocateBlock()
+		}
+	},
+	define i32 AllocateBlock() {
+		i8* Bitmap := this->Buffer + 0x1000 * (this->Superblock->FreeBlockMapBlock + 1)
+		
+		for (i32 Index := 0, Index < 0x1000, Index += 1) {
+			i32 ByteIndex := Index / 8
+			i32 BitIndex := Index % 8
+			i32 BitMask := 1 << (BitIndex As i8)
+			
+			i8 TargetByte := Bitmap[ByteIndex]
+			
+			if (TargetByte & BitMask) {
+				Bitmap[ByteIndex] := TargetByte ^ BitMask
+				
+				return Index
+			}
+		}
+	},
+	define i32 WriteToFile(i8* FilePath) {
+		i64 File := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
+		
+		FileWrite(File, this->Buffer, this->Size)
+		
+		return FileClose(File)
+	}
+}
+
+
+define i32 Main() {
+	MSFBuilder* B := Alloc(#MSFBuilder)
+	
+	B->Initialize()
+	
+	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\lib\dummy.pdb")
+	
+	Print("Done\n")
+	
+	return 0
+}
+

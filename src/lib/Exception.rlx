@@ -198,12 +198,18 @@ define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
 	windows {
 		PushX64Volitile()
 		
+		StackFrame FakeFrame
+		
 		WindowsContextRecord* Context := ExceptionInfo->ContextRecord
 		StackFrame* Handler := FindHandler(Context->RBP)
 		
 		Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
 		
 		if (Handler = null) {
+			FakeFrame.ReturnAddress := Context->RIP
+			FakeFrame.LastFrame := Context->RBP
+			
+			Context->RBP := &FakeFrame
 			Context->RIP := &CallUnhandledExceptionHandler
 		}
 		else {

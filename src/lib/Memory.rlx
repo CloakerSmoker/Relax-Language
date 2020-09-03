@@ -39,6 +39,21 @@ define i8 Free(void* Memory) {
 	}
 }
 
+define void MoveMemory(i8* To, i8* From, i32 Size) {
+	i32 Index := 0
+	
+	if (To < From) {
+		for (Index := 0, Index < Size, Index += 1) {
+			To[Index] := From[Index]
+		}
+	}
+	else {
+		for (Index := Size, Index != 0, Index -= 1) {
+			To[Index - 1] := From[Index - 1]
+		}
+	}
+}
+
 struct ExpandArray {
 	i32 ElementSize,
 	i32 Capacity	
