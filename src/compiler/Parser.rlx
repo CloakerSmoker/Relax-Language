@@ -1639,6 +1639,8 @@ define void ParseAndAddStruct(ParserState* pState) {
 			
 			TokenError(NameToken, "Duplicate type definition")
 		}
+		
+		NewType->IsIncomplete := false
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
