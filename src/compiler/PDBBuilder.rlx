@@ -376,7 +376,7 @@ struct PDBSparceBitVector {
 		return this~>Words + (Index / 32) * 4
 	},
 	define i32 FindBitMask(i32 Index) {
-		return 1 << ((Index % 32 - 1) As i8)
+		return 1 << ((Index % 32) As i8)
 	},
 	define i32 Get(i32 Index) {
 		i32 Value := this->FindWord(Index)[0]
@@ -401,6 +401,17 @@ struct PDBSparceBitVector {
 	},
 	define void* GetEnd() {
 		return this~>Words + (this->WordCount * 4)
+	},
+	define void* SerializeInto(void* TargetBuffer) {
+		i32* Buffer := TargetBuffer As i32*
+		
+		Buffer[0] := this->WordCount
+		
+		for (i32 WordIndex := 0, WordIndex < this->WordCount, WordIndex += 1) {
+			Buffer[WordIndex + 1] := this~>Words[WordIndex]
+		}
+		
+		return Buffer + 4 + this->WordCount * 4
 	}
 }
 
@@ -421,6 +432,10 @@ struct PDBHashmapHeader {
 	},
 	define PDBHashmapBucket* GetBuckets() {
 		return this->GetDeletedVector()->GetEnd()
+	},
+	define void* SerializeInto(void* Buffer) {
+		Buffer[0] := (this As void*)[0]
+		return Buffer + 8
 	}
 }
 
@@ -515,6 +530,8 @@ struct PDBHashmapBuilder {
 		
 		i32 Index := this->GetBucketIndex(Entry)
 		
+		;Print("Set %s @ %i To %i\n", Key, Index, Value)
+		
 		if (this->PresentVector->Get(Index)) {
 			Entry->Value := Value
 			return false
@@ -527,6 +544,7 @@ struct PDBHashmapBuilder {
 		Entry->Key := InternalKey
 		Entry->Value := Value
 		
+		this->Header->Size += 1
 		this->PresentVector->Set(Index, true)
 		
 		return true
@@ -546,6 +564,19 @@ struct PDBHashmapBuilder {
 		}
 		
 		return 0
+	},
+	define void* SerializeInto(void* Buffer) {
+		Buffer := this->Header->SerializeInto(Buffer)
+		Buffer := this->PresentVector->SerializeInto(Buffer)
+		Buffer := this->DeletedVector->SerializeInto(Buffer)
+		
+		void* RawBucketBuffer := this->Buckets As void*
+		
+		for (i32 BucketIndex := 0, BucketIndex < this->Header->Capacity, BucketIndex += 1) {
+			Buffer[BucketIndex] := RawBucketBuffer[BucketIndex]
+		}
+		
+		return Buffer + this->Header->Capacity * 8
 	}
 }
 
@@ -595,24 +626,6 @@ struct PDBNamedStreamMapBuilder {
 		
 		StreamNumber[0] := Entry->Value
 		return true
-		
-		/* i32 Run := 0
-		i32 Length := StringLength(String)
-		
-		for (i32 Index := 0, Index < this->Header->StringBufferSize, Index += 1) {
-			i8 NextCharacter := this->Header~>StringBuffer[Index]
-			
-			if (NextCharacter = String[Run]) {
-				Run += 1
-				
-				if (Run = Length) {
-					return true
-				}
-			}
-			else {
-				Run := 0
-			}
-		} */
 	},
 	define i8 Get(i8* String, i32* StreamNumber) {
 		return this->Get(String, StringLength(String), StreamNumber)
@@ -637,6 +650,23 @@ struct PDBNamedStreamMapBuilder {
 		MoveMemory(OldBufferEnd, String, StringLength)
 		
 		return OldSize
+	},
+	define void* SerializeInto(void* RawBuffer) {
+		i32* Buffer := RawBuffer As i32*
+		
+		i32 StringBufferSize := this->Header->StringBufferSize
+		
+		Buffer[0] := StringBufferSize
+		
+		i8* StringBuffer := (Buffer + 4) As i8*
+		
+		for (i32 Index := 0, Index < StringBufferSize, Index += 1) {
+			StringBuffer[Index] := this->Header~>StringBuffer[Index]
+		}
+		
+		RawBuffer := (StringBuffer + StringBufferSize) As void*
+		
+		return this->OffsetIndexMap->SerializeInto(RawBuffer)
 	}
 }
 
@@ -667,16 +697,9 @@ define i32 Main() {
 	
 	i8* D := Alloc(0x1500)
 	
-	for (i32 I := 0, I < 0x1200, I += 1) {
+	for (i32 I := 0x800, I < 0x1200, I += 1) {
 		D[I] := 0x75
 	}
-	
-	B->AppendStream(0, D, 0x1500)
-	
-	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\lib\dummy.pdb")
-	
-	Print("Done\n")
-	
 	
 	PDBNamedStreamMapBuilder* Bu := Alloc(#PDBNamedStreamMapBuilder)
 	
@@ -687,6 +710,7 @@ define i32 Main() {
 	Print("Set\n")
 	
 	Bu->Set(HW, 3)
+	Bu->Set("Wello horld?", 3)
 	
 	Print("Set done, get\n")
 	
@@ -702,6 +726,14 @@ define i32 Main() {
 	Bu->OffsetIndexMap->DeletedVector->Print()
 	
 	Print("C %i = %i\n", Result, Value)
+	
+	Bu->SerializeInto(D)
+	
+	B->AppendStream(0, D, 0x1500)
+	
+	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\lib\dummy.pdb")
+	
+	Print("Done\n")
 	
 	return 0
 }
