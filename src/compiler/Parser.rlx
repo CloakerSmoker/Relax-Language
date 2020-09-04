@@ -48,6 +48,26 @@ define i32 GetTypeStorageSize(Type T) {
 define i32 GetPointerDepth(Type T) {
 	return T.PointerDepth As i32
 }
+define i8* GetTypeName(Type T) {
+	SafeWideString* BaseName := GetBaseType(T)->Name
+	i32 BaseNameLength := BaseName->Length
+	i32 PointerDepth := GetPointerDepth(T)
+	
+	i32 BufferSize := BaseNameLength + PointerDepth + 1
+	
+	i8* NameBuffer := Alloc(BufferSize)
+	i16* BaseNameBuffer := BaseName->Buffer
+	
+	for (i32 BaseNameIndex := 0, BaseNameIndex < BaseNameLength, BaseNameIndex += 1) {
+		Buffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
+	}
+	
+	for (i32 PointerDepthIndex := 0, PointerDepthIndex < PointerDepth, PointerDepthIndex += 1) {
+		Buffer[BaseNameLength + PointerDepthIndex] := '*'
+	}
+	
+	return Buffer
+}
 
 struct StructField {
 	SafeWideString* Name,
@@ -1680,7 +1700,10 @@ define void ParseAndAddStruct(ParserState* pState) {
 				Method->IsMethod := true
 				Method->MethodOfTypeName := Name
 				
-				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				; Ignore commas after methods, they aren't actually needed for parsing
+				ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+				
+				if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 					break
 				}
 				
@@ -1741,13 +1764,15 @@ define void ParseAndAddStruct(ParserState* pState) {
 			TotalSize := NextFieldOffset
 		}
 		
-		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-			/* If the next token is not a ',' break the loop */
+		; Ignore commas after fields, since they aren't needed for parsing
+		ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+		
+		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 			break
 		}
 	}
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
+	;Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
 	
 	NewType->Size := TotalSize
 	NewType->IsStructType := true

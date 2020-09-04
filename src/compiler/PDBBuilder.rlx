@@ -237,41 +237,6 @@ struct MSFBuilder {
 ;	}
 ;}
 
-struct UUID {
-	i32 DataOne,
-	i16 DataTwo,
-	i16 DataThree,
-	i8{8} DataFour
-}
-
-struct PDBStreamHeader {
-	i32 Version,
-	i32 CreationTime,
-	i32 WriteCount,
-	i64 UUIDHigh,
-	i64 UUIDLow
-}
-
-i32 PDB_VERSION_VC70 := 20000404
-
-define void* CreatePDBStreamData(i64 SourcePathHash, i64 Time) {
-	void* Data := Alloc(0x1000)
-	PDBStreamHeader* Header := Data As PDBStreamHeader*
-	
-	Header->Version := PDB_VERSION_VC70
-	Header->CreationTime := Time As i32
-	Header->WriteCount := 1
-	Header->UUIDLow := SourcePathHash ^ Time
-	Header->UUIDHigh := Time ^ Header
-	
-	;PDBHashmapBuilder* Hashmap := Alloc(#PDBHashmapHeader)
-	
-	;HashMap->Initialize(Data + #PDBStreamHeader, 2, 6)
-	
-	
-	
-}
-
 #Require "./src/lib/Debug.rlx"
 
 define i32 PDBHashStringV1(i8* String, i32 Length) {
@@ -688,56 +653,304 @@ define i32 PDBNamedStreamMapLookupKeyToStorageKey(PDBNamedStreamMapBuilder* this
 	return this->AppendString(Key, KeyLength)
 }
 
+struct PDBStreamHeader unaligned {
+	i32 Version,
+	i32 CreationTime,
+	i32 WriteCount,
+	i64 UUIDHigh,
+	i64 UUIDLow
+}
 
-define i32 Main() {
-	MSFBuilder* B := Alloc(#MSFBuilder)
+i32 PDB_VERSION_VC70 := 20000404
+
+define void* PDBWriteStreamHeaders(void* IntoBuffer, i64 SourcePathHash, i64 Time) {
+	PDBStreamHeader* Header := IntoBuffer As PDBStreamHeader*
 	
-	B->Initialize()
-	B->AllocateStreamDirectory()
+	Header->Version := PDB_VERSION_VC70
+	Header->CreationTime := Time As i32
+	Header->WriteCount := 1
+	Header->UUIDLow := SourcePathHash ^ Time
+	Header->UUIDHigh := Time ^ Header
 	
-	i8* D := Alloc(0x1500)
+	return IntoBuffer + #PDBStreamHeader
+}
+
+;define i32 Main() {
+;	MSFBuilder* B := Alloc(#MSFBuilder)
+;	
+;	B->Initialize()
+;	B->AllocateStreamDirectory()
+;	
+;	i8* D := Alloc(0x1500)
+;	i8* StreamBuffer := D
+;	
+;	for (i32 I := 0x800, I < 0x1200, I += 1) {
+;		D[I] := 0x75
+;	}
+;	
+;	PDBNamedStreamMapBuilder* Bu := Alloc(#PDBNamedStreamMapBuilder)
+;	
+;	Bu->Initialize()
+;	
+;	i8* HW := "Hello world!"
+;	
+;	Print("Set\n")
+;	
+;	Bu->Set(HW, 3)
+;	Bu->Set("Wello horld?", 3)
+;	
+;	Print("Set done, get\n")
+;	
+;	Bu->OffsetIndexMap->PresentVector->Print()
+;	Bu->OffsetIndexMap->DeletedVector->Print()
+;	
+;	i8* HW2 := "Google"
+;	
+;	i32 Value := 0
+;	i8 Result := Bu->Get(HW, &Value)
+;	
+;	Bu->OffsetIndexMap->PresentVector->Print()
+;	Bu->OffsetIndexMap->DeletedVector->Print()
+;	
+;	Print("C %i = %i\n", Result, Value)
+;	
+;	Print("Before %x\n", D)
+;	D := PDBWriteStreamHeaders(D, 0x123, 0x456)
+;	Print("After %x\n", D)
+;	Bu->SerializeInto(D)
+;	
+;	B->AppendStream(0, StreamBuffer, 0x1500)
+;	
+;	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\lib\dummy.pdb")
+;	
+;	Print("Done\n")
+;	
+;	return 0
+;}
+
+i32 TPI_STREAM_VERSION_V80 := 20040203
+
+i8 CV_POINTER_KIND_NEAR64 := 0x0C
+i8 CV_POINTER_MODE_NORMAL := 0
+i8 CV_POINTER_MODIFIER_NONE := 0
+i32 CV_POINTER_ATTRIBUTES := 0x0C | (8 << 0xD)
+
+i32 CV_KIND_I8 := 0x68
+i32 CV_KIND_I16 := 0x21
+i32 CV_KIND_I32 := 0x12
+i32 CV_KIND_I64 := 0x76
+i32 CV_MODE_POINTER := 0x600
+
+struct CVTypeIndex {
+	i32 RawIndex
 	
-	for (i32 I := 0x800, I < 0x1200, I += 1) {
-		D[I] := 0x75
+	define i8 IsSimple() {
+		return this->RawIndex < 0x1000
+	}
+	define i32 ToArrayIndex() {
+		return this->RawIndex - 0x1000
+	}
+	define void FromArrayIndex(i32 Index) {
+		this->RawIndex := Index + 0x1000
+	}
+	define i32 GetSimpleType() {
+		return this->RawIndex & 0xFF
+	}
+	define i32 GetSimpleMode() {
+		return this->RawIndex & 0x700
+	}
+}
+
+struct CVTypeIndexHelper {
+	union {
+		i32 TypeIndex,
+		CVTypeIndex Index
+	}
+}
+
+i16 LF_POINTER := 0x1002
+i16 LF_ARGLIST := 0x1201
+
+struct CVTypeRecordHeader {
+	i16 Length
+	i16 Type
+	
+	define void* GetData() {
+		return this + 4
+	}
+	define void* GetEnd() {
+		return this + this->Length + 2
+	}
+}
+
+struct TPIStreamHeader {
+	i32 Version,
+	i32 HeaderSize,
+	
+	i32 TypeIndexStart,
+	i32 TypeIndexEnd,
+	i32 TypeRecordBytes,
+	
+	i32 HashStreamIndex,
+	i32 HashAuxStreamIndex,
+	i32 HashKeySize,
+	i32 NumberOfHashBuckets,
+	
+	i32 HashValueBufferOffset,
+	i32 HashValueBufferLength,
+	
+	i32 IndexOffsetBufferOffset,
+	i32 IndexOffsetBufferLength,
+	
+	i32 HashTableBufferOffset,
+	i32 HashTableBufferLength,
+	
+	define void Initialize() {
+		this->Version := TPI_STREAM_VERSION_V80
+		this->HeaderSize := #TPIStreamHeader
+		this->TypeIndexStart := 0x1000
+		this->TypeIndexEnd := 0x1000
+		this->TypeRecordBytes := 0
+		this->HashKeySize := 4
+	}
+	define CVTypeRecordHeader* GetStartOfTypeRecords() {
+		return (this~>HashValueBufferLength + 4) As CVTypeRecordHeader*
+	}
+	define CVTypeRecordHeader* GetEndOfTypeRecords() {
+		return this->GetStartOfTypeRecords() + this->TypeRecordBytes
+	}
+}
+
+struct TPIStreamBuilder {
+	union {
+		TPIStreamHeader* Header
+		void* Buffer
 	}
 	
-	PDBNamedStreamMapBuilder* Bu := Alloc(#PDBNamedStreamMapBuilder)
+	i32 BufferSize
 	
-	Bu->Initialize()
+	define void Initialize() {
+		this->BufferSize := #TPIStreamHeader
+		this->Buffer := Alloc(this->BufferSize)
+		
+		this->Header->Initialize()
+	}
+	define void ReAlloc(i32 AdditionalSize) {
+		this->BufferSize += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
+	}
+	define i32 AppendCVRecord(CVTypeRecordHeader* Record) {
+		i32 Length := Record->Length + 2
+		
+		this->ReAlloc(Length)
+		
+		MoveMemory(this->Header->GetEndOfTypeRecords() As i8*, Record As i8*, Length)
+		
+		this->Header->TypeRecordBytes += Length
+		
+		i32 Result := this->Header->TypeIndexEnd
+		this->Header->TypeIndexEnd += 1
+		
+		return Result
+	}
+	define void SimplePrintIndex(i32 DumbIndex) {
+		CVTypeIndex Index
+		
+		Index.RawIndex := DumbIndex
+		
+		if (Index.IsSimple()) {
+			i32 Simple := Index.GetSimpleType()
+			
+			if (Simple = CV_KIND_I8) {
+				Print("i8")
+			}
+			else if (Simple = CV_KIND_I16) {
+				Print("i16")
+			}
+			else if (Simple = CV_KIND_I32) {
+				Print("i32")
+			}
+			else if (Simple = CV_KIND_I64) {
+				Print("i64")
+			}
+			else {
+				Print("<Unknown Simple %x>", Simple)
+			}
+			
+			if (Index.GetSimpleMode() = CV_MODE_POINTER) {
+				Print("*")
+			}
+			
+		}
+		else {
+			Print("%x", DumbIndex)
+		}
+	}
+	define CVTypeRecordHeader* PrintSingleRecord(CVTypeRecordHeader* ThisRecord) {
+		void* ThisRecordData := ThisRecord + 4
+		
+		if (ThisRecord->Type = LF_ARGLIST) {
+			Print("{ArgList}(")
+			
+			i32 ArgListLength := *(ThisRecordData As i32*)
+			i32* ArgListData := (ThisRecordData + 4) As i32*
+			
+			for (i32 ArgListIndex := 0, ArgListIndex < ArgListLength, ArgListIndex += 1) {
+				this->SimplePrintIndex(ArgListData[ArgListIndex])
+				
+				if (ArgListIndex + 1 != ArgListLength) {
+					Print(", ")
+				}
+			}
+			
+			Print(")\n")
+		}
+		
+		return ThisRecord->GetEnd()
+	}
+	define void PrintTypeRecords() {
+		CVTypeRecordHeader* Start := this->Header->GetStartOfTypeRecords()
+		void* End := this->Header->GetEndOfTypeRecords()
+		
+		while (Start != End) {
+			Start := this->PrintSingleRecord(Start)
+		}
+		
+	}
+}
+
+define i32 Main() {
 	
-	i8* HW := "Hello world!"
+	TPIStreamBuilder* B := Alloc(#TPIStreamBuilder)
 	
-	Print("Set\n")
+	B->Initialize()
 	
-	Bu->Set(HW, 3)
-	Bu->Set("Wello horld?", 3)
+	CVTypeRecordHeader* TList := Alloc(#CVTypeRecordHeader + 4 * 5)
 	
-	Print("Set done, get\n")
+	TList->Type := LF_ARGLIST
+	TList->Length := 22
 	
-	Bu->OffsetIndexMap->PresentVector->Print()
-	Bu->OffsetIndexMap->DeletedVector->Print()
+	i32* Buffer := TList->GetData()
 	
-	i8* HW2 := "Google"
+	Buffer[0] := 4
+	Buffer[1] := CV_KIND_I8
+	Buffer[2] := CV_KIND_I64
+	Buffer[3] := CV_KIND_I16 | CV_MODE_POINTER
+	Buffer[4] := CV_KIND_I32
 	
-	i32 Value := 0
-	i8 Result := Bu->Get(HW, &Value)
+	Print("List Built\n")
 	
-	Bu->OffsetIndexMap->PresentVector->Print()
-	Bu->OffsetIndexMap->DeletedVector->Print()
+	B->AppendCVRecord(TList)
 	
-	Print("C %i = %i\n", Result, Value)
+	Print("List Appended\n")
 	
-	Bu->SerializeInto(D)
+	B->PrintTypeRecords()
 	
-	B->AppendStream(0, D, 0x1500)
-	
-	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\lib\dummy.pdb")
 	
 	Print("Done\n")
 	
 	return 0
 }
-
 
 ;#Require "./src/lib/Console.rlx"
 ;#Require "./src/lib/HashMap.rlx"
