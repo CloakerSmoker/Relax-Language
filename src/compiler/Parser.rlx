@@ -59,14 +59,14 @@ define i8* GetTypeName(Type T) {
 	i16* BaseNameBuffer := BaseName->Buffer
 	
 	for (i32 BaseNameIndex := 0, BaseNameIndex < BaseNameLength, BaseNameIndex += 1) {
-		Buffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
+		NameBuffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
 	}
 	
 	for (i32 PointerDepthIndex := 0, PointerDepthIndex < PointerDepth, PointerDepthIndex += 1) {
-		Buffer[BaseNameLength + PointerDepthIndex] := '*'
+		NameBuffer[BaseNameLength + PointerDepthIndex] := '*'
 	}
 	
-	return Buffer
+	return NameBuffer
 }
 
 struct StructField {
