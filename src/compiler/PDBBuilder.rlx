@@ -770,6 +770,8 @@ struct CVTypeIndexHelper {
 
 i16 LF_POINTER := 0x1002
 i16 LF_ARGLIST := 0x1201
+i16 LF_PROCEDURE := 0x1008
+i16 LF_STRUCT := 0x1504
 
 struct CVTypeRecordHeader {
 	i16 Length
@@ -781,6 +783,31 @@ struct CVTypeRecordHeader {
 	define void* GetEnd() {
 		return this + this->Length + 2
 	}
+}
+
+i8 CV_PROCEDURE_GENERIC_CALL := 0xE
+
+struct CVProcedureRecord {
+	i32 ReturnTypeIndex
+	i16 Attributes
+	i16 ParameterCount
+	i32 ParameterTypeListIndex
+}
+
+; Fuck Microsoft, this file format is a massive pile of shit
+;  Their own tools can't even fucking read the files which their own compiler outputs
+;  And the braindead shithead who wrote "Source code is the ultimate documentation :-)" in the README
+;   for their garbage non-functional 'documentation' repo needs to be lobotomized. Although from what I can tell
+;    that is a prerequisite for working at Microsoft.
+
+struct CVStructRecord {
+	i16 Count
+	i16 Properties
+	i32 FieldsTypeListIndex
+	i32 DerivedTypeIndex
+	i32 VTableShapeTypeIndex
+	i16 Size
+	
 }
 
 struct TPIStreamHeader {
@@ -829,9 +856,15 @@ struct TPIStreamBuilder {
 	
 	i32 BufferSize
 	
+	i32 RecordOffsetCount
+	i32* RecordOffsetArray
+	
 	define void Initialize() {
 		this->BufferSize := #TPIStreamHeader
 		this->Buffer := Alloc(this->BufferSize)
+		
+		this->RecordOffsetCount := 0
+		this->RecordOffsetArray := Alloc(4)
 		
 		this->Header->Initialize()
 	}
@@ -839,24 +872,41 @@ struct TPIStreamBuilder {
 		this->BufferSize += AdditionalSize
 		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
 	}
+	define void StoreRecordOffset(i32 TypeIndex, i32 Offset) {
+		this->RecordOffsetCount += 4
+		this->RecordOffsetArray := ReAlloc(this->RecordOffsetArray, this->RecordOffsetCount)
+		
+		this->RecordOffsetArray[TypeIndex - 0x1000] := Offset
+	}
+	define CVTypeRecordHeader* GetRecordFromindex(i32 TypeIndex) {
+		return this->Header->GetStartOfTypeRecords() + this->RecordOffsetArray[TypeIndex - 0x1000]
+	}
 	define i32 AppendCVRecord(CVTypeRecordHeader* Record) {
 		i32 Length := Record->Length + 2
 		
 		this->ReAlloc(Length)
 		
-		MoveMemory(this->Header->GetEndOfTypeRecords() As i8*, Record As i8*, Length)
+		i8* EndOfRecords := this->Header->GetEndOfTypeRecords() As i8*
+		i32 Offset := EndOfRecords - this->Header->GetStartOfTypeRecords()
+		
+		MoveMemory(EndOfRecords, Record As i8*, Length)
 		
 		this->Header->TypeRecordBytes += Length
 		
 		i32 Result := this->Header->TypeIndexEnd
 		this->Header->TypeIndexEnd += 1
 		
+		this->StoreRecordOffset(Result, Offset)
+		
 		return Result
 	}
-	define void SimplePrintIndex(i32 DumbIndex) {
+	
+	declare CVTypeRecordHeader* PrintSingleRecord(CVTypeRecordHeader*)
+	
+	define void PrintTypeIndex(i32 TypeIndex) {
 		CVTypeIndex Index
 		
-		Index.RawIndex := DumbIndex
+		Index.RawIndex := TypeIndex
 		
 		if (Index.IsSimple()) {
 			i32 Simple := Index.GetSimpleType()
@@ -883,11 +933,11 @@ struct TPIStreamBuilder {
 			
 		}
 		else {
-			Print("%x", DumbIndex)
+			this->PrintSingleRecord(this->GetRecordFromindex(TypeIndex))
 		}
 	}
 	define CVTypeRecordHeader* PrintSingleRecord(CVTypeRecordHeader* ThisRecord) {
-		void* ThisRecordData := ThisRecord + 4
+		void* ThisRecordData := ThisRecord->GetData()
 		
 		if (ThisRecord->Type = LF_ARGLIST) {
 			Print("{ArgList}(")
@@ -896,14 +946,33 @@ struct TPIStreamBuilder {
 			i32* ArgListData := (ThisRecordData + 4) As i32*
 			
 			for (i32 ArgListIndex := 0, ArgListIndex < ArgListLength, ArgListIndex += 1) {
-				this->SimplePrintIndex(ArgListData[ArgListIndex])
+				this->PrintTypeIndex(ArgListData[ArgListIndex])
 				
 				if (ArgListIndex + 1 != ArgListLength) {
 					Print(", ")
 				}
 			}
 			
-			Print(")\n")
+			Print(")")
+		}
+		else if (ThisRecord->Type = LF_PROCEDURE) {
+			Print("{")
+			
+			i32* ProcedureData := ThisRecordData As i32*
+			
+			i32 ReturnTypeIndex := ProcedureData[0]
+			i32 Attributes := ProcedureData[1]
+			i32 ParameterTypeListIndex := ProcedureData[2]
+			
+			this->PrintTypeIndex(ReturnTypeIndex)
+			
+			Print(" Function}(")
+			
+			(0 As i32*)[2] := 20
+			
+			this->PrintTypeIndex(ParameterTypeListIndex)
+			
+			Print(")")
 		}
 		
 		return ThisRecord->GetEnd()
@@ -912,11 +981,51 @@ struct TPIStreamBuilder {
 		CVTypeRecordHeader* Start := this->Header->GetStartOfTypeRecords()
 		void* End := this->Header->GetEndOfTypeRecords()
 		
+		;Throw(0x123)
+		
 		while (Start != End) {
 			Start := this->PrintSingleRecord(Start)
+			Print("\n")
 		}
 		
 	}
+}
+
+define CVTypeRecordHeader* AllocRecord(i16 Type, i32 Size) {
+	CVTypeRecordHeader* Result := Alloc(Size + #CVTypeRecordHeader)
+	
+	Result->Length := Size + 2
+	Result->Type := Type
+	
+	return Result
+}
+
+struct DBIStreamHeader {
+	i32 Signature
+	i32 Version
+	i32 Age
+	
+	i16 GlobalStreamIndex
+	i16 BuildNumber
+	i16 PublicStreamIndex
+	i16 MSPDBVersion
+	i16 SymbolRecordStreamIndex
+	i16 Unknown
+	
+	i32 ModuleInfoSize
+	i32 SectionContributionSize
+	i32 SectionMapSize
+	i32 SourceInfoSize
+	i32 TypeServerMapSize
+	
+	i32 MFCTypeServerStreamIndex
+	i32 OptionalHeaderSize
+	i32 ECStreamSize
+	
+	i16 Flags
+	i16 Machine
+	i16 Padding
+	
 }
 
 define i32 Main() {
@@ -925,24 +1034,28 @@ define i32 Main() {
 	
 	B->Initialize()
 	
-	CVTypeRecordHeader* TList := Alloc(#CVTypeRecordHeader + 4 * 5)
-	
-	TList->Type := LF_ARGLIST
-	TList->Length := 22
-	
+	CVTypeRecordHeader* TList := AllocRecord(LF_ARGLIST, 20)
 	i32* Buffer := TList->GetData()
 	
 	Buffer[0] := 4
-	Buffer[1] := CV_KIND_I8
-	Buffer[2] := CV_KIND_I64
+	Buffer[1] := CV_KIND_I8 | CV_MODE_POINTER
+	Buffer[2] := CV_KIND_I16
 	Buffer[3] := CV_KIND_I16 | CV_MODE_POINTER
-	Buffer[4] := CV_KIND_I32
+	Buffer[4] := CV_KIND_I16
 	
 	Print("List Built\n")
 	
-	B->AppendCVRecord(TList)
+	i32 PListI := B->AppendCVRecord(TList)
 	
 	Print("List Appended\n")
+	
+	CVTypeRecordHeader* PDef := AllocRecord(LF_PROCEDURE, #CVProcedureRecord)
+	CVProcedureRecord* PDefR := PDef->GetData()
+	
+	PDefR->ReturnTypeIndex := CV_KIND_I64
+	PDefR->ParameterTypeListIndex := PListI
+	
+	B->AppendCVRecord(PDef)
 	
 	B->PrintTypeRecords()
 	
