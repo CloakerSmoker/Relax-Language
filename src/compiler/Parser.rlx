@@ -2277,8 +2277,36 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 				NewDefine->Attribute := KEYWORD_X64
 			}
 			
-			NewDefine->StringBuffer := Alloc(4) As i8*
-			NewDefine->StringBufferSize := 0
+			if (pState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+				i32 Length := Name->Length + 1
+				
+				if (ThisType != null) {
+					Length += ThisType->Name->Length + 1
+				}
+				
+				i8* StringBuffer := Alloc(Length) As i8*
+				i8* NameBuffer := StringBuffer
+				
+				if (ThisType != null) {
+					for (i32 TypeNameIndex := 0, TypeNameIndex < ThisType->Name->Length, TypeNameIndex += 1) {
+						NameBuffer[TypeNameIndex] := ThisType->Name->Buffer[TypeNameIndex] As i8
+					}
+					
+					NameBuffer[TypeNameIndex] := '.'
+					NameBuffer += TypeNameIndex + 1
+				}
+				
+				for (i32 NameIndex := 0, NameIndex < Name->Length, NameIndex += 1) {
+					NameBuffer[NameIndex] := Name->Buffer[NameIndex] As i8
+				}
+				
+				NewDefine->StringBuffer := StringBuffer
+				NewDefine->StringBufferSize := Length
+			}
+			else {
+				NewDefine->StringBuffer := Alloc(4) As i8*
+				NewDefine->StringBufferSize := 0
+			}
 			
 			NewDefine->Body := ParseBlock(pState)
 		}
@@ -2559,6 +2587,9 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
 			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_ELF
+		}
+		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "debug")) {
+			Result->IntegerValue := pState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
 			Result->ValueType := MakeType(pState->void, 1)

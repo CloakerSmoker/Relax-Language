@@ -489,23 +489,29 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
-define i32 GetVariableOffset(VariableInfo* TargetVariable, i8* FitsDisp8) {
+define i32 GetVariableOffset(CompilerState* cState, VariableInfo* TargetVariable, i8* FitsDisp8) {
+	i32 Offset := TargetVariable->StackOffset
+	
+	if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES && !TargetVariable->IsGlobal) {
+		Offset += 0x18
+	}
+	
 	if (FitsDisp8 != null) {
-		FitsDisp8[0] := (TargetVariable->StackOffset <= 112)
+		FitsDisp8[0] := (Offset <= 112)
 	}
 	
 	if (TargetVariable->IsGlobal) {
-		return TargetVariable->StackOffset
+		return Offset
 	}
 	
-	return -(TargetVariable->StackOffset + 8)
+	return -(Offset + 8)
 }
 
 /* Todo: Merge these three functions into one */
 
 define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
+	i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
 	
 	i8 BaseRegister := RBP
 	
@@ -541,7 +547,7 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 	}
 	else {
 		i8 UseDisp8 := false
-		i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
+		i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
 		
 		i8 BaseRegister := RBP
 		
@@ -567,7 +573,7 @@ define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetV
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(TargetVariable, &UseDisp8)
+	i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
 	
 	i8 BaseRegister := RBP
 	
@@ -696,6 +702,15 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
 	}
 	
+	i32 StringsStart := NextLabel(cState)
+	
+	if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+		EmitMove_R32_I32(cState, RAX, 0x12345678)
+		EmitPush_R64(cState, RAX)
+		EmitLea_R64_Label(cState, RAX, StringsStart)
+		EmitPush_R64(cState, RAX)
+	}
+	
 	if (LocalSpace) {
 		/* Only emit an instruction to allocate space for locals when we have locals */
 		EmitSub_R64_IX(cState, RSP, LocalSpace)
@@ -757,7 +772,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	if (FunctionToCompile->StringBufferSize) {
-		i32 StringsStart := NextLabel(cState)
 		i32 StringsEnd := NextLabel(cState)
 		
 		EmitJump_Label(cState, StringsEnd)
@@ -1794,7 +1808,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
 				i32 Start := cState->Index
-				i32 Offset := GetVariableOffset(TargetVariable, null)
+				i32 Offset := GetVariableOffset(cState, TargetVariable, null)
 				
 				if (Operator = OPERATOR_PLUS_EQUAL) {
 					EmitAdd_RIX_DISPX_RX(cState, RBP, WorkRegister, Offset, ResultSize)

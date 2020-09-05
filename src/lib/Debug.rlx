@@ -24,7 +24,16 @@ define void PrintStackDump(i32 IgnoreFrames) {
 				IgnoreFrames -= 1
 			}
 			else {
-				Print("	^10Stack[%i]^F0 ^B0Fn callsite^F0 = %x\n", Index, Last->ReturnAddress, Last->LastFrame)
+				i64* MaybeMagic := Last - 0x8
+				i8** MaybeName := (Last - 0x10) As i8**
+				
+				if (Debug && *MaybeMagic = 0x12345678) {
+					Print("	^10Stack[%i]^F0 ^B0Fn^F0 = %s\n", Index, *MaybeName)
+				}
+				else {
+					Print("	^10Stack[%i]^F0 ^B0Fn callsite^F0 = %x\n", Index, Last->ReturnAddress, Last->LastFrame)
+				}
+				
 				Index += 1
 			}
 			
@@ -46,6 +55,11 @@ define void UnhandledExceptionHandler(i64 Code) {
 
 define void* DebugInsertUnhandledExceptionHandler() {
 	UnhandledExceptionHandler := &UnhandledExceptionHandler
+	
+	if !(Debug) {
+		Print("^60Warning: Debug library included without '--debug' compiler flag, stack traces will only contain raw addresses.^F0\n")
+	}
+	
 	return null
 }
 

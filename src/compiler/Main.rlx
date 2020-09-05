@@ -20,11 +20,15 @@ i8 ABI_SYSTEMV := 2
 i8 DUMP_FUNCTIONS := 1
 i8 DUMP_GLOBALS := 2
 
+i8 DEBUG_NONE := 0
+i8 DEBUG_EMIT_FUNCTION_NAMES := 1
+
 struct BuildConfig {
 	i64 ImageBase,
 	i8 OutputFormat,
 	i8 TargetABI,
-	i8 DumpInfo
+	i8 DumpInfo,
+	i8 DebugMode
 }
 
 #Require ./src/lib/Memory.rlx
@@ -117,6 +121,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 		else if (StringEquals(NextArg, "--globals")) {
 			Config->DumpInfo |= DUMP_GLOBALS
+		}
+		else if (StringEquals(NextArg, "--debug")) {
+			Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES
 		}
 		else if (StringEquals(NextArg, "--no-colors")) {
 			NO_COLORS := true
