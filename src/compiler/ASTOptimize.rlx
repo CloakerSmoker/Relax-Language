@@ -1,0 +1,42 @@
+
+
+
+
+define void CountFunctionCallsVisit(ASTVisitor* Visitor, ASTNode* Node) {
+	if (Node->NodeType = NODE_TYPE_CALL) {
+		CallExpression* CallNode := Node->CallNode
+		
+		if (CallNode->BuiltinID = BUILTIN_NONE) {
+			CallNode->TargetFunction->_CallCount += 1
+			
+			Visitor->VisitBlocks(CallNode->TargetFunction->Body)
+		}
+	}
+	else if (Node->NodeType = NODE_TYPE_UNARY) {
+		UnaryExpression* UnaryNode := Node->UnaryNode
+		
+		if (UnaryNode->Operator->Value = OPERATOR_AND) {
+			if (UnaryNode->Operand->NodeType = NODE_TYPE_DEFINE) {
+				UnaryNode->Operand->DefineNode->_CallCount += 1
+			}
+		}
+	}
+}
+
+define void CountFunctionCalls(ParserState* pState) {
+	ASTVisitor* Visitor := Alloc(#ASTVisitor)
+	
+	Visitor->AllowType(NODE_TYPE_CALL)
+	Visitor->AllowType(NODE_TYPE_UNARY)
+	
+	Print("AT\n")
+	
+	Visitor->SetVisitFunction(&CountFunctionCallsVisit)
+	
+	Visitor->VisitBlocks(pState->MainFunction->Body)
+	Visitor->RawVisitNodes(GetArrayLength(pState->GlobalDefaults), pState->GlobalDefaults)
+	
+	pState->MainFunction->_CallCount += 1
+	
+	Free(Visitor)
+}

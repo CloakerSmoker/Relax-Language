@@ -74,6 +74,7 @@ struct CompilerState {
 ==========================================
 */
 
+#Require "./src/lib/Debug.rlx"
 #Include ./src/compiler/CodeGen.rlx
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
@@ -250,7 +251,12 @@ define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, Has
 	return Result
 }
 
+#Require "./src/compiler/ASTOptimize.rlx"
+;#Require "./src/lib/Debug.rlx"
+
 define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
+	;CountFunctionCalls(pState)
+	
 	CompilerState C
 	
 	C.Config := Config
@@ -329,7 +335,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		}
 	}
 	
-	if !(FoundMain) {
+	if !(MainOffset) {
 		SwapOutputStream()
 		Print("^50Main function not found, aborting.^F0")
 		Exit(1)
@@ -492,8 +498,10 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 define i32 GetVariableOffset(CompilerState* cState, VariableInfo* TargetVariable, i8* FitsDisp8) {
 	i32 Offset := TargetVariable->StackOffset
 	
-	if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES && !TargetVariable->IsGlobal) {
-		Offset += 0x18
+	if !(TargetVariable->IsGlobal) {
+		if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+			Offset += 0x10
+		}
 	}
 	
 	if (FitsDisp8 != null) {
@@ -709,6 +717,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitPush_R64(cState, RAX)
 		EmitLea_R64_Label(cState, RAX, StringsStart)
 		EmitPush_R64(cState, RAX)
+		
+		; Extend LocalSpace to account for extra offset from RBP to local variables
+		LocalSpace += 0x8
 	}
 	
 	if (LocalSpace) {
@@ -811,6 +822,13 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	
 	if (ReturnExpression) {
 		CompileExpression(cState, RAX, ReturnExpression)
+		
+		i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
+		i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunction->ReturnType)
+		
+		if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
+			Cast(cState, RAX, ReturnValueSize As i8)
+		}
 	}
 	
 	EmitLeave(cState)

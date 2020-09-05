@@ -25,12 +25,12 @@ run_command_format = '{}.{} {}'
 expected_exitcode = 1
 
 if running_on == 'Linux':
-    compile_command_format = f'{compile_command_format}.elf" --elf'
+    compile_command_format = f'{compile_command_format}.elf" --elf --debug'
     platform_extension = 'elf'
     run_command_format = f'{run_command_format}'
     expected_exitcode = 0
 elif running_on == 'Windows':
-    compile_command_format += '.exe"'
+    compile_command_format += '.exe" --debug'
 else:
     print('Unsupported platform.', file=sys.stderr)
     sys.exit(1)

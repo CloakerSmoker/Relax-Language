@@ -23,7 +23,7 @@ tools_dir = path_join(cwd, 'tools')
 
 running_on = platform.system()
 
-compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}"'
+compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug'
 platform_extension = 'exe'
 python = sys.executable
 expected_returncode = 1

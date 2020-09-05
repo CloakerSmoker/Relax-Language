@@ -205,6 +205,7 @@ struct FunctionDefine {
 	i32 StringBufferSize,
 	
 	i32 CallCount,
+	i32 _CallCount,
 	i8 UsesGlobals,
 	i8 IsMethod,
 	
@@ -247,6 +248,7 @@ struct ParserState {
 	TypeInfo* void,
 	
 	FunctionDefine* CurrentFunction,
+	FunctionDefine* MainFunction,
 	
 	i16 FunctionCount,
 	i16 GlobalCount,
@@ -311,6 +313,103 @@ struct ASTNode {
 	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
 }
 
+struct ASTVisitor {
+	void* VisitFunction,
+	i32 NodeTypeMask,
+	
+	define i32 IsTypeAllowed(i8 NodeType) {
+		return !!(this->NodeTypeMask & (1 << NodeType))
+	},
+	define void AllowType(i8 NodeType) {
+		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
+	},
+	define void SetVisitFunction(void* Function) {
+		this->VisitFunction := Function
+	},
+	define void CallVisitor(ASTNode* Node, void* VisitFunction) asm {
+		jmp, rdx
+	},
+	
+	declare void VisitNodes(...),
+	declare void RawVisitNodes(i64, ASTNode**),
+	
+	define void RawVisitBlocks(i64 Count, Block** Blocks) {
+		for (i32 Index := 0, Index < Count, Index += 1) {
+			Block* Next := Blocks[Index]
+			
+			this->RawVisitNodes(Next->StatementCount, Next->Statements)
+		}
+	},
+	define void VisitBlocks(... Blocks) {
+		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
+	},
+	define void VisitChildren(ASTNode* Node) {
+		i8 NodeType := Node->NodeType
+		
+		if (NodeType = NODE_TYPE_UNARY) {
+			this->VisitNodes(Node->UnaryNode->Operand)
+		}
+		else if (NodeType = NODE_TYPE_BINARY) {
+			this->VisitNodes(Node->BinaryNode->Left, Node->BinaryNode->Right)
+		}
+		else if (NodeType = NODE_TYPE_CALL) {
+			this->RawVisitNodes(Node->CallNode->ParameterCount, Node->CallNode->Parameters)
+		}
+		else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			this->VisitNodes(Node->AccessNode->Left)
+		}
+		else if (NodeType = NODE_TYPE_IF) {
+			this->RawVisitNodes(Node->IfNode->BranchCount, Node->IfNode->Conditions)
+			this->RawVisitBlocks(Node->IfNode->BranchCount, Node->IfNode->Bodies)
+			
+			if (Node->IfNode->ElseBranch) {
+				this->VisitBlocks(Node->IfNode->ElseBranch)
+			}
+		}
+		else if (NodeType = NODE_TYPE_WHILE) {
+			this->VisitNodes(Node->WhileNode->Condition)
+			this->VisitBlocks(Node->WhileNode->Body)
+		}
+		else if (NodeType = NODE_TYPE_FOR) {
+			this->VisitNodes(Node->ForNode->Initializer, Node->ForNode->Condition, Node->ForNode->Step)
+			this->VisitBlocks(Node->ForNode->Body)
+		}
+		else if (NodeType = NODE_TYPE_LOOP) {
+			this->VisitBlocks(Node->LoopBody)
+		}
+		else if (NodeType = NODE_TYPE_RETURN) {
+			this->VisitNodes(Node->ReturnExpression)
+		}
+		else if (NodeType = NODE_TYPE_EXPRESSION) {
+			this->VisitNodes(Node->ExpressionStatement)
+		}
+		else if (NodeType = NODE_TYPE_TRY) {
+			this->VisitBlocks(Node->TryNode->Body)
+			
+			if (Node->TryNode->CatchBody) {
+				this->VisitBlocks(Node->TryNode->CatchBody)
+			}
+		}
+		
+	},
+	
+	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
+		for (i32 Index := 0, Index < Count, Index += 1) {
+			ASTNode* Node := Nodes[Index]
+			
+			if (this->IsTypeAllowed(Node->NodeType)) {
+				this->CallVisitor(Node, this->VisitFunction)
+			}
+			else {
+				this->VisitChildren(Node)
+			}
+		}
+	},
+	define void VisitNodes(... Nodes) {
+		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
+	}
+}
+
 define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
 	ASTNode* NewNode := Alloc(#ASTNode) As ASTNode*
 	
@@ -336,8 +435,8 @@ define ASTNode* AllocateNewASTNode(i8 NewNodeType, i64 NewNodeValue, Type NewNod
 	return AllocateNewASTNode(NewNodeType, NewNodeValue As void*, NewNodeValueType)
 }
 
-define void FreeASTNode(ASTNode* NodeToFree) {
-	Free(NodeToFree As void*)
+define void FreeASTNode(ASTNode* Node) {
+	Free(Node As void*)
 }
 
 
@@ -820,8 +919,10 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		
 		i32 ThisFunctionRating := 0
 		
+		i8 IS_VARIADIC := false
+		
 		if (Next->Attribute = OPERATOR_DOT) {
-			i8 IS_VARIADIC := true
+			IS_VARIADIC := true
 			ThisFunctionRating := 100000
 			
 			NextParameterCount -= 1
@@ -2313,6 +2414,10 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		
 		NewDefine->HasFullDefinition := true
 		pState->CurrentFunction := false
+		
+		;if (ThisType = null && SafeStringEqualsAString(Name, "Main")) {
+		;	pState->MainFunction := NewDefine
+		;}
 	}
 	
 	return NewDefine

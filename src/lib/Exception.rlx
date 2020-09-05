@@ -94,7 +94,7 @@ define void CallUnhandledExceptionHandler(i64 Code) {
 		TerminateProcess(GetCurrentProcess(), Code)
 	}
 	linux {
-		syscall:(60, ExitCode)
+		syscall:(60, Code)
 	}
 }
 
