@@ -89,7 +89,7 @@ move(compiler_output, safe_compiler)
 
 if platform_extension == 'exe':
     elf_compile_output = path_join(bin_dir, 'new_compiler.elf')
-    elf_compile_command = compile_command_format.format(safe_compiler, elf_compile_output) + ' --elf'
+    elf_compile_command = compile_command_format.format(safe_compiler, elf_compile_output) + ' --elf --debug'
 
     elf_compile_result = subprocess.run(elf_compile_command, cwd=cwd, shell=True, capture_output=True)
 
