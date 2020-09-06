@@ -80,7 +80,6 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
-
 define void DumpGlobals(CompilerState* cState) {
 	/* Walk the globals hashmap and print the offset/size of each */
 	
@@ -100,7 +99,6 @@ define void DumpGlobals(CompilerState* cState) {
 				
 				if (LastOffset) {
 					Print(" %x\n", ThisOffset - LastOffset)
-					/* IWriteHexLine() */
 				}
 				else {
 					PrintNewLine()
@@ -109,10 +107,6 @@ define void DumpGlobals(CompilerState* cState) {
 				PrintSafeString(NextGlobal->Name)
 				Print(": %x", Base + ThisOffset)
 				
-				/* PrintSafeString(NextGlobal->Name)
-				AWrite(": ")
-				IWriteHex(Base + ThisOffset) */
-				
 				LastOffset := ThisOffset
 				FoundElement := FoundElement->NextElement
 			}
@@ -120,8 +114,6 @@ define void DumpGlobals(CompilerState* cState) {
 	}
 	
 	Print(" %x\n", Max - LastOffset)
-	/* AWrite(" ")
-	IWriteHexLine(Max - LastOffset) */
 }
 
 define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
@@ -129,15 +121,6 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 			Address Of Function - Size of function (Call count of function) Name
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
 	*/
-	
-	/* IWriteHex(CODE_BASE + FunctionOffset)
-	AWrite(" - ")
-	
-	Print(cState->Index - FunctionOffset)
-	
-	Print("	(")
-	Print(TargetFunction->CallCount)
-	Print(")	") */
 	
 	Print("%x - %i	(%i)	", CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
 	
@@ -162,8 +145,6 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 			}
 			
 			if (ParameterIndex + 1 != TargetFunction->ParameterCount) {
-/* 				WriteCharacter(',')
-				WriteCharacter(' ') */
 				PrintLiteral(', ')
 			}
 		}
@@ -199,7 +180,6 @@ define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDe
 			
 			Result := true
 			MainOffset[0] := FunctionOffset
-			BaseFunction->CallCount += 1	/* Since `Main()` should never be called, ensure it isn't optimized away due to being called 0 times */
 		}
 		
 		if (BaseFunction->CallCount != 0) {
@@ -255,7 +235,7 @@ define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, Has
 ;#Require "./src/lib/Debug.rlx"
 
 define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
-	;CountFunctionCalls(pState)
+	CountReferences(pState)
 	
 	CompilerState C
 	
@@ -538,11 +518,20 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 		AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
 	}
 }
+
+declare void CompileExpression(CompilerState*, i8, ASTNode*)
+
 define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->Type.IsArray) {
 		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
+	}
+	
+	if (TargetVariable->IsGlobal && TargetVariable->SetCount = 1) {
+		if (TargetVariable->LastValue->NodeType != NODE_TYPE_CALL) {
+			return CompileExpression(cState, ResultRegister, TargetVariable->LastValue)
+		}
 	}
 	
 	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
@@ -625,7 +614,6 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 	EmitJump_RI64(cState, RBX)
 }
 
-declare void CompileExpression(CompilerState*, i8, ASTNode*)
 declare void CompileBlock(CompilerState*, Block*)
 declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
@@ -778,7 +766,12 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		i32 Length := GetArrayLength(GlobalDefaults)
 		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
-			CompileExpression(cState, RAX, GlobalDefaults[GlobalDefaultIndex])
+			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
+			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
+			
+			if (TargetGlobal->SetCount != 1) {
+				CompileExpression(cState, RAX, NextGlobalDefault)
+			}
 		}
 	}
 	

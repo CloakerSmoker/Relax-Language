@@ -125,6 +125,35 @@ i8 NODE_TYPE_TRY := 23
 ==========================================
 */
 
+struct VariableInfo {
+	ASTNode* LastValue,
+	SafeWideString* Name,
+	Type Type,
+	i32 StackOffset,
+	i16 GetCount,
+	i16 SetCount,
+	i8 IsGlobal,
+	i8 IsParameter,
+	i8 IsVariadic,
+	i8 IsThis
+}
+
+define VariableInfo* AllocateNewVariableInfo() {
+	return Alloc(#VariableInfo) As VariableInfo*
+}
+define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
+	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
+}
+define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
+	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
+	
+	if (Result) {
+		return (Result->Value) As VariableInfo*
+	}
+	
+	return 0 As VariableInfo*
+}
+
 struct UnaryExpression {
 	Token* Operator,
 	ASTNode* Operand
@@ -205,7 +234,6 @@ struct FunctionDefine {
 	i32 StringBufferSize,
 	
 	i32 CallCount,
-	i32 _CallCount,
 	i8 UsesGlobals,
 	i8 IsMethod,
 	
@@ -251,7 +279,6 @@ struct ParserState {
 	FunctionDefine* MainFunction,
 	
 	i16 FunctionCount,
-	i16 GlobalCount,
 	i16 TypeCount,
 	
 	i8 InLoop,
@@ -310,25 +337,35 @@ struct ASTNode {
 	
 	Type ValueType,
 	i8 NodeType,
-	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
+	i8 IsStorageValue, /* Signals that this node is a value that references a storage location, and can be assigned */
+	void* LastVisitor
 }
 
 struct ASTVisitor {
-	void* VisitFunction,
-	i32 NodeTypeMask,
+	void* VisitFunction
+	void* State
+	i32 NodeTypeMask
 	
 	define i32 IsTypeAllowed(i8 NodeType) {
 		return !!(this->NodeTypeMask & (1 << NodeType))
-	},
+	}
 	define void AllowType(i8 NodeType) {
 		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
-	},
+	}
+	
+	define void SetState(void* State) {
+		this->State := State
+	}
+	define void* GetState() {
+		return this->State
+	}
+	
 	define void SetVisitFunction(void* Function) {
 		this->VisitFunction := Function
-	},
+	}
 	define void CallVisitor(ASTNode* Node, void* VisitFunction) asm {
 		jmp, rdx
-	},
+	}
 	
 	declare void VisitNodes(...),
 	declare void RawVisitNodes(i64, ASTNode**),
@@ -396,6 +433,12 @@ struct ASTVisitor {
 	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
 		for (i32 Index := 0, Index < Count, Index += 1) {
 			ASTNode* Node := Nodes[Index]
+			
+			if (Node->LastVisitor = this) {
+				continue
+			}
+			
+			Node->LastVisitor := this
 			
 			if (this->IsTypeAllowed(Node->NodeType)) {
 				this->CallVisitor(Node, this->VisitFunction)
@@ -848,39 +891,6 @@ define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	PrintNewLine()
 	PrettyError(BadNode~>Context, WarnMessage, Red | Green)
 }
-
-/*
-==========================================
-	Variable struct + alloc helper + hashmap helpers
-==========================================
-*/
-
-struct VariableInfo {
-	SafeWideString* Name,
-	Type Type,
-	i32 StackOffset,
-	i8 IsGlobal,
-	i8 IsParameter,
-	i8 IsVariadic,
-	i8 IsThis
-}
-
-define VariableInfo* AllocateNewVariableInfo() {
-	return Alloc(#VariableInfo) As VariableInfo*
-}
-define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
-	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
-}
-define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
-	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
-	
-	if (Result) {
-		return (Result->Value) As VariableInfo*
-	}
-	
-	return 0 As VariableInfo*
-}
-
 
 /*
 ==========================================
@@ -1377,8 +1387,6 @@ define ASTNode* MakeCall(ParserState* pState, HashMap* Namespace, Token* NameTok
 		/* And walk the FunctionDefine* linked list, looking for an overload which matches our parameters */
 		FoundDefine := MatchFunction(pState, FoundDefine, ResultNode)
 		
-		FoundDefine->CallCount += 1
-		
 		Result->TargetFunction := FoundDefine
 		ResultNode->ValueType := FoundDefine->ReturnType
 	}
@@ -1502,7 +1510,6 @@ define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
 	
 	P->Globals := NewHashMap()
 	P->GlobalOffset := 0
-	P->GlobalCount := 0
 	
 	P->GlobalDefaults := AllocArray(8, 0)
 	
@@ -2415,9 +2422,9 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		NewDefine->HasFullDefinition := true
 		pState->CurrentFunction := false
 		
-		;if (ThisType = null && SafeStringEqualsAString(Name, "Main")) {
-		;	pState->MainFunction := NewDefine
-		;}
+		if (ThisType = null && SafeStringEqualsAString(Name, "Main")) {
+			pState->MainFunction := NewDefine
+		}
 	}
 	
 	return NewDefine
@@ -2842,8 +2849,6 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 					
 					if (FoundFunction) {
 						FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
-						
-						FoundDefine->CallCount += 1
 						
 						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(pState->void, 1))
 						MergeContexts(NextToken~>Context, MaybeFunction~>Context, Result~>Context)

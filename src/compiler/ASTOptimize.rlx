@@ -1,42 +1,101 @@
 
 
-
-
-define void CountFunctionCallsVisit(ASTVisitor* Visitor, ASTNode* Node) {
-	if (Node->NodeType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := Node->CallNode
-		
-		if (CallNode->BuiltinID = BUILTIN_NONE) {
-			CallNode->TargetFunction->_CallCount += 1
-			
-			Visitor->VisitBlocks(CallNode->TargetFunction->Body)
-		}
-	}
-	else if (Node->NodeType = NODE_TYPE_UNARY) {
-		UnaryExpression* UnaryNode := Node->UnaryNode
-		
-		if (UnaryNode->Operator->Value = OPERATOR_AND) {
-			if (UnaryNode->Operand->NodeType = NODE_TYPE_DEFINE) {
-				UnaryNode->Operand->DefineNode->_CallCount += 1
-			}
-		}
+define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Target) {
+	Target->CallCount += 1
+	
+	if (Target->IsImported = false && Target->Attribute != KEYWORD_ASSEMBLY) {
+		Visitor->VisitBlocks(Target->Body)
 	}
 }
 
-define void CountFunctionCalls(ParserState* pState) {
+define i8 IsAssignment(Token* OperatorToken) {
+	i8 Operator := OperatorToken->Value As i8
+	
+	return (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT)
+}
+
+define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
+	i8 NodeType := Node->NodeType
+	
+	if (NodeType = NODE_TYPE_CALL) {
+		CallExpression* CallNode := Node->CallNode
+		
+		if (CallNode->BuiltinID = BUILTIN_NONE) {
+			CountReferencesVisitFunction(Visitor, CallNode->TargetFunction)
+		}
+		
+		Visitor->RawVisitNodes(CallNode->ParameterCount, CallNode->Parameters)
+	}
+	else if (NodeType = NODE_TYPE_UNARY) {
+		UnaryExpression* UnaryNode := Node->UnaryNode
+		ASTNode* Operand := UnaryNode->Operand
+		
+		if (UnaryNode->Operator->Value = OPERATOR_AND) {
+			if (Operand->NodeType = NODE_TYPE_DEFINE) {
+				CountReferencesVisitFunction(Visitor, Operand->DefineNode)
+			}
+			else if (Operand->NodeType = NODE_TYPE_VARIABLE) {
+				Operand->VariableValue->SetCount += 1
+			}
+		}
+		
+		Visitor->VisitNodes(Operand)
+	}
+	else if (NodeType = NODE_TYPE_BINARY) {
+		ASTNode* Left := Node->BinaryNode->Left
+		ASTNode* Right := Node->BinaryNode->Right
+		
+		if (Left->NodeType = NODE_TYPE_VARIABLE && IsAssignment(Node->BinaryNode->Operator)) {
+			VariableInfo* LeftVariable := Left->VariableValue
+			
+			if (Node->BinaryNode->Operator->Value != OPERATOR_COLON_EQUAL) {
+				LeftVariable->GetCount += 1
+			}
+			
+			LeftVariable->SetCount += 1
+			LeftVariable->LastValue := Right
+			
+			if (Right->NodeType = NODE_TYPE_CALL) {
+				LeftVariable->SetCount += 1
+			}
+			
+			Visitor->VisitNodes(Right)
+		}
+		else {
+			Visitor->VisitChildren(Node)
+		}
+	}
+	else if (NodeType = NODE_TYPE_VARIABLE) {
+		Node->VariableValue->GetCount += 1
+	}
+}
+
+define void CountReferences(ParserState* pState) {
 	ASTVisitor* Visitor := Alloc(#ASTVisitor)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
+	Visitor->AllowType(NODE_TYPE_BINARY)
+	Visitor->AllowType(NODE_TYPE_VARIABLE)
 	
-	Print("AT\n")
-	
-	Visitor->SetVisitFunction(&CountFunctionCallsVisit)
+	Visitor->SetVisitFunction(&CountReferencesVisit)
 	
 	Visitor->VisitBlocks(pState->MainFunction->Body)
 	Visitor->RawVisitNodes(GetArrayLength(pState->GlobalDefaults), pState->GlobalDefaults)
 	
-	pState->MainFunction->_CallCount += 1
+	pState->MainFunction->CallCount += 1
 	
 	Free(Visitor)
 }
+
+;define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
+;	Visitor->SetState(true)
+;}
+;
+;define i8 NodeHasSideEffects(ASTNode* Node) {
+;	ASTVisitor* Visitor := Alloc(#ASTVisitor)
+;	
+;	Visitor->AllowType(
+;	
+;	
+;}
