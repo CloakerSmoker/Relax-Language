@@ -85,5 +85,17 @@ define i32 Main() {
 	
 	Print(",%i", #ExtraText)
 	
+	Test* BestFit := 5754784
+	i32 BestFitRating := 2000011101
+	
+	;breakpoint:()
+	
+	if (BestFit || BestFitRating < 200000) {
+		Print("1")
+	}
+	else {
+		Print("0")
+	}
+	
 	return 0
 }

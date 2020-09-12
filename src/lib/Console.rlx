@@ -263,7 +263,7 @@ define i8 ReadCharacter() {
 	PrintCharacter(CharacterRead)
 	return CharacterRead
 }
-define i8* ReadLine(i32 MaxLength) {
+define i8* ReadLine() {
 	i8* Buffer := Alloc(200)
 	i32 BufferSize := 200
 	i32 BufferIndex := 0

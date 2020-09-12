@@ -66,6 +66,38 @@ struct CompilerState {
 	*/
 	i32 ScopedTryDepth,
 	i32 TotalTryDepth
+	
+	define void Initialize(BuildConfig* Config, ParserState* pState) {
+		this->Config := Config
+		this->pState := pState
+		
+		this->CodeBufferSize := 0x10000
+		this->CodeBuffer := Alloc(0x10000) As i8*
+		this->Index := 0
+		
+		this->CodeRelocations := Alloc(8) As i64*
+		this->CodeRelocationCount := 0
+		
+		this->Labels := Alloc(80) As Label**
+		this->LabelCount := 0
+		this->LabelBufferCapacity := 10
+		
+		this->LabelIndex := (pState->FunctionCount) + 1
+		this->RegisterStackIndex := 0
+		
+		this->ParameterRegistersMaxSave := 0
+		this->ParameterRegistersMinSave := 0
+		
+		this->CurrentFunction := null
+		
+		this->ScopedTryDepth := 0
+		this->TotalTryDepth := 0
+	}
+	define void Free() {
+		Free(this->CodeBuffer)
+		Free(this->CodeRelocations)
+		Free(this->Labels)
+	}
 }
 
 /*
@@ -122,7 +154,13 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
 	*/
 	
-	Print("%x - %i	(%i)	", CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
+	i8* Format := "%x - %i	(%i)	"
+	
+	if (TargetFunction->CallCount = 0) {
+		Format := "^60%x - %i	(%i)	"
+	}
+	
+	Print(Format, CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
 	
 	if (TargetFunction->MethodOfTypeName) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
@@ -152,7 +190,7 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		PrintCharacter(')')
 	}
 	
-	PrintNewLine()
+	Print("^F0\n")
 }
 
 define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i32* MainOffset) {
@@ -239,30 +277,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	CompilerState C
 	
-	C.Config := Config
-	C.pState := pState
-	
-	C.CodeBufferSize := 0x10000
-	C.CodeBuffer := Alloc(0x10000) As i8*
-	C.Index := 0
-	
-	C.CodeRelocations := Alloc(8) As i64*
-	C.CodeRelocationCount := 0
-	
-	C.Labels := Alloc(80) As Label**
-	C.LabelCount := 0
-	C.LabelBufferCapacity := 10
-	
-	C.LabelIndex := (pState->FunctionCount) + 1
-	C.RegisterStackIndex := 0
-	
-	C.ParameterRegistersMaxSave := 0
-	C.ParameterRegistersMinSave := 0
-	
-	C.CurrentFunction := null
-	
-	C.ScopedTryDepth := 0
-	C.TotalTryDepth := 0
+	C.Initialize(Config, pState)
 	
 	i64 CODE_BASE := 0x3000
 	
@@ -528,8 +543,8 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 	}
 	
-	if (TargetVariable->IsGlobal && TargetVariable->SetCount = 1) {
-		if (TargetVariable->LastValue->NodeType != NODE_TYPE_CALL) {
+	if (TargetVariable->SetCount = 1 && TargetVariable->LastValue != null) {
+		if (TargetVariable->IsGlobal && !NodeHasSideEffects(TargetVariable->LastValue)) {
 			return CompileExpression(cState, ResultRegister, TargetVariable->LastValue)
 		}
 	}
@@ -1777,6 +1792,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 	i8 ResultSize := GetTypeSize(ResultType) As i8
 	
 	i8 LeftRegister := ResultRegister
+	i8 RightRegister := 0
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
 	
@@ -1893,6 +1909,38 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			}
 		}
 		else if (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) {
+			if !(NodeHasSideEffects(Right)) {
+				RightRegister := PushRegisterStack(cState)
+				CompileExpression(cState, RightRegister, Right)
+				
+				i8 MaxOperandSize := LeftSize
+				
+				if (RightSize > LeftSize) {
+					MaxOperandSize := RightSize
+					Cast(cState, LeftRegister, LeftSize)
+				}
+				else if (RightSize < LeftSize) {
+					Cast(cState, RightRegister, RightSize)
+				}
+				
+				if (Operator = OPERATOR_LOGICAL_AND) {
+					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, MaxOperandSize)
+				}
+				else if (Operator = OPERATOR_LOGICAL_OR) {
+					EmitAdd_RX_RX(cState, LeftRegister, RightRegister, MaxOperandSize)
+				}
+				
+				EmitOr_RX_RX(cState, LeftRegister, LeftRegister, MaxOperandSize)
+				
+				if !(DiscardResult) {
+					EmitSetNE_R8(cState, ResultRegister)
+				}
+				
+				PopRegisterStack(cState)
+				
+				return 0
+			}
+			
 			i32 End := NextLabel(cState)
 			
 			EmitTest_RX_RX(cState, LeftRegister, LeftRegister, LeftSize)
@@ -1999,7 +2047,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			
 			/* Allocate a new register for the right operand */
 			
-			i8 RightRegister := PushRegisterStack(cState)
+			RightRegister := PushRegisterStack(cState)
 			CompileExpression(cState, RightRegister, Right)
 			
 			if (RightSize < ResultSize) {

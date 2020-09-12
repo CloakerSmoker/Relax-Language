@@ -5,6 +5,10 @@
 struct SafeWideString {
 	i32 Length,
 	i16* Buffer
+	
+	define void Free() {
+		Free(this->Buffer)
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {

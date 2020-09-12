@@ -335,15 +335,15 @@ struct ASTNode {
 		TryCatch* TryNode
 	},
 	
-	Type ValueType,
-	i8 NodeType,
-	i8 IsStorageValue, /* Signals that this node is a value that references a storage location, and can be assigned */
 	void* LastVisitor
+	Type ValueType
+	i8 NodeType
+	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
 }
 
 struct ASTVisitor {
 	void* VisitFunction
-	void* State
+	i64 State
 	i32 NodeTypeMask
 	
 	define i32 IsTypeAllowed(i8 NodeType) {
@@ -353,10 +353,10 @@ struct ASTVisitor {
 		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
 	}
 	
-	define void SetState(void* State) {
+	define void SetState(i64 State) {
 		this->State := State
 	}
-	define void* GetState() {
+	define i64 GetState() {
 		return this->State
 	}
 	
@@ -1005,6 +1005,8 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 			/* AWrite("Parameter ") 
 			IWrite(LastNonMatchingParameter + 1)
 			AWrite(" should be an ") */
+			
+			Print("%i %i\n", BestFit, BestFitRating)
 			
 			Print("Parameter %i should be an ", LastNonMatchingParameter + 1)
 			

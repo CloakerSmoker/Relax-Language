@@ -621,6 +621,11 @@ define void EmitIMul_RX_RX(CompilerState* cState, i8 DestinationRegister, i8 Sou
 	I.OpcodeOne := 0x0F
 	I.OpcodeTwo := 0xAF
 	I.Mode := MODE_RTOR
+	
+	if (Size = 1) {
+		Size := 2
+	}
+	
 	I.Size := Size
 	
 	EmitInstruction(cState, &I, DestinationRegister, SourceRegister) 

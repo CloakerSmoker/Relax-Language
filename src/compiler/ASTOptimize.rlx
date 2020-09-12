@@ -88,14 +88,51 @@ define void CountReferences(ParserState* pState) {
 	Free(Visitor)
 }
 
-;define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
-;	Visitor->SetState(true)
-;}
-;
-;define i8 NodeHasSideEffects(ASTNode* Node) {
-;	ASTVisitor* Visitor := Alloc(#ASTVisitor)
-;	
-;	Visitor->AllowType(
-;	
-;	
-;}
+define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
+	i8 NodeType := Node->NodeType
+	
+	if (NodeType = NODE_TYPE_CALL || NodeType = NODE_TYPE_STRUCT_ACCESS) {
+		Visitor->SetState(true)
+	}
+	else if (NodeType = NODE_TYPE_UNARY) {
+		UnaryExpression* UnaryNode := Node->UnaryNode
+		ASTNode* Operand := UnaryNode->Operand
+		
+		if (UnaryNode->Operator->Value = OPERATOR_STAR) {
+			Visitor->SetState(true)
+		}
+		
+		Visitor->VisitNodes(Operand)
+	}
+	else if (NodeType = NODE_TYPE_BINARY) {
+		ASTNode* Left := Node->BinaryNode->Left
+		ASTNode* Right := Node->BinaryNode->Right
+		
+		i8 Operator := Node->BinaryNode->Operator->Value
+		
+		if (Operator = OPERATOR_OPEN_BRACKET) {
+			Visitor->SetState(true)
+		}
+		
+		Visitor->VisitChildren(Node)
+	}
+}
+
+define i8 NodeHasSideEffects(ASTNode* Node) {
+	ASTVisitor* Visitor := Alloc(#ASTVisitor)
+	
+	Visitor->AllowType(NODE_TYPE_CALL)
+	Visitor->AllowType(NODE_TYPE_UNARY)
+	Visitor->AllowType(NODE_TYPE_BINARY)
+	Visitor->AllowType(NODE_TYPE_STRUCT_ACCESS)
+	
+	Visitor->SetVisitFunction(&NodeHasSideEffectsVisitor)
+	
+	Visitor->VisitNodes(Node)
+	
+	i8 Result := Visitor->GetState() As i8
+	
+	Free(Visitor)
+	
+	return Result
+}
