@@ -1002,12 +1002,6 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 			Print("Has too many paramters for overload")
 		}
 		else {
-			/* AWrite("Parameter ") 
-			IWrite(LastNonMatchingParameter + 1)
-			AWrite(" should be an ") */
-			
-			Print("%i %i\n", BestFit, BestFitRating)
-			
 			Print("Parameter %i should be an ", LastNonMatchingParameter + 1)
 			
 			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
@@ -1214,17 +1208,6 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			/* Else if the left is a literal struct type, error out */
 			
 			ASTError(Left, "Local structs can't be assigned")
-		}
-		else if (LeftSize < RightSize) {
-			/* Warn of the right side being truncated to fit the left */
-			
-			; if !(Right->NodeType = NODE_TYPE_INTEGER && (LeftSize >= GetNumberSize(Right->IntegerValue))) {
-			; 	/* If the right operand is a number, and the actual size of the number is less than the variable size, don't show this warning */
-			; 	
-			; 	ASTWarn(Right, "Right side operand of ':=' is bigger than left, right side will be truncated")
-			; }
-			
-			ResultType := LeftType
 		}
 		else if !(Left->IsStorageValue) {
 			ASTError(Left, "Left side of ':=' must be a storage value")
