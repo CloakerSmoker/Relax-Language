@@ -1264,6 +1264,14 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	i32 ParameterCount := CallNode->ParameterCount
 	i32 StackParameterCount := 0
 	i8 ExtraPadding := false
+	i8 HasSavedRAX := false
+	
+	if (cState->NoClobberA && ResultRegister != RAX) {
+		EmitPush_R64(cState, RAX)
+		HasSavedRAX := true
+		
+		cState->NoClobberA := false
+	}
 	
 	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
 	
@@ -1282,7 +1290,7 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	i8 RegisterStackIndex := cState->RegisterStackIndex
 	i8 StackIsAligned := RegisterStackIndex >= 8 && (RegisterStackIndex % 2 != 0)
 	
-	if (StackParameterCount % 2 || StackIsAligned) {
+	if (StackParameterCount % 2 || StackIsAligned && !HasSavedRAX) {
 		EmitPush_R64(cState, RBX)
 		ExtraPadding := true
 	}
@@ -1434,6 +1442,11 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	
 	if (ResultRegister != RAX) {
 		EmitMove_R64_RX(cState, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType) As i8)
+	}
+	
+	if (HasSavedRAX) {
+		EmitPop_R64(cState, RAX)
+		cState->NoClobberA := true
 	}
 	
 	cState->RegisterStackIndex := RegisterStackIndex

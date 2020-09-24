@@ -54,6 +54,14 @@ define void MoveMemory(i8* To, i8* From, i32 Size) {
 	}
 }
 
+define void* CloneMemory(void* Memory, i32 Size) {
+	void* NewBuffer := Alloc(Size)
+	
+	MoveMemory(NewBuffer, Memory, Size)
+	
+	return NewBuffer
+}
+
 struct ExpandArray {
 	i32 ElementSize,
 	i32 Capacity	

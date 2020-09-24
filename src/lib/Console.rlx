@@ -260,7 +260,7 @@ define i8 ReadCharacter() {
 	i8 CharacterRead := 0
 	FileRead(STDIN, &CharacterRead, 1)
 	
-	PrintCharacter(CharacterRead)
+	;PrintCharacter(CharacterRead)
 	return CharacterRead
 }
 define i8* ReadLine() {
@@ -277,6 +277,10 @@ define i8* ReadLine() {
 		i8 NextCharacter := ReadCharacter()
 		
 		if (NextCharacter = 0x0A || NextCharacter = 0x0D) {
+			if (BufferIndex = 0) {
+				continue
+			}
+			
 			PrintNewLine()
 			Buffer[BufferIndex] := 0
 			break

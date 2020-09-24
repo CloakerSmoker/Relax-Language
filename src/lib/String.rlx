@@ -311,3 +311,14 @@ define i8 StringEquals(i8* Left, i8* Right) {
 		Index += 1
 	}
 }
+define i8* Concatenate(i8* Left, i8* Right) {
+	i32 LeftLength := StringLength(Left)
+	i32 RightLength := StringLength(Right)
+	
+	i8* NewString := Alloc(LeftLength + RightLength + 1)
+	
+	MoveMemory(NewString, Left, LeftLength)
+	MoveMemory(NewString + LeftLength, Right, RightLength)
+	
+	return NewString
+}

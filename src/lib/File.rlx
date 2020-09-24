@@ -16,7 +16,7 @@ DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
 
 DllImport i8 DeleteFile(i8*) {Kernel32.dll, DeleteFileA}
 
-#Require ./src/lib/Memory.rlx
+#Require "./src/lib/Memory.rlx"
 
 define i64 FileOpen(i8* FilePath, i32 Mode) {
 	windows {
@@ -76,7 +76,6 @@ define i32 FileGetSize(i64 File) {
 		return End
 	}
 }
-
 define void FileRead(i64 File, void* Buffer, i32 BytesToRead) {
 	windows {
 		i32 BytesRead := 0
@@ -131,4 +130,99 @@ define i32 FileDelete(i8* FilePath) {
 	linux {
 		return syscall:(87, FilePath) As i32
 	}
-} 
+}
+
+define i32 FileGetSizeByPath(i8* FilePath) {
+	i64 File := FileOpen(FilePath, FILE_READ)
+	i32 Result := FileGetSize(File)
+	FileClose(File)
+	
+	return Result
+}
+
+
+define i8 CallDirectoryVisitor(i8 IsDirectory, i8* FilePath, void* Function) asm {
+	jmp, rdx
+}
+
+struct WindowsDirectory unaligned {
+	i32 Attributes
+	
+	i64 CreationTime
+	i64 LastAccessTime
+	i64 LastWriteTime
+	
+	i32 FileSizeHigh
+	i32 FileSizeLow
+	
+	i64 Reserved
+	
+	i8{260} Name
+	i8{14} ShortName
+	
+	i32 FileType
+	i32 CreatorType
+	i16 Flags
+}
+
+DllImport i64 FindFirstFile(i8*, WindowsDirectory*) {Kernel32.dll, FindFirstFileA} 
+DllImport i8 FindNextFile(i64, WindowsDirectory*) {Kernel32.dll, FindNextFileA} 
+DllImport i8 FindClose(i64) {Kernel32.dll, FindClose}
+
+declare void Print(i8*, ...)
+
+#Require "./src/lib/String.rlx"
+
+define i8 DirectoryWalk(i8* DirectoryPath, void* VisitFunction) {
+	windows {
+		i32 DirectoryLength := StringLength(DirectoryPath)
+		i8* FixedDirectoryPath := Concatenate(DirectoryPath, "\*")
+		
+		WindowsDirectory Directory
+		WindowsDirectory* pDirectory := &Directory 
+		
+		i64 FindHandle := FindFirstFile(FixedDirectoryPath, pDirectory)
+		
+		FixedDirectoryPath[DirectoryLength + 1] := 0
+		
+		if (FindHandle = -1) {
+			Free(FixedDirectoryPath)
+			
+			return 1
+		}
+		
+		loop {
+			i8* FullPath := Concatenate(FixedDirectoryPath, pDirectory~>Name)
+			
+			CallDirectoryVisitor(!!(pDirectory->Attributes & 0x10), FullPath, VisitFunction)
+			
+			Free(FullPath)
+			
+			if !(FindNextFile(FindHandle, pDirectory)) {
+				break
+			}
+		}
+		
+		Free(FixedDirectoryPath)
+		FindClose(FindHandle)
+		
+		return 0
+	}
+	
+}
+
+DllImport i32 GetFullPathName(i8*, i32, i8*, i8*) {Kernel32.dll, GetFullPathNameA}
+
+define i8* GetAbsolutePath(i8* ForPath) {
+	windows {
+		i8* Buffer := Alloc(260)
+		
+		GetFullPathName(ForPath, 260, Buffer, null)
+		
+		return Buffer
+	}
+}
+
+define i8* GetWorkingDirectory() {
+	GetAbsolutePath(".")
+}
