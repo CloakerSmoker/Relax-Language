@@ -194,13 +194,16 @@ define void SetupAssembly(ParserState* pState) {
 	HashMapASet(I, "outw", MakeInstruction(null, 0xEF, 0, E_NO_RM | E_NEEDS_66, 0))
 	HashMapASet(I, "outd", MakeInstruction(null, 0xEF, 0, E_NO_RM, 0))
 	
-	/* Uh */
+	/* Interrupts */
 	
 	HashMapASet(I, "lidt", MakeInstruction(null, 0x0F01, OP_M64, E_1OP_WEXT | E_2_BYTE_OPCODE, 3))
 	HashMapASet(I, "cli", MakeInstruction(null, 0xFA, 0, E_NO_RM, 0))
 	HashMapASet(I, "sti", MakeInstruction(null, 0xFB, 0, E_NO_RM, 0))
 	
-	/* Prefixes (which are actually considered instr */
+	/* Bit scans */
+	
+	HashMapASet(I, "bsr", MakeInstruction(null, 0x0FBD, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
+	HashMapASet(I, "bsf", MakeInstruction(null, 0x0FBC, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {

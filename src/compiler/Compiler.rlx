@@ -202,7 +202,7 @@ define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDe
 	i8 Result := false
 	
 	if (BaseFunction->IsImported) {
-		if (Config->OutputFormat = OUTPUT_PE) {
+		if (Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
 			CompileImportStub(cState, BaseFunction)
 		}
 	}

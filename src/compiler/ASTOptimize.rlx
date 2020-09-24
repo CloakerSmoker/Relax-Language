@@ -14,6 +14,16 @@ define i8 IsAssignment(Token* OperatorToken) {
 	return (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT)
 }
 
+define i8 IsDivision(Token* OperatorToken) {
+	i8 Operator := OperatorToken->Value As i8
+	
+	return (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT)
+}
+
+define i8 IsPowerOfTwo(i64 Number) {
+	return Number && !(Number & (Number - 1))
+}
+
 define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	i8 NodeType := Node->NodeType
 	
@@ -44,11 +54,12 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	else if (NodeType = NODE_TYPE_BINARY) {
 		ASTNode* Left := Node->BinaryNode->Left
 		ASTNode* Right := Node->BinaryNode->Right
+		Token* BinaryOperator := Node->BinaryNode->Operator
 		
-		if (Left->NodeType = NODE_TYPE_VARIABLE && IsAssignment(Node->BinaryNode->Operator)) {
+		if (Left->NodeType = NODE_TYPE_VARIABLE && IsAssignment(BinaryOperator)) {
 			VariableInfo* LeftVariable := Left->VariableValue
 			
-			if (Node->BinaryNode->Operator->Value != OPERATOR_COLON_EQUAL) {
+			if (BinaryOperator->Value != OPERATOR_COLON_EQUAL) {
 				LeftVariable->GetCount += 1
 			}
 			
@@ -64,6 +75,13 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 		else {
 			Visitor->VisitChildren(Node)
 		}
+		
+		;if (Right->NodeType = NODE_TYPE_INTEGER && IsDivision(BinaryOperator)) {
+		;	if (IsPowerOfTwo(Right->IntegerValue)) {
+		;		
+		;		
+		;	}
+		;}
 	}
 	else if (NodeType = NODE_TYPE_VARIABLE) {
 		Node->VariableValue->GetCount += 1
