@@ -736,6 +736,20 @@ define void EmitAnd_RX_RX(CompilerState* cState, i8 SourceRegister, i8 Destinati
 	EmitBasicInstruction(cState, 0x21, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
 
+define void EmitAnd_RX_IX(CompilerState* cState, i8 TargetRegister, i32 Mask, i8 Size) {
+	EmitBasicInstruction(cState, 0x81, MODE_RTOR, Size, 4, TargetRegister)
+	
+	if (Size = 1) {
+		PushByte(cState, Mask As i8)
+	}
+	else if (Size = 2) {
+		PushI16(cState, Mask As i16)
+	}
+	else if (Size = 4) {
+		PushI32(cState, Mask)
+	}
+}
+
 define void EmitOr_RX_RX(CompilerState* cState, i8 SourceRegister, i8 DestinationRegister, i8 Size) {
 	EmitBasicInstruction(cState, 0x09, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }

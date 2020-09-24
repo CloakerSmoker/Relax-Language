@@ -1793,6 +1793,10 @@ define void CompileBinaryOperator(CompilerState* cState, i8 Operator, i8 ResultS
 	}
 }
 
+define i8 IsPowerOfTwo(i64 Number) {
+	return Number && !(Number & (Number - 1))
+}
+
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
@@ -1980,31 +1984,41 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			}
 		}
 		else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
-			i8 LeftWasRCX := LeftRegister = RCX
-			
-			if (LeftWasRCX) {
-				LeftRegister := PushRegisterStack(cState)
-				EmitMove_RX_RX(cState, LeftRegister, RCX, ResultSize)
+			if (Right->NodeType = NODE_TYPE_INTEGER) {
+				if (Operator = OPERATOR_LESS_LESS) {
+					EmitSAL_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, ResultSize)
+				}
+				else {
+					EmitSAR_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, ResultSize)
+				}
 			}
-			else if (cState->NoClobberCD89) {
-				EmitPush_R64(cState, RCX)
-			}
-			
-			CompileExpression(cState, RCX, Right)
-			
-			if (Operator = OPERATOR_LESS_LESS) {
-				EmitSHL_RX_CL(cState, LeftRegister, ResultSize)
-			}
-			else if (Operator = OPERATOR_GREATER_GREATER) {
-				EmitSHR_RX_CL(cState, LeftRegister, ResultSize)
-			}
-			
-			if (LeftWasRCX) {
-				EmitMove_RX_RX(cState, RCX, LeftRegister, ResultSize)
-				PopRegisterStack(cState)
-			}
-			else if (cState->NoClobberCD89) {
-				EmitPop_R64(cState, RCX)
+			else {
+				i8 LeftWasRCX := LeftRegister = RCX
+				
+				if (LeftWasRCX) {
+					LeftRegister := PushRegisterStack(cState)
+					EmitMove_RX_RX(cState, LeftRegister, RCX, ResultSize)
+				}
+				else if (cState->NoClobberCD89) {
+					EmitPush_R64(cState, RCX)
+				}
+				
+				CompileExpression(cState, RCX, Right)
+				
+				if (Operator = OPERATOR_LESS_LESS) {
+					EmitSHL_RX_CL(cState, LeftRegister, ResultSize)
+				}
+				else if (Operator = OPERATOR_GREATER_GREATER) {
+					EmitSHR_RX_CL(cState, LeftRegister, ResultSize)
+				}
+				
+				if (LeftWasRCX) {
+					EmitMove_RX_RX(cState, RCX, LeftRegister, ResultSize)
+					PopRegisterStack(cState)
+				}
+				else if (cState->NoClobberCD89) {
+					EmitPop_R64(cState, RCX)
+				}
 			}
 		}
 		else {
@@ -2026,6 +2040,27 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
 			if (LeftSize < ResultSize) {
 				Cast(cState, LeftRegister, LeftSize)
+			}
+			
+			i8 IsDivision := (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT)
+			
+			if (IsDivision && Right->NodeType = NODE_TYPE_INTEGER && IsPowerOfTwo(Right->IntegerValue)) {
+				if (Operator = OPERATOR_SLASH) {
+					EmitSAR_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, LeftSize)
+				}
+				else {
+					i64 Mask := Right->IntegerValue - 1
+					
+					if (LeftSize <= 4) {
+						EmitAnd_RX_IX(cState, LeftRegister, Mask As i32, LeftSize)
+					}
+					else {
+						EmitMove_R64_I64(cState, RBX, Mask)
+						EmitAnd_RX_RX(cState, LeftRegister, RBX, 8)
+					}
+				}
+				
+				return 0
 			}
 			
 			i8 IsPlusMinus := (Operator = OPERATOR_PLUS || Operator = OPERATOR_MINUS)
