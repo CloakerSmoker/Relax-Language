@@ -698,12 +698,12 @@ define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDep
 
 declare Token* ParserCurrentToken(ParserState*)
 
-define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement) {
+define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement, ErrorContext* BlameContext) {
 	/* Returns the type you would get from dereferencing TypeToDecrement */
 	
 	if (TypeToDecrement.PointerDepth = 0) {
 		/* If you're dereferencing a non-pointer type, something's wrong */
-		TokenError(ParserCurrentToken(pState), "Pointer type expected")
+		ContextError(BlameContext, "Pointer type expected")
 	}
 	
 	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1 As i16)
@@ -1228,7 +1228,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			
 			CopyContext(ParserCurrentToken(pState)~>Context, Right~>Context)
 			
-			ResultType := DecrementPointerType(pState, LeftType)
+			ResultType := DecrementPointerType(pState, LeftType, Right~>Context)
 		}
 	}
 	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
@@ -1299,7 +1299,7 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 		ResultType := IncrementPointerType(pState, ResultType)
 	}
 	else if (Operator = OPERATOR_STAR) {
-		ResultType := DecrementPointerType(pState, ResultType)
+		ResultType := DecrementPointerType(pState, ResultType, Operand~>Context)
 	}
 	
 	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)

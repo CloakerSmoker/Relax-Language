@@ -221,7 +221,7 @@ DllImport i8 SetErrorMode(i32) {Kernel32.dll, SetErrorMode}
 DllImport void* SetUnhandledExceptionFilter(void*) {Kernel32.dll, SetUnhandledExceptionFilter}
 DllImport void* AddVectoredExceptionHandler(i32, void*) {Kernel32.dll, AddVectoredExceptionHandler}
 
-define void* SetupWindowsExceptionTranslation() {
+define void* SetupExceptionTranslation() {
 	windows {
 		SetErrorMode(1)
 		
@@ -232,4 +232,4 @@ define void* SetupWindowsExceptionTranslation() {
 	}
 }
 
-void* DummyNameForExceptionTranslation := SetupWindowsExceptionTranslation()
+void* DummyNameForExceptionTranslation := SetupExceptionTranslation()

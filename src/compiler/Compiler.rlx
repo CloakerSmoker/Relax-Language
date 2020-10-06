@@ -1796,6 +1796,10 @@ define void CompileBinaryOperator(CompilerState* cState, i8 Operator, i8 ResultS
 define i8 IsPowerOfTwo(i64 Number) {
 	return Number && !(Number & (Number - 1))
 }
+define i8 FindFirstBitSet(i64 Number) asm {
+	bsr, rax, rdi
+	ret
+}
 
 define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
@@ -2046,7 +2050,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			
 			if (IsDivision && Right->NodeType = NODE_TYPE_INTEGER && IsPowerOfTwo(Right->IntegerValue)) {
 				if (Operator = OPERATOR_SLASH) {
-					EmitSAR_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, LeftSize)
+					EmitSAR_RX_I8(cState, LeftRegister, FindFirstBitSet(Right->IntegerValue), LeftSize)
 				}
 				else {
 					i64 Mask := Right->IntegerValue - 1
