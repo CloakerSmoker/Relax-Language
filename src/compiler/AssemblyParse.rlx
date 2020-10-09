@@ -421,6 +421,7 @@ struct InstructionOperand {
 	i32 Type,
 	i32 Size,
 	i8 HasSIB,
+	i8 ReferencesFunction,
 	i8 DispSize,
 	
 	union {
@@ -431,7 +432,8 @@ struct InstructionOperand {
 	union {
 		i32 DispValue,
 		i64 IntegerValue,
-		i32 LabelNumber
+		i32 LabelNumber,
+		FunctionDefine* FunctionReference
 	}
 }
 
@@ -584,6 +586,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)) {
 		Next->Type := O_L
+		Next->ReferencesFunction := true
 		
 		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* FunctionName := FunctionToken->StringValue
@@ -596,9 +599,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		
 		FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 		
-		FoundDefine->CallCount += 1
-		
-		Next->LabelNumber := FoundDefine->LabelNumber
+		Next->FunctionReference := FoundDefine
 		
 		MergeContexts(NextToken~>Context, FunctionToken~>Context, Next~>Context)
 	}

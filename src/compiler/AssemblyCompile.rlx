@@ -153,6 +153,12 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 	}
 }
 
+define void ResolveOperandFunctionReference(InstructionOperand* Operand) {
+	if (Operand && Operand->ReferencesFunction) {
+		Operand->LabelNumber := Operand->FunctionReference->LabelNumber
+	}
+}
+
 define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile) {
 	if (ToCompile->Type = INSTRUCTION_LABEL) {
 		SetLabel(cState, ToCompile->LabelNumber)
@@ -161,6 +167,10 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 	
 	InstructionOperand* OperandOne := ToCompile->Operands[0]
 	InstructionOperand* OperandTwo := ToCompile->Operands[1]
+	
+	ResolveOperandFunctionReference(OperandOne)
+	ResolveOperandFunctionReference(OperandTwo)
+	
 	InstructionOperand* MemoryOperand := 0
 	InstructionOperand* OtherOperand := 0
 	

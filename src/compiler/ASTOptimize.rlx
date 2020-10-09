@@ -1,10 +1,32 @@
 
+declare void CountReferencesVisitFunction(ASTVisitor*, FunctionDefine*)
+
+define void CountReferencesVisitAssembly(ASTVisitor* Visitor, AssemblyBlock* Target) {
+	for (i32 InstructionIndex := 0, InstructionIndex < Target->InstructionCount, InstructionIndex += 1) {
+		InstructionNode* NextInstruction := Target->Instructions[InstructionIndex]
+		
+		if (NextInstruction->Type = INSTRUCTION_REGULAR) {
+			for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
+				InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
+				
+				if (NextOperand != null && NextOperand->ReferencesFunction) {
+					CountReferencesVisitFunction(Visitor, NextOperand->FunctionReference)
+				}
+			}
+		}
+	}
+}
 
 define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Target) {
 	Target->CallCount += 1
 	
-	if (Target->IsImported = false && Target->Attribute != KEYWORD_ASSEMBLY) {
-		Visitor->VisitBlocks(Target->Body)
+	if (Target->IsImported = false) {
+		if (Target->Attribute = KEYWORD_ASSEMBLY) {
+			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
+		}
+		else {
+			Visitor->VisitBlocks(Target->Body)
+		}
 	}
 }
 
@@ -69,6 +91,9 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	else if (NodeType = NODE_TYPE_VARIABLE) {
 		Node->VariableValue->GetCount += 1
 	}
+	else if (NodeType = NODE_TYPE_ASSEMBLY) {
+		CountReferencesVisitAssembly(Visitor, Node->AssemblyValue)
+	}
 }
 
 define void CountReferences(ParserState* pState) {
@@ -78,6 +103,7 @@ define void CountReferences(ParserState* pState) {
 	Visitor->AllowType(NODE_TYPE_UNARY)
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_VARIABLE)
+	Visitor->AllowType(NODE_TYPE_ASSEMBLY)
 	
 	Visitor->SetVisitFunction(&CountReferencesVisit)
 	
