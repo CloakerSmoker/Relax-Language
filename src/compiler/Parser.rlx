@@ -8,7 +8,6 @@ struct TypeInfo {
 	SafeWideString* Name,
 	HashMap* StructFields,
 	HashMap* StructMethods,
-	TypeInfo* StructBaseType,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
@@ -912,50 +911,9 @@ define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** Against
 	return true
 }
 
-define void PrintOverloadErrorHeader(ASTNode* Caller) {
-	Print("No matching overload found for:\n")
-	
-	PrettyError(Caller~>Context, Red | Bright)
-}
-
-define void PrintOverloadError(ASTNode* CallerNode, FunctionDefine* Next) {
+define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFunction, ASTNode* CallerNode) {
 	CallExpression* Caller := CallerNode->CallNode
 	i32 CallerParameterCount := Caller->ParameterCount
-	
-	while (Next) {
-		i32 LastNonMatchingParameter := Next->TempValue
-		
-		if (CallerParameterCount < Next->ParameterCount) {
-			Print("Is missing required parameters for overload")
-		}
-		else if (CallerParameterCount > Next->ParameterCount) {
-			Print("Has too many paramters for overload")
-		}
-		else {
-			Print("Parameter %i should be an ", LastNonMatchingParameter + 1)
-			
-			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
-			
-			Print(" for overload, not ")
-			
-			if (LastNonMatchingParameter < CallerParameterCount) {
-				PrintType(Caller->Parameters[LastNonMatchingParameter]->ValueType)
-			}
-			else {
-				Print("<none>")
-			}
-		}
-		
-		PrintNewLine()
-		PrettyError(Next~>Context, Red | Bright)
-		
-		Next := Next->Next
-	}
-}
-
-define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFunction, ASTNode* Caller, i8 Silent) {
-	CallExpression* AgainstCaller := Caller->CallNode
-	i32 CallerParameterCount := AgainstCaller->ParameterCount
 	
 	FunctionDefine* Next := BaseFunction
 	
@@ -985,7 +943,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 			for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
 				Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
 				
-				ASTNode* NextNode := DowncastIntegerType(pState, AgainstCaller->Parameters[ParameterIndex])
+				ASTNode* NextNode := DowncastIntegerType(pState, Caller->Parameters[ParameterIndex])
 				Type ActualNext := NextNode->ValueType
 				
 				if (CheckTypes(pState, ActualNext, ExpectedNext, null)) {
@@ -1025,21 +983,45 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		return BestFit
 	}
 	
-	if (Silent) {
-		return null
+	SwapOutputStream()
+	
+	Print("No matching overload found for:\n")
+	PrettyError(CallerNode~>Context, Red | Bright)
+	
+	Next := BaseFunction
+	
+	while (Next) {
+		i32 LastNonMatchingParameter := Next->TempValue
+		
+		if (CallerParameterCount < Next->ParameterCount) {
+			Print("Is missing required parameters for overload")
+		}
+		else if (CallerParameterCount > Next->ParameterCount) {
+			Print("Has too many paramters for overload")
+		}
+		else {
+			Print("Parameter %i should be an ", LastNonMatchingParameter + 1)
+			
+			PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
+			
+			Print(" for overload, not ")
+			
+			if (LastNonMatchingParameter < CallerParameterCount) {
+				PrintType(Caller->Parameters[LastNonMatchingParameter]->ValueType)
+			}
+			else {
+				Print("<none>")
+			}
+		}
+		
+		PrintNewLine()
+		PrettyError(Next~>Context, Red | Bright)
+		
+		Next := Next->Next
 	}
 	
 	SwapOutputStream()
-	
-	PrintOverloadErrorHeader(Caller)
-	PrintOverloadError(Caller, BaseFunction)
-	
-	SwapOutputStream()
 	Exit(0)
-}
-
-define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFunction, ASTNode* Caller) {
-	return MatchFunction(pState, BaseFunction, Caller, false)
 }
 
 /*
@@ -1114,22 +1096,6 @@ define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightTy
 declare Token* ParserCurrentToken(ParserState*)
 declare ASTNode** ParseParameterList(ParserState*, i8*)
 
-define StructField* FindStructField(TypeInfo* Type, SafeWideString* FieldName) {
-	while (Type) {
-		HashMapElement* FoundField := HashMapGetValue(Type->StructFields, FieldName)
-		
-		if (FoundField) { 
-			return (FoundField->Value) As StructField*
-		}
-		else if (Type->StructBaseType) {
-			Type := Type->StructBaseType
-		}
-		else {
-			return null
-		}
-	}
-}
-
 define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
 	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_STRUCT_ACCESS */
 	
@@ -1183,17 +1149,18 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			TokenError(OperatorToken, "Struct pointer fields can only be accessed with the '->'/'~>' operators.")
 		}
 		else {
-			/* Get the right side text */
-			SafeWideString* RightText := Right->StringValue
+			; Look up a field with a name given by the right side's string value
+			SafeWideString* FieldName := Right->StringValue
 			
-			/* And look up the struct field with that name */
-			StructField* TargetField := FindStructField(LeftBaseType, RightText)
+			HashMapElement* TargetElement := HashMapGetValue(LeftBaseType->StructFields, FieldName)
 			
-			if (TargetField) {
-				/* Build a StructAccessExpression node */
+			if (TargetElement) {
+				; If we found a field with the correct name, create a `StructAccessExpression` for this expression
+				
+				StructField* TargetField := (TargetElement->Value) As StructField*
+				
 				StructAccessExpression* NewAccess := Alloc(#StructAccessExpression) As StructAccessExpression*
 				
-				/* Populate the StructAccessExpression node */
 				NewAccess->Left := Left
 				NewAccess->Operator := OperatorToken
 				NewAccess->TargetField := TargetField
@@ -1391,13 +1358,13 @@ define ASTNode* MakeBuiltinCall(ParserState* pState, Token* NameToken, ASTNode**
 	return ResultNode
 }
 
-define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+define ASTNode* MakeCall(ParserState* pState, HashMap* NameSpace, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
 	ASTNode* ResultNode := AllocateCall(pState, NameToken, Parameters, ParameterCount)
 	CallExpression* Result := ResultNode->CallNode
 	
 	SafeWideString* Name := NameToken->StringValue
 	
-	HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, Name)
+	HashMapElement* FoundFunction := HashMapGetValue(NameSpace, Name)
 	
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
@@ -1415,82 +1382,6 @@ define ASTNode* MakeCall(ParserState* pState, Token* NameToken, ASTNode** Parame
 	ResultNode->ValueType := FoundDefine->ReturnType
 	
 	return ResultNode
-}
-
-define ASTNode* MakeMethodCall(ParserState* pState, TypeInfo* ThisType, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
-	; Since a method call could actually be calling off to a function definied in a base type
-	;  this needs to be more complex than the regular MakeCall function
-	
-	TypeInfo* OriginalType := ThisType
-	
-	ASTNode* ResultNode := AllocateCall(pState, NameToken, Parameters, ParameterCount)
-	CallExpression* Result := ResultNode->CallNode
-	
-	SafeWideString* Name := NameToken->StringValue
-	
-	while (ThisType) {
-		; Go through each base type which has `NameToken` defined
-		
-		HashMapElement* FoundFunction := HashMapGetValue(ThisType->StructMethods, Name)
-		
-		if (FoundFunction) {
-			FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
-			
-			; Since `this~>Base` = `this`, we can just change the type of the `this` parameter as need
-			;  be in order for it to match the expected type of the current base type's methods
-			Parameters[0]->ValueType := MakeType(ThisType, 1)
-			
-			; Check if this base type has a definition of `NameToken` that matches the parameter list
-			FoundDefine := MatchFunction(pState, FoundDefine, ResultNode, true)
-			
-			if (FoundDefine) {
-				; And if it does, we've matched the function, and can link our new `CallExpression` 
-				;  to the definition, and return it
-				
-				Result->TargetFunction := FoundDefine
-				ResultNode->ValueType := FoundDefine->ReturnType
-				
-				return ResultNode
-			}
-		}
-		
-		; This is reached when the current base type doesn't define `NameToken` at all, or doesn't
-		;  define a compatible overload for `NameToken` with the given parameter list
-		
-		; So we just grab the next base type out of the base type linked list, and check if it
-		;  has a matching definition, and so on...
-		
-		ThisType := ThisType->StructBaseType
-	}
-	
-	; By now we know that none of the base types define a compatible version of `NameToken`
-	;  which means we need to print an error explaining why each definition doesn't match
-	
-	ThisType := OriginalType
-	
-	SwapOutputStream()
-	
-	PrintOverloadErrorHeader(ResultNode)
-	
-	while (ThisType) {
-		; As with above, we go through each base type with `NameToken` defined, but now we print
-		;  each overload for `NameToken` defined in the base types, and why each caller
-		;   doesn't match each overload
-		
-		FoundFunction := HashMapGetValue(ThisType->StructMethods, Name)
-		
-		if (FoundFunction) {
-			FoundDefine := (FoundFunction->Value) As FunctionDefine*
-			
-			PrintOverloadError(ResultNode, FoundDefine)
-		}
-
-		ThisType := ThisType->StructBaseType
-	}
-	
-	SwapOutputStream()
-	
-	Exit(0)
 }
 
 /*
@@ -1874,35 +1765,13 @@ define void ParseAndAddStruct(ParserState* pState) {
 	NewType->StructMethods := Methods
 	NewType->StructFields := Fields
 	
-	i16 NextFieldOffset := 0
-	i16 TotalSize := 0
-	
-	if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_EXTENDS)) {
-		i32 BeforeBaseType := FreezeParser(pState)
-		
-		Type ExtendType := ParseTypeName(pState)
-		
-		TypeInfo* ExtendBaseType := GetBaseType(ExtendType)
-		
-		if (GetPointerDepth(ExtendType) != 0 || !ExtendBaseType->IsStructType || ExtendBaseType->IsIncomplete) {
-			UnfreezeParser(pState, BeforeBaseType)
-			
-			TokenError(ParserNextToken(pState), "Only complete struct types can be extended.")
-		}
-		
-		NewType->StructBaseType := ExtendBaseType
-		
-		; When extending another struct, the first field starts at the end of the base struct type
-		;  and the size of the struct is defaulted to at least the size of any extended struct
-		TotalSize := ExtendBaseType->Size
-		NextFieldOffset += TotalSize
-	}
-	
 	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
 	
 	/* Consumes the opening '{' */
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
+	i16 NextFieldOffset := 0
+	i16 TotalSize := 0
 	i8 InUnion := false
 	i16 MaxUnionSize := 0
 	
@@ -2913,7 +2782,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				Result := MakeBuiltinCall(pState, NextToken, Parameters, ParameterCount)
 			}
 			else {
-				Result := MakeCall(pState, NextToken, Parameters, ParameterCount)
+				Result := MakeCall(pState, pState->Functions, NextToken, Parameters, ParameterCount)
 			}
 		}
 		else {
@@ -3087,7 +2956,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			/* Result = the left side of the struct access, which is passed as the `this` parameter */
 			Parameters[0] := Result
 			
-			Result := MakeMethodCall(pState, LeftBase, Right, Parameters, ParameterCount)
+			Result := MakeCall(pState, LeftBase->StructMethods, Right, Parameters, ParameterCount)
 		}
 		else {
 			Result := MakeBinary(pState, Result, OperatorToken, Operand)
