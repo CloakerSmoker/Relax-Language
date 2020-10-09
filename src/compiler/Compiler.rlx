@@ -106,7 +106,8 @@ struct CompilerState {
 ==========================================
 */
 
-#Require ./src/compiler/CodeGen.rlx
+#Require "./src/compiler/ASTOptimize.rlx"
+#Require "./src/compiler/CodeGen.rlx"
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
@@ -122,7 +123,6 @@ define void DumpGlobals(CompilerState* cState) {
 	
 	i32 MaxOffset := Globals->NextOffset
 	i32 Base := cState->GlobalBase
-	i32 LastOffset := 0
 	
 	i32 MaxIndex := RawGlobals->BufferMaxCount
 	
@@ -132,25 +132,28 @@ define void DumpGlobals(CompilerState* cState) {
 			
 			while (FoundElement) {
 				VariableInfo* NextGlobal := FoundElement->Value
-				i32 ThisOffset := NextGlobal->StackOffset
 				
-				if (LastOffset) {
-					Print(" %x\n", ThisOffset - LastOffset)
+				if (NextGlobal->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+					Print("^60     Opimized Away    = ")
 				}
 				else {
-					PrintNewLine()
+					i32 ThisOffset := NextGlobal->StackOffset
+					i32 ThisSize := GetTypeStorageSize(NextGlobal->Type)
+					
+					i32 Start := Base + ThisOffset
+					i32 End := Start + ThisSize
+					
+					Print("%x:%x = ", Start, End)
 				}
 				
-				PrintSafeString(NextGlobal->Name)
-				Print(": %x", Base + ThisOffset)
+				NextGlobal->Name->PrintLine()
 				
-				LastOffset := ThisOffset
+				ResetColors()
+				
 				FoundElement := FoundElement->NextElement
 			}
 		}
 	}
-	
-	Print(" %x\n", MaxOffset - LastOffset)
 }
 
 define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
@@ -274,11 +277,9 @@ define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, Has
 	return Result
 }
 
-#Require "./src/compiler/ASTOptimize.rlx"
-;#Require "./src/lib/Debug.rlx"
-
 define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
 	CountReferences(pState)
+	EliminateGlobals(pState~>Globals)
 	
 	CompilerState C
 	
@@ -551,10 +552,8 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
 	}
 	
-	if (TargetVariable->SetCount = 1 && TargetVariable->LastValue != null) {
-		if (TargetVariable->IsGlobal && !NodeHasSideEffects(TargetVariable->LastValue)) {
-			return CompileExpression(cState, ResultRegister, TargetVariable->LastValue)
-		}
+	if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+		return CompileExpression(cState, ResultRegister, TargetVariable->LastValue)
 	}
 	
 	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
@@ -792,7 +791,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
 			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 			
-			if (TargetGlobal->SetCount != 1) {
+			if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
 				CompileExpression(cState, RAX, NextGlobalDefault)
 			}
 		}
@@ -1255,11 +1254,6 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	}
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
 		EmitInt3(cState)
-		
-		return 0
-	}
-	else if (BuiltinID = BUILTIN_STATICALLOC) {
-		EmitMove_R64_I64(cState, ResultRegister, cState->GlobalBase + CallNode->Parameters[0]->IntegerValue)
 		
 		return 0
 	}

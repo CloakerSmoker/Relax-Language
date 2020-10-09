@@ -163,3 +163,47 @@ define i8 NodeHasSideEffects(ASTNode* Node) {
 	
 	return Result
 }
+
+define void EliminateGlobals(VariableHashMap* Globals) {
+	HashMap* RawGlobals := Globals->Map
+	
+	void* Elements := RawGlobals->Elements
+	i32 MaxIndex := RawGlobals->BufferMaxCount
+	
+	i32 NewNextOffset := 0
+	
+	for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+		if (Elements[ElementIndex]) {
+			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+			
+			while (FoundElement) {
+				VariableInfo* NextGlobal := FoundElement->Value
+				
+				if (NextGlobal->SetCount = 1 && NextGlobal->LastValue != null) {
+					if !(NodeHasSideEffects(NextGlobal->LastValue)) {
+						NextGlobal->IsGlobal := GLOBAL_IS_OPTIMIZED_AWAY
+					}
+				}
+				
+				if (NextGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+					NextGlobal->StackOffset := NewNextOffset
+					
+					i16 NextGlobalSize := GetTypeStorageSize(NextGlobal->Type)
+					
+					if (NextGlobalSize <= 8) {
+						NewNextOffset += 8
+					}
+					else {
+						i16 RoundedSize := RoundTo(NextGlobalSize, 8) As i16
+						
+						NewNextOffset += RoundedSize + 8
+					}
+				}
+				
+				FoundElement := FoundElement->NextElement
+			}
+		}
+	}
+	
+	Globals->NextOffset := NewNextOffset
+}

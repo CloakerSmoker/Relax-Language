@@ -12,6 +12,15 @@ struct SafeWideString {
 	define i8 ASCIICharAt(i32 Index) {
 		return this->Buffer[Index] As i8
 	}
+	define void Print() {
+		for (i32 Index := 0, Index < this->Length, Index += 1) {
+			PrintCharacter(this->ASCIICharAt(Index))
+		}
+	}
+	define void PrintLine() {
+		this->Print()
+		Print("\n")
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {

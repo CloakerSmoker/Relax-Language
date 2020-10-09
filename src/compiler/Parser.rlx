@@ -125,6 +125,8 @@ i8 NODE_TYPE_TRY := 23
 ==========================================
 */
 
+i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
+
 struct VariableInfo {
 	ASTNode* LastValue,
 	SafeWideString* Name,
@@ -290,7 +292,6 @@ struct FunctionDefine {
 i8 BUILTIN_NONE := 0
 i8 BUILTIN_SYSCALL := 1
 i8 BUILTIN_BREAKPOINT := 2
-i8 BUILTIN_STATICALLOC := 3
 
 struct CallExpression {
 	FunctionDefine* TargetFunction,
@@ -1385,16 +1386,6 @@ define ASTNode* MakeBuiltinCall(ParserState* pState, Token* NameToken, ASTNode**
 	else if (SafeStringEqualsAString(Name, "breakpoint") && ParameterCount = 0) {
 		Result->BuiltinID := BUILTIN_BREAKPOINT
 		ResultNode->ValueType := MakeType(pState->i8, 0)
-	}
-	else if (SafeStringEqualsAString(Name, "StaticAllocate") && ParameterCount = 1 && Parameters[0]->NodeType = NODE_TYPE_INTEGER) {
-		Result->BuiltinID := BUILTIN_STATICALLOC
-		ResultNode->ValueType := MakeType(pState->void, 1)
-		
-		i32 OldOffset := pState~>Globals->NextOffset
-		
-		pState~>Globals->NextOffset += Parameters[0]->IntegerValue
-		
-		Parameters[0]->IntegerValue := OldOffset
 	}
 	else {
 		TokenError(NameToken, "Builtin function not found.")

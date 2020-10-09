@@ -45,7 +45,6 @@ define void PrintNewLine() {
 	}
 }
 define void PrintCharacters(i8* Characters, i32 Count) {
-
 	FileWrite(STDOUT, Characters, Count)
 }
 
@@ -61,7 +60,7 @@ define void PrintCharacter(i8 Character) {
 }
 
 
-i8* PrintBuffer := StaticAllocate:(96)
+i8{96} PrintBuffer
 
 define void PrintString(i8* AString) {
 	PrintCharacters(AString, StringLength(AString))
