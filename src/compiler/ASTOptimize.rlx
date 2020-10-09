@@ -165,12 +165,26 @@ define i8 NodeHasSideEffects(ASTNode* Node) {
 }
 
 define void EliminateGlobals(VariableHashMap* Globals) {
+	; This will go through each global variable, and check if it is actually a global variable, or just
+	;  a fake `#define` consant. It will also re-pack any real globals, and determine how much space
+	;   is actually needed for globals, after any constants have been eliminated.
+	
+	; Constant globals are eliminated by `CompileGetVariableValue` which will inline the variable's 
+	;  default value instead of actually reading the value out of memory.
+	; Additionally, constant globals aren't even assigned, as `CompileFunction` (when compiling main)
+	;  will ensure each global is not eliminated before compiling the global's default value assignment
+	
+	; TODO: Move the actual value inlining into this file, so consant folding (when implemented) works
+	;  for inlined constant globals
+	
 	HashMap* RawGlobals := Globals->Map
 	
 	void* Elements := RawGlobals->Elements
 	i32 MaxIndex := RawGlobals->BufferMaxCount
 	
 	i32 NewNextOffset := 0
+	
+	; Walk the global hashmap
 	
 	for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
@@ -179,11 +193,18 @@ define void EliminateGlobals(VariableHashMap* Globals) {
 			while (FoundElement) {
 				VariableInfo* NextGlobal := FoundElement->Value
 				
+				; If a global is only set once, and has a default value, and the default value has no
+				;  side-effects, then it can safely be optimized away.
+				
 				if (NextGlobal->SetCount = 1 && NextGlobal->LastValue != null) {
 					if !(NodeHasSideEffects(NextGlobal->LastValue)) {
 						NextGlobal->IsGlobal := GLOBAL_IS_OPTIMIZED_AWAY
 					}
 				}
+				
+				; If this variable is not being optimized away, then give it a new offset based on
+				;  any other real globals, and update the offset of the next real global to be after
+				;   this one.
 				
 				if (NextGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
 					NextGlobal->StackOffset := NewNextOffset
@@ -204,6 +225,8 @@ define void EliminateGlobals(VariableHashMap* Globals) {
 			}
 		}
 	}
+	
+	; Update how much space is needed for globals, excluding any eliminated globals.
 	
 	Globals->NextOffset := NewNextOffset
 }

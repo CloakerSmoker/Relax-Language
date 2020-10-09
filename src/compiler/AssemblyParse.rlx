@@ -32,14 +32,6 @@ i32 O_I := OP_I8 | OP_I16 | OP_I32 	/* Imm8,Imm16,Imm32 encoding */
 i32 O_MI := O_M | (O_I << 16) 		/* MI encoding */
 i32 O_L := OP_LABEL					/* rel32 encoding, references a label */
 
-struct Instruction {
-	Instruction* Next,
-	i16 Opcode,
-	i16 Flags,
-	i8 Extra,
-	i32 EncodingMask
-}
-
 i32 E_NO_RM := 0x1				/* The instruction does not use the ModRM byte */
 i32 E_RM_IS_OP1 := 0x2			/* The RM field of the ModRM byte encodes the first operand */
 i32 E_RM_IS_OP2 := 0x4			/* The RM field of the ModRM byte encodes the second operand */
@@ -58,6 +50,14 @@ i32 E_NEEDS_66 := 0x3000		/* The instruction needs the 0x66 prefix */
 
 i32 E_1OP_WEXT := E_RM_IS_OP1 | E_OP_EXT	/* The instruction has one operand, and an opcode extension */
 i32 E_CJMP := E_2_BYTE_OPCODE | E_LABEL		/* The instruction is a conditional jump */
+
+struct Instruction {
+	Instruction* Next,
+	i16 Opcode,
+	i16 Flags,
+	i8 Extra,
+	i32 EncodingMask
+}
 
 define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding, i32 Flags, i8 Extra) {
 	Instruction* Next := Alloc(#Instruction)
@@ -79,67 +79,67 @@ define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding,
 }
 
 define void SetupAssembly(ParserState* pState) {
-	HashMap* I := NewHashMap()
-	pState->Instructions := I
+	HashMap* I := pState~>Instructions
 	
+	I->Initialize()
 	I->IgnoreCase := true
 	
 	/* Ret */
-	HashMapASet(I, "ret", MakeInstruction(null, 0xC3, 0, E_NO_RM, 0))
+	I->Set("ret", MakeInstruction(null, 0xC3, 0, E_NO_RM, 0))
 	
 	/* Not */
-	HashMapASet(I, "not", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 2)) /* Not, memory */
+	I->Set("not", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 2)) /* Not, memory */
 	
 	/* Neg */
-	HashMapASet(I, "neg", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 3)) /* Neg, memory */
+	I->Set("neg", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 3)) /* Neg, memory */
 	
 	/* And */
 	Instruction* And := MakeInstruction(null, 0x23, O_RM, E_RM_IS_OP2, 0) /* And, register, memory  */
 	MakeInstruction(And, 0x20, O_MR, E_RM_IS_OP1, 0) /* And, memory, register */
 	MakeInstruction(And, 0x80, O_MI, E_RM_IS_OP1 | E_IMM8 | E_OP_EXT, 4) /* And, memory, byte */
 	MakeInstruction(And, 0x81, O_MI, E_RM_IS_OP1 | E_IMM32 | E_OP_EXT, 4) /* And, memory, dword */
-	HashMapASet(I, "and", And)
+	I->Set("and", And)
 	
 	/* Mov */
 	Instruction* Mov := MakeInstruction(null, 0xC7, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 0) /* Mov, register, <i32 */
 	MakeInstruction(Mov, 0xB8, O_M | (OP_I64 << 16), E_NO_RM | E_REG_IN_OPCODE | E_IMM64, 0) /* Mov, register, i64 */
 	MakeInstruction(Mov, 0x8B, O_RM, E_RM_IS_OP2, 0) /* Mov, register, memory */
 	MakeInstruction(Mov, 0x89, O_MR, E_RM_IS_OP1, 0) /* Mov, memory, register */
-	HashMapASet(I, "mov", Mov)
+	I->Set("mov", Mov)
 	
 	/* Inc */
-	HashMapASet(I, "inc", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 0)) /* Inc, memory */
+	I->Set("inc", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 0)) /* Inc, memory */
 	
 	/* Dec */
-	HashMapASet(I, "dec", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 1)) /* Dec, memory */
+	I->Set("dec", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 1)) /* Dec, memory */
 	
 	/* Jumps (including conditionals) */
 	
 	/* Jmp */
 	Instruction* Jmp := MakeInstruction(null, 0xE9, O_L, E_LABEL, 0) /* Jmp, :label */
 	MakeInstruction(Jmp, 0xFF, O_M, E_1OP_WEXT, 4) /* Jmp, register */
-	HashMapASet(I, "jmp", Jmp)
+	I->Set("jmp", Jmp)
 	
 	/* Je */
 	Instruction* JE := MakeInstruction(null, 0x0F84, O_L, E_CJMP, 0)
-	HashMapASet(I, "je", JE)
-	HashMapASet(I, "jz", JE)
+	I->Set("je", JE)
+	I->Set("jz", JE)
 	
 	/* Jcc */
-	HashMapASet(I, "jgt", MakeInstruction(null, 0x0F8F, O_L, E_CJMP, 0))
-	HashMapASet(I, "jge", MakeInstruction(null, 0x0F8D, O_L, E_CJMP, 0))
-	HashMapASet(I, "jlt", MakeInstruction(null, 0x0F8C, O_L, E_CJMP, 0))
-	HashMapASet(I, "jle", MakeInstruction(null, 0x0F8E, O_L, E_CJMP, 0))
+	I->Set("jgt", MakeInstruction(null, 0x0F8F, O_L, E_CJMP, 0))
+	I->Set("jge", MakeInstruction(null, 0x0F8D, O_L, E_CJMP, 0))
+	I->Set("jlt", MakeInstruction(null, 0x0F8C, O_L, E_CJMP, 0))
+	I->Set("jle", MakeInstruction(null, 0x0F8E, O_L, E_CJMP, 0))
 	
 	/* Jne */
 	Instruction* JNE := MakeInstruction(null, 0x0F85, O_L, E_CJMP, 0)
-	HashMapASet(I, "jne", JNE)
-	HashMapASet(I, "jnz", JNE)
+	I->Set("jne", JNE)
+	I->Set("jnz", JNE)
 	
 	/* Call */
 	Instruction* Call := MakeInstruction(null, 0xE8, O_L, E_LABEL, 0) /* Call, :label */
 	MakeInstruction(Call, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 2) /* Call, memory64 */
-	HashMapASet(I, "call", Call)
+	I->Set("call", Call)
 	
 	
 	/* Comparisons */
@@ -147,7 +147,7 @@ define void SetupAssembly(ParserState* pState) {
 	/* Test */
 	Instruction* Test := MakeInstruction(null, 0xF7, O_M | (O_I << 16), E_1OP_WEXT, 0) /* Test, memory, immX */
 	MakeInstruction(Test, 0x85, O_MR, E_RM_IS_OP1, 0) /* Test, memory, register */
-	HashMapASet(I, "test", Test)
+	I->Set("test", Test)
 	
 	Instruction* Cmp := MakeInstruction(null, 0x83, (OP_HR | OP_M) | (OP_I8 << 16), E_RM_IS_OP1, 0)
 	
@@ -156,58 +156,58 @@ define void SetupAssembly(ParserState* pState) {
 	/* XChg */
 	Instruction* XChg := MakeInstruction(null, 0x87, O_MR, E_RM_IS_OP1, 0) /* XChg, memory, register */
 	MakeInstruction(XChg, 0x87, O_RM, E_RM_IS_OP2, 0) /* XChg, register, memory */
-	HashMapASet(I, "xchg", XChg) /* Yes, I know both of these encode to the same thing, but I'm not adding another encoding flag just for this single instruction where operand order doesn't matter */
+	I->Set("xchg", XChg) /* Yes, I know both of these encode to the same thing, but I'm not adding another encoding flag just for this single instruction where operand order doesn't matter */
 	
 	/* IRet */
-	HashMapASet(I, "iret", MakeInstruction(null, 0xCF, 0, E_NO_RM | E_REX_W, 0))
+	I->Set("iret", MakeInstruction(null, 0xCF, 0, E_NO_RM | E_REX_W, 0))
 	
 	/* Lea */
-	HashMapASet(I, "lea", MakeInstruction(null, 0x8D, O_RM, E_RM_IS_OP2, 0))
+	I->Set("lea", MakeInstruction(null, 0x8D, O_RM, E_RM_IS_OP2, 0))
 	
 	/* Xor */
 	Instruction* Xor := MakeInstruction(null, 0x81, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 6)
 	MakeInstruction(Xor, 0x31, O_MR, E_RM_IS_OP1, 0)
 	MakeInstruction(Xor, 0x33, O_RM, E_RM_IS_OP2, 0)
-	HashMapASet(I, "xor", Xor)
+	I->Set("xor", Xor)
 	
 	/* Stack */
 	
 	/* Push */
 	Instruction* Push := MakeInstruction(null, 0x50, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
 	MakeInstruction(Push, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 6)
-	HashMapASet(I, "push", Push)
+	I->Set("push", Push)
 	
 	/* Pop */
 	Instruction* Pop := MakeInstruction(null, 0x58, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
 	MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_1OP_WEXT, 0)
-	HashMapASet(I, "pop", Pop)
+	I->Set("pop", Pop)
 	
 	/* IO */
 	
 	/* In */
-	HashMapASet(I, "inb", MakeInstruction(null, 0xEC, 0, E_NO_RM, 0))
-	HashMapASet(I, "inw", MakeInstruction(null, 0xED, 0, E_NO_RM | E_NEEDS_66, 0))
-	HashMapASet(I, "ind", MakeInstruction(null, 0xED, 0, E_NO_RM, 0))
+	I->Set("inb", MakeInstruction(null, 0xEC, 0, E_NO_RM, 0))
+	I->Set("inw", MakeInstruction(null, 0xED, 0, E_NO_RM | E_NEEDS_66, 0))
+	I->Set("ind", MakeInstruction(null, 0xED, 0, E_NO_RM, 0))
 	
 	/* Out */
-	HashMapASet(I, "outb", MakeInstruction(null, 0xEE, 0, E_NO_RM, 0))
-	HashMapASet(I, "outw", MakeInstruction(null, 0xEF, 0, E_NO_RM | E_NEEDS_66, 0))
-	HashMapASet(I, "outd", MakeInstruction(null, 0xEF, 0, E_NO_RM, 0))
+	I->Set("outb", MakeInstruction(null, 0xEE, 0, E_NO_RM, 0))
+	I->Set("outw", MakeInstruction(null, 0xEF, 0, E_NO_RM | E_NEEDS_66, 0))
+	I->Set("outd", MakeInstruction(null, 0xEF, 0, E_NO_RM, 0))
 	
 	/* Interrupts */
 	
-	HashMapASet(I, "lidt", MakeInstruction(null, 0x0F01, OP_M64, E_1OP_WEXT | E_2_BYTE_OPCODE, 3))
-	HashMapASet(I, "cli", MakeInstruction(null, 0xFA, 0, E_NO_RM, 0))
-	HashMapASet(I, "sti", MakeInstruction(null, 0xFB, 0, E_NO_RM, 0))
+	I->Set("lidt", MakeInstruction(null, 0x0F01, OP_M64, E_1OP_WEXT | E_2_BYTE_OPCODE, 3))
+	I->Set("cli", MakeInstruction(null, 0xFA, 0, E_NO_RM, 0))
+	I->Set("sti", MakeInstruction(null, 0xFB, 0, E_NO_RM, 0))
 	
 	/* Bit scans */
 	
-	HashMapASet(I, "bsr", MakeInstruction(null, 0x0FBD, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
-	HashMapASet(I, "bsf", MakeInstruction(null, 0x0FBC, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
+	I->Set("bsr", MakeInstruction(null, 0x0FBD, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
+	I->Set("bsf", MakeInstruction(null, 0x0FBC, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
-	HashMapElement* FoundBaseElement := HashMapGetValue(pState->Instructions, Name)
+	HashMapElement* FoundBaseElement := pState~>Instructions->Get(Name)
 	
 	if !(FoundBaseElement) {
 		return 0 As Instruction*
@@ -231,14 +231,6 @@ define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i
 	return 0 As Instruction*
 }
 
-define i8 GetCharacter(SafeWideString* NameString, i32 CharacterIndex) {
-	if (CharacterIndex >= NameString->Length) {
-		return ' '
-	}
-	
-	return NameString->Buffer[CharacterIndex] As i8
-}
-
 define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize) {
 	i8* InvalidName := "Invalid register name."
 	
@@ -252,8 +244,8 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		TokenError(NameToken, InvalidName)
 	}
 	
-	i8 FirstCharacter := GetCharacter(NameString, 0)
-	i8 SecondCharacter := GetCharacter(NameString, 1)
+	i8 FirstCharacter := NameString->ASCIICharAt(0, ' ')
+	i8 SecondCharacter := NameString->ASCIICharAt(1, ' ')
 	
 	i32 Offset := 0
 	
@@ -291,8 +283,8 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		RegisterSize := 4
 	}
 	
-	FirstCharacter := GetCharacter(NameString, Offset)
-	SecondCharacter := GetCharacter(NameString, Offset + 1)
+	FirstCharacter := NameString->ASCIICharAt(Offset, ' ')
+	SecondCharacter := NameString->ASCIICharAt(Offset + 1, ' ')
 	
 	if (IsNumber(FirstCharacter)) {
 		/* RDD, DD = digits */
@@ -327,7 +319,7 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		Offset += 2 /* Advance past the register name */
 		RegisterNumber := 4 + (FirstCharacter = 'b') /* Numbers 4 and 5, 4 for SP, 5 for BP */
 		
-		SecondCharacter := GetCharacter(NameString, Offset)
+		SecondCharacter := NameString->ASCIICharAt(Offset, ' ')
 		
 		if !(RegisterSize) {
 			/* Custom 'x' suffix for the word version of each */
@@ -347,7 +339,7 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		Offset += 2 /* Advance past the register name */
 		RegisterNumber := 6 + (FirstCharacter = 'd') /* Numbers 6 and 7, 6 for SI, 7 for DI */
 		
-		SecondCharacter := GetCharacter(NameString, Offset)
+		SecondCharacter := NameString->ASCIICharAt(Offset, ' ')
 		
 		if !(RegisterSize) {
 			/* Custom 'x' suffix for the word version of each */
@@ -440,7 +432,7 @@ struct InstructionOperand {
 struct AssemblyBlock {
 	i32 InstructionCount,
 	InstructionNode** Instructions,
-	HashMap* Labels
+	HashMap Labels
 }
 
 i8 INSTRUCTION_REGULAR := 0
@@ -541,9 +533,9 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		
 		SafeWideString* TypeName := TypeNameToken->StringValue
 		
-		i32 I := GetCharacter(TypeName, 0) /* i/i/i/i */
-		i32 L := GetCharacter(TypeName, 1) /* 8/1/3/6 */
-		i32 R := GetCharacter(TypeName, 2) /*  /6/2/4 */
+		i32 I := TypeName->ASCIICharAt(0, ' ') /* i i i i */
+		i32 L := TypeName->ASCIICharAt(1, ' ') /* 8 1 3 6 */
+		i32 R := TypeName->ASCIICharAt(2, ' ') /*   6 2 4 */
 		
 		i32 NameCharacters := I | (L << 8) | (R << 16)
 		
@@ -591,7 +583,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* FunctionName := FunctionToken->StringValue
 		
-		HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, FunctionName)
+		HashMapElement* FoundFunction := pState~>Functions->Get(FunctionName)
 		
 		if !(FoundFunction) {
 			TokenError(FunctionToken, "Function definition/declaration not found.")
@@ -609,7 +601,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
-		HashMapElement* FoundLabelElement := HashMapGetValue(ThisBlock->Labels, LabelName)
+		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
 		InstructionNode* FoundLabel := 0
 		
 		if (FoundLabelElement) {
@@ -621,6 +613,8 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 			FoundLabel->Type := INSTRUCTION_LABEL_INCOMPLETE
 			FoundLabel->LabelName := LabelName
 			FoundLabel->LabelNumber := ParserNextLabel(pState)
+			
+			ThisBlock~>Labels->Set(LabelName, FoundLabel)
 		}
 		
 		Next->LabelNumber := FoundLabel->LabelNumber
@@ -641,7 +635,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
-		HashMapElement* FoundLabelElement := HashMapGetValue(ThisBlock->Labels, LabelName)
+		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
 		InstructionNode* FoundLabel := 0
 		
 		if (FoundLabelElement) {
@@ -655,7 +649,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 			FoundLabel := Alloc(#InstructionNode)
 			FoundLabel->LabelNumber := ParserNextLabel(pState)
 			
-			HashMapAddValue(ThisBlock->Labels, LabelName, FoundLabel)
+			ThisBlock~>Labels->Set(LabelName, FoundLabel)
 		}
 		
 		FoundLabel->Type := INSTRUCTION_LABEL
@@ -690,12 +684,6 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 						
 						Print("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand.\n", OperandSize * 8, Next->Size * 8)
 						
-						/* AWrite("Incompatible operand size, expected a ")
-						IWrite(OperandSize * 8)
-						AWrite(" bit operand, got a ")
-						IWrite(Next->Size * 8)
-						AWriteLine(" bit operand.") */
-						
 						ContextError(Next~>Context, null)
 					}
 				}
@@ -719,7 +707,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		
 		if !(Found) {
 			SwapOutputStream()
-			/* IWriteHexLine(OperandTypes) */
+			
 			Print("No encoding for operand type(s).")
 			
 			ContextError(Result~>Context, null)
@@ -746,7 +734,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 define ASTNode* ParseAssembly(ParserState* pState) {
 	AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
 	
-	ThisBlock->Labels := NewHashMap()
+	ThisBlock~>Labels->Initialize()
 	
 	InstructionNode** Instructions := Alloc(16 * #InstructionNode)
 	i32 InstructionCapacity := 16

@@ -316,13 +316,16 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	i32 MainOffset := 0
 	
-	/* Compile all regular functions */
-	i8 FoundMain := CompileFunctionHashMap(Config, cState, pState->Functions, CODE_BASE, &MainOffset)
+	; Compile all global functions
+	i8 FoundMain := CompileFunctionHashMap(Config, cState, pState~>Functions, CODE_BASE, &MainOffset)
 	
-	/* Loop through each custom type */
-	void* Elements := pState->Types->Elements
+	; Loop through each custom type
+	HashMap* Types := pState~>Types
 	
-	for (i32 ElementIndex := 0, ElementIndex < (pState->Types->BufferMaxCount), ElementIndex += 1) {
+	i32 ElementCount := Types->BufferMaxCount
+	void* Elements := Types->Elements
+	
+	for (i32 ElementIndex := 0, ElementIndex < ElementCount, ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
 			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
 			

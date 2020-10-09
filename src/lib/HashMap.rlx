@@ -150,211 +150,21 @@ struct HashMap {
 		this->Upsert(this->HashString(Key), Value)
 	}
 	
-	;define HashMapElement* Get(i8* Key, i32 KeyLength) {
-	;	return this->GetElement(this->HashString(Key, KeyLength))
-	;}
-	;define void Set(i8* Key, i32 KeyLength, void Value) {
-	;	this->Upsert(this->HashString(Key, KeyLength), Value As void*)
-	;}
-	;define void Set(i8* Key, i32 KeyLength, void* Value) {
-	;	this->Upsert(this->HashString(Key, KeyLength), Value)
-	;}
-	
-	HashMapElement* EnumerateLastElement
-	
-	define i32 StartEnumerate() {
-		this->EnumerateLastElement := null
-		
-		return 0
+	define HashMapElement* Get(i8* Key, i32 KeyLength) {
+		return this->GetElement(this->HashString(Key, KeyLength))
 	}
-	define HashMapElement* EnumerateNext(i32* Index) {
-		HashMapElement* Last := this->EnumerateLastElement
-		
-		if (Last && Last->NextElement) {
-			this->EnumerateLastElement := Last->NextElement
-			
-			return this->EnumerateLastElement
-		}
-		
-		Last := null
-		
-		while !(Last) {
-			if (*Index = this->BufferMaxCount) {
-				return null
-			}
-			
-			Last := this->Buckets[*Index]
-			Index[0] += 1
-		}
-		
-		this->EnumerateLastElement := Last
-		
-		return Last
+	define void Set(i8* Key, i32 KeyLength, void Value) {
+		this->Upsert(this->HashString(Key, KeyLength), Value As void*)
 	}
-	
-	define void Print() {
-		i32 State := this->StartEnumerate()
-		
-		loop {
-			HashMapElement* Next := this->EnumerateNext(&State)
-			
-			if !(Next) {
-				break
-			}
-			
-			Print(" %i %x: %i\n", Next->Hash % this->BufferMaxCount, Next->Hash, Next->Value)
-		}
+	define void Set(i8* Key, i32 KeyLength, void* Value) {
+		this->Upsert(this->HashString(Key, KeyLength), Value)
 	}
 }
 
 define HashMap* NewHashMap() {
 	HashMap* NewMap := Alloc(#HashMap) As HashMap*
 	
-	NewMap->BufferMaxCount := 100
-	NewMap->Elements := Alloc(NewMap->BufferMaxCount * 8)
+	NewMap->Initialize()
 	
 	return NewMap
-}
-
-define i64 HashString(SafeWideString* StringToHash, i8 IgnoreCase) {
-	i64 Hash := 5281
-	
-	for (i32 Index := 0, Index < (StringToHash->Length), Index += 1) {
-		i8 NextCharacter := StringToHash->Buffer[Index] As i8
-		
-		if (IgnoreCase) {
-			NextCharacter := Lower(NextCharacter) As i8
-		}
-		
-		Hash := ((Hash * 32) + Hash) ^ NextCharacter
-	}
-	
-	return Hash
-}
-define i64 HashAString(i8* StringToHash, i8 IgnoreCase) {
-	i64 Hash := 5281
-	
-	for (i32 Index := 0, StringToHash[Index] != 0, Index += 1) {
-		i8 NextCharacter := StringToHash[Index]
-		
-		if (IgnoreCase) {
-			NextCharacter := Lower(NextCharacter) As i8
-		}
-		
-		Hash := ((Hash * 32) + Hash) ^ NextCharacter
-	}
-	
-	return Hash
-}
-
-
-define i64 HashMapGetIndex(i64 Hash, i32 Length) {
-	i64 Index := Hash % Length
-	
-	if (Index < 0) {
-		Index := -Index
-	}
-	
-	return 0
-}
-
-
-define HashMapElement* HashMapFindElement(HashMap* TargetMap, i64 Hash) {
-	/* 
-		Finds the last element in the linked list for Hash, and returns it
-		OR returns 0 when there is no element with Hash yet
-	*/
-	
-	i64 Index := HashMapGetIndex(Hash, TargetMap->BufferMaxCount)
-	
-	HashMapElement* Node := (TargetMap->Elements)[Index]
-	HashMapElement* NoNode := false As HashMapElement*
-	
-	if !(Node) {
-		return NoNode
-	}
-
-	while (Node->Hash != Hash) {
-		if !(Node->NextElement) {
-			return Node
-		}
-		
-		Node := Node->NextElement
-	}
-	
-	return Node
-}
-define HashMapElement* HashMapGetValue(HashMap* TargetMap, SafeWideString* Key) {
-	i64 Hash := HashString(Key, TargetMap->IgnoreCase)
-	
-	HashMapElement* Result := HashMapFindElement(TargetMap, Hash)
-	
-	if (Result != 0) {
-		if (Result->Hash = Hash) {
-			return Result
-		}
-	}
-	
-	return false As HashMapElement*
-}
-
-define void HashMapUpsert(HashMap* TargetMap, i64 KeyHash, void Value) {
-	i64 Index := HashMapGetIndex(KeyHash, TargetMap->BufferMaxCount)
-	
-	HashMapElement* TailElement := HashMapFindElement(TargetMap, KeyHash)
-	HashMapElement* NewElement := 0
-	
-	if (TailElement = 0) {
-		/* If TailElement = 0 then:
-			No linked list exists for this index
-			Create one, and insert the head into the element list
-		*/
-		
-		/* AWriteLine("which does not exist") */
-		
-		NewElement := Alloc(#HashMapElement) As HashMapElement*
-		NewElement->NextElement := 0
-		
-		TargetMap->Elements[Index] := NewElement
-	}
-	else if (TailElement->Hash != KeyHash) {
-		/* else if TailElement->Hash != KeyHash:
-			Linked list exists, but doesn't contain the key yet
-			Create new element, and insert it into to the list
-		*/
-		
-		/* AWriteLine("which does contain the key") */
-		
-		NewElement := Alloc(#HashMapElement) As HashMapElement*
-		NewElement->NextElement := TailElement->NextElement
-	
-		TailElement->NextElement := NewElement
-	}
-	else {
-		/* Else, the tail node exists, and the hash matches
-			Aka this key already has an element
-			So just overwrite the values in it
-		*/
-		
-		/* AWriteLine("which already contains the key") */
-		
-		NewElement := TailElement
-		/* TailElement->NextElement := 0 */
-	}
-	
-	NewElement->Hash := KeyHash
-	NewElement->Value := Value
-}
-
-define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void Value) {
-	HashMapUpsert(TargetMap, HashString(Key, TargetMap->IgnoreCase), Value)
-}
-define void HashMapAddValue(HashMap* TargetMap, SafeWideString* Key, void* Value) {
-	HashMapUpsert(TargetMap, HashString(Key, TargetMap->IgnoreCase), Value As void)
-}
-define void HashMapASet(HashMap* TargetMap, i8* Key, void Value) {
-	HashMapUpsert(TargetMap, HashAString(Key, TargetMap->IgnoreCase), Value)
-}
-define void HashMapASet(HashMap* TargetMap, i8* Key, void* Value) {
-	HashMapUpsert(TargetMap, HashAString(Key, TargetMap->IgnoreCase), Value As void)
 }

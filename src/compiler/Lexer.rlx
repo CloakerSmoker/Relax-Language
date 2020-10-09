@@ -13,7 +13,9 @@ struct Token {
 struct TokenizerState {
 	BuildConfig* Config,
 	SafeWideString* SourceFilePath,
+	
 	HashMap* IncludedFiles,
+	HashMap Keywords,
 	
 	i16* Source,
 	i32 SourceIndex,
@@ -24,9 +26,7 @@ struct TokenizerState {
 	i32 MaxTokenIndex,
 	i32 CurrentLineNumber,
 	i16 CurrentLineStart,
-	i32 TokenCapacity,
-	
-	HashMap* Keywords
+	i32 TokenCapacity
 }
 
 i8 TOKEN_TYPE_EOF := 0
@@ -173,9 +173,9 @@ define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceF
 	NewState->MaxTokenIndex := 0
 	NewState->CurrentLineNumber := 1
 	
-	HashMap* K := NewHashMap()
-	NewState->Keywords := K
+	HashMap* K := NewState~>Keywords
 	
+	K->Initialize()
 	K->IgnoreCase := true
 	
 	K->Set("declare", 	KEYWORD_DECLARE)
@@ -636,7 +636,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 			
 			SafeWideString* TokenText := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 			
-			HashMapElement* FoundKeyword := tState->Keywords->Get(TokenText)
+			HashMapElement* FoundKeyword := tState~>Keywords->Get(TokenText)
 			
 			if (FoundKeyword) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */

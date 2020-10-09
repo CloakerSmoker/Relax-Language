@@ -304,15 +304,15 @@ struct ParserState {
 	BuildConfig* Config,
 	TokenizerState* tState,
 	
-	HashMap* Functions,
+	HashMap Functions,
 	
 	VariableHashMap Globals,
 	ASTNode** GlobalDefaults,
 	
-	HashMap* Registers,
-	HashMap* Instructions,
+	HashMap Registers,
+	HashMap Instructions,
 	
-	HashMap* Types,
+	HashMap Types,
 	
 	/* Builtin types, actually added to the type list in CreateDefaultTypes */
 	
@@ -662,7 +662,7 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, i16 Size, i8
 		NewType->IsBuiltin := true
 	}
 	
-	HashMapAddValue(pState->Types, Name, NewType As void)
+	pState~>Types->Set(Name, NewType)
 	
 	return NewType
 }
@@ -695,7 +695,7 @@ define void CreateDefaultTypes(ParserState* pState) {
 define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
 	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
 	
-	HashMapElement* FoundElement := HashMapGetValue(pState->Types, TypeName)
+	HashMapElement* FoundElement := pState~>Types->Get(TypeName)
 	TypeInfo* FoundTypeInfo := 0
 
 	if (FoundElement) {
@@ -1400,7 +1400,7 @@ define ASTNode* MakeCall(ParserState* pState, HashMap* NameSpace, Token* NameTok
 	
 	SafeWideString* Name := NameToken->StringValue
 	
-	HashMapElement* FoundFunction := HashMapGetValue(NameSpace, Name)
+	HashMapElement* FoundFunction := NameSpace->Get(Name)
 	
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
@@ -1535,11 +1535,9 @@ define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
 	
 	P->GlobalDefaults := AllocArray(8, 0)
 	
-	P->Functions := NewHashMap()
-	P->FunctionCount := 0
+	P~>Functions->Initialize()
 	
-	P->Types := NewHashMap()
-	P->TypeCount := 0
+	P~>Types->Initialize()
 	
 	CreateDefaultTypes(P)
 	SetupAssembly(P)
@@ -1670,13 +1668,13 @@ define void ParseProgram(ParserState* pState) {
 		i8 NextType := NextToken->Type
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
-			ParseFunction(pState, pState->Functions, KEYWORD_DEFINE)
+			ParseFunction(pState, pState~>Functions, KEYWORD_DEFINE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-			ParseFunction(pState, pState->Functions, KEYWORD_DECLARE)
+			ParseFunction(pState, pState~>Functions, KEYWORD_DECLARE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
-			ParseFunction(pState, pState->Functions, KEYWORD_DLLIMPORT)
+			ParseFunction(pState, pState~>Functions, KEYWORD_DLLIMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 			ParseAndAddStruct(pState)
@@ -1739,10 +1737,10 @@ define void ParseAndAddStruct(ParserState* pState) {
 	
 	/* Gets the type name */
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
-	SafeWideString* Name := (NameToken->Value) As SafeWideString*
+	SafeWideString* Name := NameToken->StringValue
 	
 	/* Check if there's already a type with this name */
-	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
+	HashMapElement* FoundElement := pState~>Types->Get(Name)
 	TypeInfo* NewType := 0
 	
 	if (FoundElement) {
@@ -1906,7 +1904,7 @@ define void ParseAndAddBits(ParserState* pState) {
 	i8 BackingTypeSizeBits := BackingTypeSize * 8
 	
 	/* Check if there's already a type with this name */
-	HashMapElement* FoundElement := HashMapGetValue(pState->Types, BitsName)
+	HashMapElement* FoundElement := pState~>Types->Get(BitsName)
 	TypeInfo* NewType := 0
 	
 	if (FoundElement) {
@@ -2260,7 +2258,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		}
 	}
 	
-	HashMapElement* FoundFunctionElement := HashMapGetValue(Namespace, Name)
+	HashMapElement* FoundFunctionElement := Namespace->Get(Name)
 	
 	FunctionDefine* FoundFunction := 0
 	FunctionDefine* NewDefine := 0
@@ -2315,7 +2313,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		else {
 			/* If this is the very first definition for this function, it needs to be inserted into the function hashmap */
 			
-			HashMapAddValue(Namespace, Name, NewDefine As void)
+			Namespace->Set(Name, NewDefine)
 		}
 		
 		NewDefine->LabelNumber := ParserNextLabel(pState)
@@ -2780,10 +2778,14 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				Result := MakeBuiltinCall(pState, NextToken, Parameters, ParameterCount)
 			}
 			else {
-				Result := MakeCall(pState, pState->Functions, NextToken, Parameters, ParameterCount)
+				Result := MakeCall(pState, pState~>Functions, NextToken, Parameters, ParameterCount)
 			}
 		}
 		else {
+			if (IsBuiltin) {
+				TokenError(NextToken, "Unexpected ':' after identifier")
+			}
+			
 			/* Else, this isn't a function call, and is just a normal variable */
 			Result := TranslateTokenToNode(pState, NextToken)
 		}
@@ -2840,7 +2842,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Dummy", &ErrorMessage)
 				
 				if (MaybeFunction && !ErrorMessage) {
-					HashMapElement* FoundFunction := HashMapGetValue(pState->Functions, MaybeFunction->StringValue)
+					HashMapElement* FoundFunction := pState~>Functions->Get(MaybeFunction->StringValue)
 					
 					if (FoundFunction) {
 						FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
