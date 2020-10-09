@@ -25,6 +25,15 @@ struct Test {
 	}
 }
 
+struct Test2 extends Test unaligned {
+	define Test* Common() {
+		return this As Test*
+	}
+	define void GetValue(i64 New) {
+		this->Value := New
+	}
+}
+
 struct BadIdea {
 	define i64 What() {
 		return 90
@@ -63,6 +72,13 @@ define i32 Main() {
 	PrintCharacter(' ')
 	
 	Print(L.GetValue(90))
+	
+	Test2* Abc := Alloc(#Test2)
+	Test* Abcd := Abc->Common()
+	
+	Abc->GetValue(9000)
+	
+	Print(" %i", Abc->Value = Abcd->Value)
 	
 	return 0
 }
