@@ -6,8 +6,8 @@
 
 struct TypeInfo {
 	SafeWideString* Name,
-	HashMap* StructFields,
-	HashMap* StructMethods,
+	HashMap Fields,
+	HashMap Methods,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
@@ -141,17 +141,65 @@ struct VariableInfo {
 define VariableInfo* AllocateNewVariableInfo() {
 	return Alloc(#VariableInfo) As VariableInfo*
 }
-define void HashMapAddVariable(HashMap* TargetMap, VariableInfo* TargetVariable) {
-	HashMapAddValue(TargetMap, TargetVariable->Name, TargetVariable As void)
-}
-define VariableInfo* HashMapGetVariable(HashMap* TargetMap, SafeWideString* VariableName) {
-	HashMapElement* Result := HashMapGetValue(TargetMap, VariableName)
+
+declare i32 RoundTo(i32, i32)
+
+struct VariableHashMap {
+	HashMap BackingMap
+	HashMap* Map
+	i32 NextOffset
 	
-	if (Result) {
-		return (Result->Value) As VariableInfo*
+	define void Initialize() {
+		this->Map := this~>BackingMap
+		
+		this->Map->BufferMaxCount := 100
+		this->Map->Elements := Alloc(this->Map->BufferMaxCount * 8)
+		
+		this->NextOffset := 0
 	}
 	
-	return 0 As VariableInfo*
+	define VariableInfo* Get(SafeWideString* VariableName) {
+		HashMapElement* FoundElement := this->Map->Get(VariableName)
+		
+		if (FoundElement) {
+			return FoundElement->Value As VariableInfo*
+		}
+		
+		return null
+	}
+	
+	define void Add(VariableInfo* NewVariable, Token* SourceToken) {
+		if (this->Get(NewVariable->Name)) {
+			/* If we already have this name in the hashmap, then it's a duplicate definition */
+			
+			TokenError(SourceToken, "Duplicate definition")
+		}
+		
+		this->Map->Set(NewVariable->Name, NewVariable)
+		
+		NewVariable->StackOffset := this->NextOffset
+		
+		i16 NewVariableSize := GetTypeStorageSize(NewVariable->Type)
+		
+		if (NewVariableSize <= 8) {
+			this->NextOffset += 8
+		}
+		else {
+			i16 RoundedSize := RoundTo(NewVariableSize, 8) As i16
+			
+			NewVariable->StackOffset += RoundedSize
+			
+			this->NextOffset += RoundedSize + 8
+		}
+	}
+}
+
+define VariableHashMap* NewVariableMap() {
+	VariableHashMap* Map := Alloc(#VariableHashMap)
+	
+	Map->Initialize()
+	
+	return Map
 }
 
 struct UnaryExpression {
@@ -210,7 +258,7 @@ struct FunctionDefine {
 	i16 ParameterCount,
 	VariableInfo** Parameters,
 	
-	HashMap* Locals,
+	VariableHashMap Locals,
 	Type ReturnType,
 	
 	i8 IsImported,
@@ -228,7 +276,6 @@ struct FunctionDefine {
 	SafeWideString* MethodOfTypeName,
 	
 	i8 Attribute,
-	i16 LocalOffset,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
 	i32 StringBufferSize,
@@ -258,8 +305,7 @@ struct ParserState {
 	
 	HashMap* Functions,
 	
-	i32 GlobalOffset,
-	HashMap* Globals,
+	VariableHashMap Globals,
 	ASTNode** GlobalDefaults,
 	
 	HashMap* Registers,
@@ -590,30 +636,29 @@ i8 TYPE_INCOMPLETE := 4
 i8 TYPE_BITS := 8
 i8 TYPE_ARRAY := 16
 
-define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, HashMap* Fields, i16 Size, i8 Flags) {
+define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, i16 Size, i8 Flags) {
 	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
 	
 	/* Should only be called once per type name */
 	TypeInfo* NewType := Alloc(#TypeInfo) As TypeInfo*
 	
 	NewType->Name := Name
-	NewType->StructFields := Fields
 	NewType->Size := Size
 
 	if (Flags & TYPE_STRUCT) {
-		NewType->IsStructType := True
+		NewType->IsStructType := true
 	}
 	
 	if (Flags & TYPE_INCOMPLETE) {
-		NewType->IsIncomplete := True
+		NewType->IsIncomplete := true
 	}
 	
 	if (Flags & TYPE_BITS) {
-		NewType->IsBits := True
+		NewType->IsBits := true
 	}
 	
 	if (Flags & TYPE_REGULAR) {
-		NewType->IsBuiltin := True
+		NewType->IsBuiltin := true
 	}
 	
 	HashMapAddValue(pState->Types, Name, NewType As void)
@@ -639,11 +684,11 @@ define void CreateDefaultTypes(ParserState* pState) {
 	/* Creates all the standard types, only called once */
 	
 	/* All standard types are not structs, and are not incomplete */
-	pState->i8 := AddType(pState, AToS("i8"), null, 1, TYPE_REGULAR)
-	pState->i16 := AddType(pState, AToS("i16"), null, 2, TYPE_REGULAR)
-	pState->i32 := AddType(pState, AToS("i32"), null, 4, TYPE_REGULAR)
-	pState->i64 := AddType(pState, AToS("i64"), null, 8, TYPE_REGULAR)
-	pState->void := AddType(pState, AToS("void"), null, 8, TYPE_REGULAR)
+	pState->i8 := AddType(pState, AToS("i8"), 1, TYPE_REGULAR)
+	pState->i16 := AddType(pState, AToS("i16"), 2, TYPE_REGULAR)
+	pState->i32 := AddType(pState, AToS("i32"), 4, TYPE_REGULAR)
+	pState->i64 := AddType(pState, AToS("i64"), 8, TYPE_REGULAR)
+	pState->void := AddType(pState, AToS("void"), 8, TYPE_REGULAR)
 }
 
 define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
@@ -668,7 +713,7 @@ define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 Pointe
 		}
 		else {
 			/* We didn't find a type with the name, build an incomplete type for it */
-			FoundTypeInfo := AddType(pState, TypeName, null, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+			FoundTypeInfo := AddType(pState, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
 		}
 	}
 	
@@ -1152,7 +1197,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			; Look up a field with a name given by the right side's string value
 			SafeWideString* FieldName := Right->StringValue
 			
-			HashMapElement* TargetElement := HashMapGetValue(LeftBaseType->StructFields, FieldName)
+			HashMapElement* TargetElement := LeftBaseType~>Fields->Get(FieldName)
 			
 			if (TargetElement) {
 				; If we found a field with the correct name, create a `StructAccessExpression` for this expression
@@ -1345,9 +1390,9 @@ define ASTNode* MakeBuiltinCall(ParserState* pState, Token* NameToken, ASTNode**
 		Result->BuiltinID := BUILTIN_STATICALLOC
 		ResultNode->ValueType := MakeType(pState->void, 1)
 		
-		i32 OldOffset := pState->GlobalOffset
+		i32 OldOffset := pState~>Globals->NextOffset
 		
-		pState->GlobalOffset += Parameters[0]->IntegerValue
+		pState~>Globals->NextOffset += Parameters[0]->IntegerValue
 		
 		Parameters[0]->IntegerValue := OldOffset
 	}
@@ -1495,8 +1540,7 @@ define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
 	P->Config := Config
 	P->tState := tState
 	
-	P->Globals := NewHashMap()
-	P->GlobalOffset := 0
+	P~>Globals->Initialize()
 	
 	P->GlobalDefaults := AllocArray(8, 0)
 	
@@ -1524,12 +1568,12 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	
 	if (CurrentFunction) {
 		/* If we are in a function, try to find the variable in the locals */
-		FoundVariable := HashMapGetVariable(CurrentFunction->Locals, VariableName)
+		FoundVariable := CurrentFunction~>Locals->Get(VariableName)
 	}
 	
 	if !(FoundVariable) {
 		/* If we didn't find the variable in the locals, then check the globals */
-		FoundVariable := HashMapGetVariable(pState->Globals, VariableName)
+		FoundVariable := pState~>Globals->Get(VariableName)
 		
 		if (CurrentFunction) {
 			CurrentFunction->UsesGlobals := true
@@ -1547,45 +1591,16 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	return FoundVariable
 }
 
-
-declare i32 RoundTo(i32, i32)
-
-define i32 ParserAddVariable(HashMap* ToScope, VariableInfo* NewVariable, i32 Offset, Token* SourceToken) {
-	if (HashMapGetVariable(ToScope, NewVariable->Name)) {
-		/* If we already have this name in the hashmap, then it's a duplicate definition */
-		
-		TokenError(SourceToken, "Duplicate definition")
-	}
-	
-	HashMapAddVariable(ToScope, NewVariable)
-	
-	NewVariable->StackOffset := Offset
-	
-	i16 NewVariableSize := GetTypeStorageSize(NewVariable->Type)
-	
-	if (NewVariableSize <= 8) {
-		return 8
-	}
-	else {
-		i16 RoundedSize := RoundTo(NewVariableSize, 8) As i16
-		
-		NewVariable->StackOffset += RoundedSize
-		
-		return RoundedSize + 8
-	}
-}
 define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal, Token* SourceToken) {
 	/* Adds a global variable to the current program */
 	
-	pState->GlobalOffset += ParserAddVariable(pState->Globals, NewGlobal, pState->GlobalOffset, SourceToken)
+	pState~>Globals->Add(NewGlobal, SourceToken)
 }
 
 define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* SourceToken) {
 	/* Adds a local variable to the current function */
 	
-	FunctionDefine* CurrentFunction := pState->CurrentFunction
-	
-	CurrentFunction->LocalOffset += ParserAddVariable(CurrentFunction->Locals, NewLocal, CurrentFunction->LocalOffset, SourceToken)
+	pState->CurrentFunction~>Locals->Add(NewLocal, SourceToken)
 }
 
 /*
@@ -1735,11 +1750,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := (NameToken->Value) As SafeWideString*
 	
-	/* Create a hashmap for the struct fields/methods */
-	HashMap* Fields := NewHashMap()
-	i16 FieldCount := 0
-	HashMap* Methods := NewHashMap()
-	
 	/* Check if there's already a type with this name */
 	HashMapElement* FoundElement := HashMapGetValue(pState->Types, Name)
 	TypeInfo* NewType := 0
@@ -1752,18 +1762,21 @@ define void ParseAndAddStruct(ParserState* pState) {
 		if !(NewType->IsIncomplete) {
 			/* If the type we found isn't incomplete, then error out */
 			
-			TokenError(NameToken, "Duplicate type definition")
+			TokenError(NameToken, "Duplicate struct definition")
 		}
 		
 		NewType->IsIncomplete := false
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		NewType := AddType(pState, Name, Fields, 0, TYPE_STRUCT)
+		NewType := AddType(pState, Name, 0, TYPE_STRUCT)
 	}
 	
-	NewType->StructMethods := Methods
-	NewType->StructFields := Fields
+	HashMap* Methods := NewType~>Methods
+	HashMap* Fields := NewType~>Fields
+	
+	Methods->Initialize()
+	Fields->Initialize()
 	
 	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
 	
@@ -1813,12 +1826,15 @@ define void ParseAndAddStruct(ParserState* pState) {
 		/* Get the name of the field */
 		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (FieldNameToken->Value) As SafeWideString*
+		NextField->Name := FieldName
 		
-		HashMapAddValue(Fields, FieldName, NextField As void)
+		if (Fields->Get(FieldName)) {
+			TokenError(FieldNameToken, "Duplicate definition")
+		}
+		
+		Fields->Set(FieldName, NextField)
 		
 		i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
-		
-		NextField->Name := FieldName
 		
 		if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->IsStructType) {
 			/* Dummy branch */
@@ -1836,7 +1852,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 		/* If we're in a union, don't change the NextFieldOffset so all union fields get overlapping offsets */
 		
 		NextField->Offset := NextFieldOffset
-		FieldCount += 1
 		
 		if (InUnion) {
 			if (FieldSize > MaxUnionSize) {
@@ -1862,8 +1877,6 @@ define void ParseAndAddStruct(ParserState* pState) {
 			break
 		}
 	}
-	
-	;Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for struct body")
 	
 	NewType->Size := TotalSize
 	NewType->IsStructType := true
@@ -1901,9 +1914,34 @@ define void ParseAndAddBits(ParserState* pState) {
 	i8 BackingTypeSize := GetTypeSize(BackingType) As i8
 	i8 BackingTypeSizeBits := BackingTypeSize * 8
 	
-	/* Creates a hashmap for the bit fields */
-	HashMap* Fields := NewHashMap()
-	i16 FieldCount := 0
+	/* Check if there's already a type with this name */
+	HashMapElement* FoundElement := HashMapGetValue(pState->Types, BitsName)
+	TypeInfo* NewType := 0
+	
+	if (FoundElement) {
+		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
+		
+		NewType := (FoundElement->Value) As TypeInfo*
+		
+		if !(NewType->IsIncomplete) {
+			/* If the type we found isn't incomplete, then error out */
+			
+			TokenError(NameToken, "Duplicate type definition")
+		}
+		
+		NewType->Size := BackingTypeSize
+		NewType->IsStructType := false
+		NewType->IsBits := true
+		NewType->IsIncomplete := false /* And set that it is no longer incomplete */
+	}
+	else {
+		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
+		NewType := AddType(pState, BitsName, BackingTypeSize, TYPE_BITS)
+	}
+	
+	/* Initialize a hashmap for the bit fields */
+	HashMap* Fields := NewType~>Fields
+	Fields->Initialize()
 	
 	/* Stores where the next field will be */
 	i16 NextFieldOffset := 0
@@ -1955,7 +1993,7 @@ define void ParseAndAddBits(ParserState* pState) {
 			NextField->ValueType := MakeType(pState->i64, 0)
 		}
 		
-		HashMapAddValue(Fields, FieldName, NextField As void)
+		Fields->Set(FieldName, NextField)
 		
 		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 			/* If the next token is not a ',' break the loop */
@@ -1964,33 +2002,6 @@ define void ParseAndAddBits(ParserState* pState) {
 	}
 	
 	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for bits body.")
-	
-	/* Check if there's already a type with this name */
-	HashMapElement* FoundElement := HashMapGetValue(pState->Types, BitsName)
-	TypeInfo* FoundType := 0
-	
-	if (FoundElement) {
-		/* If we did find a type, then this is either: the definition of an incomplete type, or a duplicate definition */
-		
-		FoundType := (FoundElement->Value) As TypeInfo*
-		
-		if !(FoundType->IsIncomplete) {
-			/* If the type we found isn't incomplete, then error out */
-			
-			TokenError(NameToken, "Duplicate type definition")
-		}
-		
-		/* Otherwise, update the found type with the info we just parsed */
-		FoundType->StructFields := Fields
-		FoundType->Size := BackingTypeSize
-		FoundType->IsStructType := false
-		FoundType->IsBits := true
-		FoundType->IsIncomplete := false /* And set that it is no longer incomplete */
-	}
-	else {
-		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		AddType(pState, BitsName, Fields, BackingTypeSize, TYPE_BITS)
-	}
 }
 
 declare ASTNode* ParseStatement(ParserState*)
@@ -2156,12 +2167,9 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			parsed, and the matching overload has been found (if it exists)
 		*/
 		
-		Locals := NewHashMap()
-		
 		FunctionDefine TempDefine
 		
-		TempDefine.Locals := Locals
-		TempDefine.LocalOffset := 0
+		TempDefine~>Locals->Initialize()
 		
 		pState->CurrentFunction := &TempDefine
 	}
@@ -2334,8 +2342,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	if (ForDefine) {
 		/* If we are parsing a `define` statement, we need to copy the locals hashmap which already contains the parameters, along with size of the stack space needed for locals */
 		
-		NewDefine->Locals := Locals
-		NewDefine->LocalOffset := TempDefine.LocalOffset
+		MoveMemory(NewDefine~>Locals As i8*, TempDefine~>Locals As i8*, #VariableHashMap)
 	}
 	
 	NewDefine->Parameters := ParameterList
@@ -2956,7 +2963,7 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			/* Result = the left side of the struct access, which is passed as the `this` parameter */
 			Parameters[0] := Result
 			
-			Result := MakeCall(pState, LeftBase->StructMethods, Right, Parameters, ParameterCount)
+			Result := MakeCall(pState, LeftBase~>Methods, Right, Parameters, ParameterCount)
 		}
 		else {
 			Result := MakeBinary(pState, Result, OperatorToken, Operand)

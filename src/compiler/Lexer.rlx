@@ -178,27 +178,27 @@ define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceF
 	
 	K->IgnoreCase := true
 	
-	HashMapASet(K, "declare", 	KEYWORD_DECLARE)
-	HashMapASet(K, "define", 	KEYWORD_DEFINE)
-	HashMapASet(K, "dllimport", KEYWORD_DLLIMPORT)
-	HashMapASet(K, "if", 		KEYWORD_IF)
-	HashMapASet(K, "else", 		KEYWORD_ELSE)
-	HashMapASet(K, "for", 		KEYWORD_FOR)
-	HashMapASet(K, "while",		KEYWORD_WHILE)
-	HashMapASet(K, "loop", 		KEYWORD_LOOP)
-	HashMapASet(K, "continue", 	KEYWORD_CONTINUE)
-	HashMapASet(K, "break", 	KEYWORD_BREAK)
-	HashMapASet(K, "struct", 	KEYWORD_STRUCT)
-	HashMapASet(K, "return", 	KEYWORD_RETURN)
-	HashMapASet(K, "union", 	KEYWORD_UNION)
-	HashMapASet(K, "bits", 		KEYWORD_BITS)
-	HashMapASet(K, "unaligned", KEYWORD_UNALIGNED)
-	HashMapASet(K, "windows", 	KEYWORD_WINDOWS)
-	HashMapASet(K, "linux", 	KEYWORD_LINUX)
-	HashMapASet(K, "asm", 		KEYWORD_ASSEMBLY)
-	HashMapASet(K, "try", 		KEYWORD_TRY)
-	HashMapASet(K, "catch", 	KEYWORD_CATCH)
-	HashMapASet(K, "x64", 		KEYWORD_X64)
+	K->Set("declare", 	KEYWORD_DECLARE)
+	K->Set("define", 	KEYWORD_DEFINE)
+	K->Set("dllimport", KEYWORD_DLLIMPORT)
+	K->Set("if", 		KEYWORD_IF)
+	K->Set("else", 		KEYWORD_ELSE)
+	K->Set("for", 		KEYWORD_FOR)
+	K->Set("while",		KEYWORD_WHILE)
+	K->Set("loop", 		KEYWORD_LOOP)
+	K->Set("continue", 	KEYWORD_CONTINUE)
+	K->Set("break", 	KEYWORD_BREAK)
+	K->Set("struct", 	KEYWORD_STRUCT)
+	K->Set("return", 	KEYWORD_RETURN)
+	K->Set("union", 	KEYWORD_UNION)
+	K->Set("bits", 		KEYWORD_BITS)
+	K->Set("unaligned", KEYWORD_UNALIGNED)
+	K->Set("windows", 	KEYWORD_WINDOWS)
+	K->Set("linux", 	KEYWORD_LINUX)
+	K->Set("asm", 		KEYWORD_ASSEMBLY)
+	K->Set("try", 		KEYWORD_TRY)
+	K->Set("catch", 	KEYWORD_CATCH)
+	K->Set("x64", 		KEYWORD_X64)
 	
 	return NewState
 }
@@ -358,19 +358,12 @@ define Token* GetNextToken(TokenizerState* tState) {
 	if (Index < tState->MaxTokenIndex) {
 		/* If we already have a token in the token list for this index, return it instead */
 		
-		/* 
-			AWrite("Found cached version of token[")
-			IWrite(Index)
-			AWrite("] @")
-			IWriteLine(((tState->Tokens)[Index]) as i64)
-		 */
-		
-		return (tState->Tokens)[Index]
+		return tState->Tokens[Index]
 	}
 	
 	Token* ErrorToken := 0
 	
-	while (!TokenizerAtEnd(tState)) {
+	while !(TokenizerAtEnd(tState)) {
 		i32 StartingIndex := tState->SourceIndex
 		i16 NextCharacter := GetNextCharacter(tState)
 
@@ -643,7 +636,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 			
 			SafeWideString* TokenText := MakeSafeStringToken(tState, StartingIndex) As SafeWideString*
 			
-			HashMapElement* FoundKeyword := HashMapGetValue(tState->Keywords, TokenText)
+			HashMapElement* FoundKeyword := tState->Keywords->Get(TokenText)
 			
 			if (FoundKeyword) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
@@ -704,14 +697,14 @@ define Token* GetNextToken(TokenizerState* tState) {
 				}
 				
 				if (IsRequire) {
-					HashMapElement* FoundFile := HashMapGetValue(tState->IncludedFiles, IncludePath)
+					HashMapElement* FoundFile := tState->IncludedFiles->Get(IncludePath)
 					
 					if (FoundFile) {
 						continue
 					}
 				}
 				
-				HashMapAddValue(tState->IncludedFiles, IncludePath, true)
+				tState->IncludedFiles->Set(IncludePath, true)
 				
 				Print("Including file: '")
 				PrintSafeString(IncludePath)

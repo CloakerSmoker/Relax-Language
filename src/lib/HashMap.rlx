@@ -1,3 +1,4 @@
+#Require "./src/lib/String.rlx"
 #Require "./src/lib/SafeString.rlx"
 
 struct HashMapElement {
@@ -6,10 +7,204 @@ struct HashMapElement {
 	HashMapElement* NextElement
 }
 
+i64 DEFAULT_HASH_STARTING_VALUE := 5281
+
 struct HashMap {
 	i32 BufferMaxCount,
-	void *Elements,
+	
+	union {
+		void* Elements,
+		HashMapElement** Buckets
+	}
+	
 	i8 IgnoreCase
+	
+	define void Initialize() {
+		if (this->BufferMaxCount = 0) {
+			this->BufferMaxCount := 100
+		}
+		
+		this->Elements := Alloc(this->BufferMaxCount * #HashMapElement*)
+	}
+	
+	define i64 HashNext(i64 Hash, i8 NextCharacter) {
+		if (this->IgnoreCase) {
+			NextCharacter := Lower(NextCharacter)
+		}
+		
+		return ((Hash << 5) + Hash) ^ NextCharacter
+	}
+	
+	define i64 HashString(SafeWideString* StringToHash) {
+		i64 Hash := DEFAULT_HASH_STARTING_VALUE
+		
+		for (i32 Index := 0, Index < StringToHash->Length, Index += 1) {
+			Hash := this->HashNext(Hash, StringToHash->ASCIICharAt(Index))
+		}
+		
+		return Hash
+	}
+	define i64 HashString(i8* StringToHash, i32 Length) {
+		i64 Hash := DEFAULT_HASH_STARTING_VALUE
+		
+		for (i32 Index := 0, Index < Length, Index += 1) {
+			Hash := this->HashNext(Hash, StringToHash[Index])
+		}
+		
+		return Hash
+	}
+	define i64 HashString(i8* StringToHash) {
+		return this->HashString(StringToHash, StringLength(StringToHash))
+	}
+	
+	define i64 GetBucketIndex(i64 Hash) {
+		i64 Index := Hash % this->BufferMaxCount
+		
+		if (Index < 0) {
+			Index := -Index
+		}
+		
+		return Index
+	}
+	
+	define HashMapElement* FindElement(i64 Hash) {
+		i64 Index := this->GetBucketIndex(Hash)
+		
+		HashMapElement* Bucket := this->Buckets[Index]
+		
+		if !(Bucket) {
+			return null
+		}
+		
+		while (Bucket->Hash != Hash) {
+			if !(Bucket->NextElement) {
+				return Bucket
+			}
+			
+			Bucket := Bucket->NextElement
+		}
+		
+		return Bucket
+	}
+	
+	define HashMapElement* GetElement(i64 Hash) {
+		HashMapElement* Result := this->FindElement(Hash)
+		
+		if (Result && Result->Hash = Hash) {
+			return Result
+		}
+		
+		return null
+	}
+	
+	define void Upsert(i64 Hash, void* Value) {
+		i64 Index := this->GetBucketIndex(Hash)
+		
+		HashMapElement* Bucket := this->FindElement(Index)
+		HashMapElement* NewElement := null
+		
+		if (Bucket = null) {
+			; This bucket is totally uninitialized, create it.
+			
+			NewElement := Alloc(#HashMapElement) As HashMapElement*
+			NewElement->NextElement := null
+			
+			this->Buckets[Index] := NewElement
+		}
+		else if (Bucket->Hash != Hash) {
+			; This bucket contains something, but with the wrong hash. Prepend a new element onto it
+			
+			NewElement := Alloc(#HashMapElement) As HashMapElement*
+			NewElement->NextElement := Bucket->NextElement
+		
+			Bucket->NextElement := NewElement
+		}
+		else {
+			; This bucket contains the exact hash we are looking for. Overwrite it
+			
+			NewElement := Bucket
+		}
+		
+		; Update whichever element was found/allocated for this key with the new hash/value
+		NewElement->Hash := Hash
+		NewElement->Value := Value
+	}
+	
+	define HashMapElement* Get(SafeWideString* Key) {
+		return this->GetElement(this->HashString(Key))
+	}
+	define void Set(SafeWideString* Key, void Value) {
+		this->Upsert(this->HashString(Key), Value As void*)
+	}
+	define void Set(SafeWideString* Key, void* Value) {
+		this->Upsert(this->HashString(Key), Value)
+	}
+	
+	define HashMapElement* Get(i8* Key) {
+		return this->GetElement(this->HashString(Key))
+	}
+	define void Set(i8* Key, void Value) {
+		this->Upsert(this->HashString(Key), Value As void*)
+	}
+	define void Set(i8* Key, void* Value) {
+		this->Upsert(this->HashString(Key), Value)
+	}
+	
+	;define HashMapElement* Get(i8* Key, i32 KeyLength) {
+	;	return this->GetElement(this->HashString(Key, KeyLength))
+	;}
+	;define void Set(i8* Key, i32 KeyLength, void Value) {
+	;	this->Upsert(this->HashString(Key, KeyLength), Value As void*)
+	;}
+	;define void Set(i8* Key, i32 KeyLength, void* Value) {
+	;	this->Upsert(this->HashString(Key, KeyLength), Value)
+	;}
+	
+	HashMapElement* EnumerateLastElement
+	
+	define i32 StartEnumerate() {
+		this->EnumerateLastElement := null
+		
+		return 0
+	}
+	define HashMapElement* EnumerateNext(i32* Index) {
+		HashMapElement* Last := this->EnumerateLastElement
+		
+		if (Last && Last->NextElement) {
+			this->EnumerateLastElement := Last->NextElement
+			
+			return this->EnumerateLastElement
+		}
+		
+		Last := null
+		
+		while !(Last) {
+			if (*Index = this->BufferMaxCount) {
+				return null
+			}
+			
+			Last := this->Buckets[*Index]
+			Index[0] += 1
+		}
+		
+		this->EnumerateLastElement := Last
+		
+		return Last
+	}
+	
+	define void Print() {
+		i32 State := this->StartEnumerate()
+		
+		loop {
+			HashMapElement* Next := this->EnumerateNext(&State)
+			
+			if !(Next) {
+				break
+			}
+			
+			Print(" %i %x: %i\n", Next->Hash % this->BufferMaxCount, Next->Hash, Next->Value)
+		}
+	}
 }
 
 define HashMap* NewHashMap() {
@@ -20,6 +215,7 @@ define HashMap* NewHashMap() {
 	
 	return NewMap
 }
+
 define i64 HashString(SafeWideString* StringToHash, i8 IgnoreCase) {
 	i64 Hash := 5281
 	

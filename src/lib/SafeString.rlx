@@ -9,6 +9,9 @@ struct SafeWideString {
 	define void Free() {
 		Free(this->Buffer)
 	}
+	define i8 ASCIICharAt(i32 Index) {
+		return this->Buffer[Index] As i8
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {

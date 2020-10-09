@@ -113,14 +113,20 @@ declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
 define void DumpGlobals(CompilerState* cState) {
 	/* Walk the globals hashmap and print the offset/size of each */
-	
 	ParserState* pState := cState->pState
-	void* Elements := pState->Globals->Elements
-	i32 Max := pState->GlobalOffset
+	
+	VariableHashMap* Globals := pState~>Globals
+	HashMap* RawGlobals := Globals->Map
+	
+	void* Elements := RawGlobals->Elements
+	
+	i32 MaxOffset := Globals->NextOffset
 	i32 Base := cState->GlobalBase
 	i32 LastOffset := 0
 	
-	for (i32 ElementIndex := 0, ElementIndex < (pState->Globals->BufferMaxCount), ElementIndex += 1) {
+	i32 MaxIndex := RawGlobals->BufferMaxCount
+	
+	for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
 			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
 			
@@ -144,7 +150,7 @@ define void DumpGlobals(CompilerState* cState) {
 		}
 	}
 	
-	Print(" %x\n", Max - LastOffset)
+	Print(" %x\n", MaxOffset - LastOffset)
 }
 
 define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
@@ -282,12 +288,15 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		C.GlobalBase := Config->ImageBase + 0x10
-		CODE_BASE := Config->ImageBase + pState->GlobalOffset + 0x10
+		
+		CODE_BASE := Config->ImageBase + pState~>Globals->NextOffset + 0x10
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		C.ELF := BuildELFBuilder()
+		
 		C.GlobalBase := Config->ImageBase + 64 + 0x1000
-		CODE_BASE := pState->GlobalOffset + 564 + 0x2000
+		
+		CODE_BASE := pState~>Globals->NextOffset + 564 + 0x2000
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		C.PE := BuildBuilder()
@@ -319,9 +328,9 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 			while (FoundElement) {
 				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
 				
-				/* If the type is a struct, and it has methods, compile the methods */
-				if (NextType->IsStructType && NextType->StructMethods != 0) {
-					CompileFunctionHashMap(Config, cState, NextType->StructMethods, CODE_BASE, &MainOffset)
+				/* If the type is a struct compile any methods */
+				if (NextType->IsStructType) {
+					CompileFunctionHashMap(Config, cState, NextType~>Methods, CODE_BASE, &MainOffset)
 				}
 				
 				FoundElement := FoundElement->NextElement
@@ -338,7 +347,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	ResolveAllLabels(cState)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", cState->pState->GlobalOffset, cState->Index)
+		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", pState~>Globals->NextOffset, cState->Index)
 	}
 	
 	FileDelete(OutputFilePath)
@@ -357,7 +366,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	i32 BytesWritten := 0
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		i32 CodeBase := pState->GlobalOffset + 0x10
+		i32 CodeBase := pState~>Globals->NextOffset + 0x10
 		i32 FileSize := CodeBase + cState->Index
 		
 		void* Binary := Alloc(FileSize)
@@ -375,7 +384,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		BytesWritten := FileSize
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		AddDataSection(cState->ELF, cState->pState->GlobalOffset)
+		AddDataSection(cState->ELF, pState~>Globals->NextOffset)
 		AddCodeSection(cState->ELF, cState->CodeBuffer, cState->Index)
 		
 		FinalizeELFBuilder(cState->ELF, MainOffset, Config->ImageBase)
@@ -384,7 +393,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		BytesWritten := cState->ELF->BufferSize
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		AddData(cState->PE, cState->pState->GlobalOffset)
+		AddData(cState->PE, pState~>Globals->NextOffset)
 		
 		i64 TextRVA := AddCode(cState->PE, cState->CodeBuffer, cState->Index, MainOffset)
 		
@@ -687,7 +696,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 	}
 	
 	/* Set up the stack frame for this function */
-	i16 LocalSpace := FunctionToCompile->LocalOffset
+	i16 LocalSpace := FunctionToCompile~>Locals->NextOffset
 	i16 LocalSpaceRemainder := LocalSpace % 16
 	
 	if (LocalSpaceRemainder) {
@@ -771,7 +780,7 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		CompileSetVariableValue(cState, NextStackParameter, RAX)
 	}
 	
-	if (cState->pState->GlobalOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
+	if (cState->pState~>Globals->NextOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
 		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
 	}
 	
