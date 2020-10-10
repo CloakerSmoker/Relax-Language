@@ -170,9 +170,15 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 	
 	Print(Format, CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
 	
-	if (TargetFunction->MethodOfTypeName) {
+	if (TargetFunction->IsMethod) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
-		PrintCharacter('.')
+		
+		if (TargetFunction->IsMethod = FUNCTION_IS_STATIC_METHOD) {
+			PrintCharacter(':')
+		}
+		else {
+			PrintCharacter('.')
+		}
 	}
 	
 	PrintSafeString(TargetFunction->Name)
@@ -335,6 +341,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 				/* If the type is a struct compile any methods */
 				if (NextType->IsStructType) {
 					CompileFunctionHashMap(Config, cState, NextType~>Methods, CODE_BASE, &MainOffset)
+					CompileFunctionHashMap(Config, cState, NextType~>StaticMethods, CODE_BASE, &MainOffset)
 				}
 				
 				FoundElement := FoundElement->NextElement
@@ -1242,6 +1249,11 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 	else if (ExpressionType = NODE_TYPE_STRING) {		
 		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringsLabel)
 		OffsetLabel(cState, ExpressionToCompile->StringOffsetValue)
+	}
+	else if (ExpressionType = NODE_TYPE_GET_TYPE_SIZE) {
+		i32 OperandTypeSize := GetTypeStorageSize(ExpressionToCompile->TypeValue)
+		
+		EmitMove_RX_IX(cState, ResultRegister, OperandTypeSize, 4)
 	}
 }
 

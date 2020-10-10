@@ -27,6 +27,14 @@ struct HashMap {
 		this->Elements := Alloc(this->BufferMaxCount * #HashMapElement*)
 	}
 	
+	;define HashMap* New() static {
+	;	HashMap* this := Alloc(#HashMap)
+	;	
+	;	this->Initialize()
+	;	
+	;	return this
+	;}
+	
 	define i64 HashNext(i64 Hash, i8 NextCharacter) {
 		if (this->IgnoreCase) {
 			NextCharacter := Lower(NextCharacter)

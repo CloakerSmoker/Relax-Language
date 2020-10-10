@@ -8,6 +8,7 @@ struct TypeInfo {
 	SafeWideString* Name,
 	HashMap Fields,
 	HashMap Methods,
+	HashMap StaticMethods,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
@@ -118,6 +119,10 @@ i8 NODE_TYPE_ASSEMBLY := 21
 i8 NODE_TYPE_ZERO := 22
 
 i8 NODE_TYPE_TRY := 23
+
+; Since type sizes can change at parse-time inside of struct methods, the actually resolution
+;  of a type's size needs to be deferred until compile-time
+i8 NODE_TYPE_GET_TYPE_SIZE := 24
 
 /*
 ==========================================
@@ -250,6 +255,9 @@ struct TryCatch {
 	Block* CatchBody,
 	VariableInfo* CatchCodeVariable
 }
+
+i8 FUNCTION_IS_METHOD := 1
+i8 FUNCTION_IS_STATIC_METHOD := 2
 
 struct FunctionDefine {
 	ErrorContext Context,
@@ -1761,11 +1769,13 @@ define void ParseAndAddStruct(ParserState* pState) {
 		NewType := AddType(pState, Name, 0, TYPE_STRUCT)
 	}
 	
-	HashMap* Methods := NewType~>Methods
 	HashMap* Fields := NewType~>Fields
+	HashMap* Methods := NewType~>Methods
+	HashMap* StaticMethods := NewType~>StaticMethods
 	
-	Methods->Initialize()
 	Fields->Initialize()
+	Methods->Initialize()
+	StaticMethods->Initialize()
 	
 	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
 	
@@ -1787,20 +1797,40 @@ define void ParseAndAddStruct(ParserState* pState) {
 				
 				InUnion := true
 			}
-			else if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-				FunctionDefine* Method := ParseFunction(pState, Methods, ParserCurrentToken(pState)->Value As i8, NewType)
+			else {
+				i8 IsStaticMethod := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_STATIC)
+				i8 IsMethod := IsStaticMethod || (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE))
 				
-				Method->IsMethod := true
-				Method->MethodOfTypeName := Name
-				
-				; Ignore commas after methods, they aren't actually needed for parsing
-				ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
-				
-				if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-					break
+				if (IsMethod) {
+					HashMap* MethodNamespace := Methods
+					TypeInfo* ThisType := NewType
+					
+					if (IsStaticMethod) {
+						; Static methods take no `this` parameter, so we need to make that `ThisType`
+						;  isn't present to prevent `ParseFunction` from automatically adding
+						;   the `this` parameter
+						
+						MethodNamespace := StaticMethods
+						ThisType := null
+					}
+					
+					i8 ParseMode := ParserCurrentToken(pState)->Value As i8
+					FunctionDefine* Method := ParseFunction(pState, MethodNamespace, ParseMode, ThisType)
+					
+					; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
+					;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
+					Method->IsMethod := true + IsStaticMethod
+					Method->MethodOfTypeName := Name
+					
+					; Ignore commas after methods, they aren't actually needed for parsing
+					ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+					
+					if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						break
+					}
+					
+					continue
 				}
-				
-				continue
 			}
 		}
 		
@@ -2133,7 +2163,8 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	
 	Token* StartToken := ParserCurrentToken(pState)
 	
-	i8 ForDefine := Mode = KEYWORD_DEFINE
+	i8 ForStatic := Mode = KEYWORD_STATIC
+	i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
 	i8 ForImport := Mode = KEYWORD_DLLIMPORT
 	
 	Type ReturnType := ParseTypeName(pState)
@@ -2388,7 +2419,13 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 						NameBuffer[TypeNameIndex] := ThisType->Name->Buffer[TypeNameIndex] As i8
 					}
 					
-					NameBuffer[TypeNameIndex] := '.'
+					i8 Separator := '.'
+					
+					if (ForStatic) {
+						Separator := ':'
+					}
+					
+					NameBuffer[TypeNameIndex] := Separator
 					NameBuffer += TypeNameIndex + 1
 				}
 				
@@ -2760,21 +2797,44 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		/* Else if the next token is an identifier */
 		
 		/* This check is fine, since x:(y) is never valid, nor is x:y */
-		i8 IsBuiltin := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+		i8 IsBuiltinOrStatic := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		
-		if (IsBuiltin) {
+		i8 ParameterCount := 0
+		ASTNode** Parameters := null
+		
+		if (IsBuiltinOrStatic) {
 			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, NextToken~>Context)
+			
+			if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFIER, 0)) {
+				SafeWideString* StaticMethodType := NextToken->StringValue
+				
+				HashMapElement* FoundTypeElement := pState~>Types->Get(StaticMethodType)
+				
+				if !(FoundTypeElement) {
+					TokenError(NextToken, "Unknown type")
+				}
+				
+				TypeInfo* FoundType := FoundTypeElement->Value As TypeInfo*
+				
+				Token* StaticMethodNameToken := ParserCurrentToken(pState)
+				MergeContexts(StaticMethodNameToken~>Context, NextToken~>Context, StaticMethodNameToken~>Context)
+				
+				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for static method call")
+				
+				Parameters := ParseParameterList(pState, &ParameterCount)
+				
+				return MakeCall(pState, FoundType~>StaticMethods, StaticMethodNameToken, Parameters, ParameterCount)
+			}
 		}
 		
 		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If the next-next token is an (, then this is a function call */
 			
-			i8 ParameterCount := 0
-			ASTNode** Parameters := ParseParameterList(pState, &ParameterCount)
+			Parameters := ParseParameterList(pState, &ParameterCount)
 			
 			/* Make a NODE_TYPE_CALL node for the function call */
 			
-			if (IsBuiltin) {
+			if (IsBuiltinOrStatic) {
 				Result := MakeBuiltinCall(pState, NextToken, Parameters, ParameterCount)
 			}
 			else {
@@ -2782,7 +2842,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			}
 		}
 		else {
-			if (IsBuiltin) {
+			if (IsBuiltinOrStatic) {
 				TokenError(NextToken, "Unexpected ':' after identifier")
 			}
 			
@@ -2830,7 +2890,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
 			}
 			
-			Result := AllocateNewASTNode(NODE_TYPE_INTEGER, GetTypeSize(GetSizeOfType), MakeType(pState->i32, 0))
+			Result := AllocateNewASTNode(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, MakeType(pState->i32, 0))
 			
 			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, Result~>Context)
 		}

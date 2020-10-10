@@ -154,6 +154,8 @@ i8 KEYWORD_CATCH := 19
 
 i8 KEYWORD_X64 := 20
 
+i8 KEYWORD_STATIC := 21
+
 define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceFilePath, HashMap* IncludedFiles, i16* Source, i32 SourceLength) {
 	TokenizerState* NewState := Alloc(#TokenizerState) As TokenizerState*
 	
@@ -199,6 +201,7 @@ define TokenizerState* NewTokenizer(BuildConfig* Config, SafeWideString* SourceF
 	K->Set("try", 		KEYWORD_TRY)
 	K->Set("catch", 	KEYWORD_CATCH)
 	K->Set("x64", 		KEYWORD_X64)
+	K->Set("static", 	KEYWORD_STATIC)
 	
 	return NewState
 }
