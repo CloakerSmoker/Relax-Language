@@ -67,6 +67,9 @@ struct CompilerState {
 	i32 ScopedTryDepth,
 	i32 TotalTryDepth
 	
+	; Number of functions present in output file
+	i16 FunctionCount
+	
 	define void Initialize(BuildConfig* Config, ParserState* pState) {
 		this->Config := Config
 		this->pState := pState
@@ -82,7 +85,7 @@ struct CompilerState {
 		this->LabelCount := 0
 		this->LabelBufferCapacity := 10
 		
-		this->LabelIndex := (pState->FunctionCount) + 1
+		this->LabelIndex := (pState->LabelCount) + 1
 		this->RegisterStackIndex := 0
 		
 		this->ParameterRegistersMaxSave := 0
@@ -92,6 +95,8 @@ struct CompilerState {
 		
 		this->ScopedTryDepth := 0
 		this->TotalTryDepth := 0
+		
+		this->FunctionCount := 0
 	}
 	define void Free() {
 		Free(this->CodeBuffer)
@@ -227,15 +232,16 @@ define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDe
 	else {
 		i8 IsMain := SafeStringEqualsAString(BaseFunction->Name, "Main")
 		
+		if (BaseFunction->CallCount != 0) {
+			cState->FunctionCount += 1
+			FunctionOffset := CompileFunction(cState, BaseFunction, IsMain)
+		}
+		
 		if (IsMain) {
 			/* If we found the main function, let the callee know for linking's sake. */
 			
 			Result := true
 			MainOffset[0] := FunctionOffset
-		}
-		
-		if (BaseFunction->CallCount != 0) {
-			CompileFunction(cState, BaseFunction, IsMain)
 		}
 	}
 	
@@ -358,7 +364,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	ResolveAllLabels(cState)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		Print("^10	Globals use %i bytes\n	%i total bytes of code generated.^F0\n", pState~>Globals->NextOffset, cState->Index)
+		Print("\t^10Globals use %i bytes\n\t%i total bytes of code generated.\n\t%i total functions compiled.^F0\n", pState~>Globals->NextOffset, cState->Index, cState->FunctionCount)
 	}
 	
 	FileDelete(OutputFilePath)
@@ -649,27 +655,40 @@ define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToC
 declare void CompileBlock(CompilerState*, Block*)
 declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
-define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
+define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
-	cState->RegisterStackIndex := 0
+	; First though, we'll prefix the function's code with any strings which it uses
+	i32 StringsLabel := NextLabel(cState)
 	
+	if (FunctionToCompile->StringBufferSize) {
+		SetLabel(cState, StringsLabel)
+		
+		cState->CurrentFunctionStringsLabel := StringsLabel
+		
+		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
+			PushByte(cState, FunctionToCompile->StringBuffer[CharacterIndex])
+		}
+	}
+	
+	i32 FunctionOffset := cState->Index
 	SetLabel(cState, FunctionToCompile->LabelNumber)
 	
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
 		CompileAssembly(cState, FunctionToCompile->AssemblyBody)
-		return 0
+		return FunctionOffset
 	}
 	
 	if (FunctionToCompile->Body->StatementCount = 0) {
 		/* Empty functions don't deserve any prelude code. */
 		
 		EmitReturn(cState)
-		return 0
+		return FunctionOffset
 	}
 	
+	cState->RegisterStackIndex := 0
 	cState->CurrentFunction := FunctionToCompile
 	
 	i8 USE_SYSTEMV := true /* cState->OutputELF */
@@ -730,12 +749,10 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
 	}
 	
-	i32 StringsStart := NextLabel(cState)
-	
 	if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
 		EmitMove_R32_I32(cState, RAX, 0x12345678)
 		EmitPush_R64(cState, RAX)
-		EmitLea_R64_Label(cState, RAX, StringsStart)
+		EmitLea_R64_Label(cState, RAX, StringsLabel)
 		EmitPush_R64(cState, RAX)
 		
 		; Extend LocalSpace to account for extra offset from RBP to local variables
@@ -807,21 +824,6 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		}
 	}
 	
-	if (FunctionToCompile->StringBufferSize) {
-		i32 StringsEnd := NextLabel(cState)
-		
-		EmitJump_Label(cState, StringsEnd)
-		SetLabel(cState, StringsStart)
-		
-		cState->CurrentFunctionStringsLabel := StringsStart
-		
-		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
-			PushByte(cState, FunctionToCompile->StringBuffer[CharacterIndex])
-		}
-		
-		SetLabel(cState, StringsEnd)
-	}
-	
 	/* Compile the body of the function */
 	
 	Block* Body := FunctionToCompile->Body
@@ -871,7 +873,9 @@ define void CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCom
 		ContextError(FunctionToCompile~>Context, "[INTERNAL] Register stack not empty")
 	}
 	
-	cState->CurrentFunction := 0
+	cState->CurrentFunction := null
+	
+	return FunctionOffset
 }
 
 declare void Compile(CompilerState*, ASTNode*)

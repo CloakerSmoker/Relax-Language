@@ -333,9 +333,6 @@ struct ParserState {
 	FunctionDefine* CurrentFunction,
 	FunctionDefine* MainFunction,
 	
-	i16 FunctionCount,
-	i16 TypeCount,
-	
 	i8 InLoop,
 	
 	i32 LabelCount
@@ -2345,7 +2342,6 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		}
 		
 		NewDefine->LabelNumber := ParserNextLabel(pState)
-		pState->FunctionCount += 1
 	}
 	
 	/* Copy info parsed from the first part of this function into `NewDefine`, which is 100% correctly set by now */
