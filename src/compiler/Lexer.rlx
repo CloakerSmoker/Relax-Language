@@ -35,9 +35,10 @@ i8 TOKEN_TYPE_OPERATOR := 1
 i8 TOKEN_TYPE_IDENTIFIER := 2
 i8 TOKEN_TYPE_INTEGER := 3
 i8 TOKEN_TYPE_STRING := 4
-i8 TOKEN_TYPE_PUNCTUATION := 5
-i8 TOKEN_TYPE_KEYWORD := 6
-i8 TOKEN_TYPE_DEBUG_CHARACTER := 7
+i8 TOKEN_TYPE_WIDE_STRING := 5
+i8 TOKEN_TYPE_PUNCTUATION := 6
+i8 TOKEN_TYPE_KEYWORD := 7
+i8 TOKEN_TYPE_DEBUG_CHARACTER := 8
 
 /* TODO: Bit shifts need to be higher precedence than bitwise operations */
 
@@ -246,15 +247,13 @@ define Token* MakeToken(TokenizerState* tState, i32 PositionInSource, i8 Type, i
 	return PushToken(tState, Value As void*, tState->Source, PositionInSource, (tState->SourceIndex) - PositionInSource, Type)
 }
 
-define void* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
-	/* Makes a SafeWideString from tState and returns it as a void* to fit into Token->Value */
-	
+define SafeWideString* MakeSafeStringToken(TokenizerState* tState, i32 StartingIndex) {
 	SafeWideString* NewSafeString := AllocateNewSafeString()
 
 	NewSafeString->Length := tState->SourceIndex - StartingIndex
 	NewSafeString->Buffer := tState->Source + (StartingIndex * 2)
 
-	return NewSafeString As void*
+	return NewSafeString
 }
 
 /* Both the Token and ASTNode struct have the same first 2 fields as ErrorContext, making them safe to cast down to
@@ -586,22 +585,99 @@ define Token* GetNextToken(TokenizerState* tState) {
 		else if (NextCharacter = '"') {
 			NextCharacter := 0
 			
-			/* Consume all characters in the string */
+			; When tokenizing a string, first we need to find the bounds of the string
 			
-			while ((NextCharacter != '"') && (!TokenizerAtEnd(tState))) {
+			i32 Length := 0
+			
+			while !(TokenizerAtEnd(tState)) {
 				NextCharacter := GetNextCharacter(tState)
+				
+				Length += 1
+				
+				if (NextCharacter = '\') {
+					; If we find an escaped character, just skip over it
+					
+					GetNextCharacter(tState)
+					Length += 1
+				}
+				else if (NextCharacter = '"') {
+					; If we find a unescaped quote, we've found the end of the string
+					
+					break
+				}
 			}
 			
 			if (TokenizerAtEnd(tState)) {
+				; If we're at EOF, then this string is missing a close quote
+				
 				ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
 				TokenError(ErrorToken, "Expected close quote before EOF")
 			}
 			
-			SafeWideString* FoundString := MakeSafeStringToken(tState, StartingIndex + 1) As SafeWideString*
-			FoundString->Length -= 1
+			; Allow the `r`, `w`, and `rw` suffixes to mark a string as:
+			;  raw, wide characters, or both
+			i8 SkipEscapes := NextCharacterMatches(tState, 'r')
+			i8 WideCharacters := NextCharacterMatches(tState, 'w')
 			
-			/* And return the string as a TOKEN_TYPE_STRING */
-			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING, FoundString As void*)
+			; Since `MakeSafeStringToken` returns a sort-of slice out of the original source string
+			;  we need to clone it before actually replacing any escape sequences, otherwise
+			;   error printouts would show strings after the are escaped
+			SafeWideString* ConstantStringLiteral := MakeSafeStringToken(tState, StartingIndex + 1)
+			
+			; Since `tState->SourceIndex` is used in `MakeSafeStringToken` to determine the length of the
+			;  string, we need to correct the length to not include the closing quote, and any suffixes
+			ConstantStringLiteral->Length -= 1 + SkipEscapes + WideCharacters
+			
+			SafeWideString* StringLiteral := ConstantStringLiteral->Clone()
+			
+			ConstantStringLiteral->Free()
+			
+			; Only actually replace escape sequences when we're not working with a raw string
+			
+			if !(SkipEscapes) {
+				; Beforehand, we need to use the target output format to decide if `\n` is actually
+				;  `\r\n` or just `\n`
+				
+				i16 NewLine := 0x0A0D
+				i32 NewLineLength := 2
+				
+				if (tState->Config->OutputFormat = OUTPUT_ELF) {
+					NewLine := 0x0A
+					NewLineLength := 1
+				}
+				
+				i8* NewLineString := &NewLine As i8*
+				
+				; Now we can go through each character, and replace escape sequences
+				
+				for (i32 StringIndex := 0, StringIndex < StringLiteral->Length, StringIndex += 1) {
+					NextCharacter := StringLiteral->ASCIICharAt(StringIndex)
+					
+					if (NextCharacter = '\') {
+						i8 EscapeCharacter := StringLiteral->ASCIICharAt(StringIndex + 1)
+						
+						i8* Replacement := &EscapeCharacter
+						i32 ReplacementLength := 1
+						
+						if (EscapeCharacter = 'n') {
+							Replacement := NewLineString
+							ReplacementLength := NewLineLength
+						}
+						else if (EscapeCharacter = 't') {
+							Replacement := "	"
+						}
+						
+						StringLiteral->Replace(StringIndex, 2, Replacement, ReplacementLength)
+					}
+				}
+				
+				; Since `StringLiteral->Replace` will modify `StringLiteral` itself, the `MakeToken` call
+				;  below will make a token containing the escaped string
+			}
+			
+			; Return the string as a TOKEN_TYPE_STRING 
+			;  (or TOKEN_TYPE_WIDE_STRING depending on the `w` suffix)
+			return MakeToken(tState, StartingIndex, TOKEN_TYPE_STRING + WideCharacters, StringLiteral)
 		}
 		else if (IsNumeric(NextCharacter)) {
 			i8 NumberIsValid := false

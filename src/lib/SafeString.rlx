@@ -3,12 +3,40 @@
 #Require ./src/lib/Console.rlx
 
 struct SafeWideString {
+	i16* Buffer,
 	i32 Length,
-	i16* Buffer
+	i8 BufferIsSelfOwned
+	
+	static SafeWideString* New(i32 Length, i16* Buffer, i8 BufferIsSelfOwned) {
+		SafeWideString* this := Alloc(#SafeWideString)
+		
+		this->Length := Length
+		this->Buffer := Buffer
+		this->BufferIsSelfOwned := BufferIsSelfOwned
+		
+		return this
+	}
+	static SafeWideString* New(i32 Length, i16* Buffer) {
+		return SafeWideString:New(Length, Buffer, false) 
+	}
+	static SafeWideString* Adopt(i32 Length, i16* Buffer) {
+		return SafeWideString:New(Length, Buffer, true)
+	}
+	
+	define SafeWideString* Clone() {
+		i16* NewBuffer := CloneMemory(this->Buffer, this->Length * 2)
+		
+		return SafeWideString:Adopt(this->Length, NewBuffer)
+	}
 	
 	define void Free() {
-		Free(this->Buffer)
+		if (this->BufferIsSelfOwned) {
+			Free(this->Buffer)
+		}
+		
+		Free(this)
 	}
+	
 	define i8 ASCIICharAt(i32 Index) {
 		return this->Buffer[Index] As i8
 	}
@@ -18,6 +46,34 @@ struct SafeWideString {
 		}
 		
 		return this->ASCIICharAt(Index)
+	}
+	
+	define void ShiftLeft(i32 Index, i32 Length) {
+		i32 StartOffset := Index * 2
+		i32 EndOffset := Length * 2
+		
+		i16* Start := this->Buffer + StartOffset
+		i16* End := Start + EndOffset
+		
+		i32 ShiftCharacterCount := this->Length - Index - Length
+		
+		MoveMemory(Start, End, ShiftCharacterCount * 2)
+		
+		this->Length -= Length
+	}
+	
+	define void Remove(i32 Index, i32 Length) {
+		this->ShiftLeft(Index, Length)
+	}
+	
+	define void Replace(i32 Index, i32 Length, i8* Replacement, i32 ReplacementLength) {
+		if (ReplacementLength < Length) {
+			this->ShiftLeft(Index + ReplacementLength, Length - ReplacementLength)
+		}
+		
+		for (i32 ReplacementIndex := 0, ReplacementIndex < ReplacementLength, ReplacementIndex += 1) {
+			this->Buffer[Index + ReplacementIndex] := Replacement[ReplacementIndex] As i16
+		}
 	}
 	
 	define void Print() {
@@ -41,12 +97,12 @@ define void FreeSafeString(SafeWideString* StringToFree) {
 define SafeWideString* AToS(i8* SourceString) {
 	/* Converts an ASCII string to a SafeWideString (without freeing anything ever) */
 	
-	SafeWideString* NewString := AllocateNewSafeString()
 	
 	i32 Length := StringLength(SourceString)
+	i16* Buffer := AToW(SourceString, Length)
 	
-	NewString->Buffer := AToW(SourceString, Length)
-	NewString->Length := Length
+	SafeWideString* NewString := SafeWideString:New(Length, Buffer)
+	NewString->BufferIsSelfOwned := true
 	
 	return NewString
 }

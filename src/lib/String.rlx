@@ -6,6 +6,13 @@ define i32 StringLength(i8* String) {
 	
 	return Length
 }
+define i32 StringLength(i16* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+
+
 define i32 WLen(i16* String) {
 	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
 	

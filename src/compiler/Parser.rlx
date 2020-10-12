@@ -875,12 +875,7 @@ define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* Sou
 		}
 		
 		if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
-			if (TargetDepth) {
-				if (SourceBase->Size >= TargetBase->Size) {
-					return 0
-				}
-			}
-			else {
+			if !(TargetDepth) {
 				if (SourceSize <= TargetSize) {
 					return 0
 				}
@@ -1010,11 +1005,13 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 				i32 ExpectedRating := GetGenericRating(ExpectedNext)
 				i32 ActualRating := GetGenericRating(ActualNext)
 				
-				if (ActualRating > ExpectedRating) {
-					ThisFunctionRating += ActualRating
-				}
-				else {
-					ThisFunctionRating += ExpectedRating
+				if (ExpectedRating != ActualRating) {
+					if (ActualRating > ExpectedRating) {
+						ThisFunctionRating += ActualRating
+					}
+					else {
+						ThisFunctionRating += ExpectedRating
+					}
 				}
 			}
 			
@@ -2850,26 +2847,42 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			Result := TranslateTokenToNode(pState, NextToken)
 		}
 	}
-	else if (NextToken->Type = TOKEN_TYPE_STRING) {
+	else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
 		FunctionDefine* CurrentFunction := pState->CurrentFunction
 		
 		if !(CurrentFunction) {
 			TokenError(NextToken, "Strings can only be used inside functions.")
 		}
 		
+		i8 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
+		
 		SafeWideString* StringText := NextToken->StringValue
 		
 		i32 Offset := CurrentFunction->StringBufferSize
-		i32 NewSize := Offset + StringText->Length + 1
+		
+		if (Offset % CharacterSize) {
+			Offset += 1
+		}
+		
+		i32 NewSize := Offset + (StringText->Length + 1) * CharacterSize
 		
 		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
 		CurrentFunction->StringBufferSize := NewSize
 		
-		for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-			CurrentFunction->StringBuffer[Offset + Index] := StringText->Buffer[Index]
+		TypeInfo* BaseType := pState->i8
+		
+		if (CharacterSize = 1) {
+			for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
+				CurrentFunction->StringBuffer[Offset + Index] := StringText->Buffer[Index]
+			}
+		}
+		else {
+			BaseType := pState->i16
+			MoveMemory(&CurrentFunction->StringBuffer[Offset], StringText->Buffer, StringText->Length * 2)
 		}
 		
-		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(pState->i8, 1))
+		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(BaseType, 1))
+		CopyContext(NextToken~>Context, Result~>Context)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
 		/* A literal integer, just make a NODE_TYPE_INTEGER for it */

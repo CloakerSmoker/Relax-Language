@@ -113,20 +113,6 @@ define void Print(i8* Format, ... Args) {
 			
 			ArgIndex += 1
 		}
-		else if (Next = '\') {
-			Index += 1
-			Next := Format[Index]
-			
-			if (Next = 'n') {
-				PrintNewLine()
-			}
-			else if (Next = 'r') {
-				PrintCharacter(0x0D)
-			}
-			else {
-				PrintCharacter(Next)
-			}
-		}
 		else if (Next = '^') {
 			Index += 2
 			i8 Fore := GetCharacterValue(Format[Index - 1])

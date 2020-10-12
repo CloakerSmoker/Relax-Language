@@ -39,7 +39,10 @@ define i8 Free(void* Memory) {
 	}
 }
 
-define void MoveMemory(i8* To, i8* From, i32 Size) {
+define void MoveMemory(void* RawTo, void* RawFrom, i32 Size) {
+	i8* To := RawTo As i8*
+	i8* From := RawFrom As i8*
+	
 	i32 Index := 0
 	
 	if (To < From) {

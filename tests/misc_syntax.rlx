@@ -97,5 +97,7 @@ define i32 Main() {
 		Print("0")
 	}
 	
+	Print(" \"\\")
+	
 	return 0
 }
