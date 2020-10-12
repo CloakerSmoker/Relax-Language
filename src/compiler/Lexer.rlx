@@ -315,38 +315,51 @@ define i8 TokenizerAtEnd(TokenizerState* tState) {
 	return (tState->SourceIndex) > (tState->SourceLength)
 }
 
-define i64 TokenizeNumber(TokenizerState* tState, i16 NextCharacter, i32 StartingIndex, i8* Success) {
-	i8 NumberIsHex := false
+define i64 TokenizeNumber(TokenizerState* tState, i8 NextCharacter, i32 StartingIndex, i8* Success) {
+	i64 Base := 10
+	i32 LeadingCharacters := 0
 	
 	if (NextCharacterMatches(tState, 'x')) {
-		/* If NextCharacter = 0 and Next-NextCharacter = 'x' */
-		NumberIsHex := true
-		
-		NextCharacter := PeekNextCharacter(tState)
-		
-		/* Gather all hex characters */
-		while (IsHex(NextCharacter) && (!TokenizerAtEnd(tState))) {
-			NextCharacter := GetNextCharacter(tState)
-		}
+		Base := 16
+		LeadingCharacters := 1
 	}
-	else {
-		/* Number is not hex, gather all decimal characters */
-		
-		while (IsNumeric(NextCharacter) && (!TokenizerAtEnd(tState))) {
-			NextCharacter := GetNextCharacter(tState)
-		}
+	else if (NextCharacterMatches(tState, 'b')) {
+		Base := 2
+		LeadingCharacters := 1
 	}
 	
-	if !(TokenizerAtEnd(tState)) {
-		Backtrack(tState)
+	;while (IsNumeric(NextCharacter, Base) && !(TokenizerAtEnd(tState))) {
+	;	NextCharacter := GetNextCharacter(tState)
+	;}
+	
+	loop {
+		NextCharacter := GetNextCharacter(tState)
+		
+		if !(IsNumeric(NextCharacter, Base) || NextCharacter = '_') {
+			Backtrack(tState)
+			break
+		}
+		else if (TokenizerAtEnd(tState)) {
+			break
+		}
 	}
 	
 	/* Convert the number to string which we can then parse into a number */
-	SafeWideString* AsString := MakeSafeStringToken(tState, StartingIndex + (NumberIsHex * 2)) As SafeWideString*
+	SafeWideString* ConstantNumberString := MakeSafeStringToken(tState, StartingIndex + (Base != 10) * 2)
 	
-	i64 Result := WToI(AsString->Buffer, AsString->Length, 10 + (6 * NumberIsHex), Success)
+	SafeWideString* NumberString := ConstantNumberString->Clone()
 	
-	FreeSafeString(AsString)
+	ConstantNumberString->Free()
+	
+	for (i32 Index := 0, Index < NumberString->Length, Index += 1) {
+		if (NumberString->ASCIICharacterAt(Index) = '_') {
+			NumberString->Remove(Index, 1)
+		}
+	}
+	
+	i64 Result := WToI(NumberString->Buffer, NumberString->Length, Base, Success)
+	
+	NumberString->Free()
 	
 	return Result
 }
@@ -651,10 +664,10 @@ define Token* GetNextToken(TokenizerState* tState) {
 				; Now we can go through each character, and replace escape sequences
 				
 				for (i32 StringIndex := 0, StringIndex < StringLiteral->Length, StringIndex += 1) {
-					NextCharacter := StringLiteral->ASCIICharAt(StringIndex)
+					NextCharacter := StringLiteral->ASCIICharacterAt(StringIndex)
 					
 					if (NextCharacter = '\') {
-						i8 EscapeCharacter := StringLiteral->ASCIICharAt(StringIndex + 1)
+						i8 EscapeCharacter := StringLiteral->ASCIICharacterAt(StringIndex + 1)
 						
 						i8* Replacement := &EscapeCharacter
 						i32 ReplacementLength := 1
@@ -682,7 +695,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 		else if (IsNumeric(NextCharacter)) {
 			i8 NumberIsValid := false
 			
-			ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter, StartingIndex, &NumberIsValid))
+			ErrorToken := MakeToken(tState, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(tState, NextCharacter As i8, StartingIndex, &NumberIsValid))
 			
 			if !(NumberIsValid) {
 				TokenError(ErrorToken, "Invalid numeric literal")
@@ -828,7 +841,7 @@ define Token* GetNextToken(TokenizerState* tState) {
 				
 				NextCharacter := GetNextCharacter(tState)
 				
-				i64 NewImageBase := TokenizeNumber(tState, NextCharacter, StartingIndex + 11, &ImageBaseValid)
+				i64 NewImageBase := TokenizeNumber(tState, NextCharacter As i8, StartingIndex + 11, &ImageBaseValid)
 				
 				if !(ImageBaseValid && NewImageBase) {
 					ErrorToken := MakeToken(tState, StartingIndex + 11, TOKEN_TYPE_DEBUG_CHARACTER, '#')

@@ -37,15 +37,15 @@ struct SafeWideString {
 		Free(this)
 	}
 	
-	define i8 ASCIICharAt(i32 Index) {
+	define i8 ASCIICharacterAt(i32 Index) {
 		return this->Buffer[Index] As i8
 	}
-	define i8 ASCIICharAt(i32 Index, i8 Default) {
+	define i8 ASCIICharacterAt(i32 Index, i8 Default) {
 		if (Index >= this->Length) {
 			return Default
 		}
 		
-		return this->ASCIICharAt(Index)
+		return this->ASCIICharacterAt(Index)
 	}
 	
 	define void ShiftLeft(i32 Index, i32 Length) {
@@ -78,7 +78,7 @@ struct SafeWideString {
 	
 	define void Print() {
 		for (i32 Index := 0, Index < this->Length, Index += 1) {
-			PrintCharacter(this->ASCIICharAt(Index))
+			PrintCharacter(this->ASCIICharacterAt(Index))
 		}
 	}
 	define void PrintLine() {

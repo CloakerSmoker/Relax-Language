@@ -244,8 +244,8 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		TokenError(NameToken, InvalidName)
 	}
 	
-	i8 FirstCharacter := NameString->ASCIICharAt(0, ' ')
-	i8 SecondCharacter := NameString->ASCIICharAt(1, ' ')
+	i8 FirstCharacter := NameString->ASCIICharacterAt(0, ' ')
+	i8 SecondCharacter := NameString->ASCIICharacterAt(1, ' ')
 	
 	i32 Offset := 0
 	
@@ -283,8 +283,8 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		RegisterSize := 4
 	}
 	
-	FirstCharacter := NameString->ASCIICharAt(Offset, ' ')
-	SecondCharacter := NameString->ASCIICharAt(Offset + 1, ' ')
+	FirstCharacter := NameString->ASCIICharacterAt(Offset, ' ')
+	SecondCharacter := NameString->ASCIICharacterAt(Offset + 1, ' ')
 	
 	if (IsNumber(FirstCharacter)) {
 		/* RDD, DD = digits */
@@ -319,7 +319,7 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		Offset += 2 /* Advance past the register name */
 		RegisterNumber := 4 + (FirstCharacter = 'b') /* Numbers 4 and 5, 4 for SP, 5 for BP */
 		
-		SecondCharacter := NameString->ASCIICharAt(Offset, ' ')
+		SecondCharacter := NameString->ASCIICharacterAt(Offset, ' ')
 		
 		if !(RegisterSize) {
 			/* Custom 'x' suffix for the word version of each */
@@ -339,7 +339,7 @@ define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize
 		Offset += 2 /* Advance past the register name */
 		RegisterNumber := 6 + (FirstCharacter = 'd') /* Numbers 6 and 7, 6 for SI, 7 for DI */
 		
-		SecondCharacter := NameString->ASCIICharAt(Offset, ' ')
+		SecondCharacter := NameString->ASCIICharacterAt(Offset, ' ')
 		
 		if !(RegisterSize) {
 			/* Custom 'x' suffix for the word version of each */
@@ -533,9 +533,9 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		
 		SafeWideString* TypeName := TypeNameToken->StringValue
 		
-		i32 I := TypeName->ASCIICharAt(0, ' ') /* i i i i */
-		i32 L := TypeName->ASCIICharAt(1, ' ') /* 8 1 3 6 */
-		i32 R := TypeName->ASCIICharAt(2, ' ') /*   6 2 4 */
+		i32 I := TypeName->ASCIICharacterAt(0, ' ') /* i i i i */
+		i32 L := TypeName->ASCIICharacterAt(1, ' ') /* 8 1 3 6 */
+		i32 R := TypeName->ASCIICharacterAt(2, ' ') /*   6 2 4 */
 		
 		i32 NameCharacters := I | (L << 8) | (R << 16)
 		

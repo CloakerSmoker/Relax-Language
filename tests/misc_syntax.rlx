@@ -97,7 +97,7 @@ define i32 Main() {
 		Print("0")
 	}
 	
-	Print(" \"\\")
+	Print(" \"\\ %i%i%i", 0b1_1_0_1, 0xd, 13)
 	
 	return 0
 }

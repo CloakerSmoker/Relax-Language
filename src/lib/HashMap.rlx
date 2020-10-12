@@ -27,13 +27,13 @@ struct HashMap {
 		this->Elements := Alloc(this->BufferMaxCount * #HashMapElement*)
 	}
 	
-	;define HashMap* New() static {
-	;	HashMap* this := Alloc(#HashMap)
-	;	
-	;	this->Initialize()
-	;	
-	;	return this
-	;}
+	static HashMap* New() {
+		HashMap* this := Alloc(#HashMap)
+		
+		this->Initialize()
+		
+		return this
+	}
 	
 	define i64 HashNext(i64 Hash, i8 NextCharacter) {
 		if (this->IgnoreCase) {
@@ -47,7 +47,7 @@ struct HashMap {
 		i64 Hash := DEFAULT_HASH_STARTING_VALUE
 		
 		for (i32 Index := 0, Index < StringToHash->Length, Index += 1) {
-			Hash := this->HashNext(Hash, StringToHash->ASCIICharAt(Index))
+			Hash := this->HashNext(Hash, StringToHash->ASCIICharacterAt(Index))
 		}
 		
 		return Hash
