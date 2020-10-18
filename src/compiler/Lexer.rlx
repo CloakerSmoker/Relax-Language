@@ -632,6 +632,8 @@ define Token* GetNextToken(TokenizerState* tState) {
 			i8 SkipEscapes := NextCharacterMatches(tState, 'r')
 			i8 WideCharacters := NextCharacterMatches(tState, 'w')
 			
+			; TODO: Add an `l` suffix to get string length instead, maybe
+			
 			; Since `MakeSafeStringToken` returns a sort-of slice out of the original source string
 			;  we need to clone it before actually replacing any escape sequences, otherwise
 			;   error printouts would show strings after the are escaped

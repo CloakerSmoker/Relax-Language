@@ -1,3 +1,7 @@
+; TODO: Add a divmod built-in, the `x / constant` with `x % constant` pattern is getting annoying.
+
+
+
 /*
 ==========================================
 	Typing helper structs (Defined first since ASTNode has a Type field)
