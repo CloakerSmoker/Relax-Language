@@ -1,0 +1,218 @@
+#Require "./src/lib/Console.rlx"
+#Require "./src/lib/File.rlx"
+#Require "./src/lib/Debug.rlx"
+
+#Require "./src/compiler/PDB/MSF.rlx"
+#Require "./src/compiler/PDB/CodeView.rlx"
+
+struct PDBStreamHeader unaligned {
+	i32 Version
+	i32 CreationTime
+	i32 WriteCount
+	i64 UUIDHigh
+	i64 UUIDLow
+}
+
+i32 PDB_VERSION_VC70 := 20000404
+i32 PBD_STREAM_VC140 := 20140508
+
+struct PDBStreamBuilder {
+	i32 FeatureFlags
+	PDBNamedStreamMapBuilder* NameMap
+	
+	static PDBStreamBuilder* New() {
+		PDBStreamBuilder* this := Alloc(#PDBStreamBuilder)
+		
+		this->NameMap := PDBNamedStreamMapBuilder:New()
+		
+		return this
+	}
+	define i32 GetSize() {
+		return #PDBStreamHeader + this->NameMap->GetSize() + 8
+	}
+	define void* SerializeInto(void* Buffer, i64 SourcePathHash, i64 Time) {
+		PDBStreamHeader* Header := Buffer As PDBStreamHeader*
+		
+		Header->Version := PDB_VERSION_VC70
+		Header->CreationTime := Time As i32
+		Header->WriteCount := 1
+		Header->UUIDLow := SourcePathHash ^ Time
+		Header->UUIDHigh := Time ^ Header
+		
+		Buffer := this->NameMap->SerializeInto(Buffer + #PDBStreamHeader)
+		
+		(Buffer As i32*)[0] := PBD_STREAM_VC140
+		
+		return Buffer + 8
+	}
+}
+
+declare TPIStreamBuilder* TPITest(MSFBuilder*)
+declare void TPIFinalize(TPIStreamBuilder*)
+
+define i32 Main() {
+	MSFBuilder* B := Alloc(#MSFBuilder)
+	
+	B->Initialize()
+	B->AllocateStreamDirectory()
+	
+	i8* D := Alloc(0x1500)
+	i8* StreamBuffer := D
+	
+	PDBStreamBuilder* Bu := PDBStreamBuilder:New()
+	
+	;Bu->NameMap->Set("/LinkInfo", 5)
+	;Bu->NameMap->Set("/names", 13)
+	;Bu->NameMap->Set("/src/headerblock", 9)
+	;Bu->NameMap->Set("/src/files/debug.natvis", 384)
+	
+	;i32 StreamNumber := 0
+	;i8 R := Bu->NameMap->Get("/LinkInfo", &StreamNumber)
+	;
+	;Print("Bu->Get %i = %x\n", R, StreamNumber)
+	;
+	;Bu->NameMap->OffsetIndexMap->Print()
+	
+	i32 PDBStreamSize := Bu->GetSize()
+	Bu->SerializeInto(StreamBuffer, 0x123, 0x456)
+	
+	void* Empty := Alloc(0x1000)
+	
+	B->AppendStream(Empty, 0)						; MSF ??? stream
+	B->AppendStream(StreamBuffer, PDBStreamSize)	; PDB Stream
+	
+	TPIStreamBuilder* TB := TPITest(B)
+	
+	B->AppendStream(Empty, 0x1000)					; DBI Stream
+	B->AppendStream(Empty, 0x1000)					; IPI Stream
+	
+	TPIFinalize(TB)
+	
+	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\dummy.pdb"r)
+	
+	Print("MSF Done\n")
+	
+	B->SuperBlock->Print()
+	
+	;i64 F := FileOpen("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\AutoHotkey.pdb"r, FILE_READ)
+	;
+	;FileSeek(F, 0x96E000, SEEK_SET)
+	;
+	;void* Data := Alloc(0x1000)
+	;FileRead(F, Data, 0x1000)
+	;
+	;PDBNamedStreamMapBuilder* B := PDBNamedStreamMapBuilder:Load(Data + #PDBStreamHeader)
+	;
+	;B->OffsetIndexMap->Print()
+	;
+	;i32 StreamNumber := 0
+	;i8 R := B->Get("/src/files/debdug.natvis", &StreamNumber)
+	;
+	;Print("B->Get %i = %x\n", R, StreamNumber)
+	;
+	;return 0
+}
+
+
+
+i32 DBI_SIGNATURE := -1
+i32 DBI_VERSION := 19990903
+i16 DBI_BUILD_NUMBER := 1
+
+struct DBIStreamHeader {
+	i32 Signature
+	i32 Version
+	i32 Age
+	
+	i16 GlobalStreamIndex
+	i16 BuildNumber
+	i16 PublicStreamIndex
+	i16 MSPDBVersion
+	i16 SymbolRecordStreamIndex
+	i16 Unknown
+	
+	i32 ModuleInfoSize
+	i32 SectionContributionSize
+	i32 SectionMapSize
+	i32 SourceInfoSize
+	i32 TypeServerMapSize
+	
+	i32 MFCTypeServerStreamIndex
+	i32 OptionalHeaderSize
+	i32 ECStreamSize
+	
+	i16 Flags
+	i16 Machine
+	i16 Padding
+	
+	define void SetFieldDefaults() {
+		this->Signature := DBI_SIGNATURE
+		this->Version := DBI_VERSION
+		this->Age := DBI_BUILD_NUMBER
+	}
+}
+
+define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
+	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
+	
+		CVTypeRecord* CVPointerPointer := CVTypeRecord:New(LF_POINTER, 8)
+		CVPointerRecord* PointerPointer := CVPointerPointer->GetData()
+		
+		PointerPointer->PointerToTypeIndex := CV_KIND_I64 | CV_MODE_POINTER
+		PointerPointer->Attributes := CV_POINTER_ATTRIBUTES
+	
+	i32 PointerPointerIndex := B->AppendCVRecord(CVPointerPointer)
+	
+	CVStructBuilder* Bu := CVStructBuilder:New("Struct1", 16)
+	
+	Bu->AddDataMember(PointerPointerIndex, 0, "Field1")
+	Bu->AddDataMember(PointerPointerIndex, 8, "Field2")
+	
+	i32 BuFields := B->AppendCVRecord(Bu->MakeFieldListRecord())
+	i32 Struct1 := B->AppendCVRecord(Bu->MakeStructRecord(BuFields))
+	
+	CVProcedureBuilder* Pu := CVProcedureBuilder:New()
+	
+	Pu->SetReturnType(Struct1)
+	Pu->AppendParameter(CV_KIND_I8)
+	Pu->AppendParameter(CV_KIND_I16)
+	
+	i32 PuParams := B->AppendCVRecord(Pu->MakeParameterListRecord())
+	B->AppendCVRecord(Pu->MakeProcedureRecord(PuParams))
+	
+	;CVTypeRecord* TList := CVTypeRecord:New(LF_ARGLIST, CVArgListRecord:GetSize(4))
+	;CVArgListRecord* TBuffer := TList->GetData()
+	;
+	;TBuffer->Count := 4
+	;TBuffer~>Entries[0] := CV_KIND_I8 | CV_MODE_POINTER
+	;TBuffer~>Entries[1] := CV_KIND_I16
+	;TBuffer~>Entries[2] := CV_KIND_I16 | CV_MODE_POINTER
+	;TBuffer~>Entries[3] := PointerPointerIndex
+	;
+	;Print("List Built\n")
+	;
+	;i32 PListI := B->AppendCVRecord(TList)
+	;
+	;Print("List Appended\n")
+	;
+	;CVTypeRecord* PDef := CVTypeRecord:New(LF_PROCEDURE, #CVProcedureRecord)
+	;CVProcedureRecord* PDefR := PDef->GetData()
+	;
+	;PDefR->Attributes := CV_PROCEDURE_GENERIC_CALL
+	;PDefR->ReturnTypeIndex := CV_KIND_I64
+	;PDefR->ParameterCount := 4
+	;PDefR->ParameterTypeListIndex := PListI
+	;
+	;B->AppendCVRecord(PDef)
+	
+	B->PrintTypeRecords()
+	
+	Print("TPI Done\n")
+	
+	B->Serialize()
+	
+	return B
+}
+define void TPIFinalize(TPIStreamBuilder* B) {
+	B->SerializeRecordOffsetArray()
+}

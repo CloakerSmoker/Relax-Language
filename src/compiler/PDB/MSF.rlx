@@ -1,7 +1,3 @@
-#Require "./src/lib/Console.rlx"
-
-#Require "./src/lib/File.rlx"
-
 struct MSFSuperBlock {
 	i8{0x20} Magic,
 	i32 BlockSize,			; Should be 4096
@@ -24,6 +20,11 @@ struct MSFSuperBlock {
 		Print("}\n")
 	}
 }
+
+i32 MSF_PDB_STREAM_INDEX := 1
+i32 MSF_TPI_STREAM_INDEX := 2
+i32 MSF_DBI_STREAM_INDEX := 3
+i32 MSF_IPI_STREAM_INDEX := 4
 
 struct MSFStreamDirectory {
 	i32 NumberOfStreams
@@ -73,7 +74,7 @@ struct MSFStreamDirectory {
 		return Start
 	}
 	
-	define i32 StartAppendStream(i32 Size, i32* OutBlockCount, i32* OutNewSize) {
+	define i32 StartAppendStream(i32 Size, i32* OutBlockCount, i32* OutNewSize, i32* OutStreamNumber) {
 		void* BlocksArray := this->GetStreamBlocksArray()
 		i32 BlocksArraySize := this->GetBlocksArraySize()
 		i32 OldSize := 4 + (this->NumberOfStreams * 4) + BlocksArraySize
@@ -86,6 +87,9 @@ struct MSFStreamDirectory {
 		
 		; Write the new stream size into the space the block number array was shifted out of
 		NewBlockSizesTail[0] := Size
+		
+		; And return what the stream number of the new stream actaully is
+		OutStreamNumber[0] := this->NumberOfStreams
 		
 		; Update the stream count
 		this->NumberOfStreams += 1
@@ -187,9 +191,10 @@ struct MSFBuilder {
 		this->StreamDirectoryBlockIndex := StreamDirectoryBlockNumber
 		this->StreamDirectoryBlock := this->GetBlockBuffer(StreamDirectoryBlockNumber)
 	}
-	define void AppendStream(void* StreamData, i32 StreamSize) {
+	define i32 AppendStream(void* StreamData, i32 StreamSize) {
 		i32 BlockCount := 0
-		i32 BlockBufferOffset := this->StreamDirectory->StartAppendStream(StreamSize, &BlockCount, this->SuperBlock~>NumberOfDirectoryBytes)
+		i32 StreamIndex := 0
+		i32 BlockBufferOffset := this->StreamDirectory->StartAppendStream(StreamSize, &BlockCount, this->SuperBlock~>NumberOfDirectoryBytes, &StreamIndex)
 		
 		i32 Remainder := StreamSize % 0x1000
 		
@@ -212,6 +217,8 @@ struct MSFBuilder {
 				MoveMemory(NextBlockBuffer, StreamData + BlockIndex * 0x1000, 0x1000)
 			}
 		}
+		
+		return StreamIndex
 	}
 	
 	define void WriteToFile(i8* FilePath) {
@@ -224,50 +231,6 @@ struct MSFBuilder {
 		FileClose(File)
 	}
 }
-
-;struct PDBHashmap {
-;	union {
-;		PDBHashmapHeader* Header,
-;		void* Buffer
-;	},
-;	
-;	i32 BufferSize,
-;	i32 PairIndex,
-;	
-;	define void Initialize(void* InBuffer, i32 Size, i32 BucketCount) {
-;		this->BufferSize := #PDBHashmapHeader + (BucketCount * 2) + (Size * #PDBHashmapKeyValuePair)
-;		
-;		if (InBuffer = null) {
-;			this->Buffer := Alloc(this->BufferSize)
-;		}
-;		else {
-;			this->Buffer := InBuffer
-;		}
-;
-;		this->Header->Size := Size
-;		this->Header->BucketCount := BucketCount		
-;	},
-;	define void Initialize(i32 Size, i32 BucketCount) {
-;		this->Initialize(null, Size, BucketCount)
-;	},
-;	define void AppendPair(i32 Key, i32 Value) {
-;		PDBHashmapKeyValuePair* Pairs := this->Header->GetKeyValues()
-;		
-;		PDBHashmapKeyValuePair* NextPair := Pairs + (this->PairIndex * #PDBHashmapKeyValuePair)
-;		
-;		NextPair->Key := Key
-;		NextPair->Value := Value
-;		
-;		this->PairIndex += 1
-;	},
-;	define void* SerializeInto(void* Buffer) {
-;		MoveMemory(Buffer, this->Buffer, this->BufferSize)
-;		
-;		return Buffer + this->BufferSize
-;	}
-;}
-
-#Require "./src/lib/Debug.rlx"
 
 define i32 PDBHashStringV1(i8* String, i32 Length) {
 	i32* Longs := String As i32*
@@ -495,15 +458,15 @@ struct PDBHashmap {
 		
 		for (i32 BucketIndex := 0, BucketIndex < this->Header->Capacity, BucketIndex += 1) {
 			if (this->PresentVector->Get(BucketIndex)) {
-				Print("On-file bucket is in-memory bucket %i\n", BucketIndex)
+				;Print("On-file bucket is in-memory bucket %i\n", BucketIndex)
 				MoveMemory(this->FindBucket(BucketIndex), RawBucketBuffer, #PDBHashmapBucket)
 				RawBucketBuffer := RawBucketBuffer->Next()
 			}
 		}
 		
-		Print("PV = %x\n", this->PresentVector - this->Buffer)
-		Print("DV = %x\n", this->DeletedVector - this->Buffer)
-		Print("BU = %x\n", this->Buckets - this->Buffer)
+		;Print("PV = %x\n", this->PresentVector - this->Buffer)
+		;Print("DV = %x\n", this->DeletedVector - this->Buffer)
+		;Print("BU = %x\n", this->Buckets - this->Buffer)
 		
 		this->Traits := Traits
 		
@@ -513,26 +476,27 @@ struct PDBHashmap {
 	define void Initialize(i32 Buckets, PDBHashmapTraits* Traits) {
 		i32 BitVectorWordCount := Ceil(Buckets, 32)
 		
-		Print("Init %i buckets, %i bucket words\n", Buckets, BitVectorWordCount)
+		;Print("Init %i buckets, %i bucket words\n", Buckets, BitVectorWordCount)
 		
-		;					  | Header			| Vector Headers  | Vector data  | Buckets
 		this->BufferSize := #PDBHashmapHeader + 8 + (BitVectorWordCount * 8) + (Buckets * 8)
 		this->Buffer := Alloc(this->BufferSize)
 		this->Header->Capacity := Buckets
 		
 		this->PresentVector := this->Header->GetPresentVector()
-		Print("PV = %x\n", this->PresentVector - this->Buffer)
 		this->PresentVector->WordCount := BitVectorWordCount
+		
+		; DeletedVector seems totally unused
 		this->DeletedVector := this->Header->GetDeletedVector()
-		Print("DV = %x\n", this->DeletedVector - this->Buffer)
 		this->DeletedVector->WordCount := 0
 		
 		this->Buckets := this->Header->GetBuckets()
-		Print("BU = %x\n", this->Buckets - this->Buffer)
 		
 		this->Traits := Traits
 		
-		Print("Size = %x, Start = %x\n", this->BufferSize, this->Buffer)
+		;Print("PV = %x\n", this->PresentVector - this->Buffer)
+		;Print("DV = %x\n", this->DeletedVector - this->Buffer)
+		;Print("BU = %x\n", this->Buckets - this->Buffer)
+		;Print("Size = %x, Start = %x\n", this->BufferSize, this->Buffer)
 	},
 	define void Initialize(PDBHashmapTraits* Traits) {
 		return this->Initialize(6, Traits)
@@ -792,11 +756,7 @@ define i32 AbsoluteValue(i32 Value) {
 }
 
 define i32 PDBNamedStreamMapHash(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
-	i32 R := AbsoluteValue(PDBHashLookupKeyV1(Key, KeyLength) As i32)
-	
-	;Print("Hash(%s, %i) = %x\n", Key, KeyLength, R)
-	
-	return R
+	return AbsoluteValue(PDBHashLookupKeyV1(Key, KeyLength) As i32)
 }
 define i8* PDBNamedStreamMapStorageKeyToLookupKey(PDBNamedStreamMapBuilder* this, i32 Offset) {
 	return this->GetString(Offset)
@@ -804,455 +764,3 @@ define i8* PDBNamedStreamMapStorageKeyToLookupKey(PDBNamedStreamMapBuilder* this
 define i32 PDBNamedStreamMapLookupKeyToStorageKey(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
 	return this->AppendString(Key, KeyLength)
 }
-
-struct PDBStreamHeader unaligned {
-	i32 Version
-	i32 CreationTime
-	i32 WriteCount
-	i64 UUIDHigh
-	i64 UUIDLow
-}
-
-i32 PDB_VERSION_VC70 := 20000404
-i32 PBD_STREAM_VC140 := 20140508
-
-struct PDBStreamBuilder {
-	i32 FeatureFlags
-	PDBNamedStreamMapBuilder* NameMap
-	
-	static PDBStreamBuilder* New() {
-		PDBStreamBuilder* this := Alloc(#PDBStreamBuilder)
-		
-		this->NameMap := PDBNamedStreamMapBuilder:New()
-		
-		return this
-	}
-	define i32 GetSize() {
-		return #PDBStreamHeader + this->NameMap->GetSize() + 8
-	}
-	define void* SerializeInto(void* Buffer, i64 SourcePathHash, i64 Time) {
-		PDBStreamHeader* Header := Buffer As PDBStreamHeader*
-		
-		Header->Version := PDB_VERSION_VC70
-		Header->CreationTime := Time As i32
-		Header->WriteCount := 1
-		Header->UUIDLow := SourcePathHash ^ Time
-		Header->UUIDHigh := Time ^ Header
-		
-		Buffer := this->NameMap->SerializeInto(Buffer + #PDBStreamHeader)
-		
-		(Buffer As i32*)[0] := PBD_STREAM_VC140
-		
-		return Buffer + 8
-	}
-}
-
-;        Buckets[0] = {0x11: 0x9}
-;                Present? 1, Deleted? 0
-;        Buckets[1] = {0x22: 0x180}
-;                Present? 1, Deleted? 0
-;        Buckets[2] = {0xA: 0xD}
-;                Present? 1, Deleted? 0
-;        Buckets[3] = {0x0: 0x5}
-;                Present? 1, Deleted? 0
-;        Buckets[4] = {0x0: 0x13351DC}
-;                Present? 0, Deleted? 0
-;        Buckets[5] = {0x740200: 0x10000000}
-
-define i32 Main() {
-	MSFBuilder* B := Alloc(#MSFBuilder)
-	
-	B->Initialize()
-	B->AllocateStreamDirectory()
-	
-	i8* D := Alloc(0x1500)
-	i8* StreamBuffer := D
-	
-	PDBStreamBuilder* Bu := PDBStreamBuilder:New()
-	
-	Bu->NameMap->Set("/LinkInfo", 5)
-	;Bu->NameMap->Set("/names", 13)
-	;Bu->NameMap->Set("/src/headerblock", 9)
-	;Bu->NameMap->Set("/src/files/debug.natvis", 384)
-	
-	i32 PDBStreamSize := Bu->GetSize()
-	Bu->SerializeInto(StreamBuffer, 0x123, 0x456)
-	
-	i32 StreamNumber := 0
-	i8 R := Bu->NameMap->Get("/LinkInfo", &StreamNumber)
-	
-	Print("Bu->Get %i = %x\n", R, StreamNumber)
-	
-	Bu->NameMap->OffsetIndexMap->Print()
-	
-	void* Empty := Alloc(0x1000)
-	
-	B->AppendStream(Empty, 0x1000)
-	B->AppendStream(StreamBuffer, PDBStreamSize)	; PDB Stream
-	B->AppendStream(Empty, 0x1000)				; TPI Stream
-	B->AppendStream(Empty, 0x1000)				; DBI Stream
-	B->AppendStream(Empty, 0x1000)				; IPI Stream
-	
-	for (i32 I := 0, I < 400, I += 1) {
-		B->AppendStream(Empty, 0x1000)				; LinkInfo
-	}
-	
-	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\dummy.pdb"r)
-	
-	Print("Done\n")
-	
-	B->SuperBlock->Print()
-	
-	;i64 F := FileOpen("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\AutoHotkey.pdb"r, FILE_READ)
-	;
-	;FileSeek(F, 0x96E000, SEEK_SET)
-	;
-	;void* Data := Alloc(0x1000)
-	;FileRead(F, Data, 0x1000)
-	;
-	;PDBNamedStreamMapBuilder* B := PDBNamedStreamMapBuilder:Load(Data + #PDBStreamHeader)
-	;
-	;B->OffsetIndexMap->Print()
-	;
-	;i32 StreamNumber := 0
-	;i8 R := B->Get("/src/files/debdug.natvis", &StreamNumber)
-	;
-	;Print("B->Get %i = %x\n", R, StreamNumber)
-	;
-	;return 0
-}
-
-i32 TPI_STREAM_VERSION_V80 := 20040203
-
-i8 CV_POINTER_KIND_NEAR64 := 0x0C
-i8 CV_POINTER_MODE_NORMAL := 0
-i8 CV_POINTER_MODIFIER_NONE := 0
-i32 CV_POINTER_ATTRIBUTES := 0x0C | (8 << 0xD)
-
-i32 CV_KIND_I8 := 0x68
-i32 CV_KIND_I16 := 0x21
-i32 CV_KIND_I32 := 0x12
-i32 CV_KIND_I64 := 0x76
-i32 CV_MODE_POINTER := 0x600
-
-struct CVTypeIndex {
-	i32 RawIndex
-	
-	define i8 IsSimple() {
-		return this->RawIndex < 0x1000
-	}
-	define i32 ToArrayIndex() {
-		return this->RawIndex - 0x1000
-	}
-	define void FromArrayIndex(i32 Index) {
-		this->RawIndex := Index + 0x1000
-	}
-	define i32 GetSimpleType() {
-		return this->RawIndex & 0xFF
-	}
-	define i32 GetSimpleMode() {
-		return this->RawIndex & 0x700
-	}
-}
-
-struct CVTypeIndexHelper {
-	union {
-		i32 TypeIndex,
-		CVTypeIndex Index
-	}
-}
-
-i16 LF_POINTER := 0x1002
-i16 LF_ARGLIST := 0x1201
-i16 LF_PROCEDURE := 0x1008
-i16 LF_STRUCT := 0x1504
-
-struct CVTypeRecordHeader {
-	i16 Length
-	i16 Type
-	
-	define void* GetData() {
-		return this + 4
-	}
-	define void* GetEnd() {
-		return this + this->Length + 2
-	}
-}
-
-i8 CV_PROCEDURE_GENERIC_CALL := 0xE
-
-struct CVProcedureRecord {
-	i32 ReturnTypeIndex
-	i16 Attributes
-	i16 ParameterCount
-	i32 ParameterTypeListIndex
-}
-
-; Fuck Microsoft, this file format is a massive pile of shit
-;  Their own tools can't even fucking read the files which their own compiler outputs
-;  And the braindead shithead who wrote "Source code is the ultimate documentation :-)" in the README
-;   for their garbage non-functional 'documentation' repo needs to be lobotomized. Although from what I can tell
-;    that is a prerequisite for working at Microsoft.
-
-struct CVStructRecord {
-	i16 Count
-	i16 Properties
-	i32 FieldsTypeListIndex
-	i32 DerivedTypeIndex
-	i32 VTableShapeTypeIndex
-	i16 Size
-	
-}
-
-struct TPIStreamHeader {
-	i32 Version,
-	i32 HeaderSize,
-	
-	i32 TypeIndexStart,
-	i32 TypeIndexEnd,
-	i32 TypeRecordBytes,
-	
-	i32 HashStreamIndex,
-	i32 HashAuxStreamIndex,
-	i32 HashKeySize,
-	i32 NumberOfHashBuckets,
-	
-	i32 HashValueBufferOffset,
-	i32 HashValueBufferLength,
-	
-	i32 IndexOffsetBufferOffset,
-	i32 IndexOffsetBufferLength,
-	
-	i32 HashTableBufferOffset,
-	i32 HashTableBufferLength,
-	
-	define void Initialize() {
-		this->Version := TPI_STREAM_VERSION_V80
-		this->HeaderSize := #TPIStreamHeader
-		this->TypeIndexStart := 0x1000
-		this->TypeIndexEnd := 0x1000
-		this->TypeRecordBytes := 0
-		this->HashKeySize := 4
-	}
-	define CVTypeRecordHeader* GetStartOfTypeRecords() {
-		return (this~>HashValueBufferLength + 4) As CVTypeRecordHeader*
-	}
-	define CVTypeRecordHeader* GetEndOfTypeRecords() {
-		return this->GetStartOfTypeRecords() + this->TypeRecordBytes
-	}
-}
-
-struct TPIStreamBuilder {
-	union {
-		TPIStreamHeader* Header
-		void* Buffer
-	}
-	
-	i32 BufferSize
-	
-	i32 RecordOffsetCount
-	i32* RecordOffsetArray
-	
-	define void Initialize() {
-		this->BufferSize := #TPIStreamHeader
-		this->Buffer := Alloc(this->BufferSize)
-		
-		this->RecordOffsetCount := 0
-		this->RecordOffsetArray := Alloc(4)
-		
-		this->Header->Initialize()
-	}
-	define void ReAlloc(i32 AdditionalSize) {
-		this->BufferSize += AdditionalSize
-		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
-	}
-	define void StoreRecordOffset(i32 TypeIndex, i32 Offset) {
-		this->RecordOffsetCount += 4
-		this->RecordOffsetArray := ReAlloc(this->RecordOffsetArray, this->RecordOffsetCount)
-		
-		this->RecordOffsetArray[TypeIndex - 0x1000] := Offset
-	}
-	define CVTypeRecordHeader* GetRecordFromindex(i32 TypeIndex) {
-		return this->Header->GetStartOfTypeRecords() + this->RecordOffsetArray[TypeIndex - 0x1000]
-	}
-	define i32 AppendCVRecord(CVTypeRecordHeader* Record) {
-		i32 Length := Record->Length + 2
-		
-		this->ReAlloc(Length)
-		
-		i8* EndOfRecords := this->Header->GetEndOfTypeRecords() As i8*
-		i32 Offset := EndOfRecords - this->Header->GetStartOfTypeRecords()
-		
-		MoveMemory(EndOfRecords, Record As i8*, Length)
-		
-		this->Header->TypeRecordBytes += Length
-		
-		i32 Result := this->Header->TypeIndexEnd
-		this->Header->TypeIndexEnd += 1
-		
-		this->StoreRecordOffset(Result, Offset)
-		
-		return Result
-	}
-	
-	declare CVTypeRecordHeader* PrintSingleRecord(CVTypeRecordHeader*)
-	
-	define void PrintTypeIndex(i32 TypeIndex) {
-		CVTypeIndex Index
-		
-		Index.RawIndex := TypeIndex
-		
-		if (Index.IsSimple()) {
-			i32 Simple := Index.GetSimpleType()
-			
-			if (Simple = CV_KIND_I8) {
-				Print("i8")
-			}
-			else if (Simple = CV_KIND_I16) {
-				Print("i16")
-			}
-			else if (Simple = CV_KIND_I32) {
-				Print("i32")
-			}
-			else if (Simple = CV_KIND_I64) {
-				Print("i64")
-			}
-			else {
-				Print("<Unknown Simple %x>", Simple)
-			}
-			
-			if (Index.GetSimpleMode() = CV_MODE_POINTER) {
-				Print("*")
-			}
-			
-		}
-		else {
-			this->PrintSingleRecord(this->GetRecordFromindex(TypeIndex))
-		}
-	}
-	define CVTypeRecordHeader* PrintSingleRecord(CVTypeRecordHeader* ThisRecord) {
-		void* ThisRecordData := ThisRecord->GetData()
-		
-		if (ThisRecord->Type = LF_ARGLIST) {
-			Print("{ArgList}(")
-			
-			i32 ArgListLength := *(ThisRecordData As i32*)
-			i32* ArgListData := (ThisRecordData + 4) As i32*
-			
-			for (i32 ArgListIndex := 0, ArgListIndex < ArgListLength, ArgListIndex += 1) {
-				this->PrintTypeIndex(ArgListData[ArgListIndex])
-				
-				if (ArgListIndex + 1 != ArgListLength) {
-					Print(", ")
-				}
-			}
-			
-			Print(")")
-		}
-		else if (ThisRecord->Type = LF_PROCEDURE) {
-			Print("{")
-			
-			CVProcedureRecord* ProcedureData := ThisRecordData
-			
-			this->PrintTypeIndex(ProcedureData->ReturnTypeIndex)
-			
-			Print(" Function}(")
-			
-			this->PrintTypeIndex(ProcedureData->ParameterTypeListIndex)
-			
-			Print(")")
-		}
-		
-		return ThisRecord->GetEnd()
-	}
-	define void PrintTypeRecords() {
-		CVTypeRecordHeader* Start := this->Header->GetStartOfTypeRecords()
-		void* End := this->Header->GetEndOfTypeRecords()
-		
-		;Throw(0x123)
-		
-		while (Start != End) {
-			Start := this->PrintSingleRecord(Start)
-			Print("\n")
-		}
-		
-	}
-}
-
-define CVTypeRecordHeader* AllocRecord(i16 Type, i32 Size) {
-	CVTypeRecordHeader* Result := Alloc(Size + #CVTypeRecordHeader)
-	
-	Result->Length := Size + 2
-	Result->Type := Type
-	
-	return Result
-}
-
-i32 DBISignature := -1
-i32 DBIVersion := 19990903
-i16 DBIBuildNumber := 1
-
-struct DBIStreamHeader {
-	i32 Signature
-	i32 Version
-	i32 Age
-	
-	i16 GlobalStreamIndex
-	i16 BuildNumber
-	i16 PublicStreamIndex
-	i16 MSPDBVersion
-	i16 SymbolRecordStreamIndex
-	i16 Unknown
-	
-	i32 ModuleInfoSize
-	i32 SectionContributionSize
-	i32 SectionMapSize
-	i32 SourceInfoSize
-	i32 TypeServerMapSize
-	
-	i32 MFCTypeServerStreamIndex
-	i32 OptionalHeaderSize
-	i32 ECStreamSize
-	
-	i16 Flags
-	i16 Machine
-	i16 Padding
-	
-}
-
-;define i32 Main() {
-;	
-;	TPIStreamBuilder* B := Alloc(#TPIStreamBuilder)
-;	
-;	B->Initialize()
-;	
-;	CVTypeRecordHeader* TList := AllocRecord(LF_ARGLIST, 20)
-;	i32* Buffer := TList->GetData()
-;	
-;	Buffer[0] := 4
-;	Buffer[1] := CV_KIND_I8 | CV_MODE_POINTER
-;	Buffer[2] := CV_KIND_I16
-;	Buffer[3] := CV_KIND_I16 | CV_MODE_POINTER
-;	Buffer[4] := CV_KIND_I16
-;	
-;	Print("List Built\n")
-;	
-;	i32 PListI := B->AppendCVRecord(TList)
-;	
-;	Print("List Appended\n")
-;	
-;	CVTypeRecordHeader* PDef := AllocRecord(LF_PROCEDURE, #CVProcedureRecord)
-;	CVProcedureRecord* PDefR := PDef->GetData()
-;	
-;	PDefR->ReturnTypeIndex := CV_KIND_I64
-;	PDefR->ParameterTypeListIndex := PListI
-;	
-;	B->AppendCVRecord(PDef)
-;	
-;	B->PrintTypeRecords()
-;	
-;	
-;	Print("Done\n")
-;	
-;	return 0
-;}
