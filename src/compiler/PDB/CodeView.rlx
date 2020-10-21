@@ -1,0 +1,646 @@
+; TPI stream header constants
+i32 TPI_STREAM_VERSION_V80 := 20040203
+i32 TPI_MAX_HASH_BUCKETS := 0x40000
+
+; Simple type indexes for built-in types 
+i32 CV_KIND_VOID := 0x3
+i32 CV_KIND_I8 := 0x68
+i32 CV_KIND_I16 := 0x72
+i32 CV_KIND_I32 := 0x74
+i32 CV_KIND_I64 := 0x76
+i32 CV_MODE_POINTER := 0x600
+
+; Record type constants
+i16 LF_POINTER := 0x1002
+i16 LF_PROCEDURE := 0x1008
+
+i16 LF_ARGLIST := 0x1201
+i16 LF_FIELDLIST := 0x1203
+i16 LF_BITFIELD := 0x1205
+
+i16 LF_STRUCT := 0x1504
+i16 LF_MEMBER := 0x150d
+
+; Misc record field constants
+i8 CV_POINTER_KIND_NEAR64 := 0x0C
+i8 CV_POINTER_MODE_NORMAL := 0
+i8 CV_POINTER_MODIFIER_NONE := 0
+i32 CV_POINTER_ATTRIBUTES := 0x0C | (8 << 0xD)
+
+i8 CV_PROCEDURE_GENERIC_CALL := 0xD
+
+struct CVTypeIndex {
+	; Helper for figuring out if a type index is simple, and what simple type/mode it is
+	
+	i32 RawIndex
+	
+	define i8 IsSimple() {
+		return this->RawIndex < 0x1000
+	}
+	define i32 ToArrayIndex() {
+		return this->RawIndex - 0x1000
+	}
+	define void FromArrayIndex(i32 Index) {
+		this->RawIndex := Index + 0x1000
+	}
+	define i32 GetSimpleType() {
+		return this->RawIndex & 0xFF
+	}
+	define i32 GetSimpleMode() {
+		return this->RawIndex & 0x700
+	}
+}
+
+struct CVTypeRecord {
+	; Backing type for a single record stored in an array of type records.
+	; Length does not include the size of the `Length` field itself, which is why 2 is added/subtracted
+	;  a bunch.
+	
+	i16 Length
+	i16 Type
+	
+	static CVTypeRecord* New(i16 Type, i32 Size) {
+		Size += #CVTypeRecord - 2
+		
+		CVTypeRecord* this := Alloc(Size)
+		
+		this->Length := Size
+		this->Type := Type
+		
+		return this
+	}
+	
+	define i32 GetStorageSize() {
+		return this->Length + 2
+	}
+	
+	define void* GetData() {
+		return this + #CVTypeRecord
+	}
+	define void* GetEnd() {
+		return this + this->Length + 2
+	}
+	
+	define CVMemberRecord* AsMemberRecord() {
+		return (this + 2) As CVMemberRecord*
+	}
+	
+	define void Free() {
+		Free(this)
+	}
+}
+
+struct CVPointerRecord {
+	; LF_POINTER
+	
+	i32 PointerToTypeIndex
+	i32 Attributes
+}
+
+struct CVProcedureRecord {
+	; LF_PROCEDURE
+	
+	i32 ReturnTypeIndex
+	i16 Attributes
+	i16 ParameterCount
+	i32 ParameterTypeListIndex
+}
+
+struct CVArgListRecord {
+	; LF_ARGLIST
+	
+	i32 Count
+	i32{0} Entries
+	
+	static i32 GetSize(i32 ArgCount) {
+		return 4 + ArgCount * 4
+	}
+}
+
+struct CVProcedureBuilder {
+	i32* ParameterIndexes
+	i32 ParameterCount
+	
+	i32 ReturnTypeIndex
+	
+	static CVProcedureBuilder* New() {
+		CVProcedureBuilder* this := Alloc(#CVProcedureBuilder)
+		
+		this->ParameterIndexes := Alloc(4)
+	
+		return this
+	}
+	
+	define void AppendParameter(i32 ParameterTypeIndex) {
+		i32 ThisParameterIndex := this->ParameterCount
+		
+		this->ParameterCount += 1
+		this->ParameterIndexes := ReAlloc(this->ParameterIndexes, this->ParameterCount * 4)
+		
+		this->ParameterIndexes[ThisParameterIndex] := ParameterTypeIndex
+	}
+	define void SetReturnType(i32 ReturnTypeIndex) {
+		this->ReturnTypeIndex := ReturnTypeIndex
+	}
+	
+	define CVTypeRecord* MakeParameterListRecord() {
+		i32 IndexesSize := this->ParameterCount * 4
+		
+		CVTypeRecord* Result := CVTypeRecord:New(LF_ARGLIST, 4 + IndexesSize)
+		CVArgListRecord* ResultRecord := Result->GetData()
+		
+		ResultRecord->Count := this->ParameterCount
+		MoveMemory(ResultRecord~>Entries, this->ParameterIndexes, IndexesSize)
+		
+		Free(this->ParameterIndexes)
+		
+		return Result
+	}
+	define CVTypeRecord* MakeProcedureRecord(i32 ParameterListIndex) {
+		CVTypeRecord* Result := CVTypeRecord:New(LF_PROCEDURE, #CVProcedureRecord)
+		CVProcedureRecord* ResultRecord := Result->GetData()
+		
+		ResultRecord->ReturnTypeIndex := this->ReturnTypeIndex
+		ResultRecord->Attributes := CV_PROCEDURE_GENERIC_CALL
+		ResultRecord->ParameterCount := this->ParameterCount
+		ResultRecord->ParameterTypeListIndex := ParameterListIndex
+		
+		Free(this)
+		
+		return Result
+	}
+}
+
+struct CVMemberRecord {
+	; LF_MEMBER
+	
+	i16 LeafKind
+	i16 Attributes
+	i32 Type
+	
+	i16 Offset
+	i8{0} Name
+	
+	define void* GetEnd() {
+		return this + #CVMemberRecord + StringLength(this~>Name) + 1
+	}
+	define CVTypeRecord* AsTypeRecord() {
+		return (this - 2) As CVTypeRecord*
+	}
+}
+
+struct CVFieldListBuilder {
+	; Builds an LF_FIELDLIST containing LF_MEMBER records
+	
+	void* Buffer
+	i32 Size
+	i32 Count
+	
+	static CVFieldListBuilder* New() {
+		CVFieldListBuilder* this := Alloc(#CVFieldListBuilder)
+		
+		this->Size := 0
+		this->Buffer := Alloc(4)
+		
+		return this
+	}
+	define void Extend(i32 AdditionalSize) {
+		this->Size += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->Size)
+	}
+	define void AddDataMember(i32 Type, i32 Offset, i8* Name) {
+		i32 TailOffset := this->Size
+		i32 NameLength := StringLength(Name)
+		
+		i32 MemberRecordSize := #CVMemberRecord + NameLength + 1
+		
+		this->Extend(MemberRecordSize)
+		
+		CVMemberRecord* MemberRecord := this->Buffer + TailOffset
+		
+		MemberRecord->LeafKind := LF_MEMBER
+		MemberRecord->Type := Type
+		MemberRecord->Offset := Offset
+		
+		MoveMemory(MemberRecord~>Name, Name, NameLength)
+		
+		this->Count += 1
+	}
+	define CVTypeRecord* ToRecord() {
+		CVTypeRecord* Result := CVTypeRecord:New(LF_FIELDLIST, this->Size)
+		
+		MoveMemory(Result->GetData(), this->Buffer, this->Size)
+		
+		Free(this->Buffer)
+		Free(this)
+		
+		return Result
+	}
+}
+
+struct CVStructRecord {
+	; LF_STRUCT
+	
+	i16 Count
+	i16 Properties
+	i32 FieldsTypeListIndex
+	i32 DerivedTypeIndex
+	i32 VTableShapeTypeIndex
+	i16 Size
+	i8{0} Name
+}
+
+struct CVBitFieldRecord {
+	i32 BackingType
+	i8 BitLength
+	i8 BitIndex
+}
+
+struct CVStructBuilder {
+	CVFieldListBuilder* FieldListBuilder
+	
+	union {
+		void* Buffer
+		CVStructRecord* Record
+	}
+	
+	i32 Size
+	
+	static CVStructBuilder* New(i8* Name, i32 Size) {
+		CVStructBuilder* this := Alloc(#CVStructBuilder)
+		
+		this->FieldListBuilder := CVFieldListBuilder:New()
+		
+		i32 NameLength := StringLength(Name)
+		
+		this->Size := #CVStructRecord + NameLength + 1
+		this->Buffer := Alloc(this->Size)
+		
+		this->Record->Size := Size
+		MoveMemory(this->Record~>Name, Name, NameLength)
+		
+		return this
+	}
+	
+	define void AddDataMember(i32 Type, i32 Offset, i8* Name) {
+		this->Record->Count += 1
+		
+		this->FieldListBuilder->AddDataMember(Type, Offset, Name)
+	}
+	
+	define CVTypeRecord* MakeFieldListRecord() {
+		return this->FieldListBuilder->ToRecord()
+	}
+	define CVTypeRecord* MakeStructRecord(i32 FieldListIndex) {
+		CVTypeRecord* Result := CVTypeRecord:New(LF_STRUCT, this->Size)
+		
+		this->Record->FieldsTypeListIndex := FieldListIndex
+		MoveMemory(Result->GetData(), this->Buffer, this->Size)
+		
+		Free(this->Buffer)
+		Free(this)
+		
+		return Result
+	}
+}
+
+; Angry comment I don't want to remove yet:
+
+; Fuck Microsoft, this file format is a massive pile of shit
+;  Their own tools can't even fucking read the files which their own compiler outputs
+;  And the braindead shithead who wrote "Source code is the ultimate documentation :-)" in the README
+;   for their garbage non-functional 'documentation' repo needs to be lobotomized. Although from what I can tell
+;    that is a prerequisite for working at Microsoft.
+
+struct TPIStreamHeader {
+	; Basic class for the TPI stream header, with helpers to get the start/end of the type records
+	;  which follow the header.
+	
+	i32 Version,
+	i32 HeaderSize,
+	
+	i32 TypeIndexStart,
+	i32 TypeIndexEnd,
+	i32 TypeRecordBytes,
+	
+	i16 HashStreamIndex,
+	i16 HashAuxStreamIndex,
+	i32 HashKeySize,
+	i32 NumberOfHashBuckets,
+	
+	i32 HashValueBufferOffset,
+	i32 HashValueBufferLength,
+	
+	i32 IndexOffsetBufferOffset,
+	i32 IndexOffsetBufferLength,
+	
+	i32 HashTableBufferOffset,
+	i32 HashTableBufferLength,
+	
+	define void Initialize() {
+		this->Version := TPI_STREAM_VERSION_V80
+		this->HeaderSize := #TPIStreamHeader
+		this->TypeIndexStart := 0x1000
+		this->TypeIndexEnd := 0x1000
+		this->TypeRecordBytes := 0
+		
+		this->HashAuxStreamIndex := -1
+		
+		this->HashKeySize := 4
+		this->NumberOfHashBuckets := TPI_MAX_HASH_BUCKETS - 1
+	}
+	define CVTypeRecord* GetStartOfTypeRecords() {
+		return (this + #TPIStreamHeader) As CVTypeRecord*
+	}
+	define CVTypeRecord* GetEndOfTypeRecords() {
+		return this->GetStartOfTypeRecords() + this->TypeRecordBytes
+	}
+}
+
+struct RecordOffsetEntry {
+	; A structure used in the TPI hash stream to allow types to be found faster than walking the entire
+	;  record array. Since we can just use it directly as an array though, the `Index` field is 
+	;   only set so the consumer doesn't freak out.
+	
+	i32 Index
+	i32 Offset
+}
+
+struct TPIStreamBuilder {
+	; Handles creating the TPI stream, appending individual records to the type record array, and
+	;  handles serializing the TPI stream/writing it into the backing MSF file. Additionally, handles
+	;   allocating and writing the TPI hash stream.
+	
+	MSFBuilder* Builder
+	
+	union {
+		TPIStreamHeader* Header
+		void* Buffer
+	}
+	
+	RecordOffsetEntry* RecordOffsetArray
+
+	i32 BufferSize
+	i32 RecordOffsetCount
+	
+	static TPIStreamBuilder* New(MSFBuilder* Builder) {
+		TPIStreamBuilder* this := Alloc(#TPIStreamBuilder)
+		
+		this->Builder := Builder
+		
+		this->BufferSize := #TPIStreamHeader
+		this->Buffer := Alloc(this->BufferSize)
+		
+		this->RecordOffsetCount := 0
+		this->RecordOffsetArray := Alloc(4)
+		
+		this->Header->Initialize()
+		
+		return this
+	}
+	
+	define void ReAlloc(i32 AdditionalSize) {
+		this->BufferSize += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
+	}
+	define RecordOffsetEntry* FindRecordOffsetEntry(i32 TypeIndex) {
+		return &this->RecordOffsetArray[TypeIndex - 0x1000]
+	}
+	define void StoreRecordOffset(i32 TypeIndex, i32 Offset) {
+		this->RecordOffsetCount += 1
+		this->RecordOffsetArray := ReAlloc(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
+		
+		RecordOffsetEntry* ThisEntry := this->FindRecordOffsetEntry(TypeIndex)
+		
+		ThisEntry->Index := TypeIndex
+		ThisEntry->Offset := Offset
+	}
+	define CVTypeRecord* GetRecordFromIndex(i32 TypeIndex) {
+		return this->Header->GetStartOfTypeRecords() + this->FindRecordOffsetEntry(TypeIndex)->Offset
+	}
+	
+	define i32 AppendCVRecord(CVTypeRecord* Record) {
+		i32 RecordSize := Record->GetStorageSize()
+		
+		this->ReAlloc(RecordSize)
+		
+		i8* EndOfRecords := this->Header->GetEndOfTypeRecords() As i8*
+		i32 Offset := EndOfRecords - this->Header->GetStartOfTypeRecords()
+		
+		MoveMemory(EndOfRecords, Record, RecordSize)
+		
+		this->Header->TypeRecordBytes += RecordSize
+		
+		i32 Result := this->Header->TypeIndexEnd
+		this->Header->TypeIndexEnd += 1
+		
+		this->StoreRecordOffset(Result, Offset)
+		
+		return Result
+	}
+	define i32 AppendPointer(i32 PointerToTypeIndex, i32 TargetDepth) {
+		CVTypeRecord* Record := CVTypeRecord:New(LF_POINTER, #CVPointerRecord)
+		CVPointerRecord* PointerRecord := Record->GetData()
+		
+		PointerRecord->Attributes := CV_POINTER_ATTRIBUTES
+		
+		for (i32 Depth := TargetDepth, Depth > 0, Depth -= 1) {
+			PointerRecord->PointerToTypeIndex := PointerToTypeIndex
+			
+			PointerToTypeIndex := this->AppendCVRecord(Record)
+		}
+		
+		Record->Free()
+		
+		return PointerToTypeIndex
+	}
+	define i32 AppendBitField(i32 BackingType, i8 BitStart, i8 BitEnd) {
+		CVTypeRecord* Record := CVTypeRecord:New(LF_BITFIELD, #CVBitFieldRecord)
+		CVBitFieldRecord* BitFieldRecord := Record->GetData()
+		
+		BitFieldRecord->BackingType := BackingType
+		BitFieldRecord->BitIndex := BitStart
+		BitFieldRecord->BitLength := BitEnd - BitStart
+		
+		i32 BitFieldIndex := this->AppendCVRecord(Record)
+		
+		Record->Free()
+		
+		return BitFieldIndex
+	}
+	
+	declare CVTypeRecord* PrintSingleRecord(CVTypeRecord*)
+	
+	define void PrintTypeIndex(i32 TypeIndex) {
+		CVTypeIndex Index
+		
+		Index.RawIndex := TypeIndex
+		
+		if (Index.IsSimple()) {
+			i32 Simple := Index.GetSimpleType()
+			
+			if (Simple = CV_KIND_I8) {
+				Print("i8")
+			}
+			else if (Simple = CV_KIND_I16) {
+				Print("i16")
+			}
+			else if (Simple = CV_KIND_I32) {
+				Print("i32")
+			}
+			else if (Simple = CV_KIND_I64) {
+				Print("i64")
+			}
+			else {
+				Print("<Unknown Simple %x>", Simple)
+			}
+			
+			if (Index.GetSimpleMode() = CV_MODE_POINTER) {
+				Print("*")
+			}
+			
+		}
+		else {
+			this->PrintSingleRecord(this->GetRecordFromIndex(TypeIndex))
+		}
+	}
+	
+	void* HighWaterMark
+	
+	define CVTypeRecord* PrintSingleRecord(CVTypeRecord* ThisRecord) {
+		void* ThisRecordData := ThisRecord->GetData()
+		
+		if (ThisRecord->Type = LF_ARGLIST) {
+			Print("{ArgList}(")
+			
+			i32 ArgListLength := *(ThisRecordData As i32*)
+			i32* ArgListData := (ThisRecordData + 4) As i32*
+			
+			for (i32 ArgListIndex := 0, ArgListIndex < ArgListLength, ArgListIndex += 1) {
+				this->PrintTypeIndex(ArgListData[ArgListIndex])
+				
+				if (ArgListIndex + 1 != ArgListLength) {
+					Print(", ")
+				}
+			}
+			
+			Print(")")
+		}
+		else if (ThisRecord->Type = LF_PROCEDURE) {
+			Print("{")
+			
+			CVProcedureRecord* ProcedureData := ThisRecordData
+			
+			this->PrintTypeIndex(ProcedureData->ReturnTypeIndex)
+			
+			Print(" Function}(")
+			
+			this->PrintTypeIndex(ProcedureData->ParameterTypeListIndex)
+			
+			Print(")")
+		}
+		else if (ThisRecord->Type = LF_POINTER) {
+			CVPointerRecord* PointerRecord := ThisRecordData
+			
+			this->PrintTypeIndex(PointerRecord->PointerToTypeIndex)
+			
+			Print("*")
+		}
+		else if (ThisRecord->Type = LF_FIELDLIST) {
+			Print("{FieldList} {")
+			
+			CVMemberRecord* Member := ThisRecordData
+			
+			loop {
+				this->PrintSingleRecord(Member->AsTypeRecord())
+				Member := Member->GetEnd()
+				
+				if (Member = ThisRecord->GetEnd()) {
+					break
+				}
+				
+				Print(", ")
+			}
+			
+			Print("}")
+		}
+		else if (ThisRecord->Type = LF_MEMBER) {
+			CVMemberRecord* MemberRecord := ThisRecord->AsMemberRecord()
+			
+			Print("[%x] ", MemberRecord->Offset)
+			
+			this->PrintTypeIndex(MemberRecord->Type)
+			
+			Print(" %s", MemberRecord~>Name)
+		}
+		else if (ThisRecord->Type = LF_STRUCT) {
+			CVStructRecord* StructRecord := ThisRecordData
+			
+			if (ThisRecord < this->HighWaterMark) {
+				Print("%s", StructRecord~>Name)
+			}
+			else {
+				Print("struct %s [%i] ", StructRecord~>Name, StructRecord->Size)
+			
+				this->PrintTypeIndex(StructRecord->FieldsTypeListIndex)
+			}
+		}
+		else if (ThisRecord->Type = LF_BITFIELD) {
+			CVBitFieldRecord* BitFieldRecord := ThisRecordData
+			
+			this->PrintTypeIndex(BitFieldRecord->BackingType)
+			
+			Print("[%i:%i]", BitFieldRecord->BitIndex, BitFieldRecord->BitIndex + BitFieldRecord->BitLength)
+		}
+		
+		this->HighWaterMark := ThisRecord
+		
+		return ThisRecord->GetEnd()
+	}
+	define void PrintTypeRecords() {
+		this->HighWaterMark := null
+		
+		CVTypeRecord* Start := this->Header->GetStartOfTypeRecords()
+		void* End := this->Header->GetEndOfTypeRecords()
+		
+		Print("^20")
+		
+		while (Start != End) {
+			Start := this->PrintSingleRecord(Start)
+			Print("\n")
+		}
+		
+		Print("^F0")
+	}
+	
+	define void Serialize() {
+		this->Header->HashValueBufferOffset := 0
+		this->Header->HashValueBufferLength := 0
+		
+		this->Header->HashTableBufferOffset := 0
+		this->Header->HashTableBufferLength := 0
+		
+		this->Header->IndexOffsetBufferOffset := 0
+		this->Header->IndexOffsetBufferLength := this->RecordOffsetCount * #RecordOffsetEntry
+		
+		i32 TPIStreamIndex := this->Builder->AppendStream(this->Buffer, this->BufferSize)
+		
+		if (TPIStreamIndex != MSF_TPI_STREAM_INDEX) {
+			Print("ERROR: TPIStreamIndex = %i, not 2\n", TPIStreamIndex)
+		}
+	}
+	define void SerializeRecordOffsetArray() {
+		; Since `this->Buffer` is already copied into the backing MSF buffer, we can't modify it
+		;  without also updating the version copied into the MSF buffer.
+		; Which makes it pointless to bother with `this->Buffer`, so we skip directly to getting
+		;  the backing TPI stream's first block and modifying the header it contains
+		
+		i32 HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
+		
+		i32* TPIBlocks := this->Builder->StreamDirectory->GetStreamBlocks(MSF_TPI_STREAM_INDEX)
+		
+		TPIStreamHeader* SerializedHeader := this->Builder->GetBlockBuffer(TPIBlocks[0])
+		
+		SerializedHeader->HashStreamIndex := HashStreamIndex
+	}
+}

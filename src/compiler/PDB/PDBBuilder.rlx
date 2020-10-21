@@ -155,18 +155,13 @@ struct DBIStreamHeader {
 define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
 	
-		CVTypeRecord* CVPointerPointer := CVTypeRecord:New(LF_POINTER, 8)
-		CVPointerRecord* PointerPointer := CVPointerPointer->GetData()
-		
-		PointerPointer->PointerToTypeIndex := CV_KIND_I64 | CV_MODE_POINTER
-		PointerPointer->Attributes := CV_POINTER_ATTRIBUTES
-	
-	i32 PointerPointerIndex := B->AppendCVRecord(CVPointerPointer)
+	i32 PointerPointerIndex := B->AppendPointer(CV_KIND_I64, 5)
+	i32 PointerPointerIndex2 := B->AppendPointer(CV_KIND_I8, 2)
 	
 	CVStructBuilder* Bu := CVStructBuilder:New("Struct1", 16)
 	
 	Bu->AddDataMember(PointerPointerIndex, 0, "Field1")
-	Bu->AddDataMember(PointerPointerIndex, 8, "Field2")
+	Bu->AddDataMember(PointerPointerIndex2, 8, "Field2")
 	
 	i32 BuFields := B->AppendCVRecord(Bu->MakeFieldListRecord())
 	i32 Struct1 := B->AppendCVRecord(Bu->MakeStructRecord(BuFields))
@@ -180,30 +175,7 @@ define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	i32 PuParams := B->AppendCVRecord(Pu->MakeParameterListRecord())
 	B->AppendCVRecord(Pu->MakeProcedureRecord(PuParams))
 	
-	;CVTypeRecord* TList := CVTypeRecord:New(LF_ARGLIST, CVArgListRecord:GetSize(4))
-	;CVArgListRecord* TBuffer := TList->GetData()
-	;
-	;TBuffer->Count := 4
-	;TBuffer~>Entries[0] := CV_KIND_I8 | CV_MODE_POINTER
-	;TBuffer~>Entries[1] := CV_KIND_I16
-	;TBuffer~>Entries[2] := CV_KIND_I16 | CV_MODE_POINTER
-	;TBuffer~>Entries[3] := PointerPointerIndex
-	;
-	;Print("List Built\n")
-	;
-	;i32 PListI := B->AppendCVRecord(TList)
-	;
-	;Print("List Appended\n")
-	;
-	;CVTypeRecord* PDef := CVTypeRecord:New(LF_PROCEDURE, #CVProcedureRecord)
-	;CVProcedureRecord* PDefR := PDef->GetData()
-	;
-	;PDefR->Attributes := CV_PROCEDURE_GENERIC_CALL
-	;PDefR->ReturnTypeIndex := CV_KIND_I64
-	;PDefR->ParameterCount := 4
-	;PDefR->ParameterTypeListIndex := PListI
-	;
-	;B->AppendCVRecord(PDef)
+	B->AppendBitField(CV_KIND_I64, 3, 9)
 	
 	B->PrintTypeRecords()
 	
