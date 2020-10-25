@@ -229,6 +229,22 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 }
 
 define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
+	for (i8 RegisterValueIndex := 0, RegisterValueIndex < 16, RegisterValueIndex += 1) {
+		ASTNode* ThisRegisterValue := ToCompile~>RegisterValues[RegisterValueIndex]
+		
+		if (ThisRegisterValue != null) {
+			CompileExpression(cState, RAX, ThisRegisterValue)
+			EmitPush_R64(cState, RAX)
+		}
+	}
+	for (RegisterValueIndex := 15, RegisterValueIndex >= 0, RegisterValueIndex -= 1) {
+		ThisRegisterValue := ToCompile~>RegisterValues[RegisterValueIndex]
+		
+		if (ThisRegisterValue != null) {
+			EmitPop_R64(cState, RegisterValueIndex)
+		}
+	}
+	
 	for (i32 InstructionIndex := 0, InstructionIndex < ToCompile->InstructionCount, InstructionIndex += 1) {
 		CompileInstruction(cState, ToCompile->Instructions[InstructionIndex])
 	}

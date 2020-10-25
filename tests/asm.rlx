@@ -21,21 +21,21 @@ define i32 Abc(i64 a) {
 }
 define i32 IncRAX() asm {
 	push, rax
-	xchg, rbx, {rsp} as i64*
+	lock xchg, rbx, {rsp} as i64*
 	inc, rbx
-	xchg, rbx, {rsp} as i64*
+	lock xchg, rbx, {rsp} as i64*
 	pop, rax
 	ret
 }
 
-define i32 ReturnAddNumber(i32 Number) asm {
-	mov, eax, edi
-	call, @IncRAX
-	ret
-}
-
 define i32 Main() {
-	i64 B := ReturnAddNumber(696968)
+	i64 B := 0
+	
+	asm (rdi := 696968, rax := &B) {
+		xchg, rax, rdi
+		call, @IncRAX
+		mov, {rdi} As i64*, rax
+	}
 	
 	Print(B)
 	PrintCharacter(',')

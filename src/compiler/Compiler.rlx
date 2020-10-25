@@ -1627,15 +1627,6 @@ define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode
 	i8 PointerRegister := ResultRegister
 	CompileExpression(cState, PointerRegister, Pointer)
 	
-	i8 IndexRegister := PushRegisterStack(cState)
-	CompileExpression(cState, IndexRegister, Index)
-	
-	i8 IndexSize := GetTypeSize(Index->ValueType) As i8
-	
-	if (IndexSize < 4) {
-		Cast(cState, IndexRegister, IndexSize)
-	}
-	
 	Type PointerType := Pointer->ValueType
 	
 	i8 IndexScale := 8
@@ -1649,18 +1640,48 @@ define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode
 	
 	i8 IsSet := !(ValueRegister < 0)
 	
-	if (IsSet || GetAddress) {
-		EmitLea_R64_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+	if (Index->NodeType = NODE_TYPE_INTEGER) {
+		i32 IndexAsDisplacement := Index->IntegerValue * IndexScale
+		i8 DisplacementSize := 4
 		
-		if (IsSet) {
-			EmitMove_RIX_RX(cState, ResultRegister, ValueRegister, IndexScale)
+		if (IndexAsDisplacement <= 112) {
+			DisplacementSize := 1
+		}
+		
+		if (IsSet || GetAddress) {
+			EmitLea_R64_R64_DISPX(cState, ResultRegister, PointerRegister, IndexAsDisplacement)
+			
+			if (IsSet) {
+				EmitMove_RIX_RX(cState, ResultRegister, ValueRegister, IndexScale)
+			}
+		}
+		else {
+			EmitMove_RX_RIX_DISPX(cState, ResultRegister, PointerRegister, IndexAsDisplacement, DisplacementSize, IndexScale)
 		}
 	}
 	else {
-		EmitMove_RX_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+		i8 IndexRegister := PushRegisterStack(cState)
+		CompileExpression(cState, IndexRegister, Index)
+		
+		i8 IndexSize := GetTypeSize(Index->ValueType) As i8
+		
+		if (IndexSize < 4) {
+			Cast(cState, IndexRegister, IndexSize)
+		}
+		
+		if (IsSet || GetAddress) {
+			EmitLea_R64_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			
+			if (IsSet) {
+				EmitMove_RIX_RX(cState, ResultRegister, ValueRegister, IndexScale)
+			}
+		}
+		else {
+			EmitMove_RX_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+		}
+		
+		PopRegisterStack(cState)
 	}
-	
-	PopRegisterStack(cState)
 }
 
 define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {

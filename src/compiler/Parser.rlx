@@ -2135,7 +2135,7 @@ define Block* ParseBlock(ParserState* pState) {
 	return NewBlock
 }
 
-declare ASTNode* ParseAssembly(ParserState*)
+declare ASTNode* ParseAssembly(ParserState*, i8)
 
 define VariableInfo* MakeMagicLocal(i8* Name, TypeInfo* BaseType, i8 IsParameter) {
 	/* Note: All of this is technically a memory leak, but that doesn't really matter */
@@ -2394,7 +2394,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
 			NewDefine->Attribute := KEYWORD_ASSEMBLY
 			
-			NewDefine->AssemblyBody := ParseAssembly(pState)->AssemblyValue
+			NewDefine->AssemblyBody := ParseAssembly(pState, false)->AssemblyValue
 		}
 		else {
 			if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
@@ -2522,7 +2522,7 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			Result := ParseWhile(pState)
 		}
 		else if (NextKeyword = KEYWORD_ASSEMBLY) {
-			Result := ParseAssembly(pState)
+			Result := ParseAssembly(pState, true)
 		}
 		else if (NextKeyword = KEYWORD_TRY) {
 			Result := ParseTry(pState)

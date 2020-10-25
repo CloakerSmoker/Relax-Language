@@ -204,6 +204,9 @@ define void SetupAssembly(ParserState* pState) {
 	
 	I->Set("bsr", MakeInstruction(null, 0x0FBD, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
 	I->Set("bsf", MakeInstruction(null, 0x0FBC, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
+	
+	/* Prefixes (which can just be treated as regular instructions) */
+	I->Set("lock", MakeInstruction(null, 0xF0, 0, E_NO_RM, 0))
 }
 
 define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
@@ -433,6 +436,8 @@ struct AssemblyBlock {
 	i32 InstructionCount,
 	InstructionNode** Instructions,
 	HashMap Labels
+	
+	ASTNode*{16} RegisterValues
 }
 
 i8 INSTRUCTION_REGULAR := 0
@@ -708,7 +713,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		if !(Found) {
 			SwapOutputStream()
 			
-			Print("No encoding for operand type(s).")
+			Print("No encoding for operand type(s).\n")
 			
 			ContextError(Result~>Context, null)
 		}
@@ -731,10 +736,27 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 	return Result
 }
 
-define ASTNode* ParseAssembly(ParserState* pState) {
+define ASTNode* ParseAssembly(ParserState* pState, i8 InFunction) {
 	AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
 	
 	ThisBlock~>Labels->Initialize()
+	
+	if (InFunction && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+		loop {
+			Token* RegisterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name")
+			i32 TargetRegister := LookupRegister(pState, RegisterNameToken, 0) & 0x0F
+			
+			Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected register value assignment")
+			
+			ThisBlock~>RegisterValues[TargetRegister] := ParseExpression(pState, 0)
+			
+			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				break
+			}
+		}
+		
+		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for register value list")
+	}
 	
 	InstructionNode** Instructions := Alloc(16 * #InstructionNode)
 	i32 InstructionCapacity := 16
