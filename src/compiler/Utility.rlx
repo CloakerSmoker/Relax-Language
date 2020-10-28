@@ -57,6 +57,11 @@ define void PrintSpaces(i32 Count) {
 	}
 }
 
+define void ManualErrorMessagePrelude() {
+	SwapOutputStream()
+	TextColor(Red | Bright)
+}
+
 define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {	
 	i8* LineNumberString := IToA(At->LineNumber)
 	i32 LineNumberLength := StringLength(LineNumberString)
@@ -65,8 +70,9 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 		TextColor(Color)
 		Print(Message)
 		PrintNewLine()
-		ResetColors()
 	}
+	
+	ResetColors()
 	
 	PrintSpaces(LineNumberLength + 1) 
 	Print(" [^90 ")

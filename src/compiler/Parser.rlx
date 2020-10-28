@@ -820,9 +820,9 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 		return 1
 	}
 	
-	SwapOutputStream()
+	ManualErrorMessagePrelude()
 	
-	Print("\n%s", Message)
+	Print("%s", Message)
 	
 	if ((Expected) As i64) != 0 {
 		Print(", expected ")
@@ -1035,7 +1035,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		return BestFit
 	}
 	
-	SwapOutputStream()
+	ManualErrorMessagePrelude()
 	
 	Print("No matching overload found for:\n")
 	PrettyError(CallerNode~>Context, Red | Bright)
@@ -1072,8 +1072,7 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 		Next := Next->Next
 	}
 	
-	SwapOutputStream()
-	Exit(0)
+	Exit(1)
 }
 
 /*
@@ -1082,67 +1081,75 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 ==========================================
 */
 
-define Type TryGetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, i8** ErrorMessage) {
+define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, ErrorContext* BlameContext) {
 	/* Decides the result of a binary expression with the given operand types */
+	
+	i8 Compatible := !CheckTypes(pState, RightType, LeftType, null)
+	Type BestFit := LeftType
+	
+	if (GetGenericRating(LeftType) < GetGenericRating(RightType)) {
+		BestFit := RightType
+	}
 	
 	TypeInfo* LeftBaseType := GetBaseType(LeftType)
 	TypeInfo* RightBaseType := GetBaseType(RightType)
 	
-	i16 LeftDepth := LeftType.PointerDepth
-	i16 RightDepth := RightType.PointerDepth
+	i16 LeftDepth := GetPointerDepth(LeftType)
+	i16 RightDepth := GetPointerDepth(RightType)
 	
-	if (LeftDepth && RightDepth) {
-		/* If we are dealing with two pointer types, something's wrong */
-		
-		ErrorMessage := "Operations involving two pointers are disallowed."
-	}
-	else if (LeftDepth) {
-		/* Eles if the left side is a pointer */
-		
-		if (RightBaseType->IsStructType) {
-			/* And the right type is a.. struct? Then something's real funky */
-			
-			ErrorMessage := "Invalid operation types1."
-		}
-		
-		/* Otherwise, right type is a normal type, so return the pointer type */
-		return LeftType
-	}
-	else if (RightDepth) {
-		/* Same as above, just in the opposite direction */
-		
-		if (LeftBaseType->IsStructType) {
-			ErrorMessage := "Invalid operation types2."
-		}
-		
-		return RightType
+	if (Compatible) {
+		return BestFit
 	}
 	else {
-		if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
-			/* If both types are structs, then something even more funky is going on */
-			ErrorMessage := "Invalid operation types3."
+		if (LeftDepth && RightDepth) {
+			; If we are dealing with two pointer types, something's wrong
+			
+			ManualErrorMessagePrelude()
+			
+			Print("Operations on the types ")
+			PrintType(LeftType)
+			Print(" and ")
+			PrintType(RightType)
+			Print(" are invalid.\n")
+			
+			ContextError(BlameContext, null)
 		}
-		
-		/* Otherwise, two normal types, just pick the bigger of the two */
-		if (LeftBaseType->Size >= RightBaseType->Size) {
+		else if (LeftDepth) {
+			/* Eles if the left side is a pointer */
+			
+			if (RightBaseType->IsStructType) {
+				/* And the right type is a.. struct? Then something's real funky */
+				
+				ContextError(BlameContext, "Invalid operation types1.")
+			}
+			
+			/* Otherwise, right type is a normal type, so return the pointer type */
 			return LeftType
 		}
-		else {
+		else if (RightDepth) {
+			/* Same as above, just in the opposite direction */
+			
+			if (LeftBaseType->IsStructType) {
+				ContextError(BlameContext, "Invalid operation types2.")
+			}
+			
 			return RightType
 		}
+		else {
+			if (LeftBaseType->IsStructType || RightBaseType->IsStructType) {
+				/* If both types are structs, then something even more funky is going on */
+				ContextError(BlameContext, "Invalid operation types3.")
+			}
+			
+			/* Otherwise, two normal types, just pick the bigger of the two */
+			if (LeftBaseType->Size >= RightBaseType->Size) {
+				return LeftType
+			}
+			else {
+				return RightType
+			}
+		}
 	}
-}
-
-define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, ErrorContext* BlameContext) {
-	i8* ErrorMessage := 0
-	
-	Type Result := TryGetBinaryResultType(pState, LeftType, RightType, &ErrorMessage)
-	
-	if (ErrorMessage) {
-		ContextError(BlameContext, ErrorMessage)
-	}
-	
-	return Result
 }
 
 declare Token* ParserCurrentToken(ParserState*)
@@ -2495,11 +2502,10 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				/* Parse the expression to return */
 				ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
 				
-				/* Get the type of the return expression, and the current function's return type */
-				Type ActualReturnType := DowncastIntegerType(pState, ExpressionToReturn)
+				ExpressionToReturn := DowncastIntegerType(pState, ExpressionToReturn)
 				Type ExpectedReturnType := pState->CurrentFunction->ReturnType
 				
-				CheckTypes(pState, ActualReturnType, ExpectedReturnType, ExpressionToReturn)
+				CheckTypes(pState, 0 As Type, ExpectedReturnType, ExpressionToReturn)
 				
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 			}
@@ -2978,9 +2984,22 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		else if (Operator = OPERATOR_AS) {
 			/* Else if the next operator is 'as' then parse a type name as the right operand */
 			
+			; Note: This needs a hack to give the result node a correct context, since `ParseTypeName` doesn't
+			;  produce a context
+			
+			i32 BeforeType := FreezeParser(pState)
+			ErrorContext* TypeStart := ParserNextToken(pState)~>Context
+			UnfreezeParser(pState, BeforeType)
+			
 			Type CastToType := ParseTypeName(pState)
 			
+			i32 AfterType := FreezeParser(pState)
+			UnfreezeParser(pState, AfterType - 1)
+			ErrorContext* TypeEnd := ParserNextToken(pState)~>Context
+			UnfreezeParser(pState, AfterType)
+			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
+			MergeContexts(TypeStart, TypeEnd, Operand~>Context)
 		}
 		else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
 			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")

@@ -28,10 +28,10 @@ i32 MSF_IPI_STREAM_INDEX := 4
 
 struct MSFStreamDirectory {
 	i32 NumberOfStreams
-	i32 StreamSizesArrayStart
+	i32{0} StreamSizesArray
 	
 	define i32* GetStreamSizesArray() {
-		return this~>StreamSizesArrayStart
+		return this~>StreamSizesArray
 	}
 	define i32* GetStreamBlocksArray() {
 		return (this->GetStreamSizesArray() + this->NumberOfStreams * 4) As i32*
@@ -63,6 +63,9 @@ struct MSFStreamDirectory {
 	define i32 GetSize() {
 		return 4 + (this->NumberOfStreams * 4) + this->GetBlocksArraySize()
 	}
+	define void* GetEnd() {
+		return this + this->GetSize()
+	}
 	
 	define i32* GetStreamBlocks(i32 TargetStreamIndex) {
 		i32* Start := this->GetStreamBlocksArray()
@@ -74,32 +77,83 @@ struct MSFStreamDirectory {
 		return Start
 	}
 	
+	define i32* SetStreamSize(i32 StreamIndex, i32 NewSize, i32* OutBlocksNeeded) {
+		if (StreamIndex < this->NumberOfStreams) {
+			i32* SizesArray := this->GetStreamSizesArray()
+			i32 OldSize := SizesArray[StreamIndex]
+			
+			i32 NewSizeBlockCount := this->GetStreamBlockCountFromSize(NewSize)
+			i32 OldSizeBlockCount := this->GetStreamBlockCountFromSize(OldSize)
+			i32 BlockCountDifference := NewSizeBlockCount - OldSizeBlockCount
+			
+			if !(BlockCountDifference) {
+				SizesArray[StreamIndex] := NewSize
+				return null
+			}
+			
+			i32* NextStreamBlocks := this->GetStreamBlocks(StreamIndex + 1)
+			i32 DifferenceAsOffset := BlockCountDifference * 4
+			
+			MoveMemory(NextStreamBlocks + DifferenceAsOffset, NextStreamBlocks, (this->GetEnd() - NextStreamBlocks) As i32)
+			
+			i32* ThisStreamBlocks := this->GetStreamBlocks(StreamIndex)
+			i32* NewBlocksTail := ThisStreamBlocks + OldSizeBlockCount * 4
+			
+			return NewBlocksTail
+		}
+		else {
+			i32* BlocksArray := this->GetStreamBlocksArray()
+			
+			MoveMemory(BlocksArray + (StreamIndex - this->NumberOfStreams) * 4, BlocksArray, this->GetBlocksArraySize())
+			
+			for (i32 Index := this->NumberOfStreams, Index < StreamIndex, Index += 1) {
+				BlocksArray[Index] := 0
+			}
+			
+			BlocksArray[StreamIndex] := NewSize
+			
+			OutBlocksNeeded[0] := this->GetStreamBlockCountFromSize(NewSize)
+			
+			return this->GetStreamBlocks(StreamIndex)
+		}
+	}
+	
 	define i32 StartAppendStream(i32 Size, i32* OutBlockCount, i32* OutNewSize, i32* OutStreamNumber) {
-		void* BlocksArray := this->GetStreamBlocksArray()
-		i32 BlocksArraySize := this->GetBlocksArraySize()
-		i32 OldSize := 4 + (this->NumberOfStreams * 4) + BlocksArraySize
+		i32 StreamIndex := this->NumberOfStreams
 		
-		; Shift the entire block number array to make room for another i32 stream size before it
-		MoveMemory(BlocksArray + 4, BlocksArray, BlocksArraySize)
+		i32 BlockNumberCount := 0
+		i32* BlockNumbers := this->SetStreamSize(StreamIndex, Size, &BlockNumberCount)
 		
-		i32* NewBlockSizesTail := BlocksArray
-		i32 BlockNumbersCount := this->GetStreamBlockCountFromSize(Size)
+		OutBlockCount[0] := BlockNumberCount
+		OutNewSize[0] := this->GetSize()
+		OutStreamNumber[0] := StreamIndex
+		return BlockNumbers As i64 - this As i64
 		
-		; Write the new stream size into the space the block number array was shifted out of
-		NewBlockSizesTail[0] := Size
-		
-		; And return what the stream number of the new stream actaully is
-		OutStreamNumber[0] := this->NumberOfStreams
-		
-		; Update the stream count
-		this->NumberOfStreams += 1
-		
-		; And update the output parameters
-		OutBlockCount[0] := BlockNumbersCount
-		OutNewSize[0] := OldSize + 4 + BlockNumbersCount * 4
-		
-		; Return the offset into the buffer for the caller to write the new stream's block numbers into
-		return OldSize + 4
+		;void* BlocksArray := this->GetStreamBlocksArray()
+		;i32 BlocksArraySize := this->GetBlocksArraySize()
+		;i32 OldSize := 4 + (this->NumberOfStreams * 4) + BlocksArraySize
+		;
+		;; Shift the entire block number array to make room for another i32 stream size before it
+		;MoveMemory(BlocksArray + 4, BlocksArray, BlocksArraySize)
+		;
+		;i32* NewBlockSizesTail := BlocksArray
+		;i32 BlockNumbersCount := this->GetStreamBlockCountFromSize(Size)
+		;
+		;; Write the new stream size into the space the block number array was shifted out of
+		;NewBlockSizesTail[0] := Size
+		;
+		;; And return what the stream number of the new stream actaully is
+		;OutStreamNumber[0] := this->NumberOfStreams
+		;
+		;; Update the stream count
+		;this->NumberOfStreams += 1
+		;
+		;; And update the output parameters
+		;OutBlockCount[0] := BlockNumbersCount
+		;OutNewSize[0] := OldSize + 4 + BlockNumbersCount * 4
+		;
+		;; Return the offset into the buffer for the caller to write the new stream's block numbers into
+		;return OldSize + 4
 	}
 }
 
@@ -196,7 +250,7 @@ struct MSFBuilder {
 	define i32 AppendStream(void* StreamData, i32 StreamSize) {
 		i32 BlockCount := 0
 		i32 StreamIndex := 0
-		i32 BlockBufferOffset := this->StreamDirectory->StartAppendStream(StreamSize, &BlockCount, this->SuperBlock~>NumberOfDirectoryBytes, &StreamIndex)
+		i32* BlockBufferOffset := this->StreamDirectory->StartAppendStream(StreamSize, &BlockCount, this->SuperBlock~>NumberOfDirectoryBytes, &StreamIndex)
 		
 		i32 Remainder := StreamSize % 0x1000
 		

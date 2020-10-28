@@ -2072,16 +2072,9 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			i8 IsComparison := IsComparison(ExpressionToCompile->Operator)
 			
 			if (IsComparison) {
-				i8* ErrorMessage := 0
+				Type TrueResultType := GetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, null)
 				
-				Type TrueResultType := TryGetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, &ErrorMessage)
-				
-				if !(ErrorMessage) {
-					ResultSize := GetTypeSize(TrueResultType)
-				}
-				else {
-					ResultSize := 8
-				}
+				ResultSize := GetTypeSize(TrueResultType)
 			}
 			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
