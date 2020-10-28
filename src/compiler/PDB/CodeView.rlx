@@ -424,7 +424,7 @@ struct TPIStreamBuilder {
 		
 		this->ReAlloc(RecordSize)
 		
-		i8* EndOfRecords := this->Header->GetEndOfTypeRecords() As i8*
+		void* EndOfRecords := this->Header->GetEndOfTypeRecords()
 		i32 Offset := EndOfRecords - this->Header->GetStartOfTypeRecords()
 		
 		MoveMemory(EndOfRecords, Record, RecordSize)

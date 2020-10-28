@@ -12,6 +12,32 @@ define i32 Align(i32 N, i32 Size) {
 	return N
 }
 
+define void PrintArray(i8* Format, void* Array, i8 Size, i32 Count) {
+	Print("{%i, %i}[", Size, Count)
+	
+	void* Next := Array
+	
+	i8 Shift := Size * 8
+	i64 Mask := (1 As i64 << Shift) - 1
+	
+	for (i32 Index := 0, Index < Count, Index += 1) {
+		i64 Data := *(Next As i64*)
+		
+		Print(Format, Data & Mask)
+		
+		if (Index + 1 != Count) {
+			Print(", ")
+		}
+		
+		Next += Size
+	}
+	
+	Print("]\n")
+}
+define void PrintArray(void* Array, i8 Size, i32 Count) {
+	return PrintArray("%x", Array, Size, Count)
+}
+
 #Require "./src/compiler/PDB/MSF.rlx"
 #Require "./src/compiler/PDB/CodeView.rlx"
 #Require "./src/compiler/PDB/DBi.rlx"
@@ -103,6 +129,22 @@ define i32 Main() {
 	B->AppendStream(Empty, 0x1000)					; Names stream
 	
 	TPIFinalize(TB)
+	
+	i32 Extra := 0
+	B->StreamDirectory->SetStreamSize(0, 0x1300, &Extra)
+	Print("Expanded stream, %i new blocks needed\n", Extra)
+	
+	for (i32 I := 0, I < Extra, I += 1) {
+		B->StreamDirectory->SetStreamBlock(0, I, B->AllocateBlock())
+	}
+	
+	Print("SSA: ")
+	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
+	
+	B->StreamDirectory->SetStreamSize(0, 0, &Extra)
+	
+	Print("SSA: ")
+	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
 	
 	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\dummy.pdb"r)
 	
