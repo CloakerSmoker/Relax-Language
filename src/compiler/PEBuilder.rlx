@@ -1,3 +1,5 @@
+#Require "./src/lib/SafeString.rlx"
+
 /*
 ==========================================
 	PE building structs
@@ -175,6 +177,8 @@ i32 DEFAULT_FILE_ALIGNMENT := 0x0200
 i16 DEFAULT_MAJOR_OS_VERSION := 6
 i16 DEFAULT_MINOR_OS_VERSION := 0
 
+i64 DEFAULT_IMAGE_BASE := 0x40000000
+
 i16 IMAGE_SUBSYSTEM_WINDOWS_CUI := 3
 
 i16 DLL_DYNAMIC_BASE := 0x0040
@@ -264,6 +268,10 @@ define void WritePEHeader(void* IntoBuffer) {
 	Section building
 ==========================================
 */
+
+i32 DATA_SECTION_INDEX := 0
+i32 IDATA_SECTION_INDEX := 1
+i32 TEXT_SECTION_INDEX := 2
 
 i16 DATA_OFFSET := 0x1F8
 i16 IDATA_OFFSET := 0x220
@@ -452,9 +460,9 @@ define PEBuilder* BuildBuilder() {
 	/* Write all the sections (out of order, since they are moved around via changing XXXXX_OFFSET */
 	
 	/* NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, 0x0000636F6C65722E, SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE) */
-	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, 0x000061746164692E, SECTION_READ | SECTION_INITIALIZED_DATA)
-	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, 0x000000617461642E, SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
-	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, 0x000000747865742E, SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
+	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, '.idata', SECTION_READ | SECTION_INITIALIZED_DATA)
+	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, '.data', SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
+	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, '.text', SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
 	
 	/* Note: The characteristics are also hardcoded, but based on which section is being written */
 	

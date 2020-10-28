@@ -31,25 +31,23 @@ struct BuildConfig {
 	i8 DebugMode
 }
 
-#Require ./src/lib/Memory.rlx
-#Require ./src/lib/File.rlx
+#Require "./src/lib/Memory.rlx"
+#Require "./src/lib/File.rlx"
 
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
-#Require ./src/lib/SafeString.rlx
-#Require ./src/lib/HashMap.rlx
-#Require ./src/lib/Debug.rlx
+#Require "./src/lib/String.rlx"
+#Require "./src/lib/Console.rlx"
+#Require "./src/lib/SafeString.rlx"
+#Require "./src/lib/HashMap.rlx"
+#Require "./src/lib/Debug.rlx"
 
 declare i16* OpenAndRead(i8*, i32*)
 
-i64 DEFAULT_IMAGE_BASE := 0x40000000
-
-#Require ./src/compiler/Utility.rlx
-#Require ./src/compiler/Lexer.rlx
-#Require ./src/compiler/Parser.rlx
-#Require ./src/compiler/PEBuilder.rlx
-#Require ./src/compiler/ELFBuilder.rlx
-#Require ./src/compiler/Compiler.rlx
+#Require "./src/compiler/Utility.rlx"
+#Require "./src/compiler/Lexer.rlx"
+#Require "./src/compiler/Parser.rlx"
+#Require "./src/compiler/PEBuilder.rlx"
+#Require "./src/compiler/ELFBuilder.rlx"
+#Require "./src/compiler/Compiler.rlx"
 
 define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	i64 FileHandle := FileOpen(FilePath, FILE_READ)

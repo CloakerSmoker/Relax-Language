@@ -1,0 +1,326 @@
+#Require "./src/compiler/PEBuilder.rlx"
+
+i32 DBI_SIGNATURE := -1
+i32 DBI_VERSION := 19990903
+i16 DBI_BUILD_NUMBER := 1
+
+i16 DBI_MACHINE_AMD64 := 0x8664
+
+i32 DBI_VER60_MAGIC := 0xeffe0000 + 19970605
+
+struct SectionContributionEntry {
+	; '.text' = section 3
+	i16 Section
+	
+	; Offset = 0, the one module owns the entire section
+	i32 Offset
+	; Size = TextSection.size, we own the entire thing
+	i32 Size
+	
+	; TextSection.Characteristics
+	i32 Characteristics
+	
+	; 0, hopefully
+	i16 ModuleIndex
+	
+	; Both also 0, hopefully
+	i32 DataCRC
+	i32 RelocationsCRC
+}
+
+struct ModuleInfoEntry {
+	i32 Unused
+	SectionContributionEntry Contribution
+	
+	i16 Flags
+	
+	i16 ModuleSymbolStreamNumber
+	i32 SymbolsByteSize
+	i32 OldLineInfoByteSize
+	i32 LineInfoByteSize
+	
+	i16 SourceFileCount
+	
+	union {
+		i32 AlsoUnused
+		i32 NameLength
+	}
+	
+	i32 SourceFileNameIndex
+	i32 PDBFileNameIndex
+	
+	i8{0} ModuleName
+	
+	static i32 CalculateSize(i32 NameLength) {
+		return #ModuleInfoEntry + (NameLength + 1) * 2
+	}
+	
+	define i8* GetModuleName() {
+		return this~>ModuleName
+	}
+	define i8* GetObjectFileName() {
+		return this~>ModuleName + this->NameLength + 1
+	}
+	
+	define void* GetEnd() {
+		return this + ModuleInfoEntry:CalculateSize(this->NameLength)
+	}
+	
+	define void SetFieldDefaults() {
+		SectionContributionEntry* ThisContribution := this~>Contribution
+		
+		ThisContribution->Section := 2
+		ThisContribution->Offset := 0
+		ThisContribution->Size := 0x1000
+		ThisContribution->Characteristics := SECTION_READ | SECTION_EXECUTE | SECTION_CODE
+		
+		this->ModuleSymbolStreamNumber := -1
+		
+		this->SourceFileCount := 1
+	}
+	static ModuleInfoEntry* Adopt(void* Buffer, i32 NameLength) {
+		ModuleInfoEntry* this := Buffer
+		
+		this->SetFieldDefaults()
+		this->NameLength := NameLength
+		
+		return this
+	}
+}
+
+struct FileInfoSubstreamHeader {
+	i16 NumberOfModules
+	i16 NumberOfSourceFiles
+	
+	i16{0} ModuleIndices
+	
+	define void* GetHeaderEnd() {
+		return this + #FileInfoSubstreamHeader
+	}
+	
+	define i16* GetFileCountArray() {
+		return this->GetHeaderEnd() + this->NumberOfModules * 2
+	}
+	define i32* GetFileNamesOffsetArray() {
+		return (this->GetHeaderEnd() + this->NumberOfModules * 4) As i32*
+	}
+	define i8* GetFileNamesBuffer() {
+		return (this->GetFileNamesOffsetArray() + this->NumberOfSourceFiles * 4) As i8*
+	}
+	
+	static i32 GetSize(i32 NumberOfModules, i32 NumberOfSourceFiles) {
+		return #FileInfoSubstreamHeader + NumberOfModules * 4 + NumberOfSourceFiles * 4
+	}
+	define i32 GetSize(i32 NumberOfModules, i32 NumberOfSourceFiles) {
+		return FileInfoSubstreamHeader:GetSize(NumberOfModules, NumberOfSourceFiles)
+	}
+	
+	define void* GetEnd() {
+		return this + FileInfoSubstreamHeader:GetSize(this->NumberOfModules, this->NumberOfSourceFiles)
+	}
+}
+
+struct FileInfoSubstreamBuilder {
+	i8* NameBuffer
+	i32 NameBufferSize
+	
+	i32* OffsetArray
+	
+	i32 SourceFileCount
+	
+	static FileInfoSubstreamBuilder* New() {
+		FileInfoSubstreamBuilder* this := Alloc(#FileInfoSubstreamBuilder)
+		
+		this->NameBufferSize := 0
+		this->NameBuffer := Alloc(4)
+		
+		this->OffsetArray := Alloc(4)
+		
+		return this
+	}
+	
+	define void AddSourceFile(i8* SourceFile, i32 SourceFileLength) {
+		i32 SourceFileOffsetIndex := this->SourceFileCount
+		this->SourceFileCount += 1
+		
+		i32 SourceFileOffset := this->NameBufferSize
+		
+		this->OffsetArray := ReAlloc(this->OffsetArray, this->SourceFileCount * 4)
+		this->OffsetArray[SourceFileOffsetIndex] := SourceFileOffset
+		
+		this->NameBufferSize += SourceFileLength + 1
+		this->NameBuffer := ReAlloc(this->NameBuffer, this->NameBufferSize)
+		
+		MoveMemory(this->NameBuffer + SourceFileOffset, SourceFile, SourceFileLength)
+	}
+	define void SynchronizeWith(ModuleInfoEntry* Module) {
+		Module->SourceFileCount := this->SourceFileCount
+	}
+	
+	define i32 GetSize() {
+		return Align(FileInfoSubstreamHeader:GetSize(1, this->SourceFileCount) + this->NameBufferSize, 4)
+	}
+	
+	define void* SerializeInto(void* Buffer) {
+		FileInfoSubstreamHeader* Header := Buffer
+		
+		Header->NumberOfModules := 1
+		Header->NumberOfSourceFiles := this->SourceFileCount
+		
+		Header->GetFileCountArray()[0] := this->SourceFileCount
+		
+		MoveMemory(Header->GetFileNamesOffsetArray(), this->OffsetArray, this->SourceFileCount * 4)
+		
+		MoveMemory(Header->GetFileNamesBuffer(), this->NameBuffer, this->NameBufferSize)
+		
+		return Header->GetEnd() + this->NameBufferSize
+	}
+}
+
+struct DBIOptionalDebugHeader {
+	i16 FPODataStreamNumber
+	i16 ExceptionDataStreamNumber
+	i16 FixupDataStreamNumber
+	i16{2} Dummy
+	i16 SectionHeadersStreamNumber
+	i16{5} Unknown
+	
+	define void SetFieldDefaults() {
+		;i16* ThisBuffer := this As i16*
+		;
+		;for (i32 Index := 0, Index < 10, Index += 1) {
+		;	ThisBuffer[Index] := -1
+		;}
+	}
+	define void* GetEnd() {
+		return this + #DBIOptionalDebugHeader
+	}
+}
+
+struct DBIStreamHeader {
+	; Size = 64
+	
+	i32 Signature
+	i32 Version
+	i32 Age
+	
+	i16 GlobalStreamIndex
+	i16 BuildNumber
+	i16 PublicStreamIndex
+	i16 MSPDBVersion
+	i16 SymbolRecordStreamIndex
+	i16 Unknown
+	
+	i32 ModuleInfoSize
+	i32 SectionContributionSize
+	i32 SectionMapSize
+	i32 SourceInfoSize
+	i32 TypeServerMapSize
+	
+	i32 MFCTypeServerStreamIndex
+	i32 OptionalHeaderSize
+	i32 ECStreamSize
+	
+	i16 Flags
+	i32 Machine
+	
+	define void SetFieldDefaults() {
+		this->Signature := DBI_SIGNATURE
+		this->Version := DBI_VERSION
+		this->Age := DBI_BUILD_NUMBER
+		
+		;this->OptionalHeaderSize := #DBIOptionalDebugHeader
+	}
+	
+	define void* GetSourceInfo() {
+		return this + #DBIStreamHeader + this->ModuleInfoSize + this->SectionContributionSize + this->SectionMapSize
+	}
+}
+
+struct DBIStreamBuilder {
+	union {
+		void* Buffer
+		DBIStreamHeader* Header
+	}
+	
+	FileInfoSubstreamBuilder* FileInfoBuilder
+	
+	i32 BufferSize
+	
+	static DBIStreamBuilder* New() {
+		DBIStreamBuilder* this := Alloc(#DBIStreamBuilder)
+		
+		this->BufferSize := #DBIStreamHeader
+		this->Buffer := Alloc(this->BufferSize)
+		
+		this->Header->SetFieldDefaults()
+		
+		this->FileInfoBuilder := FileInfoSubstreamBuilder:New()
+		
+		return this
+	}
+	
+	define void ReAlloc(i32 AdditionalSize) {
+		this->BufferSize += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
+	}
+	
+	define ModuleInfoEntry* SetModule(i8* ModuleName, i32 ModuleNameLength) {
+		i32 Size := ModuleInfoEntry:CalculateSize(ModuleNameLength)
+		i32 ThisEntryOffset := this->BufferSize
+		
+		this->Header->ModuleInfoSize += Align(Size, 4)
+		this->ReAlloc(Size)
+		
+		ModuleInfoEntry* NewEntry := ModuleInfoEntry:Adopt(this->Buffer + ThisEntryOffset, ModuleNameLength)
+		
+		MoveMemory(NewEntry->GetModuleName(), ModuleName, ModuleNameLength)
+		MoveMemory(NewEntry->GetObjectFileName(), ModuleName, ModuleNameLength)
+		
+		return NewEntry
+	}
+	
+	define i32 GetSize() {
+		return this->BufferSize + this->FileInfoBuilder->GetSize() ;+ #DBIOptionalDebugHeader
+	}
+	
+	define void* SerializeInto(void* Buffer) {
+		this->Header->SourceInfoSize := this->FileInfoBuilder->GetSize()
+		
+		MoveMemory(Buffer, this->Buffer, this->BufferSize)
+		Buffer += this->BufferSize
+		
+		Buffer := this->FileInfoBuilder->SerializeInto(Buffer)
+		
+		DBIOptionalDebugHeader* OptionalHeader := Buffer
+		OptionalHeader->SetFieldDefaults()
+		
+		return OptionalHeader->GetEnd()
+	}
+}
+
+define void WriteDBI(MSFBuilder* ToBuilder) {
+	DBIStreamBuilder* B := DBIStreamBuilder:New()
+	
+	i8* Name := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r
+	
+	ModuleInfoEntry* E := B->SetModule(Name, StringLength(Name))
+	
+	i8* FileName := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r
+	
+	B->FileInfoBuilder->AddSourceFile(FileName, StringLength(FileName))
+	
+	FileName := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r
+	B->FileInfoBuilder->AddSourceFile(FileName, StringLength(FileName))
+	
+	B->FileInfoBuilder->SynchronizeWith(E)
+	
+	i32 Size := B->GetSize()
+	void* Buffer := Alloc(Size)
+	
+	B->SerializeInto(Buffer)
+	
+	ToBuilder->AppendStream(Buffer, Size)
+	
+	Print("DBI Done\n")
+}

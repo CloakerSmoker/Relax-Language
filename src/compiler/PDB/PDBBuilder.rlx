@@ -2,8 +2,19 @@
 #Require "./src/lib/File.rlx"
 #Require "./src/lib/Debug.rlx"
 
+define i32 Align(i32 N, i32 Size) {
+	i32 Remainder := N % Size
+	
+	if (Remainder) {
+		N += Size - Remainder
+	}
+	
+	return N
+}
+
 #Require "./src/compiler/PDB/MSF.rlx"
 #Require "./src/compiler/PDB/CodeView.rlx"
+#Require "./src/compiler/PDB/DBi.rlx"
 
 struct PDBStreamHeader unaligned {
 	i32 Version
@@ -73,6 +84,8 @@ define i32 Main() {
 	;
 	;Bu->NameMap->OffsetIndexMap->Print()
 	
+	Bu->NameMap->Set("/names", 5)
+	
 	i32 PDBStreamSize := Bu->GetSize()
 	Bu->SerializeInto(StreamBuffer, 0x123, 0x456)
 	
@@ -83,8 +96,11 @@ define i32 Main() {
 	
 	TPIStreamBuilder* TB := TPITest(B)
 	
-	B->AppendStream(Empty, 0x1000)					; DBI Stream
+	WriteDBI(B)
+	;B->AppendStream(Empty, 0x1000)					; DBI Stream
 	B->AppendStream(Empty, 0x1000)					; IPI Stream
+	
+	B->AppendStream(Empty, 0x1000)					; Names stream
 	
 	TPIFinalize(TB)
 	
@@ -113,45 +129,6 @@ define i32 Main() {
 	;return 0
 }
 
-
-
-i32 DBI_SIGNATURE := -1
-i32 DBI_VERSION := 19990903
-i16 DBI_BUILD_NUMBER := 1
-
-struct DBIStreamHeader {
-	i32 Signature
-	i32 Version
-	i32 Age
-	
-	i16 GlobalStreamIndex
-	i16 BuildNumber
-	i16 PublicStreamIndex
-	i16 MSPDBVersion
-	i16 SymbolRecordStreamIndex
-	i16 Unknown
-	
-	i32 ModuleInfoSize
-	i32 SectionContributionSize
-	i32 SectionMapSize
-	i32 SourceInfoSize
-	i32 TypeServerMapSize
-	
-	i32 MFCTypeServerStreamIndex
-	i32 OptionalHeaderSize
-	i32 ECStreamSize
-	
-	i16 Flags
-	i16 Machine
-	i16 Padding
-	
-	define void SetFieldDefaults() {
-		this->Signature := DBI_SIGNATURE
-		this->Version := DBI_VERSION
-		this->Age := DBI_BUILD_NUMBER
-	}
-}
-
 define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
 	
@@ -177,7 +154,7 @@ define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	
 	B->AppendBitField(CV_KIND_I64, 3, 9)
 	
-	B->PrintTypeRecords()
+	;B->PrintTypeRecords()
 	
 	Print("TPI Done\n")
 	

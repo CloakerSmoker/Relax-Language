@@ -229,18 +229,29 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 }
 
 define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
+	; Since there's 16 different registers you could assign, we just reserve 16 ASTNode* inside of the
+	;  AssemblyBlock struct, which is fine since only like 10 will ever be allocated
 	for (i8 RegisterValueIndex := 0, RegisterValueIndex < 16, RegisterValueIndex += 1) {
 		ASTNode* ThisRegisterValue := ToCompile~>RegisterValues[RegisterValueIndex]
 		
 		if (ThisRegisterValue != null) {
+			; So, if this register has a value, then we compile the value expression
+			; But, since any following value expressions could clobber the register we just 
+			;  compiled a value for, the safest bet is to just push the value on the stack
+			;   and pop them into the actual registers after we know the registers can't get
+			;    clobbered anymore.
 			CompileExpression(cState, RAX, ThisRegisterValue)
 			EmitPush_R64(cState, RAX)
 		}
 	}
+	
+	; No registers can get clobbered below here, since we aren't compiling any high level code
 	for (RegisterValueIndex := 15, RegisterValueIndex >= 0, RegisterValueIndex -= 1) {
 		ThisRegisterValue := ToCompile~>RegisterValues[RegisterValueIndex]
 		
 		if (ThisRegisterValue != null) {
+			; Pop the register values into the target registers in reverse order, since they are pushed
+			;  in order
 			EmitPop_R64(cState, RegisterValueIndex)
 		}
 	}

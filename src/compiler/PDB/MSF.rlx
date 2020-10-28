@@ -103,6 +103,8 @@ struct MSFStreamDirectory {
 	}
 }
 
+i64 MSF_MAGIC := 0x53441a0a0d
+
 struct MSFBuilder {
 	union {
 		void* Buffer
@@ -126,7 +128,7 @@ struct MSFBuilder {
 		
 		MoveMemory(MagicBuffer, "Microsoft C/C++ MSF 7.00", 24)
 		
-		(MagicBuffer + 24 As i64*)[0] := 0x53441a0a0d
+		(MagicBuffer + 24 As i64*)[0] := MSF_MAGIC
 		
 		i8* BlockMapBuffer := this->Buffer + 0x1000
 		
@@ -219,6 +221,12 @@ struct MSFBuilder {
 		}
 		
 		return StreamIndex
+	}
+	define i32 PointerToOffset(void* PointerIntoBuffer) {
+		return (PointerIntoBuffer - this->Buffer) As i32
+	}
+	define void* OffsetToPointer(i32 Offset) {
+		return this->Buffer + Offset
 	}
 	
 	define void WriteToFile(i8* FilePath) {

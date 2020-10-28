@@ -444,6 +444,11 @@ struct TPIStreamBuilder {
 		
 		PointerRecord->Attributes := CV_POINTER_ATTRIBUTES
 		
+		if (PointerToTypeIndex < 0x1000 && !(PointerToTypeIndex & CV_MODE_POINTER)) {
+			PointerToTypeIndex |= 0x600
+			TargetDepth -= 1
+		}
+		
 		for (i32 Depth := TargetDepth, Depth > 0, Depth -= 1) {
 			PointerRecord->PointerToTypeIndex := PointerToTypeIndex
 			
