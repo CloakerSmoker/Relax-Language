@@ -348,6 +348,14 @@ struct TPIStreamHeader {
 		
 		this->HashKeySize := 4
 		this->NumberOfHashBuckets := TPI_MAX_HASH_BUCKETS - 1
+		
+		this->HashValueBufferOffset := 0
+		this->HashValueBufferLength := 0
+		
+		this->HashTableBufferOffset := 0
+		this->HashTableBufferLength := 0
+		
+		this->IndexOffsetBufferOffset := 0
 	}
 	define CVTypeRecord* GetStartOfTypeRecords() {
 		return (this + #TPIStreamHeader) As CVTypeRecord*
@@ -444,7 +452,7 @@ struct TPIStreamBuilder {
 		
 		PointerRecord->Attributes := CV_POINTER_ATTRIBUTES
 		
-		if (PointerToTypeIndex < 0x1000 && !(PointerToTypeIndex & CV_MODE_POINTER)) {
+		if (PointerToTypeIndex < 0x1000 && (PointerToTypeIndex ^ CV_MODE_POINTER)) {
 			PointerToTypeIndex |= 0x600
 			TargetDepth -= 1
 		}
@@ -619,13 +627,6 @@ struct TPIStreamBuilder {
 	}
 	
 	define void Serialize() {
-		this->Header->HashValueBufferOffset := 0
-		this->Header->HashValueBufferLength := 0
-		
-		this->Header->HashTableBufferOffset := 0
-		this->Header->HashTableBufferLength := 0
-		
-		this->Header->IndexOffsetBufferOffset := 0
 		this->Header->IndexOffsetBufferLength := this->RecordOffsetCount * #RecordOffsetEntry
 		
 		this->Header->HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)

@@ -819,6 +819,7 @@ struct MSFBuilder {
 			this->StreamDirectoryBlock := this->GetBlockBuffer(this->StreamDirectoryBlockIndex)
 		}
 	}
+	
 	define i32 AllocateBlock() {
 		i8* BitMap := this->Buffer + 0x1000 * this->SuperBlock->FreeBlockMapBlock
 		
@@ -837,15 +838,21 @@ struct MSFBuilder {
 			}
 		}
 	}
-	define void FreeBlock(i32 BlockIndex) {
-		i8* BitMap := this->Buffer + 0x1000
-		
-		i32 ByteIndex := BlockIndex / 8
-		i8 BitIndex := BlockIndex % 8
-		i32 BitMask := 1 << BitIndex
-		
-		BitMap[ByteIndex] |= BitMask
-	}
+	
+	; Note: Many things (mainly callers of `CreateUninitializedStream`) expect any blocks allocated
+	;  for a stream to be a contiguous group of blocks, but if freeing blocks was allowed, then
+	;   it would be possible for a stream to allocate an out of order list of blocks, making it impossible
+	;    to write to the blocks as a single buffer. Which is why `FreeBlock` is commented out.
+	
+	;define void FreeBlock(i32 BlockIndex) {
+	;	i8* BitMap := this->Buffer + 0x1000
+	;	
+	;	i32 ByteIndex := BlockIndex / 8
+	;	i8 BitIndex := BlockIndex % 8
+	;	i32 BitMask := 1 << BitIndex
+	;	
+	;	BitMap[ByteIndex] |= BitMask
+	;}
 	
 	define void AllocateStreamDirectory() {
 		i32 StreamDirectoryIndexBlockNumber := this->AllocateBlock()
@@ -862,6 +869,11 @@ struct MSFBuilder {
 	}
 	
 	define void SetStreamData(i32 StreamIndex, void* StreamData, i32 StreamSize) {
+		; For any stream which needs to be in the stream directory, and have blocks allocated for it
+		;  (ex: The TPI stream)
+		; Optionally commits the serialized stream data to the allocated blocks (if the data is passed)
+		; Allows for uninitialized streams through the `StreamData != null` checks
+		
 		i32 BlocksNeeded := 0
 		i32 BlockBufferOffset := this->StreamDirectory->SetStreamSize(StreamIndex, StreamSize, &BlocksNeeded)
 		
@@ -893,6 +905,8 @@ struct MSFBuilder {
 		}
 	}
 	define i32 AppendStream(void* StreamData, i32 StreamSize) {
+		; For streams without a static index, and with serialized data (ex: TPI hash stream)
+		
 		this->NextStreamIndex += 1
 		i32 StreamIndex := this->NextStreamIndex
 		
@@ -900,12 +914,26 @@ struct MSFBuilder {
 		
 		return StreamIndex
 	}
-	define i32 SetNamedStreamData(i8* StreamName, i32 StreamNameLength, void* StreamData, i32 StreamSize) {
+	define i32 SetNamedStreamData(i8* StreamName, void* StreamData, i32 StreamSize) {
+		; For named streams without a static index, and with serialized data
+		
 		i32 StreamNumber := this->AppendStream(StreamData, StreamSize)
 		
-		this->PDBStreamBuilder->NameMap->Set(StreamName, StreamNameLength, StreamNumber)
+		this->PDBStreamBuilder->NameMap->Set(StreamName, StreamNumber)
 		
 		return StreamNumber
+	}
+	define void* GetStreamBuffer(i32 StreamIndex) {
+		i32 FirstBlock := this->StreamDirectory->GetStreamBlock(StreamIndex, 0)
+		return this->GetBlockBuffer(FirstBlock)
+	}
+	define void* CreateUninitializedStream(i32 StreamIndex, i32 StreamSize) {
+		; For streams with a static index, but without serialized data. Returns a buffer for the stream's
+		;  builder to serialize itself into.
+		
+		this->SetStreamData(StreamIndex, null, StreamSize)
+		
+		return this->GetStreamBuffer(StreamIndex)
 	}
 	
 	define i32 PointerToOffset(void* PointerIntoBuffer) {
@@ -916,13 +944,8 @@ struct MSFBuilder {
 	}
 	
 	define void Finalize() {
-		i32 PDBStreamSize := this->PDBStreamBuilder->GetSize()
-		this->SetStreamData(MSF_PDB_STREAM_INDEX, null, PDBStreamSize)
-		
-		i32 PDBStreamStartBlock := this->StreamDirectory->GetStreamBlock(MSF_PDB_STREAM_INDEX, 0)
-		void* PDBStreamStartBlockBuffer := this->GetBlockBuffer(PDBStreamStartBlock)
-		
-		this->PDBStreamBuilder->SerializeInto(PDBStreamStartBlockBuffer, 0, 0)
+		void* PDBStreamBuffer := this->CreateUninitializedStream(MSF_PDB_STREAM_INDEX, this->PDBStreamBuilder->GetSize())
+		this->PDBStreamBuilder->SerializeInto(PDBStreamBuffer, 0, 0)
 		
 		this->SuperBlock->NumberOfDirectoryBytes := this->StreamDirectory->GetSize()
 	}

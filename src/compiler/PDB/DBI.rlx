@@ -8,7 +8,7 @@ i16 DBI_MACHINE_AMD64 := 0x8664
 
 i32 DBI_VER60_MAGIC := 0xeffe0000 + 19970605
 
-struct SectionContributionEntry {
+struct DBISectionContributionEntry {
 	; '.text' = section 3
 	i16 Section
 	
@@ -28,9 +28,9 @@ struct SectionContributionEntry {
 	i32 RelocationsCRC
 }
 
-struct ModuleInfoEntry {
+struct DBIModuleInfoEntry {
 	i32 Unused
-	SectionContributionEntry Contribution
+	DBISectionContributionEntry Contribution
 	
 	i16 Flags
 	
@@ -52,7 +52,7 @@ struct ModuleInfoEntry {
 	i8{0} ModuleName
 	
 	static i32 CalculateSize(i32 NameLength) {
-		return #ModuleInfoEntry + (NameLength + 1) * 2
+		return #DBIModuleInfoEntry + (NameLength + 1) * 2
 	}
 	
 	define i8* GetModuleName() {
@@ -63,11 +63,11 @@ struct ModuleInfoEntry {
 	}
 	
 	define void* GetEnd() {
-		return this + ModuleInfoEntry:CalculateSize(this->NameLength)
+		return this + DBIModuleInfoEntry:CalculateSize(this->NameLength)
 	}
 	
 	define void SetFieldDefaults() {
-		SectionContributionEntry* ThisContribution := this~>Contribution
+		DBISectionContributionEntry* ThisContribution := this~>Contribution
 		
 		ThisContribution->Section := 2
 		ThisContribution->Offset := 0
@@ -78,8 +78,8 @@ struct ModuleInfoEntry {
 		
 		this->SourceFileCount := 1
 	}
-	static ModuleInfoEntry* Adopt(void* Buffer, i32 NameLength) {
-		ModuleInfoEntry* this := Buffer
+	static DBIModuleInfoEntry* Adopt(void* Buffer, i32 NameLength) {
+		DBIModuleInfoEntry* this := Buffer
 		
 		this->SetFieldDefaults()
 		this->NameLength := NameLength
@@ -88,14 +88,20 @@ struct ModuleInfoEntry {
 	}
 }
 
-struct FileInfoSubstreamHeader {
+struct DBIModuleInfoStreamHeader {
+	i32 Signature
+	i8{0} Symbols
+	
+}
+
+struct DBIFileInfoSubstreamHeader {
 	i16 NumberOfModules
 	i16 NumberOfSourceFiles
 	
 	i16{0} ModuleIndices
 	
 	define void* GetHeaderEnd() {
-		return this + #FileInfoSubstreamHeader
+		return this + #DBIFileInfoSubstreamHeader
 	}
 	
 	define i16* GetFileCountArray() {
@@ -109,18 +115,18 @@ struct FileInfoSubstreamHeader {
 	}
 	
 	static i32 GetSize(i32 NumberOfModules, i32 NumberOfSourceFiles) {
-		return #FileInfoSubstreamHeader + NumberOfModules * 4 + NumberOfSourceFiles * 4
+		return #DBIFileInfoSubstreamHeader + NumberOfModules * 4 + NumberOfSourceFiles * 4
 	}
 	define i32 GetSize(i32 NumberOfModules, i32 NumberOfSourceFiles) {
-		return FileInfoSubstreamHeader:GetSize(NumberOfModules, NumberOfSourceFiles)
+		return DBIFileInfoSubstreamHeader:GetSize(NumberOfModules, NumberOfSourceFiles)
 	}
 	
 	define void* GetEnd() {
-		return this + FileInfoSubstreamHeader:GetSize(this->NumberOfModules, this->NumberOfSourceFiles)
+		return this + DBIFileInfoSubstreamHeader:GetSize(this->NumberOfModules, this->NumberOfSourceFiles)
 	}
 }
 
-struct FileInfoSubstreamBuilder {
+struct DBIFileInfoSubstreamBuilder {
 	i8* NameBuffer
 	i32 NameBufferSize
 	
@@ -128,8 +134,8 @@ struct FileInfoSubstreamBuilder {
 	
 	i32 SourceFileCount
 	
-	static FileInfoSubstreamBuilder* New() {
-		FileInfoSubstreamBuilder* this := Alloc(#FileInfoSubstreamBuilder)
+	static DBIFileInfoSubstreamBuilder* New() {
+		DBIFileInfoSubstreamBuilder* this := Alloc(#DBIFileInfoSubstreamBuilder)
 		
 		this->NameBufferSize := 0
 		this->NameBuffer := Alloc(4)
@@ -153,16 +159,12 @@ struct FileInfoSubstreamBuilder {
 		
 		MoveMemory(this->NameBuffer + SourceFileOffset, SourceFile, SourceFileLength)
 	}
-	define void SynchronizeWith(ModuleInfoEntry* Module) {
-		Module->SourceFileCount := this->SourceFileCount
-	}
 	
 	define i32 GetSize() {
-		return Align(FileInfoSubstreamHeader:GetSize(1, this->SourceFileCount) + this->NameBufferSize, 4)
+		return DBIFileInfoSubstreamHeader:GetSize(1, this->SourceFileCount) + Align(this->NameBufferSize, 4)
 	}
-	
 	define void* SerializeInto(void* Buffer) {
-		FileInfoSubstreamHeader* Header := Buffer
+		DBIFileInfoSubstreamHeader* Header := Buffer
 		
 		Header->NumberOfModules := 1
 		Header->NumberOfSourceFiles := this->SourceFileCount
@@ -173,7 +175,7 @@ struct FileInfoSubstreamBuilder {
 		
 		MoveMemory(Header->GetFileNamesBuffer(), this->NameBuffer, this->NameBufferSize)
 		
-		return Header->GetEnd() + this->NameBufferSize
+		return Header->GetEnd() + Align(this->NameBufferSize, 4)
 	}
 }
 
@@ -186,11 +188,11 @@ struct DBIOptionalDebugHeader {
 	i16{5} Unknown
 	
 	define void SetFieldDefaults() {
-		;i16* ThisBuffer := this As i16*
-		;
-		;for (i32 Index := 0, Index < 10, Index += 1) {
-		;	ThisBuffer[Index] := -1
-		;}
+		i16* ThisBuffer := this As i16*
+		
+		for (i32 Index := 0, Index < 10, Index += 1) {
+			ThisBuffer[Index] := -1
+		}
 	}
 	define void* GetEnd() {
 		return this + #DBIOptionalDebugHeader
@@ -229,7 +231,9 @@ struct DBIStreamHeader {
 		this->Version := DBI_VERSION
 		this->Age := DBI_BUILD_NUMBER
 		
-		;this->OptionalHeaderSize := #DBIOptionalDebugHeader
+		Print("OptionalHeaderSize = %x\n", #DBIOptionalDebugHeader)
+		
+		this->OptionalHeaderSize := #DBIOptionalDebugHeader
 	}
 	
 	define void* GetSourceInfo() {
@@ -243,7 +247,9 @@ struct DBIStreamBuilder {
 		DBIStreamHeader* Header
 	}
 	
-	FileInfoSubstreamBuilder* FileInfoBuilder
+	DBIFileInfoSubstreamBuilder* FileInfo
+	DBIModuleInfoEntry* ModuleEntry
+	PESectionHeaders* SectionHeaders
 	
 	i32 BufferSize
 	
@@ -255,72 +261,83 @@ struct DBIStreamBuilder {
 		
 		this->Header->SetFieldDefaults()
 		
-		this->FileInfoBuilder := FileInfoSubstreamBuilder:New()
+		this->FileInfo := DBIFileInfoSubstreamBuilder:New()
 		
 		return this
 	}
-	
 	define void ReAlloc(i32 AdditionalSize) {
 		this->BufferSize += AdditionalSize
 		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
 	}
 	
-	define ModuleInfoEntry* SetModule(i8* ModuleName, i32 ModuleNameLength) {
-		i32 Size := ModuleInfoEntry:CalculateSize(ModuleNameLength)
+	define DBIModuleInfoEntry* SetModule(i8* ModuleName, i32 ModuleNameLength) {
+		i32 Size := DBIModuleInfoEntry:CalculateSize(ModuleNameLength)
 		i32 ThisEntryOffset := this->BufferSize
 		
 		this->Header->ModuleInfoSize += Align(Size, 4)
 		this->ReAlloc(Size)
 		
-		ModuleInfoEntry* NewEntry := ModuleInfoEntry:Adopt(this->Buffer + ThisEntryOffset, ModuleNameLength)
+		DBIModuleInfoEntry* NewEntry := DBIModuleInfoEntry:Adopt(this->Buffer + ThisEntryOffset, ModuleNameLength)
+		this->ModuleEntry := NewEntry
 		
 		MoveMemory(NewEntry->GetModuleName(), ModuleName, ModuleNameLength)
 		MoveMemory(NewEntry->GetObjectFileName(), ModuleName, ModuleNameLength)
 		
 		return NewEntry
 	}
-	
-	define i32 GetSize() {
-		return this->BufferSize + this->FileInfoBuilder->GetSize() ;+ #DBIOptionalDebugHeader
+	define DBIModuleInfoEntry* SetModule(i8* ModuleName) {
+		return this->SetModule(ModuleName, StringLength(ModuleName))
 	}
 	
-	define void* SerializeInto(void* Buffer) {
-		this->Header->SourceInfoSize := this->FileInfoBuilder->GetSize()
+	define void AddSourceFile(i8* SourceFilePath, i32 SourceFileName) {
+		this->FileInfo->AddSourceFile(SourceFilePath, SourceFileName)
+		this->ModuleEntry->SourceFileCount := this->FileInfo->SourceFileCount
+	}
+	define void AddSourceFile(i8* SourceFilePath) {
+		return this->AddSourceFile(SourceFilePath, StringLength(SourceFilePath))
+	}
+	
+	define void SetSectionHeaders(PESectionHeaders* Headers) {
+		this->SectionHeaders := Headers
+	}
+	
+	define i32 GetSize() {
+		return this->BufferSize + this->FileInfo->GetSize() + #DBIOptionalDebugHeader
+	}
+	define void SerializeInto(void* Buffer, i32 SectionHeadersStreamNumber) {
+		this->Header->SourceInfoSize := this->FileInfo->GetSize()
 		
 		MoveMemory(Buffer, this->Buffer, this->BufferSize)
 		Buffer += this->BufferSize
 		
-		Buffer := this->FileInfoBuilder->SerializeInto(Buffer)
+		Buffer := this->FileInfo->SerializeInto(Buffer)
 		
 		DBIOptionalDebugHeader* OptionalHeader := Buffer
 		OptionalHeader->SetFieldDefaults()
+		OptionalHeader->SectionHeadersStreamNumber := SectionHeadersStreamNumber
+	}
+	define void WriteStreams(MSFBuilder* ToBuilder) {
+		i32 SectionHeadersStream := ToBuilder->AppendStream(null, #PESectionHeaders)
 		
-		return OptionalHeader->GetEnd()
+		if (this->SectionHeaders != null) {
+			void* HeadersBuffer := ToBuilder->GetStreamBuffer(SectionHeadersStream)
+			MoveMemory(HeadersBuffer, this->SectionHeaders, #PESectionHeaders)
+		}
+		
+		void* StreamBuffer := ToBuilder->CreateUninitializedStream(MSF_DBI_STREAM_INDEX, this->GetSize())
+		
+		this->SerializeInto(StreamBuffer, SectionHeadersStream)
 	}
 }
 
 define void WriteDBI(MSFBuilder* ToBuilder) {
 	DBIStreamBuilder* B := DBIStreamBuilder:New()
 	
-	i8* Name := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r
+	B->SetModule("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r)
+	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r)
+	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r)
 	
-	ModuleInfoEntry* E := B->SetModule(Name, StringLength(Name))
-	
-	i8* FileName := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r
-	
-	B->FileInfoBuilder->AddSourceFile(FileName, StringLength(FileName))
-	
-	FileName := "C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r
-	B->FileInfoBuilder->AddSourceFile(FileName, StringLength(FileName))
-	
-	B->FileInfoBuilder->SynchronizeWith(E)
-	
-	i32 Size := B->GetSize()
-	void* Buffer := Alloc(Size)
-	
-	B->SerializeInto(Buffer)
-	
-	ToBuilder->SetStreamData(MSF_DBI_STREAM_INDEX, Buffer, Size)
+	B->WriteStreams(ToBuilder)
 	
 	Print("DBI Done\n")
 }

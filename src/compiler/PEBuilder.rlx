@@ -295,6 +295,12 @@ struct SectionHeader {
 	i32 Characteristics
 }
 
+struct PESectionHeaders {
+	SectionHeader DataHeader
+	SectionHeader IDataHeader
+	SectionHeader TextHeader
+}
+
 i32 SECTION_CODE := 0x00000020
 i32 SECTION_INITIALIZED_DATA := 0x00000040
 i32 SECTION_UNINITIALIZED_DATA := 0x00000080

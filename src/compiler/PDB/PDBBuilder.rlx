@@ -51,7 +51,7 @@ define i32 Main() {
 	B->AllocateStreamDirectory()
 	
 	; Unfinished streams:
-	B->SetNamedStreamData("/names", 6, null, 0x1000)
+	B->SetNamedStreamData("/names", null, 0x1000)
 	B->SetStreamData(MSF_MSF_STREAM_INDEX, null, 0x1000)				; MSF ??? stream
 	B->SetStreamData(MSF_IPI_STREAM_INDEX, null, 0x1000)				; IPI Stream
 	
@@ -118,7 +118,7 @@ define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	
 	B->AppendBitField(CV_KIND_I64, 3, 9)
 	
-	;B->PrintTypeRecords()
+	B->PrintTypeRecords()
 	
 	Print("TPI Done\n")
 	
