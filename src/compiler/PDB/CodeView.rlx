@@ -628,24 +628,8 @@ struct TPIStreamBuilder {
 		this->Header->IndexOffsetBufferOffset := 0
 		this->Header->IndexOffsetBufferLength := this->RecordOffsetCount * #RecordOffsetEntry
 		
-		i32 TPIStreamIndex := this->Builder->AppendStream(this->Buffer, this->BufferSize)
+		this->Header->HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
 		
-		if (TPIStreamIndex != MSF_TPI_STREAM_INDEX) {
-			Print("ERROR: TPIStreamIndex = %i, not 2\n", TPIStreamIndex)
-		}
-	}
-	define void SerializeRecordOffsetArray() {
-		; Since `this->Buffer` is already copied into the backing MSF buffer, we can't modify it
-		;  without also updating the version copied into the MSF buffer.
-		; Which makes it pointless to bother with `this->Buffer`, so we skip directly to getting
-		;  the backing TPI stream's first block and modifying the header it contains
-		
-		i32 HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
-		
-		i32* TPIBlocks := this->Builder->StreamDirectory->GetStreamBlocks(MSF_TPI_STREAM_INDEX)
-		
-		TPIStreamHeader* SerializedHeader := this->Builder->GetBlockBuffer(TPIBlocks[0])
-		
-		SerializedHeader->HashStreamIndex := HashStreamIndex
+		this->Builder->SetStreamData(MSF_TPI_STREAM_INDEX, this->Buffer, this->BufferSize)
 	}
 }

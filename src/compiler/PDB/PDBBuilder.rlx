@@ -42,50 +42,7 @@ define void PrintArray(void* Array, i8 Size, i32 Count) {
 #Require "./src/compiler/PDB/CodeView.rlx"
 #Require "./src/compiler/PDB/DBi.rlx"
 
-struct PDBStreamHeader unaligned {
-	i32 Version
-	i32 CreationTime
-	i32 WriteCount
-	i64 UUIDHigh
-	i64 UUIDLow
-}
-
-i32 PDB_VERSION_VC70 := 20000404
-i32 PBD_STREAM_VC140 := 20140508
-
-struct PDBStreamBuilder {
-	i32 FeatureFlags
-	PDBNamedStreamMapBuilder* NameMap
-	
-	static PDBStreamBuilder* New() {
-		PDBStreamBuilder* this := Alloc(#PDBStreamBuilder)
-		
-		this->NameMap := PDBNamedStreamMapBuilder:New()
-		
-		return this
-	}
-	define i32 GetSize() {
-		return #PDBStreamHeader + this->NameMap->GetSize() + 8
-	}
-	define void* SerializeInto(void* Buffer, i64 SourcePathHash, i64 Time) {
-		PDBStreamHeader* Header := Buffer As PDBStreamHeader*
-		
-		Header->Version := PDB_VERSION_VC70
-		Header->CreationTime := Time As i32
-		Header->WriteCount := 1
-		Header->UUIDLow := SourcePathHash ^ Time
-		Header->UUIDHigh := Time ^ Header
-		
-		Buffer := this->NameMap->SerializeInto(Buffer + #PDBStreamHeader)
-		
-		(Buffer As i32*)[0] := PBD_STREAM_VC140
-		
-		return Buffer + 8
-	}
-}
-
 declare TPIStreamBuilder* TPITest(MSFBuilder*)
-declare void TPIFinalize(TPIStreamBuilder*)
 
 define i32 Main() {
 	MSFBuilder* B := Alloc(#MSFBuilder)
@@ -93,55 +50,20 @@ define i32 Main() {
 	B->Initialize()
 	B->AllocateStreamDirectory()
 	
-	i8* D := Alloc(0x1500)
-	i8* StreamBuffer := D
+	; Unfinished streams:
+	B->SetNamedStreamData("/names", 6, null, 0x1000)
+	B->SetStreamData(MSF_MSF_STREAM_INDEX, null, 0x1000)				; MSF ??? stream
+	B->SetStreamData(MSF_IPI_STREAM_INDEX, null, 0x1000)				; IPI Stream
 	
-	PDBStreamBuilder* Bu := PDBStreamBuilder:New()
-	
-	;Bu->NameMap->Set("/LinkInfo", 5)
-	;Bu->NameMap->Set("/names", 13)
-	;Bu->NameMap->Set("/src/headerblock", 9)
-	;Bu->NameMap->Set("/src/files/debug.natvis", 384)
-	
-	;i32 StreamNumber := 0
-	;i8 R := Bu->NameMap->Get("/LinkInfo", &StreamNumber)
-	;
-	;Print("Bu->Get %i = %x\n", R, StreamNumber)
-	;
-	;Bu->NameMap->OffsetIndexMap->Print()
-	
-	Bu->NameMap->Set("/names", 5)
-	
-	i32 PDBStreamSize := Bu->GetSize()
-	Bu->SerializeInto(StreamBuffer, 0x123, 0x456)
-	
-	void* Empty := Alloc(0x1000)
-	
-	B->AppendStream(Empty, 0)						; MSF ??? stream
-	B->AppendStream(StreamBuffer, PDBStreamSize)	; PDB Stream
-	
-	TPIStreamBuilder* TB := TPITest(B)
-	
+	; Mostly finished streams:
+	TPITest(B)
 	WriteDBI(B)
-	;B->AppendStream(Empty, 0x1000)					; DBI Stream
-	B->AppendStream(Empty, 0x1000)					; IPI Stream
-	
-	B->AppendStream(Empty, 0x1000)					; Names stream
-	
-	TPIFinalize(TB)
-	
-	i32 Extra := 0
-	B->StreamDirectory->SetStreamSize(0, 0x1300, &Extra)
-	Print("Expanded stream, %i new blocks needed\n", Extra)
-	
-	for (i32 I := 0, I < Extra, I += 1) {
-		B->StreamDirectory->SetStreamBlock(0, I, B->AllocateBlock())
-	}
 	
 	Print("SSA: ")
 	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
 	
-	B->StreamDirectory->SetStreamSize(0, 0, &Extra)
+	; Totall finished streams (MSF format, PDB stream):
+	B->Finalize()
 	
 	Print("SSA: ")
 	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
@@ -203,7 +125,4 @@ define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	B->Serialize()
 	
 	return B
-}
-define void TPIFinalize(TPIStreamBuilder* B) {
-	B->SerializeRecordOffsetArray()
 }

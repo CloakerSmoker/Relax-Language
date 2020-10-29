@@ -1,355 +1,3 @@
-struct MSFSuperBlock {
-	i8{0x20} Magic,
-	i32 BlockSize,			; Should be 4096
-	i32 FreeBlockMapBlock,	; Block index (only allowed to be 1 or 2)
-	i32 NumberOfBlocks,		; Total block count, (NumberOfBlocks * BlockSize) = FileSize
-	i32 NumberOfDirectoryBytes,	; Size of stream directory
-	i32 Unknown,
-	i32 BlockMapIndex	; Index of a block listing blocks which contain the stream directory
-	; Number of blocks inside of BlockMapIndex block = Ceil(NumberOfDirectoryBytes / BlockSize)
-	
-	
-	define void Print() {
-		Print("MSFSuperBlock {\n")
-		Print("	BlockSize = %x\n", this->BlockSize)
-		Print("	FreeBlockMapBlock = %x\n", this->FreeBlockMapBlock)
-		Print("	NumberOfBlocks = %x\n", this->NumberOfBlocks)
-		Print("	NumberOfDirectoryBytes = %x\n", this->NumberOfDirectoryBytes)
-		Print("	Unknown = %x\n", this->Unknown)
-		Print("	BlockMapIndex = %x\n", this->BlockMapIndex)
-		Print("}\n")
-	}
-}
-
-i32 MSF_PDB_STREAM_INDEX := 1
-i32 MSF_TPI_STREAM_INDEX := 2
-i32 MSF_DBI_STREAM_INDEX := 3
-i32 MSF_IPI_STREAM_INDEX := 4
-
-struct MSFStreamDirectory {
-	; This struct does... a lot, for good reason though. This handles the stream number: block numbers mapping
-	;  which ends up very complex. Originally, it could only append streams in order. For example, adding
-    ;   another stream while building the TPI stream (index 2) would put that new stream in as stream 3
-	;    which was a big problem, since loads of streams end up being out of order.
-	; So, the struct was rewritten to support 0-size reserved steam indices, and resizing streams after they
-	;  were initially added to the directory, which should hopefully be good enough for the rest of the format.
-	; If not, I am already dreading rewriting it again.
-	
-	i32 NumberOfStreams
-	i32{0} StreamSizesArray
-	
-	define i32* GetStreamSizesArray() {
-		return this~>StreamSizesArray
-	}
-	define i32* GetStreamBlocksArray() {
-		return (this->GetStreamSizesArray() + this->NumberOfStreams * 4) As i32*
-	}
-	
-	define i32 GetStreamBlockCountFromSize(i32 Size) {
-		i32 BlockCount := Size / 0x1000
-		
-		if (Size % 0x1000) {
-			BlockCount += 1
-		}
-		
-		return BlockCount
-	}
-	define i32 GetStreamBlockCount(i32 StreamIndex) {
-		return this->GetStreamBlockCountFromSize(this->GetStreamSizesArray()[StreamIndex])
-	}
-	
-	define i32 GetBlocksArraySize() {
-		i32* StreamSizeArray := this->GetStreamSizesArray()
-		i32 TotalBlocks := 0
-		
-		for (i32 StreamIndex := 0, StreamIndex < this->NumberOfStreams, StreamIndex += 1) {
-			TotalBlocks += this->GetStreamBlockCountFromSize(StreamSizeArray[StreamIndex])
-		}
-		
-		return TotalBlocks * 4
-	}
-	define i32 GetSize() {
-		return 4 + (this->NumberOfStreams * 4) + this->GetBlocksArraySize()
-	}
-	define void* GetEnd() {
-		return this + this->GetSize()
-	}
-	
-	define i32* GetStreamBlocks(i32 TargetStreamIndex) {
-		i32* Start := this->GetStreamBlocksArray()
-		
-		for (i32 StreamIndex := 0, StreamIndex < TargetStreamIndex, StreamIndex += 1) {
-			Start += this->GetStreamBlockCount(StreamIndex) * 4
-		}
-		
-		return Start
-	}
-	define i32 GetStreamBlock(i32 TargetStreamIndex, i32 BlockIndex) {
-		return this->GetStreamBlocks(TargetStreamIndex)[BlockIndex]
-	}
-	define void SetStreamBlock(i32 TargetStreamIndex, i32 BlockIndex, i32 BlockValue) {
-		; Helper for setting a single data block for a given stream
-		this->GetStreamBlocks(TargetStreamIndex)[BlockIndex] := BlockValue
-	}
-	
-	define i32* SetStreamSize(i32 StreamIndex, i32 NewSize, i32* OutBlocksNeeded) {
-		if (StreamIndex < this->NumberOfStreams) {
-			; If this stream index already exists, we are resizing it.
-			
-			i32* SizesArray := this->GetStreamSizesArray()
-			i32 OldSize := SizesArray[StreamIndex]
-			
-			; Which means we need to figure out how many blocks need to be allocated/freed for this stream
-			i32 NewSizeBlockCount := this->GetStreamBlockCountFromSize(NewSize)
-			i32 OldSizeBlockCount := this->GetStreamBlockCountFromSize(OldSize)
-			i32 BlockCountDifference := NewSizeBlockCount - OldSizeBlockCount
-			
-			if !(BlockCountDifference) {
-				; If there is no difference in current vs required block count, then we can just update
-				;  the size of the stream and return
-				SizesArray[StreamIndex] := NewSize
-				return null
-			}
-			
-			; Otherwise, we need to either shift the entire block index array right/left to either
-			;  A) Make more space for any additional blocks
-			;  B) Free the space previously taken by the extra blocks this stream had
-			
-			; We only shift the block indices following this stream's indices, since the size of the target
-			;  stream doesn't impact the location of the blocks for any streams before it, only those after.
-			i32* NextStreamBlocks := this->GetStreamBlocks(StreamIndex + 1)
-			i32 DifferenceAsOffset := BlockCountDifference * 4
-			
-			; Move all stream blocks up until the end of the stream directory either forward or backward
-			;  to either fill the empty space created by this stream losing some blocks, or to make space
-			;   for the extra blocks that this stream is gaining.
-			MoveMemory(NextStreamBlocks + DifferenceAsOffset, NextStreamBlocks, (this->GetEnd() - NextStreamBlocks) As i32)
-			
-			; Update this stream's size, and how many blocks the stream has been relieved of or allocated
-			SizesArray[StreamIndex] := NewSize
-			OutBlocksNeeded[0] := BlockCountDifference
-			
-			; Finally, we return a pointer to where `OutBlocksNeeded` block numbers should be written after
-			;  they are allocated for this stream
-			return this->GetStreamBlocks(StreamIndex) + OldSizeBlockCount * 4
-		}
-		else {
-			; If this stream does not already exist, we are creating it (and any before it)
-			
-			; First thing's first, we need to shift over the block index array to make space for the
-			;  block sizes which need to be written for the target+proceeding streams
-			i32* BlocksArray := this->GetStreamBlocksArray()
-			MoveMemory(BlocksArray + (StreamIndex + 1 - this->NumberOfStreams) * 4, BlocksArray, this->GetBlocksArraySize())
-			
-			; The stream size array is now expanded, so now we'll write a 0 for the size of any proceeding streams
-			i32* StreamSizesArray := this->GetStreamSizesArray()
-			
-			for (i32 Index := this->NumberOfStreams, Index < StreamIndex, Index += 1) {
-				StreamSizesArray[Index] := 0
-			}
-			
-			; Now that all proceeding streams are initialized, we can write the target stream's size into
-			;  the stream size array
-			StreamSizesArray[StreamIndex] := NewSize
-			
-			; Update how many streams are in the directory, and how many blocks the new stream will need
-			this->NumberOfStreams := StreamIndex + 1
-			OutBlocksNeeded[0] := this->GetStreamBlockCountFromSize(NewSize)
-			
-			; And finally return a pointer to where blocks allocated for this stream should be written.
-			;  Since any proceeding streams are given 0 size, they take up 0 bytes in the block index array
-			;   so we don't have to worry about them here, the code path for resizing will handle that.
-			return this->GetStreamBlocks(StreamIndex)
-		}
-	}
-	
-	define i32 AppendStream(i32 Size, i32* OutBlockCount, i32* OutStreamNumber) {
-		i32 StreamIndex := this->NumberOfStreams
-		
-		i32 BlockNumberCount := 0
-		i32* BlockNumbers := this->SetStreamSize(StreamIndex, Size, &BlockNumberCount)
-		
-		OutBlockCount[0] := BlockNumberCount
-		OutStreamNumber[0] := StreamIndex
-		
-		return (BlockNumbers As i64 - this As i64) As i32
-		
-		;void* BlocksArray := this->GetStreamBlocksArray()
-		;i32 BlocksArraySize := this->GetBlocksArraySize()
-		;i32 OldSize := 4 + (this->NumberOfStreams * 4) + BlocksArraySize
-		;
-		;; Shift the entire block number array to make room for another i32 stream size before it
-		;MoveMemory(BlocksArray + 4, BlocksArray, BlocksArraySize)
-		;
-		;i32* NewBlockSizesTail := BlocksArray
-		;i32 BlockNumbersCount := this->GetStreamBlockCountFromSize(Size)
-		;
-		;; Write the new stream size into the space the block number array was shifted out of
-		;NewBlockSizesTail[0] := Size
-		;
-		;; And return what the stream number of the new stream actaully is
-		;OutStreamNumber[0] := this->NumberOfStreams
-		;
-		;; Update the stream count
-		;this->NumberOfStreams += 1
-		;
-		;; And update the output parameters
-		;OutBlockCount[0] := BlockNumbersCount
-		;OutNewSize[0] := OldSize + 4 + BlockNumbersCount * 4
-		;
-		;; Return the offset into the buffer for the caller to write the new stream's block numbers into
-		;return OldSize + 4
-	}
-}
-
-i64 MSF_MAGIC := 0x53441a0a0d
-
-struct MSFBuilder {
-	union {
-		void* Buffer
-		MSFSuperBlock* SuperBlock
-	}
-	
-	i32 StreamDirectoryBlockIndex
-	
-	union {
-		void* StreamDirectoryBlock
-		MSFStreamDirectory* StreamDirectory
-	}
-	
-	declare void AllocateBlock()
-	
-	define void Initialize() {
-		this->Buffer := Alloc(0x3000)
-		this->SuperBlock->NumberOfBlocks := 3
-		
-		i8* MagicBuffer := this->SuperBlock~>Magic
-		
-		MoveMemory(MagicBuffer, "Microsoft C/C++ MSF 7.00", 24)
-		
-		(MagicBuffer + 24 As i64*)[0] := MSF_MAGIC
-		
-		i8* BlockMapBuffer := this->Buffer + 0x1000
-		
-		for (i32 BlockMapIndex := 0, BlockMapIndex < 0x2000, BlockMapIndex += 1) {
-			BlockMapBuffer[BlockMapIndex] := 0xFF
-		}
-		
-		this->SuperBlock->BlockSize := 0x1000
-		this->SuperBlock->FreeBlockMapBlock := 1
-		
-		; Allocate the first 3 blocks in the file (for the superblock, and free block maps)
-		for (i32 Index := 0, Index < 3, Index += 1) {
-			this->AllocateBlock()
-		}
-	}
-	
-	define i32 GetSize() {
-		return this->SuperBlock->NumberOfBlocks * 0x1000
-	}
-	define void* GetBlockBuffer(i32 BlockIndex) {
-		return this->Buffer + (BlockIndex * 0x1000)
-	}
-	define void EnsureSize(i32 ForBlockIndex) {
-		ForBlockIndex += 1
-		
-		if (this->SuperBlock->NumberOfBlocks < ForBlockIndex) {
-			this->SuperBlock->NumberOfBlocks := ForBlockIndex
-			
-			this->Buffer := ReAlloc(this->Buffer, ForBlockIndex * 0x1000)
-			this->StreamDirectoryBlock := this->GetBlockBuffer(this->StreamDirectoryBlockIndex)
-		}
-	}
-	define i32 AllocateBlock() {
-		i8* BitMap := this->Buffer + 0x1000 * this->SuperBlock->FreeBlockMapBlock
-		
-		for (i32 Index := 0, Index < 0x1000, Index += 1) {
-			i32 ByteIndex := Index / 8
-			i32 BitIndex := Index % 8
-			i32 BitMask := 1 << (BitIndex As i8)
-			
-			i8 TargetByte := BitMap[ByteIndex]
-			
-			if (TargetByte & BitMask) {
-				BitMap[ByteIndex] := TargetByte ^ BitMask
-				
-				this->EnsureSize(Index)
-				return Index
-			}
-		}
-	}
-	define void FreeBlock(i32 BlockIndex) {
-		i8* BitMap := this->Buffer + 0x1000
-		
-		i32 ByteIndex := BlockIndex / 8
-		i8 BitIndex := BlockIndex % 8
-		i32 BitMask := 1 << BitIndex
-		
-		BitMap[ByteIndex] |= BitMask
-	}
-	
-	define void AllocateStreamDirectory() {
-		i32 StreamDirectoryIndexBlockNumber := this->AllocateBlock()
-		i32 StreamDirectoryBlockNumber := this->AllocateBlock()
-		
-		this->SuperBlock->BlockMapIndex := StreamDirectoryIndexBlockNumber
-		
-		i32* StreamDirectoryIndex := this->GetBlockBuffer(StreamDirectoryIndexBlockNumber)
-		
-		StreamDirectoryIndex[0] := StreamDirectoryBlockNumber
-		
-		this->StreamDirectoryBlockIndex := StreamDirectoryBlockNumber
-		this->StreamDirectoryBlock := this->GetBlockBuffer(StreamDirectoryBlockNumber)
-	}
-	define i32 AppendStream(void* StreamData, i32 StreamSize) {
-		i32 BlockCount := 0
-		i32 StreamIndex := 0
-		i32* BlockBufferOffset := this->StreamDirectory->AppendStream(StreamSize, &BlockCount, &StreamIndex)
-		
-		i32 Remainder := StreamSize % 0x1000
-		
-		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex += 1) {
-			i32 NextBlock := this->AllocateBlock()
-			
-			; Since the underlying buffer `this->Buffer` can be reallocated, we need to use the offset
-			;  to the block buffer to 'refresh' the pointer each iteration. Especially since
-			;   `this->AllocateBlock()` will reallocate `this->Buffer` if the new block hasn't
-			;    already been allocated space
-			i32* BlockBuffer := this->StreamDirectoryBlock + BlockBufferOffset
-			BlockBuffer[BlockIndex] := NextBlock
-			
-			void* NextBlockBuffer := this->GetBlockBuffer(NextBlock)
-			
-			if (BlockIndex + 1 = BlockCount && Remainder) {
-				MoveMemory(NextBlockBuffer, StreamData + BlockIndex * 0x1000, Remainder)
-			}
-			else {
-				MoveMemory(NextBlockBuffer, StreamData + BlockIndex * 0x1000, 0x1000)
-			}
-		}
-		
-		return StreamIndex
-	}
-	define i32 PointerToOffset(void* PointerIntoBuffer) {
-		return (PointerIntoBuffer - this->Buffer) As i32
-	}
-	define void* OffsetToPointer(i32 Offset) {
-		return this->Buffer + Offset
-	}
-	
-	define void WriteToFile(i8* FilePath) {
-		this->SuperBlock->NumberOfDirectoryBytes := this->StreamDirectory->GetSize()
-		
-		FileDelete(FilePath)
-		
-		i64 File := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
-		
-		FileWrite(File, this->Buffer, this->GetSize())
-		
-		FileClose(File)
-	}
-}
-
 define i32 PDBHashStringV1(i8* String, i32 Length) {
 	i32* Longs := String As i32*
 	i32 LongCount := Length / 4
@@ -881,4 +529,411 @@ define i8* PDBNamedStreamMapStorageKeyToLookupKey(PDBNamedStreamMapBuilder* this
 }
 define i32 PDBNamedStreamMapLookupKeyToStorageKey(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
 	return this->AppendString(Key, KeyLength)
+}
+
+struct PDBStreamHeader unaligned {
+	i32 Version
+	i32 CreationTime
+	i32 WriteCount
+	i64 UUIDHigh
+	i64 UUIDLow
+}
+
+i32 PDB_VERSION_VC70 := 20000404
+i32 PBD_STREAM_VC140 := 20140508
+
+struct PDBStreamBuilder {
+	i32 FeatureFlags
+	PDBNamedStreamMapBuilder* NameMap
+	
+	static PDBStreamBuilder* New() {
+		PDBStreamBuilder* this := Alloc(#PDBStreamBuilder)
+		
+		this->NameMap := PDBNamedStreamMapBuilder:New()
+		
+		return this
+	}
+	define i32 GetSize() {
+		return #PDBStreamHeader + this->NameMap->GetSize() + 8
+	}
+	define void* SerializeInto(void* Buffer, i64 SourcePathHash, i64 Time) {
+		PDBStreamHeader* Header := Buffer As PDBStreamHeader*
+		
+		Header->Version := PDB_VERSION_VC70
+		Header->CreationTime := Time As i32
+		Header->WriteCount := 1
+		Header->UUIDLow := SourcePathHash ^ Time
+		Header->UUIDHigh := Time ^ Header
+		
+		Buffer := this->NameMap->SerializeInto(Buffer + #PDBStreamHeader)
+		
+		(Buffer As i32*)[0] := PBD_STREAM_VC140
+		
+		return Buffer + 8
+	}
+}
+
+struct MSFSuperBlock {
+	i8{0x20} Magic,
+	i32 BlockSize,			; Should be 4096
+	i32 FreeBlockMapBlock,	; Block index (only allowed to be 1 or 2)
+	i32 NumberOfBlocks,		; Total block count, (NumberOfBlocks * BlockSize) = FileSize
+	i32 NumberOfDirectoryBytes,	; Size of stream directory
+	i32 Unknown,
+	i32 BlockMapIndex	; Index of a block listing blocks which contain the stream directory
+	; Number of blocks inside of BlockMapIndex block = Ceil(NumberOfDirectoryBytes / BlockSize)
+	
+	
+	define void Print() {
+		Print("MSFSuperBlock {\n")
+		Print("	BlockSize = %x\n", this->BlockSize)
+		Print("	FreeBlockMapBlock = %x\n", this->FreeBlockMapBlock)
+		Print("	NumberOfBlocks = %x\n", this->NumberOfBlocks)
+		Print("	NumberOfDirectoryBytes = %x\n", this->NumberOfDirectoryBytes)
+		Print("	Unknown = %x\n", this->Unknown)
+		Print("	BlockMapIndex = %x\n", this->BlockMapIndex)
+		Print("}\n")
+	}
+}
+
+i32 MSF_MSF_STREAM_INDEX := 0
+i32 MSF_PDB_STREAM_INDEX := 1
+i32 MSF_TPI_STREAM_INDEX := 2
+i32 MSF_DBI_STREAM_INDEX := 3
+i32 MSF_IPI_STREAM_INDEX := 4
+i32 MSF_NMS_STREAM_INDEX := 5 ; "/names" stream index
+i32 MSF_STREAM_LAST_RESERVED := 4
+
+struct MSFStreamDirectory {
+	; This struct does... a lot, for good reason though. This handles the stream number: block numbers mapping
+	;  which ends up very complex. Originally, it could only append streams in order. For example, adding
+    ;   another stream while building the TPI stream (index 2) would put that new stream in as stream 3
+	;    which was a big problem, since loads of streams end up being out of order.
+	; So, the struct was rewritten to support 0-size reserved steam indices, and resizing streams after they
+	;  were initially added to the directory, which should hopefully be good enough for the rest of the format.
+	; If not, I am already dreading rewriting it again.
+	
+	i32 NumberOfStreams
+	i32{0} StreamSizesArray
+	
+	define i32* GetStreamSizesArray() {
+		return this~>StreamSizesArray
+	}
+	define i32* GetStreamBlocksArray() {
+		return (this->GetStreamSizesArray() + this->NumberOfStreams * 4) As i32*
+	}
+	
+	define i32 GetStreamBlockCountFromSize(i32 Size) {
+		i32 BlockCount := Size / 0x1000
+		
+		if (Size % 0x1000) {
+			BlockCount += 1
+		}
+		
+		return BlockCount
+	}
+	define i32 GetStreamBlockCount(i32 StreamIndex) {
+		return this->GetStreamBlockCountFromSize(this->GetStreamSizesArray()[StreamIndex])
+	}
+	
+	define i32 GetBlocksArraySize() {
+		i32* StreamSizeArray := this->GetStreamSizesArray()
+		i32 TotalBlocks := 0
+		
+		for (i32 StreamIndex := 0, StreamIndex < this->NumberOfStreams, StreamIndex += 1) {
+			TotalBlocks += this->GetStreamBlockCountFromSize(StreamSizeArray[StreamIndex])
+		}
+		
+		return TotalBlocks * 4
+	}
+	define i32 GetSize() {
+		return 4 + (this->NumberOfStreams * 4) + this->GetBlocksArraySize()
+	}
+	define void* GetEnd() {
+		return this + this->GetSize()
+	}
+	
+	define i32* GetStreamBlocks(i32 TargetStreamIndex) {
+		i32* Start := this->GetStreamBlocksArray()
+		
+		for (i32 StreamIndex := 0, StreamIndex < TargetStreamIndex, StreamIndex += 1) {
+			Start += this->GetStreamBlockCount(StreamIndex) * 4
+		}
+		
+		return Start
+	}
+	define i32 GetStreamBlock(i32 TargetStreamIndex, i32 BlockIndex) {
+		return this->GetStreamBlocks(TargetStreamIndex)[BlockIndex]
+	}
+	define void SetStreamBlock(i32 TargetStreamIndex, i32 BlockIndex, i32 BlockValue) {
+		; Helper for setting a single data block for a given stream
+		this->GetStreamBlocks(TargetStreamIndex)[BlockIndex] := BlockValue
+	}
+	
+	define i32* SetStreamSize(i32 StreamIndex, i32 NewSize, i32* OutBlocksNeeded) {
+		if (StreamIndex < this->NumberOfStreams) {
+			; If this stream index already exists, we are resizing it.
+			
+			i32* SizesArray := this->GetStreamSizesArray()
+			i32 OldSize := SizesArray[StreamIndex]
+			
+			; Which means we need to figure out how many blocks need to be allocated/freed for this stream
+			i32 NewSizeBlockCount := this->GetStreamBlockCountFromSize(NewSize)
+			i32 OldSizeBlockCount := this->GetStreamBlockCountFromSize(OldSize)
+			i32 BlockCountDifference := NewSizeBlockCount - OldSizeBlockCount
+			
+			if !(BlockCountDifference) {
+				; If there is no difference in current vs required block count, then we can just update
+				;  the size of the stream and return
+				SizesArray[StreamIndex] := NewSize
+				return null
+			}
+			
+			; Otherwise, we need to either shift the entire block index array right/left to either
+			;  A) Make more space for any additional blocks
+			;  B) Free the space previously taken by the extra blocks this stream had
+			
+			; We only shift the block indices following this stream's indices, since the size of the target
+			;  stream doesn't impact the location of the blocks for any streams before it, only those after.
+			i32* NextStreamBlocks := this->GetStreamBlocks(StreamIndex + 1)
+			i32 DifferenceAsOffset := BlockCountDifference * 4
+			
+			; Move all stream blocks up until the end of the stream directory either forward or backward
+			;  to either fill the empty space created by this stream losing some blocks, or to make space
+			;   for the extra blocks that this stream is gaining.
+			MoveMemory(NextStreamBlocks + DifferenceAsOffset, NextStreamBlocks, (this->GetEnd() - NextStreamBlocks) As i32)
+			
+			; Update this stream's size, and how many blocks the stream has been relieved of or allocated
+			SizesArray[StreamIndex] := NewSize
+			OutBlocksNeeded[0] := BlockCountDifference
+			
+			; Finally, we return a pointer to where `OutBlocksNeeded` block numbers should be written after
+			;  they are allocated for this stream
+			return this->GetStreamBlocks(StreamIndex) + OldSizeBlockCount * 4
+		}
+		else {
+			; If this stream does not already exist, we are creating it (and any before it)
+			
+			; First thing's first, we need to shift over the block index array to make space for the
+			;  block sizes which need to be written for the target+proceeding streams
+			i32* BlocksArray := this->GetStreamBlocksArray()
+			MoveMemory(BlocksArray + (StreamIndex + 1 - this->NumberOfStreams) * 4, BlocksArray, this->GetBlocksArraySize())
+			
+			; The stream size array is now expanded, so now we'll write a 0 for the size of any proceeding streams
+			i32* StreamSizesArray := this->GetStreamSizesArray()
+			
+			for (i32 Index := this->NumberOfStreams, Index < StreamIndex, Index += 1) {
+				StreamSizesArray[Index] := 0
+			}
+			
+			; Now that all proceeding streams are initialized, we can write the target stream's size into
+			;  the stream size array
+			StreamSizesArray[StreamIndex] := NewSize
+			
+			; Update how many streams are in the directory, and how many blocks the new stream will need
+			this->NumberOfStreams := StreamIndex + 1
+			OutBlocksNeeded[0] := this->GetStreamBlockCountFromSize(NewSize)
+			
+			; And finally return a pointer to where blocks allocated for this stream should be written.
+			;  Since any proceeding streams are given 0 size, they take up 0 bytes in the block index array
+			;   so we don't have to worry about them here, the code path for resizing will handle that.
+			return this->GetStreamBlocks(StreamIndex)
+		}
+	}
+	
+	define i32 AppendStream(i32 Size, i32* OutBlockCount, i32* OutStreamNumber) {
+		i32 StreamIndex := this->NumberOfStreams
+		
+		i32 BlockNumberCount := 0
+		i32* BlockNumbers := this->SetStreamSize(StreamIndex, Size, &BlockNumberCount)
+		
+		OutBlockCount[0] := BlockNumberCount
+		OutStreamNumber[0] := StreamIndex
+		
+		return (BlockNumbers As i64 - this As i64) As i32
+	}
+}
+
+i64 MSF_MAGIC := 0x53441a0a0d
+
+struct MSFBuilder {
+	union {
+		void* Buffer
+		MSFSuperBlock* SuperBlock
+	}
+	
+	i32 StreamDirectoryBlockIndex
+	
+	union {
+		void* StreamDirectoryBlock
+		MSFStreamDirectory* StreamDirectory
+	}
+	
+	i32 NextStreamIndex
+	
+	PDBStreamBuilder* PDBStreamBuilder
+	
+	declare void AllocateBlock()
+	
+	define void Initialize() {
+		this->Buffer := Alloc(0x3000)
+		this->SuperBlock->NumberOfBlocks := 3
+		
+		i8* MagicBuffer := this->SuperBlock~>Magic
+		
+		MoveMemory(MagicBuffer, "Microsoft C/C++ MSF 7.00", 24)
+		
+		(MagicBuffer + 24 As i64*)[0] := MSF_MAGIC
+		
+		i8* BlockMapBuffer := this->Buffer + 0x1000
+		
+		for (i32 BlockMapIndex := 0, BlockMapIndex < 0x2000, BlockMapIndex += 1) {
+			BlockMapBuffer[BlockMapIndex] := 0xFF
+		}
+		
+		this->SuperBlock->BlockSize := 0x1000
+		this->SuperBlock->FreeBlockMapBlock := 1
+		
+		; Allocate the first 3 blocks in the file (for the superblock, and free block maps)
+		for (i32 Index := 0, Index < 3, Index += 1) {
+			this->AllocateBlock()
+		}
+		
+		this->NextStreamIndex := MSF_STREAM_LAST_RESERVED
+		this->PDBStreamBuilder := PDBStreamBuilder:New()
+	}
+	
+	define i32 GetSize() {
+		return this->SuperBlock->NumberOfBlocks * 0x1000
+	}
+	define void* GetBlockBuffer(i32 BlockIndex) {
+		return this->Buffer + (BlockIndex * 0x1000)
+	}
+	define void EnsureSize(i32 ForBlockIndex) {
+		ForBlockIndex += 1
+		
+		if (this->SuperBlock->NumberOfBlocks < ForBlockIndex) {
+			this->SuperBlock->NumberOfBlocks := ForBlockIndex
+			
+			this->Buffer := ReAlloc(this->Buffer, ForBlockIndex * 0x1000)
+			this->StreamDirectoryBlock := this->GetBlockBuffer(this->StreamDirectoryBlockIndex)
+		}
+	}
+	define i32 AllocateBlock() {
+		i8* BitMap := this->Buffer + 0x1000 * this->SuperBlock->FreeBlockMapBlock
+		
+		for (i32 Index := 0, Index < 0x1000, Index += 1) {
+			i32 ByteIndex := Index / 8
+			i32 BitIndex := Index % 8
+			i32 BitMask := 1 << (BitIndex As i8)
+			
+			i8 TargetByte := BitMap[ByteIndex]
+			
+			if (TargetByte & BitMask) {
+				BitMap[ByteIndex] := TargetByte ^ BitMask
+				
+				this->EnsureSize(Index)
+				return Index
+			}
+		}
+	}
+	define void FreeBlock(i32 BlockIndex) {
+		i8* BitMap := this->Buffer + 0x1000
+		
+		i32 ByteIndex := BlockIndex / 8
+		i8 BitIndex := BlockIndex % 8
+		i32 BitMask := 1 << BitIndex
+		
+		BitMap[ByteIndex] |= BitMask
+	}
+	
+	define void AllocateStreamDirectory() {
+		i32 StreamDirectoryIndexBlockNumber := this->AllocateBlock()
+		i32 StreamDirectoryBlockNumber := this->AllocateBlock()
+		
+		this->SuperBlock->BlockMapIndex := StreamDirectoryIndexBlockNumber
+		
+		i32* StreamDirectoryIndex := this->GetBlockBuffer(StreamDirectoryIndexBlockNumber)
+		
+		StreamDirectoryIndex[0] := StreamDirectoryBlockNumber
+		
+		this->StreamDirectoryBlockIndex := StreamDirectoryBlockNumber
+		this->StreamDirectoryBlock := this->GetBlockBuffer(StreamDirectoryBlockNumber)
+	}
+	
+	define void SetStreamData(i32 StreamIndex, void* StreamData, i32 StreamSize) {
+		i32 BlocksNeeded := 0
+		i32 BlockBufferOffset := this->StreamDirectory->SetStreamSize(StreamIndex, StreamSize, &BlocksNeeded)
+		
+		i32 Remainder := StreamSize % 0x1000
+		
+		if (Remainder) {
+			BlocksNeeded -= 1
+		}
+		
+		for (i32 BlockIndex := 0, BlockIndex < BlocksNeeded, BlockIndex += 1) {
+			i32 NextBlock := this->AllocateBlock()
+			
+			this->StreamDirectory->SetStreamBlock(StreamIndex, BlockIndex, NextBlock)
+			
+			if (StreamData != null) {
+				MoveMemory(this->GetBlockBuffer(NextBlock), StreamData, 0x1000)
+				StreamData += 0x1000
+			}
+		}
+		
+		if (Remainder) {
+			NextBlock := this->AllocateBlock()
+			
+			this->StreamDirectory->SetStreamBlock(StreamIndex, BlockIndex, NextBlock)
+			
+			if (StreamData != null) {
+				MoveMemory(this->GetBlockBuffer(NextBlock), StreamData, Remainder)
+			}
+		}
+	}
+	define i32 AppendStream(void* StreamData, i32 StreamSize) {
+		this->NextStreamIndex += 1
+		i32 StreamIndex := this->NextStreamIndex
+		
+		this->SetStreamData(StreamIndex, StreamData, StreamSize)
+		
+		return StreamIndex
+	}
+	define i32 SetNamedStreamData(i8* StreamName, i32 StreamNameLength, void* StreamData, i32 StreamSize) {
+		i32 StreamNumber := this->AppendStream(StreamData, StreamSize)
+		
+		this->PDBStreamBuilder->NameMap->Set(StreamName, StreamNameLength, StreamNumber)
+		
+		return StreamNumber
+	}
+	
+	define i32 PointerToOffset(void* PointerIntoBuffer) {
+		return (PointerIntoBuffer - this->Buffer) As i32
+	}
+	define void* OffsetToPointer(i32 Offset) {
+		return this->Buffer + Offset
+	}
+	
+	define void Finalize() {
+		i32 PDBStreamSize := this->PDBStreamBuilder->GetSize()
+		this->SetStreamData(MSF_PDB_STREAM_INDEX, null, PDBStreamSize)
+		
+		i32 PDBStreamStartBlock := this->StreamDirectory->GetStreamBlock(MSF_PDB_STREAM_INDEX, 0)
+		void* PDBStreamStartBlockBuffer := this->GetBlockBuffer(PDBStreamStartBlock)
+		
+		this->PDBStreamBuilder->SerializeInto(PDBStreamStartBlockBuffer, 0, 0)
+		
+		this->SuperBlock->NumberOfDirectoryBytes := this->StreamDirectory->GetSize()
+	}
+	
+	define void WriteToFile(i8* FilePath) {
+		FileDelete(FilePath)
+		
+		i64 File := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
+		
+		FileWrite(File, this->Buffer, this->GetSize())
+		
+		FileClose(File)
+	}
 }

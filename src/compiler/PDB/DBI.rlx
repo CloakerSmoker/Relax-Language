@@ -320,7 +320,7 @@ define void WriteDBI(MSFBuilder* ToBuilder) {
 	
 	B->SerializeInto(Buffer)
 	
-	ToBuilder->AppendStream(Buffer, Size)
+	ToBuilder->SetStreamData(MSF_DBI_STREAM_INDEX, Buffer, Size)
 	
 	Print("DBI Done\n")
 }
