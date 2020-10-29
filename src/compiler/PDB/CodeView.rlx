@@ -51,23 +51,26 @@ struct CVTypeIndex {
 	}
 }
 
-struct CVTypeRecord {
-	; Backing type for a single record stored in an array of type records.
+struct CVRecord {
+	; Backing type for a single record stored in an array of type/symbol records.
 	; Length does not include the size of the `Length` field itself, which is why 2 is added/subtracted
 	;  a bunch.
 	
 	i16 Length
 	i16 Type
 	
-	static CVTypeRecord* New(i16 Type, i32 Size) {
-		Size += #CVTypeRecord - 2
+	static CVRecord* New(i16 Type, i32 Size) {
+		Size := Align(Size, 2) + 2
 		
-		CVTypeRecord* this := Alloc(Size)
+		CVRecord* this := Alloc(Size)
 		
 		this->Length := Size
 		this->Type := Type
 		
 		return this
+	}
+	static CVRecord* NewSymbol(i16 Type, i32 Size) {
+		return CVRecord:New(Type, Align(Size, 4))
 	}
 	
 	define i32 GetStorageSize() {
@@ -75,7 +78,7 @@ struct CVTypeRecord {
 	}
 	
 	define void* GetData() {
-		return this + #CVTypeRecord
+		return this + #CVRecord
 	}
 	define void* GetEnd() {
 		return this + this->Length + 2
@@ -143,10 +146,10 @@ struct CVProcedureBuilder {
 		this->ReturnTypeIndex := ReturnTypeIndex
 	}
 	
-	define CVTypeRecord* MakeParameterListRecord() {
+	define CVRecord* MakeParameterListRecord() {
 		i32 IndexesSize := this->ParameterCount * 4
 		
-		CVTypeRecord* Result := CVTypeRecord:New(LF_ARGLIST, 4 + IndexesSize)
+		CVRecord* Result := CVRecord:New(LF_ARGLIST, 4 + IndexesSize)
 		CVArgListRecord* ResultRecord := Result->GetData()
 		
 		ResultRecord->Count := this->ParameterCount
@@ -156,8 +159,8 @@ struct CVProcedureBuilder {
 		
 		return Result
 	}
-	define CVTypeRecord* MakeProcedureRecord(i32 ParameterListIndex) {
-		CVTypeRecord* Result := CVTypeRecord:New(LF_PROCEDURE, #CVProcedureRecord)
+	define CVRecord* MakeProcedureRecord(i32 ParameterListIndex) {
+		CVRecord* Result := CVRecord:New(LF_PROCEDURE, #CVProcedureRecord)
 		CVProcedureRecord* ResultRecord := Result->GetData()
 		
 		ResultRecord->ReturnTypeIndex := this->ReturnTypeIndex
@@ -184,8 +187,8 @@ struct CVMemberRecord {
 	define void* GetEnd() {
 		return this + #CVMemberRecord + StringLength(this~>Name) + 1
 	}
-	define CVTypeRecord* AsTypeRecord() {
-		return (this - 2) As CVTypeRecord*
+	define CVRecord* AsTypeRecord() {
+		return (this - 2) As CVRecord*
 	}
 }
 
@@ -226,8 +229,8 @@ struct CVFieldListBuilder {
 		
 		this->Count += 1
 	}
-	define CVTypeRecord* ToRecord() {
-		CVTypeRecord* Result := CVTypeRecord:New(LF_FIELDLIST, this->Size)
+	define CVRecord* ToRecord() {
+		CVRecord* Result := CVRecord:New(LF_FIELDLIST, this->Size)
 		
 		MoveMemory(Result->GetData(), this->Buffer, this->Size)
 		
@@ -288,11 +291,11 @@ struct CVStructBuilder {
 		this->FieldListBuilder->AddDataMember(Type, Offset, Name)
 	}
 	
-	define CVTypeRecord* MakeFieldListRecord() {
+	define CVRecord* MakeFieldListRecord() {
 		return this->FieldListBuilder->ToRecord()
 	}
-	define CVTypeRecord* MakeStructRecord(i32 FieldListIndex) {
-		CVTypeRecord* Result := CVTypeRecord:New(LF_STRUCT, this->Size)
+	define CVRecord* MakeStructRecord(i32 FieldListIndex) {
+		CVRecord* Result := CVRecord:New(LF_STRUCT, this->Size)
 		
 		this->Record->FieldsTypeListIndex := FieldListIndex
 		MoveMemory(Result->GetData(), this->Buffer, this->Size)
@@ -357,10 +360,10 @@ struct TPIStreamHeader {
 		
 		this->IndexOffsetBufferOffset := 0
 	}
-	define CVTypeRecord* GetStartOfTypeRecords() {
-		return (this + #TPIStreamHeader) As CVTypeRecord*
+	define CVRecord* GetStartOfTypeRecords() {
+		return (this + #TPIStreamHeader) As CVRecord*
 	}
-	define CVTypeRecord* GetEndOfTypeRecords() {
+	define CVRecord* GetEndOfTypeRecords() {
 		return this->GetStartOfTypeRecords() + this->TypeRecordBytes
 	}
 }
@@ -423,11 +426,11 @@ struct TPIStreamBuilder {
 		ThisEntry->Index := TypeIndex
 		ThisEntry->Offset := Offset
 	}
-	define CVTypeRecord* GetRecordFromIndex(i32 TypeIndex) {
+	define CVRecord* GetRecordFromIndex(i32 TypeIndex) {
 		return this->Header->GetStartOfTypeRecords() + this->FindRecordOffsetEntry(TypeIndex)->Offset
 	}
 	
-	define i32 AppendCVRecord(CVTypeRecord* Record) {
+	define i32 AppendCVRecord(CVRecord* Record) {
 		i32 RecordSize := Record->GetStorageSize()
 		
 		this->ReAlloc(RecordSize)
@@ -447,7 +450,7 @@ struct TPIStreamBuilder {
 		return Result
 	}
 	define i32 AppendPointer(i32 PointerToTypeIndex, i32 TargetDepth) {
-		CVTypeRecord* Record := CVTypeRecord:New(LF_POINTER, #CVPointerRecord)
+		CVRecord* Record := CVRecord:New(LF_POINTER, #CVPointerRecord)
 		CVPointerRecord* PointerRecord := Record->GetData()
 		
 		PointerRecord->Attributes := CV_POINTER_ATTRIBUTES
@@ -463,26 +466,35 @@ struct TPIStreamBuilder {
 			PointerToTypeIndex := this->AppendCVRecord(Record)
 		}
 		
-		Record->Free()
-		
 		return PointerToTypeIndex
 	}
 	define i32 AppendBitField(i32 BackingType, i8 BitStart, i8 BitEnd) {
-		CVTypeRecord* Record := CVTypeRecord:New(LF_BITFIELD, #CVBitFieldRecord)
+		CVRecord* Record := CVRecord:New(LF_BITFIELD, #CVBitFieldRecord)
 		CVBitFieldRecord* BitFieldRecord := Record->GetData()
 		
 		BitFieldRecord->BackingType := BackingType
 		BitFieldRecord->BitIndex := BitStart
 		BitFieldRecord->BitLength := BitEnd - BitStart
 		
-		i32 BitFieldIndex := this->AppendCVRecord(Record)
+		return this->AppendCVRecord(Record)
+	}
+	define i32 AppendProcedure(i32 ReturnTypeIndex, i32 ParameterCount, i64* ParameterTypes) {
+		CVProcedureBuilder* ThisProcedure := CVProcedureBuilder:New()
 		
-		Record->Free()
+		ThisProcedure->SetReturnType(ReturnTypeIndex)
 		
-		return BitFieldIndex
+		for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex += 1) {
+			ThisProcedure->AppendParameter(ParameterTypes[ParameterIndex] As i32)
+		}
+		
+		i32 ThisProcedureParameters := this->AppendCVRecord(ThisProcedure->MakeParameterListRecord())
+		return this->AppendCVRecord(ThisProcedure->MakeProcedureRecord(ThisProcedureParameters))	
+	}
+	define i32 AppendProcedure(i32 ReturnTypeIndex, ... ParameterTypes) {
+		return this->AppendProcedure(ReturnTypeIndex, ParameterTypes[0] As i32, &ParameterTypes[1])
 	}
 	
-	declare CVTypeRecord* PrintSingleRecord(CVTypeRecord*)
+	declare CVRecord* PrintSingleRecord(CVRecord*)
 	
 	define void PrintTypeIndex(i32 TypeIndex) {
 		CVTypeIndex Index
@@ -520,7 +532,7 @@ struct TPIStreamBuilder {
 	
 	void* HighWaterMark
 	
-	define CVTypeRecord* PrintSingleRecord(CVTypeRecord* ThisRecord) {
+	define CVRecord* PrintSingleRecord(CVRecord* ThisRecord) {
 		void* ThisRecordData := ThisRecord->GetData()
 		
 		if (ThisRecord->Type = LF_ARGLIST) {
@@ -613,7 +625,7 @@ struct TPIStreamBuilder {
 	define void PrintTypeRecords() {
 		this->HighWaterMark := null
 		
-		CVTypeRecord* Start := this->Header->GetStartOfTypeRecords()
+		CVRecord* Start := this->Header->GetStartOfTypeRecords()
 		void* End := this->Header->GetEndOfTypeRecords()
 		
 		Print("^20")
@@ -626,11 +638,190 @@ struct TPIStreamBuilder {
 		Print("^F0")
 	}
 	
-	define void Serialize() {
+	define void Serialize(i32 StreamIndex) {
 		this->Header->IndexOffsetBufferLength := this->RecordOffsetCount * #RecordOffsetEntry
 		
 		this->Header->HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
 		
-		this->Builder->SetStreamData(MSF_TPI_STREAM_INDEX, this->Buffer, this->BufferSize)
+		this->Builder->SetStreamData(StreamIndex, this->Buffer, this->BufferSize)
+	}
+	define void SerializeTPI() {
+		this->Serialize(MSF_TPI_STREAM_INDEX)
+	}
+	define void SerializeIPI() {
+		this->Serialize(MSF_IPI_STREAM_INDEX)
+	}
+}
+
+i16 S_END := 0x0006
+i16 S_G_PROC := 0x1110
+i16 S_BP_REL := 0x110b
+
+struct CVProcedureSymbol {
+	i32 ParentOffset
+	i32 EndOffset
+	i32 NextSymbolOffset
+	
+	i32 Length
+	i32 PreludeEndOffset	; Offset at which the function's prelude ends
+	i32 BodyEndOffset		; Offset at which the function's body ends, and the epilogue starts
+	
+	i32 TypeIndex
+	i32 Offset				; RVA of procedure
+	
+	i16 Segment
+	i8 Flags
+	i8{0} Name
+	
+	static CVProcedureSymbol* New(i8* Name, i32 NameLength) {
+		CVRecord* Record := CVRecord:NewSymbol(S_G_PROC, NameLength + 1 + #CVProcedureSymbol)
+		
+		CVProcedureSymbol* this := Record->GetData()
+		
+		MoveMemory(this~>Name, Name, NameLength)
+		
+		return this
+	}
+	
+	define CVRecord* ToRecord() {
+		return (this - 4) As CVRecord*
+	}
+}
+
+struct CVBasePointerRelativeSymbol {
+	i32 Offset
+	i32 TypeIndex
+	i8{0} Name
+	
+	static CVBasePointerRelativeSymbol* New(i8* Name, i32 NameLength) {
+		CVRecord* Record := CVRecord:NewSymbol(S_BP_REL, NameLength + 1 + #CVBasePointerRelativeSymbol)
+		
+		CVBasePointerRelativeSymbol* this := Record->GetData()
+		
+		MoveMemory(this~>Name, Name, NameLength)
+		
+		return this
+	}
+	
+	define CVRecord* ToRecord() {
+		return (this - 4) As CVRecord*
+	}
+}
+
+struct CVSymbolStreamBuilder {
+	TPIStreamBuilder* Types
+	
+	void* Buffer
+	i32 BufferSize
+	
+	static CVSymbolStreamBuilder* New(TPIStreamBuilder* Types) { 
+		CVSymbolStreamBuilder* this := Alloc(#CVSymbolStreamBuilder)
+		
+		this->Types := Types
+		
+		this->Buffer := Alloc(4)
+		
+		return this
+	}
+	
+	define void ReAlloc(i32 AdditionalSize) {
+		this->BufferSize += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
+	}
+	define i32 GetSize() {
+		return this->BufferSize
+	}
+	
+	define i32 AppendSymbol(CVRecord* SymbolRecord) {
+		i32 Offset := this->BufferSize
+		i32 RecordSize := SymbolRecord->GetStorageSize()
+		
+		this->ReAlloc(RecordSize)
+		
+		MoveMemory(this->Buffer + Offset, SymbolRecord, RecordSize)
+		
+		return Offset
+	}
+	
+	define i32 AppendProcedure(i32 ReturnTypeIndex, i8* Name, i32 NameLength, ... ParameterTypes) {
+		CVProcedureSymbol* NewProcedure := CVProcedureSymbol:New(Name, NameLength)
+		
+		NewProcedure->EndOffset := this->BufferSize + NewProcedure->ToRecord()->GetStorageSize()
+		NewProcedure->TypeIndex := this->Types->AppendProcedure(ReturnTypeIndex, ParameterTypes[0] As i32, &ParameterTypes[1])
+		
+		return this->AppendSymbol(NewProcedure->ToRecord())
+	}
+	define void ExtendProcedureSize(i32 ProcedureOffset, i32 Size) {
+		CVRecord* ProcedureRecord := this->Buffer + ProcedureOffset
+		
+		CVProcedureSymbol* SymbolRecord := ProcedureRecord->GetData()
+		
+		SymbolRecord->EndOffset += Size
+	}
+	define void ExtendProcedureSize(i32 ProcedureOffset, CVRecord* ChildRecord) {
+		this->ExtendProcedureSize(ProcedureOffset, ChildRecord->GetStorageSize())
+	}
+	define void AppendEnd(i32 ProcedureOffset) {
+		i32 Offset := this->BufferSize
+		
+		this->ReAlloc(4)
+		
+		CVRecord* Record := this->Buffer + Offset
+		
+		Record->Length := 2
+		Record->Type := S_END
+		
+		this->ExtendProcedureSize(ProcedureOffset, 4)
+	}
+	define CVRecord* AppendBasePointerRelative(i32 Offset, i32 ValueType, i8* Name, i32 NameLength) {
+		CVBasePointerRelativeSymbol* RelativeSymbol := CVBasePointerRelativeSymbol:New(Name, NameLength)
+		
+		RelativeSymbol->Offset := Offset
+		RelativeSymbol->TypeIndex := ValueType
+		
+		CVRecord* Record := RelativeSymbol->ToRecord()
+		
+		this->AppendSymbol(Record)
+		
+		return Record
+	}
+	
+	define void* PrintSymbol(CVRecord* SymbolRecord) {
+		void* ThisRecordData := SymbolRecord->GetData()
+		
+		if (SymbolRecord->Type = S_G_PROC) {
+			CVProcedureSymbol* ProcedureSymbol := ThisRecordData
+			CVProcedureRecord* ProcedureData := this->Types->GetRecordFromIndex(ProcedureSymbol->TypeIndex)->GetData()
+			
+			Print("define ")
+			this->Types->PrintTypeIndex(ProcedureData->ReturnTypeIndex)
+			Print(" %s", ProcedureSymbol~>Name)
+			this->Types->PrintTypeIndex(ProcedureData->ParameterTypeListIndex)
+			Print("{\n")
+		}
+		else if (SymbolRecord->Type = S_BP_REL) {
+			CVBasePointerRelativeSymbol* RelativeSymbol := ThisRecordData
+			
+			Print("	locals[%x] = ", RelativeSymbol->Offset)
+			this->Types->PrintTypeIndex(RelativeSymbol->TypeIndex)
+			Print(" %s\n", RelativeSymbol~>Name)
+		}
+		else if (SymbolRecord->Type = S_END) {
+			Print("}\n")
+		}
+		
+		return SymbolRecord->GetEnd()
+	}
+	define void PrintSymbols() {
+		void* Buffer := this->Buffer
+		void* End := this->Buffer + this->BufferSize
+		
+		while (Buffer != End) {
+			Buffer := this->PrintSymbol(Buffer As CVRecord*)
+		}
+	}
+	
+	define void SerializeInto(void* Buffer) {
+		MoveMemory(Buffer, this->Buffer, this->BufferSize)
 	}
 }

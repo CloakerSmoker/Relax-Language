@@ -88,12 +88,6 @@ struct DBIModuleInfoEntry {
 	}
 }
 
-struct DBIModuleInfoStreamHeader {
-	i32 Signature
-	i8{0} Symbols
-	
-}
-
 struct DBIFileInfoSubstreamHeader {
 	i16 NumberOfModules
 	i16 NumberOfSourceFiles
@@ -231,14 +225,20 @@ struct DBIStreamHeader {
 		this->Version := DBI_VERSION
 		this->Age := DBI_BUILD_NUMBER
 		
-		Print("OptionalHeaderSize = %x\n", #DBIOptionalDebugHeader)
-		
 		this->OptionalHeaderSize := #DBIOptionalDebugHeader
 	}
 	
 	define void* GetSourceInfo() {
 		return this + #DBIStreamHeader + this->ModuleInfoSize + this->SectionContributionSize + this->SectionMapSize
 	}
+}
+
+i32 DBI_MODULE_INFO_STREAM_SIGNATURE := 4
+
+struct DBIModuleInfoStreamHeader {
+	i32 Signature
+	
+	i8{0} SymbolData
 }
 
 struct DBIStreamBuilder {
@@ -250,10 +250,11 @@ struct DBIStreamBuilder {
 	DBIFileInfoSubstreamBuilder* FileInfo
 	DBIModuleInfoEntry* ModuleEntry
 	PESectionHeaders* SectionHeaders
+	CVSymbolStreamBuilder* ModuleSymbols
 	
 	i32 BufferSize
 	
-	static DBIStreamBuilder* New() {
+	static DBIStreamBuilder* New(TPIStreamBuilder* Types) {
 		DBIStreamBuilder* this := Alloc(#DBIStreamBuilder)
 		
 		this->BufferSize := #DBIStreamHeader
@@ -262,6 +263,7 @@ struct DBIStreamBuilder {
 		this->Header->SetFieldDefaults()
 		
 		this->FileInfo := DBIFileInfoSubstreamBuilder:New()
+		this->ModuleSymbols := CVSymbolStreamBuilder:New(Types)
 		
 		return this
 	}
@@ -324,18 +326,43 @@ struct DBIStreamBuilder {
 			MoveMemory(HeadersBuffer, this->SectionHeaders, #PESectionHeaders)
 		}
 		
+		i32 ModuleSymbolsSize := this->ModuleSymbols->GetSize()
+		
+		i32 ModuleInfoStream := ToBuilder->AppendStream(null, ModuleSymbolsSize + 4 + #DBIModuleInfoStreamHeader)
+		
+		this->ModuleEntry->ModuleSymbolStreamNumber := ModuleInfoStream
+		this->ModuleEntry->SymbolsByteSize := ModuleSymbolsSize + 4 ; No idea what the 4 is for
+		
+		DBIModuleInfoStreamHeader* ModuleInfo := ToBuilder->GetStreamBuffer(ModuleInfoStream)
+		
+		ModuleInfo->Signature := DBI_MODULE_INFO_STREAM_SIGNATURE
+		this->ModuleSymbols->SerializeInto(ModuleInfo~>SymbolData)
+		
 		void* StreamBuffer := ToBuilder->CreateUninitializedStream(MSF_DBI_STREAM_INDEX, this->GetSize())
 		
 		this->SerializeInto(StreamBuffer, SectionHeadersStream)
 	}
 }
 
-define void WriteDBI(MSFBuilder* ToBuilder) {
-	DBIStreamBuilder* B := DBIStreamBuilder:New()
+define void WriteDBI(MSFBuilder* ToBuilder, TPIStreamBuilder* Types) {
+	DBIStreamBuilder* B := DBIStreamBuilder:New(Types)
 	
 	B->SetModule("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r)
 	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r)
 	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r)
+	
+	i32 CharPP := Types->AppendPointer(CV_KIND_I8, 2)
+	
+	CVSymbolStreamBuilder* M := B->ModuleSymbols
+	
+	i32 S := M->AppendProcedure(CV_KIND_I32, "Main", 4, CV_KIND_I64, CharPP)
+	
+	M->ExtendProcedureSize(S, M->AppendBasePointerRelative(0, CV_KIND_I64, "ArgC", 4))
+	M->ExtendProcedureSize(S, M->AppendBasePointerRelative(8, CharPP, "ArgV", 4))
+	
+	M->AppendEnd(S)
+	
+	B->ModuleSymbols->PrintSymbols()
 	
 	B->WriteStreams(ToBuilder)
 	

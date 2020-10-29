@@ -43,6 +43,7 @@ define void PrintArray(void* Array, i8 Size, i32 Count) {
 #Require "./src/compiler/PDB/DBi.rlx"
 
 declare TPIStreamBuilder* TPITest(MSFBuilder*)
+declare void IPITest(MSFBuilder*)
 
 define i32 Main() {
 	MSFBuilder* B := Alloc(#MSFBuilder)
@@ -53,16 +54,22 @@ define i32 Main() {
 	; Unfinished streams:
 	B->SetNamedStreamData("/names", null, 0x1000)
 	B->SetStreamData(MSF_MSF_STREAM_INDEX, null, 0x1000)				; MSF ??? stream
-	B->SetStreamData(MSF_IPI_STREAM_INDEX, null, 0x1000)				; IPI Stream
+	B->SetStreamData(MSF_IPI_STREAM_INDEX, null, 0)				; IPI Stream
+	
+	IPITest(B)
 	
 	; Mostly finished streams:
-	TPITest(B)
-	WriteDBI(B)
+	TPIStreamBuilder* T := TPITest(B)
+	WriteDBI(B, T)
+	
+	T->PrintTypeRecords()
+	T->SerializeTPI()
+	Print("TPI Done\n")
 	
 	Print("SSA: ")
 	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
 	
-	; Totall finished streams (MSF format, PDB stream):
+	; Totally finished streams (MSF format, PDB stream):
 	B->Finalize()
 	
 	Print("SSA: ")
@@ -93,6 +100,12 @@ define i32 Main() {
 	;return 0
 }
 
+define void IPITest(MSFBuilder* Builder) {
+	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
+	
+	B->SerializeIPI()
+}
+
 define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
 	
@@ -107,22 +120,24 @@ define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
 	i32 BuFields := B->AppendCVRecord(Bu->MakeFieldListRecord())
 	i32 Struct1 := B->AppendCVRecord(Bu->MakeStructRecord(BuFields))
 	
-	CVProcedureBuilder* Pu := CVProcedureBuilder:New()
+	;CVProcedureBuilder* Pu := CVProcedureBuilder:New()
+	;
+	;Pu->SetReturnType(Struct1)
+	;Pu->AppendParameter(CV_KIND_I8)
+	;Pu->AppendParameter(CV_KIND_I16)
+	;
+	;i32 PuParams := B->AppendCVRecord(Pu->MakeParameterListRecord())
+	;B->AppendCVRecord(Pu->MakeProcedureRecord(PuParams))
 	
-	Pu->SetReturnType(Struct1)
-	Pu->AppendParameter(CV_KIND_I8)
-	Pu->AppendParameter(CV_KIND_I16)
-	
-	i32 PuParams := B->AppendCVRecord(Pu->MakeParameterListRecord())
-	B->AppendCVRecord(Pu->MakeProcedureRecord(PuParams))
+	B->AppendProcedure(Struct1, CV_KIND_I8, CV_KIND_I16)
 	
 	B->AppendBitField(CV_KIND_I64, 3, 9)
 	
-	B->PrintTypeRecords()
+	;B->PrintTypeRecords()
 	
-	Print("TPI Done\n")
+	;Print("TPI Done\n")
 	
-	B->Serialize()
+	;B->Serialize()
 	
 	return B
 }
