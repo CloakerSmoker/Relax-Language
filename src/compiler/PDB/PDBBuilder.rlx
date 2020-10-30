@@ -42,6 +42,20 @@ define void PrintArray(void* Array, i8 Size, i32 Count) {
 #Require "./src/compiler/PDB/CodeView.rlx"
 #Require "./src/compiler/PDB/DBi.rlx"
 
+i32 PDB_STRING_TABLE_SIGNATURE := 0xEFFEEFFE
+
+struct PDBStringTableHeader {
+	i32 Signature
+	i32 HashVersion
+	i32 ByteSize
+}
+
+struct PDBStringTableBuilder {
+
+	
+	
+}
+
 declare TPIStreamBuilder* TPITest(MSFBuilder*)
 declare void IPITest(MSFBuilder*)
 

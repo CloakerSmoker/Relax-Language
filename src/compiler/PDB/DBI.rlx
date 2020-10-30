@@ -250,7 +250,9 @@ struct DBIStreamBuilder {
 	DBIFileInfoSubstreamBuilder* FileInfo
 	DBIModuleInfoEntry* ModuleEntry
 	PESectionHeaders* SectionHeaders
+	
 	CVSymbolStreamBuilder* ModuleSymbols
+	CVDebugLinesBuilder* ModuleLines
 	
 	i32 BufferSize
 	
@@ -264,6 +266,7 @@ struct DBIStreamBuilder {
 		
 		this->FileInfo := DBIFileInfoSubstreamBuilder:New()
 		this->ModuleSymbols := CVSymbolStreamBuilder:New(Types)
+		this->ModuleLines := CVDebugLinesBuilder:New()
 		
 		return this
 	}
@@ -318,6 +321,23 @@ struct DBIStreamBuilder {
 		OptionalHeader->SetFieldDefaults()
 		OptionalHeader->SectionHeadersStreamNumber := SectionHeadersStreamNumber
 	}
+	define void WriteModuleInfoStream(MSFBuilder* ToBuilder) {
+		i32 ModuleSymbolsSize := this->ModuleSymbols->GetSize() + 4 ; No idea what the 4 is for, breaks without it
+		i32 ModuleLinesSize := this->ModuleLines->GetSize()
+		
+		i32 ModuleInfoStream := ToBuilder->AppendStream(null, ModuleSymbolsSize + ModuleLinesSize + #DBIModuleInfoStreamHeader)
+		
+		this->ModuleEntry->ModuleSymbolStreamNumber := ModuleInfoStream
+		this->ModuleEntry->SymbolsByteSize := ModuleSymbolsSize
+		this->ModuleEntry->LineInfoByteSize := ModuleLinesSize
+		
+		DBIModuleInfoStreamHeader* ModuleInfo := ToBuilder->GetStreamBuffer(ModuleInfoStream)
+		
+		ModuleInfo->Signature := DBI_MODULE_INFO_STREAM_SIGNATURE
+		
+		void* LinesBuffer := this->ModuleSymbols->SerializeInto(ModuleInfo~>SymbolData)
+		this->ModuleLines->SerializeInto(LinesBuffer)
+	}
 	define void WriteStreams(MSFBuilder* ToBuilder) {
 		i32 SectionHeadersStream := ToBuilder->AppendStream(null, #PESectionHeaders)
 		
@@ -326,17 +346,7 @@ struct DBIStreamBuilder {
 			MoveMemory(HeadersBuffer, this->SectionHeaders, #PESectionHeaders)
 		}
 		
-		i32 ModuleSymbolsSize := this->ModuleSymbols->GetSize()
-		
-		i32 ModuleInfoStream := ToBuilder->AppendStream(null, ModuleSymbolsSize + 4 + #DBIModuleInfoStreamHeader)
-		
-		this->ModuleEntry->ModuleSymbolStreamNumber := ModuleInfoStream
-		this->ModuleEntry->SymbolsByteSize := ModuleSymbolsSize + 4 ; No idea what the 4 is for
-		
-		DBIModuleInfoStreamHeader* ModuleInfo := ToBuilder->GetStreamBuffer(ModuleInfoStream)
-		
-		ModuleInfo->Signature := DBI_MODULE_INFO_STREAM_SIGNATURE
-		this->ModuleSymbols->SerializeInto(ModuleInfo~>SymbolData)
+		this->WriteModuleInfoStream(ToBuilder)
 		
 		void* StreamBuffer := ToBuilder->CreateUninitializedStream(MSF_DBI_STREAM_INDEX, this->GetSize())
 		
@@ -362,7 +372,16 @@ define void WriteDBI(MSFBuilder* ToBuilder, TPIStreamBuilder* Types) {
 	
 	M->AppendEnd(S)
 	
+	
+	CVDebugLinesBuilder* Q := B->ModuleLines
+	
+	Q->StartGroup(0, 1, 0x10000, 200)
+	Q->AddLine(0, 20)
+	Q->AddLine(100, 40)
+	Q->EndGroup()
+	
 	B->ModuleSymbols->PrintSymbols()
+	B->ModuleLines->Print()
 	
 	B->WriteStreams(ToBuilder)
 	

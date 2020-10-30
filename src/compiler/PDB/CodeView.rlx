@@ -821,7 +821,153 @@ struct CVSymbolStreamBuilder {
 		}
 	}
 	
-	define void SerializeInto(void* Buffer) {
+	define void* SerializeInto(void* Buffer) {
 		MoveMemory(Buffer, this->Buffer, this->BufferSize)
+		
+		return Buffer + this->BufferSize
+	}
+}
+
+i32 DEBUG_SECTION_LINES := 0xf2
+i32 ALWAYS_STEP_INTO_LINE := 0xfeefee
+
+struct CVDebugSubsectionHeader {
+	i32 Type
+	i32 Length
+	
+	i8{0} Data
+}
+
+struct CVLinesHeader {
+	i32 ContributionRVA			; Should be set
+	i16 ContributionSegment		; ^
+	i16 Flags					; 0 = no column info, MSVC didn't emit it, neither will i
+	i32 ContributionSize		; Should be set
+}
+
+struct CVBlockLinesHeader {
+	i32 NameOffset				; ????
+	i32 NumberOfLines			; Number of CVLineNumberEntry structs inside
+	i32 Size					; Seems to be (#CVBlockLinesHeader + NumberOfLines * #CVLineNumberEntry)
+}
+
+struct CVLineNumberEntry {
+	i32 Offset
+	i32 Flags
+	
+	define void SetLineNumber(i32 LineNumber) {
+		this->Flags := LineNumber | 0x80000000
+	}
+	define i32 GetLineNumber() {
+		return this->Flags & 0x7FFFFFFF
+	}
+	define void Initialize(i32 Offset, i32 LineNumber) {
+		this->Offset := Offset
+		this->SetLineNumber(LineNumber)
+	}
+}
+
+struct CVSingleLineGroupHeader {
+	i32 Type
+	i32 TotalLength
+	
+	i32 ContributionRVA			; Should be set
+	i16 ContributionSegment		; ^
+	i16 Flags					; 0 = no column info, MSVC didn't emit it, neither will i
+	i32 ContributionSize		; Should be set
+	
+	i32 NameOffset				; ????
+	i32 NumberOfLines			; Number of CVLineNumberEntry structs inside
+	i32 BlockDataSize			; Seems to be (#CVBlockLinesHeader + NumberOfLines * #CVLineNumberEntry)
+	
+	CVLineNumberEntry{0} Lines
+}
+
+struct CVDebugLinesBuilder {
+	void* Buffer
+	
+	i32 BufferSize
+	
+	i32 CurrentGroupHeaderOffset
+	i32 CurrentGroupLineCount
+	
+	static CVDebugLinesBuilder* New() { 
+		CVDebugLinesBuilder* this := Alloc(#CVDebugLinesBuilder)
+		
+		this->Buffer := Alloc(4)
+		
+		return this
+	}
+	
+	define void ReAlloc(i32 AdditionalSize) {
+		this->BufferSize += AdditionalSize
+		this->Buffer := ReAlloc(this->Buffer, this->BufferSize)
+	}
+	define i32 GetSize() {
+		return this->BufferSize
+	}
+	
+	define void* Append(i32 Size) {
+		i32 Offset := this->BufferSize
+		
+		this->ReAlloc(Size)
+		
+		return this->Buffer + Offset
+	}
+	
+	define void StartGroup(i32 NameOffset, i32 Segment, i32 RVA, i32 CodeSize) {
+		this->CurrentGroupLineCount := 0
+		this->CurrentGroupHeaderOffset := this->BufferSize
+		
+		CVSingleLineGroupHeader* Header := this->Append(#CVSingleLineGroupHeader)
+		
+		Header->Type := DEBUG_SECTION_LINES
+		Header->ContributionRVA := RVA
+		Header->ContributionSegment := Segment
+		Header->ContributionSize := CodeSize
+		Header->NameOffset := NameOffset
+	}
+	define void AddLine(i32 Offset, i32 Number) {
+		this->CurrentGroupLineCount += 1
+		
+		CVLineNumberEntry* NewLine := this->Append(#CVLineNumberEntry)
+		NewLine->Initialize(Offset, Number)
+	}
+	define void EndGroup() {
+		CVSingleLineGroupHeader* Header := this->Buffer + this->CurrentGroupHeaderOffset
+		
+		i32 GroupSize := this->BufferSize - this->CurrentGroupHeaderOffset
+		
+		Header->TotalLength := GroupSize - 8 ; Exclude the `CVDebugSubsectionHeader` portion of the group
+		Header->NumberOfLines := this->CurrentGroupLineCount
+		Header->BlockDataSize := (Header->NumberOfLines * #CVLineNumberEntry) + #CVBlockLinesHeader
+	}
+	
+	define void Print() {
+		i32 Offset := 0
+		i32 End := this->BufferSize
+		
+		while (Offset != End) {
+			CVSingleLineGroupHeader* Header := this->Buffer + Offset
+			i32 NumberOfLines := Header->NumberOfLines
+			
+			Print("%i lines for (%x, %x) {\n", NumberOfLines, Header->ContributionRVA, Header->ContributionRVA + Header->ContributionSize)
+			
+			for (i32 LineIndex := 0, LineIndex < NumberOfLines, LineIndex += 1) {
+				CVLineNumberEntry* NextLine := &Header~>Lines[LineIndex]
+				
+				Print("	Line %i = %x+\n", NextLine->GetLineNumber(), NextLine->Offset)
+			}
+			
+			Print("}\n")
+			
+			Offset += Header->TotalLength + 8
+		}
+	}
+	
+	define void* SerializeInto(void* Buffer) {
+		MoveMemory(Buffer, this->Buffer, this->BufferSize)
+		
+		return Buffer + this->BufferSize
 	}
 }
