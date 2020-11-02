@@ -90,12 +90,19 @@ define i32 Main() {
 	
 	;breakpoint:()
 	
+	i32 Result := 0
+	i32* pResult := &Result
+	
 	if (BestFit || BestFitRating < 200000) {
-		Print("1")
+		;Print("1")
+		*pResult := 1
 	}
 	else {
-		Print("0")
+		;Print("0")
+		*pResult := 0
 	}
+	
+	Print("%i", Result)
 	
 	Print(" \"\\ %i%i%i", 0b1_1_0_1, 0xd, 13)
 	

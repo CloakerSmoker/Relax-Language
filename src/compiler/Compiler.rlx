@@ -1867,6 +1867,7 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 		VariableInfo* TargetVariable := Left->VariableValue
 		StructAccessExpression* LeftAccess := Left->AccessNode
 		BinaryExpression* LeftExpression := Left->BinaryNode
+		UnaryExpression* LeftUnary := Left->UnaryNode
 		
 		i8 WorkRegister := PushRegisterStack(cState)
 		
@@ -1885,6 +1886,11 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
 				CompileSetArrayAccess(cState, RBX, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+			}
+			else if (LeftType = NODE_TYPE_UNARY) {
+				CompileExpression(cState, WorkRegister, LeftUnary->Operand)
+				
+				EmitMove_RIX_RX(cState, WorkRegister, ResultRegister, ResultSize)
 			}
 		}
 		else {				

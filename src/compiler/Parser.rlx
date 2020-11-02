@@ -432,10 +432,10 @@ struct ASTVisitor {
 			
 			this->RawVisitNodes(Next->StatementCount, Next->Statements)
 		}
-	},
+	}
 	define void VisitBlocks(... Blocks) {
 		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
-	},
+	}
 	define void VisitChildren(ASTNode* Node) {
 		i8 NodeType := Node->NodeType
 		
@@ -483,8 +483,7 @@ struct ASTVisitor {
 				this->VisitBlocks(Node->TryNode->CatchBody)
 			}
 		}
-		
-	},
+	}
 	
 	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
 		for (i32 Index := 0, Index < Count, Index += 1) {
@@ -503,7 +502,7 @@ struct ASTVisitor {
 				this->VisitChildren(Node)
 			}
 		}
-	},
+	}
 	define void VisitNodes(... Nodes) {
 		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
 	}
@@ -512,14 +511,15 @@ struct ASTVisitor {
 define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
 	ASTNode* NewNode := Alloc(#ASTNode) As ASTNode*
 	
+	UnaryExpression* UnaryNode := NewNodeTrueNode
 	BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
 	StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
 	
+	i8 IsDereference := NewNodeType = NODE_TYPE_UNARY && UnaryNode->Operator->Value = OPERATOR_STAR
 	i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
-	
 	i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
 	
-	if (IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
+	if (IsDereference || IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
 		NewNode->IsStorageValue := true
 	}
 	
@@ -1266,6 +1266,12 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		}
 		else if !(Left->IsStorageValue) {
 			ASTError(Left, "Left side of ':=' must be a storage value")
+		}
+		else if (Left->NodeType = NODE_TYPE_UNARY) {
+			; Only true for `*X := Y`, result type is whatever `*X` would be. And thanks to
+			;  `*X` being parsed like normal, LeftType is already correct
+			
+			ResultType := LeftType
 		}
 		else {
 			/* Otherwise, the result type is the right type */
@@ -2921,13 +2927,46 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Dummy", &ErrorMessage)
 				
 				if (MaybeFunction && !ErrorMessage) {
-					HashMapElement* FoundFunction := pState~>Functions->Get(MaybeFunction->StringValue)
+					FunctionDefine* FoundDefine := null
+					Token* TailToken := MaybeFunction
 					
-					if (FoundFunction) {
-						FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
+					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+						Token* StaticMethodTypeName := MaybeFunction
+						Token* StaticMethodName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected static method name")
 						
+						HashMapElement* StaticMethodTypeElement := pState~>Types->Get(StaticMethodTypeName->StringValue)
+						
+						if !(StaticMethodTypeElement) {
+							TokenError(StaticMethodTypeName, "Undefined type")
+						}
+						
+						TypeInfo* TargetType := StaticMethodTypeElement->Value As TypeInfo*
+						
+						HashMapElement* FoundFunctionElement := TargetType~>StaticMethods->Get(StaticMethodName->StringValue)
+						
+						if !(FoundFunctionElement) {
+							TokenError(StaticMethodName, "Undefined static method")
+						}
+						
+						FoundDefine := FoundFunctionElement->Value As FunctionDefine*
+						
+						TailToken := StaticMethodName
+					}
+					else {
+						HashMapElement* FoundFunction := pState~>Functions->Get(MaybeFunction->StringValue)
+						
+						if (FoundFunction) {
+							FoundDefine := FoundFunction->Value As FunctionDefine*
+						}
+					}
+					
+					if (FoundDefine) {
 						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(pState->void, 1))
-						MergeContexts(NextToken~>Context, MaybeFunction~>Context, Result~>Context)
+						MergeContexts(MaybeFunction~>Context, TailToken~>Context, Result~>Context)
+						
+						if (FoundDefine->Next != null) {
+							ASTError(Result, "Getting the address of an overloaded function is not possible")
+						}
 					}
 					else {
 						UnfreezeParser(pState, Frozen)
