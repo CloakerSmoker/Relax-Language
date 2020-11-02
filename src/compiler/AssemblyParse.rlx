@@ -78,8 +78,8 @@ define Instruction* MakeInstruction(Instruction* Base, i32 Opcode, i32 Encoding,
 	return Next
 }
 
-define void SetupAssembly(ParserState* pState) {
-	HashMap* I := pState~>Instructions
+define void SetupAssembly(ParserState* Parser) {
+	HashMap* I := Parser~>Instructions
 	
 	I->Initialize()
 	I->IgnoreCase := true
@@ -209,8 +209,8 @@ define void SetupAssembly(ParserState* pState) {
 	I->Set("lock", MakeInstruction(null, 0xF0, 0, E_NO_RM, 0))
 }
 
-define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i32 EncodedOperands) {
-	HashMapElement* FoundBaseElement := pState~>Instructions->Get(Name)
+define Instruction* FindInstruction(ParserState* Parser, SafeWideString* Name, i32 EncodedOperands) {
+	HashMapElement* FoundBaseElement := Parser~>Instructions->Get(Name)
 	
 	if !(FoundBaseElement) {
 		return 0 As Instruction*
@@ -234,7 +234,7 @@ define Instruction* FindInstruction(ParserState* pState, SafeWideString* Name, i
 	return 0 As Instruction*
 }
 
-define i32 LookupRegister(ParserState* pState, Token* NameToken, i8 RequiredSize) {
+define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize) {
 	i8* InvalidName := "Invalid register name."
 	
 	i32 RegisterSize := 0
@@ -459,28 +459,28 @@ struct InstructionNode {
 	}
 }
 
-define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlock* ThisBlock) {
+define InstructionOperand* ParseAssemblyOperand(ParserState* Parser, AssemblyBlock* ThisBlock) {
 	InstructionOperand* Next := Alloc(#InstructionOperand)
 	
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := ParserNextToken(Parser)
 	
 	if (TokenMatches(NextToken, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 		/* A memory reference, through a register or SIB (plus displacements) */
 		
-		Token* MaybeBase := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name.")
+		Token* MaybeBase := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name.")
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
 			/* Register[ = SIB, so parse the SIB */
 			
 			Next->HasSIB := true
-			Next->SIBValue.BaseRegister := LookupRegister(pState, MaybeBase, 8) As i8
+			Next->SIBValue.BaseRegister := LookupRegister(Parser, MaybeBase, 8) As i8
 			
-			Token* Index := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected index register name.")
+			Token* Index := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected index register name.")
 			
-			Next->SIBValue.IndexRegister := LookupRegister(pState, Index, 8) As i8
+			Next->SIBValue.IndexRegister := LookupRegister(Parser, Index, 8) As i8
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
-				Token* Scale := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected scale value.")
+			if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+				Token* Scale := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected scale value.")
 				i64 ScaleValue := Scale->IntegerValue
 				
 				if (ScaleValue = 8 || ScaleValue = 4 || ScaleValue = 2 || ScaleValue = 1) {
@@ -491,24 +491,24 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 				}
 			}
 			
-			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for SIB.")
+			Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for SIB.")
 		}
 		else {
 			/* No [ following the register, just a regular register reference */
 			
-			Next->RegisterNumber := LookupRegister(pState, MaybeBase, 8) As i8
+			Next->RegisterNumber := LookupRegister(Parser, MaybeBase, 8) As i8
 		}
 		
-		i8 IsPlus := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+		i8 IsPlus := ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
 		i8 IsMinus := false
 		
 		if !(IsPlus) {
-			IsMinus := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+			IsMinus := ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
 		}
 		
 		/* If the next token is + or -, then parse the displacement */
 		if (IsPlus || IsMinus) {
-			Token* DispToken := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected displacement value.")
+			Token* DispToken := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected displacement value.")
 			i8 DispSize := GetNumberSize(DispToken->IntegerValue)
 			
 			if (DispSize > 4) {
@@ -528,11 +528,11 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 			}
 		}
 		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for operand.")
-		Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' for memory operand size.")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for operand.")
+		Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' for memory operand size.")
 		
-		Token* TypeNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected memory operand type name.")
-		Token* PointerStar := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR, "Expected '*' after operand type name.")
+		Token* TypeNameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected memory operand type name.")
+		Token* PointerStar := Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_STAR, "Expected '*' after operand type name.")
 		
 		MergeContexts(NextToken~>Context, PointerStar~>Context, Next~>Context)
 		
@@ -563,7 +563,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		Next->Size := Next->Type << OP_M_OFFSET
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFIER, 0)) {
-		i32 Register := LookupRegister(pState, NextToken, 0)
+		i32 Register := LookupRegister(Parser, NextToken, 0)
 		
 		Next->Size := ((Register >> 8) & 0x0F)
 		Next->Type := Next->Size << OP_R_OFFSET
@@ -585,10 +585,10 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 		Next->Type := O_L
 		Next->ReferencesFunction := true
 		
-		Token* FunctionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
+		Token* FunctionToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* FunctionName := FunctionToken->StringValue
 		
-		HashMapElement* FoundFunction := pState~>Functions->Get(FunctionName)
+		HashMapElement* FoundFunction := Parser~>Functions->Get(FunctionName)
 		
 		if !(FoundFunction) {
 			TokenError(FunctionToken, "Function definition/declaration not found.")
@@ -603,7 +603,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	else if (TokenMatches(NextToken, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 		Next->Type := O_L
 		
-		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
+		Token* LabelToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
 		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
@@ -617,7 +617,7 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 			
 			FoundLabel->Type := INSTRUCTION_LABEL_INCOMPLETE
 			FoundLabel->LabelName := LabelName
-			FoundLabel->LabelNumber := ParserNextLabel(pState)
+			FoundLabel->LabelNumber := ParserNextLabel(Parser)
 			
 			ThisBlock~>Labels->Set(LabelName, FoundLabel)
 		}
@@ -633,11 +633,11 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* pState, AssemblyBlo
 	return Next
 }
 
-define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* ThisBlock) {
+define InstructionNode* ParseInstruction(ParserState* Parser, AssemblyBlock* ThisBlock) {
 	InstructionNode* Result := 0
 	
-	if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-		Token* LabelToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
+	if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+		Token* LabelToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
 		SafeWideString* LabelName := LabelToken->StringValue
 		
 		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
@@ -652,7 +652,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 		}
 		else {
 			FoundLabel := Alloc(#InstructionNode)
-			FoundLabel->LabelNumber := ParserNextLabel(pState)
+			FoundLabel->LabelNumber := ParserNextLabel(Parser)
 			
 			ThisBlock~>Labels->Set(LabelName, FoundLabel)
 		}
@@ -665,16 +665,16 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 	else {
 		Result := Alloc(#InstructionNode)
 		
-		Token* InstructionToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected instruction name.")
+		Token* InstructionToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected instruction name.")
 		SafeWideString* InstructionName := InstructionToken->StringValue
 		
 		i32 OperandTypes := 0
 		i32 OperandSize := 0
 		InstructionOperand** Operands := Alloc(2 * #InstructionOperand)
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 			for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
-				InstructionOperand* Next := ParseAssemblyOperand(pState, ThisBlock)
+				InstructionOperand* Next := ParseAssemblyOperand(Parser, ThisBlock)
 				i32 NextType := Next->Type
 				
 				if !(OperandSize) {
@@ -697,7 +697,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 				
 				OperandTypes := OperandTypes | (Next->Type << (16 * OperandIndex As i8))
 				
-				if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 					break
 				}
 			}
@@ -708,7 +708,7 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 			CopyContext(InstructionToken~>Context, Result~>Context)
 		}
 		
-		Instruction* Found := FindInstruction(pState, InstructionName, OperandTypes)
+		Instruction* Found := FindInstruction(Parser, InstructionName, OperandTypes)
 		
 		if !(Found) {
 			SwapOutputStream()
@@ -736,33 +736,33 @@ define InstructionNode* ParseInstruction(ParserState* pState, AssemblyBlock* Thi
 	return Result
 }
 
-define ASTNode* ParseAssembly(ParserState* pState, i8 InFunction) {
+define ASTNode* ParseAssembly(ParserState* Parser, i8 InFunction) {
 	AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
 	
 	ThisBlock~>Labels->Initialize()
 	
-	if (InFunction && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+	if (InFunction && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 		loop {
-			Token* RegisterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name")
-			i32 TargetRegister := LookupRegister(pState, RegisterNameToken, 0) & 0x0F
+			Token* RegisterNameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected register name")
+			i32 TargetRegister := LookupRegister(Parser, RegisterNameToken, 0) & 0x0F
 			
-			Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected register value assignment")
+			Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected register value assignment")
 			
-			ThisBlock~>RegisterValues[TargetRegister] := ParseExpression(pState, 0)
+			ThisBlock~>RegisterValues[TargetRegister] := ParseExpression(Parser, 0)
 			
-			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				break
 			}
 		}
 		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for register value list")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for register value list")
 	}
 	
 	InstructionNode** Instructions := Alloc(16 * #InstructionNode)
 	i32 InstructionCapacity := 16
 	i32 InstructionCount := 0
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for assembly block.")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for assembly block.")
 	
 	loop {
 		if (InstructionCount >= InstructionCapacity) {
@@ -770,10 +770,10 @@ define ASTNode* ParseAssembly(ParserState* pState, i8 InFunction) {
 			Instructions := ReAlloc(Instructions, InstructionCapacity * #InstructionNode)
 		}
 		
-		Instructions[InstructionCount] := ParseInstruction(pState, ThisBlock)
+		Instructions[InstructionCount] := ParseInstruction(Parser, ThisBlock)
 		InstructionCount += 1
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 			break
 		}
 	}

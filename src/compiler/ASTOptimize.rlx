@@ -96,7 +96,7 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	}
 }
 
-define void CountReferences(ParserState* pState) {
+define void CountReferences(ParserState* Parser) {
 	ASTVisitor* Visitor := Alloc(#ASTVisitor)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
@@ -107,10 +107,10 @@ define void CountReferences(ParserState* pState) {
 	
 	Visitor->SetVisitFunction(&CountReferencesVisit)
 	
-	Visitor->VisitBlocks(pState->MainFunction->Body)
-	Visitor->RawVisitNodes(GetArrayLength(pState->GlobalDefaults), pState->GlobalDefaults)
+	Visitor->VisitBlocks(Parser->MainFunction->Body)
+	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
 	
-	pState->MainFunction->CallCount += 1
+	Parser->MainFunction->CallCount += 1
 	
 	Free(Visitor)
 }

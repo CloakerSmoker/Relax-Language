@@ -316,7 +316,7 @@ struct CallExpression {
 
 struct ParserState {
 	BuildConfig* Config,
-	TokenizerState* tState,
+	LexerState* Lexer,
 	
 	HashMap Functions,
 	
@@ -344,10 +344,10 @@ struct ParserState {
 	i32 LabelCount
 }
 
-define i32 ParserNextLabel(ParserState* pState) {
-	i32 Result := pState->LabelCount
+define i32 ParserNextLabel(ParserState* Parser) {
+	i32 Result := Parser->LabelCount
 	
-	pState->LabelCount += 1
+	Parser->LabelCount += 1
 	
 	return Result
 }
@@ -648,8 +648,8 @@ i8 TYPE_INCOMPLETE := 4
 i8 TYPE_BITS := 8
 i8 TYPE_ARRAY := 16
 
-define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, i16 Size, i8 Flags) {
-	/* Adds a type to pState with the given name, fields, size, structinfo, and completeness */
+define TypeInfo* AddType(ParserState* Parser, SafeWideString* Name, i16 Size, i8 Flags) {
+	/* Adds a type to Parser with the given name, fields, size, structinfo, and completeness */
 	
 	/* Should only be called once per type name */
 	TypeInfo* NewType := Alloc(#TypeInfo) As TypeInfo*
@@ -673,7 +673,7 @@ define TypeInfo* AddType(ParserState* pState, SafeWideString* Name, i16 Size, i8
 		NewType->IsBuiltin := true
 	}
 	
-	pState~>Types->Set(Name, NewType)
+	Parser~>Types->Set(Name, NewType)
 	
 	return NewType
 }
@@ -692,21 +692,21 @@ define Type MakeType(i64 BackingType, i16 PointerDepth) {
 	return MakeType(BackingType As TypeInfo*, PointerDepth)
 }
 
-define void CreateDefaultTypes(ParserState* pState) {
+define void CreateDefaultTypes(ParserState* Parser) {
 	/* Creates all the standard types, only called once */
 	
 	/* All standard types are not structs, and are not incomplete */
-	pState->i8 := AddType(pState, AToS("i8"), 1, TYPE_REGULAR)
-	pState->i16 := AddType(pState, AToS("i16"), 2, TYPE_REGULAR)
-	pState->i32 := AddType(pState, AToS("i32"), 4, TYPE_REGULAR)
-	pState->i64 := AddType(pState, AToS("i64"), 8, TYPE_REGULAR)
-	pState->void := AddType(pState, AToS("void"), 8, TYPE_REGULAR)
+	Parser->i8 := AddType(Parser, AToS("i8"), 1, TYPE_REGULAR)
+	Parser->i16 := AddType(Parser, AToS("i16"), 2, TYPE_REGULAR)
+	Parser->i32 := AddType(Parser, AToS("i32"), 4, TYPE_REGULAR)
+	Parser->i64 := AddType(Parser, AToS("i64"), 8, TYPE_REGULAR)
+	Parser->void := AddType(Parser, AToS("void"), 8, TYPE_REGULAR)
 }
 
-define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
+define Type TryGetType(ParserState* Parser, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
 	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
 	
-	HashMapElement* FoundElement := pState~>Types->Get(TypeName)
+	HashMapElement* FoundElement := Parser~>Types->Get(TypeName)
 	TypeInfo* FoundTypeInfo := 0
 
 	if (FoundElement) {
@@ -725,7 +725,7 @@ define Type TryGetType(ParserState* pState, SafeWideString* TypeName, i16 Pointe
 		}
 		else {
 			/* We didn't find a type with the name, build an incomplete type for it */
-			FoundTypeInfo := AddType(pState, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+			FoundTypeInfo := AddType(Parser, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
 		}
 	}
 	
@@ -736,16 +736,16 @@ declare i32 FreezeParser(ParserState*)
 declare void UnfreezeParser(ParserState*, i32)
 declare Token* ParserNextToken(ParserState*)
 
-define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDepth) {
+define Type GetType(ParserState* Parser, SafeWideString* TypeName, i8 PointerDepth) {
 	i8* ErrorMessage := 0
 	
-	i32 BeforeType := FreezeParser(pState)
-	Type Result := TryGetType(pState, TypeName, PointerDepth, &ErrorMessage)
+	i32 BeforeType := FreezeParser(Parser)
+	Type Result := TryGetType(Parser, TypeName, PointerDepth, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		UnfreezeParser(pState, BeforeType)
+		UnfreezeParser(Parser, BeforeType)
 		
-		Token* BadToken := ParserNextToken(pState)
+		Token* BadToken := ParserNextToken(Parser)
 		
 		TokenError(BadToken, ErrorMessage)
 	}
@@ -755,7 +755,7 @@ define Type GetType(ParserState* pState, SafeWideString* TypeName, i8 PointerDep
 
 declare Token* ParserCurrentToken(ParserState*)
 
-define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement, ErrorContext* BlameContext) {
+define Type DecrementPointerType(ParserState* Parser, Type TypeToDecrement, ErrorContext* BlameContext) {
 	/* Returns the type you would get from dereferencing TypeToDecrement */
 	
 	if (TypeToDecrement.PointerDepth = 0) {
@@ -765,7 +765,7 @@ define Type DecrementPointerType(ParserState* pState, Type TypeToDecrement, Erro
 	
 	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1 As i16)
 }
-define Type IncrementPointerType(ParserState* pState, Type TypeToIncrement) {
+define Type IncrementPointerType(ParserState* Parser, Type TypeToIncrement) {
 	/* Returns a type which is a pointer to the passed type */
 	
 	return MakeType(TypeToIncrement.BaseType, (TypeToIncrement.PointerDepth) + 1 As i16)
@@ -800,18 +800,18 @@ define i8 GetNumberSize(i64 NumberToCheck) {
 	}
 }
 
-define Type GetNumberType(ParserState* pState, i64 NumberToCheck) {
+define Type GetNumberType(ParserState* Parser, i64 NumberToCheck) {
 	/* Returns a type for the given number (smallest type that can store the number signed) */
 	
 	if (NumberToCheck & 0x7FFFFFFF80000000) {
 		/* If any of the upper 33 bits are set, then it's an i64 */
 		
-		return MakeType(pState->i64, 0)
+		return MakeType(Parser->i64, 0)
 	}
 	else {
 		/* Smallest type for a number is i32 for the sake of sanity (10 * 300 = 300, not 44) */
 		
-		return MakeType(pState->i32, 0)
+		return MakeType(Parser->i32, 0)
 	}
 }
 
@@ -850,7 +850,7 @@ define i32 GetGenericRating(Type ForType) {
 	return Result
 }
 
-define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* SourceNode) {
+define i8 CheckTypes(ParserState* Parser, Type Source, Type Target, ASTNode* SourceNode) {
 	if (SourceNode) {
 		Source := SourceNode->ValueType
 	}
@@ -864,8 +864,8 @@ define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* Sou
 	i16 SourceSize := GetTypeSize(Source)
 	i16 TargetSize := GetTypeSize(Target)
 	
-	i8 SourceIsVoid := SourceBase = pState->void
-	i8 TargetIsVoid := TargetBase = pState->void
+	i8 SourceIsVoid := SourceBase = Parser->void
+	i8 TargetIsVoid := TargetBase = Parser->void
 	
 	if (SourceDepth = TargetDepth) {
 		if (SourceBase = TargetBase) {
@@ -905,17 +905,17 @@ define i8 CheckTypes(ParserState* pState, Type Source, Type Target, ASTNode* Sou
 	}
 }
 
-define ASTNode* DowncastIntegerType(ParserState* pState, ASTNode* Target) {
+define ASTNode* DowncastIntegerType(ParserState* Parser, ASTNode* Target) {
 	if (Target->NodeType != NODE_TYPE_INTEGER) {
 		return Target
 	}
 	
 	i8 Size := GetNumberSize(Target->IntegerValue)
-	TypeInfo* BaseType := pState->i8
+	TypeInfo* BaseType := Parser->i8
 	
-	if (Size = 2) {BaseType := pState->i16}
-	else if (Size = 4) {BaseType := pState->i32}
-	else if (Size = 8) {BaseType := pState->i64}
+	if (Size = 2) {BaseType := Parser->i16}
+	else if (Size = 4) {BaseType := Parser->i32}
+	else if (Size = 8) {BaseType := Parser->i64}
 	
 	Target->ValueType := MakeType(BaseType, 0)
 	
@@ -963,7 +963,7 @@ define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** Against
 	return true
 }
 
-define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFunction, ASTNode* CallerNode) {
+define FunctionDefine* MatchFunction(ParserState* Parser, FunctionDefine* BaseFunction, ASTNode* CallerNode) {
 	CallExpression* Caller := CallerNode->CallNode
 	i32 CallerParameterCount := Caller->ParameterCount
 	
@@ -995,10 +995,10 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 			for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
 				Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
 				
-				ASTNode* NextNode := DowncastIntegerType(pState, Caller->Parameters[ParameterIndex])
+				ASTNode* NextNode := DowncastIntegerType(Parser, Caller->Parameters[ParameterIndex])
 				Type ActualNext := NextNode->ValueType
 				
-				if (CheckTypes(pState, ActualNext, ExpectedNext, null)) {
+				if (CheckTypes(Parser, ActualNext, ExpectedNext, null)) {
 					BrokeInner := true
 					
 					Next->TempValue := ParameterIndex
@@ -1083,10 +1083,10 @@ define FunctionDefine* MatchFunction(ParserState* pState, FunctionDefine* BaseFu
 ==========================================
 */
 
-define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightType, ErrorContext* BlameContext) {
+define Type GetBinaryResultType(ParserState* Parser, Type LeftType, Type RightType, ErrorContext* BlameContext) {
 	/* Decides the result of a binary expression with the given operand types */
 	
-	i8 Compatible := !CheckTypes(pState, RightType, LeftType, null)
+	i8 Compatible := !CheckTypes(Parser, RightType, LeftType, null)
 	Type BestFit := LeftType
 	
 	if (GetGenericRating(LeftType) < GetGenericRating(RightType)) {
@@ -1157,7 +1157,7 @@ define Type GetBinaryResultType(ParserState* pState, Type LeftType, Type RightTy
 declare Token* ParserCurrentToken(ParserState*)
 declare ASTNode** ParseParameterList(ParserState*, i8*)
 
-define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
+define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorToken, ASTNode* Right) {
 	/* Name is a bit misleading, can return a NODE_TYPE_BINARY or NODE_TYPE_STRUCT_ACCESS */
 	
 	i8 Operator := (OperatorToken->Value) As i8
@@ -1181,12 +1181,12 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		ResultType := RightType
 	}
 	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
-		DowncastIntegerType(pState, Right)
+		DowncastIntegerType(Parser, Right)
 		
-		CheckTypes(pState, Right->ValueType, MakeType(pState->i8, 0), Right)
+		CheckTypes(Parser, Right->ValueType, MakeType(Parser->i8, 0), Right)
 		
 		if (LeftSize < 4) {
-			ResultType := MakeType(pState->i32, 0)
+			ResultType := MakeType(Parser->i32, 0)
 		}
 		else {
 			ResultType := LeftType
@@ -1229,7 +1229,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 				ResultType := TargetField->ValueType
 				
 				if (Operator = OPERATOR_TILDE_GREATER && !ResultType.IsArray) {
-					ResultType := IncrementPointerType(pState, ResultType)
+					ResultType := IncrementPointerType(Parser, ResultType)
 				}
 				
 				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
@@ -1289,13 +1289,13 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		else {
 			/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
 			
-			CopyContext(ParserCurrentToken(pState)~>Context, Right~>Context)
+			CopyContext(ParserCurrentToken(Parser)~>Context, Right~>Context)
 			
-			ResultType := DecrementPointerType(pState, LeftType, Right~>Context)
+			ResultType := DecrementPointerType(Parser, LeftType, Right~>Context)
 		}
 	}
 	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
-		ResultType := MakeType(pState->i8, 0)
+		ResultType := MakeType(Parser->i8, 0)
 		
 		ALLOW_INTEGER_DOWNCAST := false
 	}
@@ -1304,11 +1304,11 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 		
 		MergeContexts(Left~>Context, Right~>Context, OperatorToken~>Context)
 		
-		ResultType := GetBinaryResultType(pState, LeftType, RightType, OperatorToken~>Context)
+		ResultType := GetBinaryResultType(Parser, LeftType, RightType, OperatorToken~>Context)
 		
 		if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
 			/* For && and ||, GetBinaryResultType is only called for the error messages, and the actual result type is a byte */
-			ResultType := MakeType(pState->i8, 0)
+			ResultType := MakeType(Parser->i8, 0)
 		}
 	}
 	
@@ -1339,7 +1339,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 	
 	return ResultNode
 }
-define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Operand) {
+define ASTNode* MakeUnary(ParserState* Parser, Token* OperatorToken, ASTNode* Operand) {
 	/* Builds a NODE_TYPE_UNARY for the given operand/operator combo */
 	
 	UnaryExpression* Result := Alloc(#UnaryExpression) As UnaryExpression*
@@ -1352,17 +1352,17 @@ define ASTNode* MakeUnary(ParserState* pState, Token* OperatorToken, ASTNode* Op
 	Result->Operand := Operand
 	
 	if (Operator = OPERATOR_BANG) {
-		ResultType := MakeType(pState->i8, 0)
+		ResultType := MakeType(Parser->i8, 0)
 	}
 	else if (Operator = OPERATOR_AND) {	
 		if !(Operand->IsStorageValue || Operand->NodeType = NODE_TYPE_DEFINE) {
 			TokenError(OperatorToken, "Operand of the '&' operator must be a storage value.")
 		}
 		
-		ResultType := IncrementPointerType(pState, ResultType)
+		ResultType := IncrementPointerType(Parser, ResultType)
 	}
 	else if (Operator = OPERATOR_STAR) {
-		ResultType := DecrementPointerType(pState, ResultType, Operand~>Context)
+		ResultType := DecrementPointerType(Parser, ResultType, Operand~>Context)
 	}
 	
 	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
@@ -1375,9 +1375,9 @@ declare i32 FreezeParser(ParserState*)
 declare void UnfreezeParser(ParserState*, i32)
 declare Token* ParserNextToken(ParserState*)
 
-define ASTNode* AllocateCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
-	UnfreezeParser(pState, FreezeParser(pState) - 1) /* Manually backtrack and consume the closing ')' for this call */
-	Token* CloseParen := ParserNextToken(pState)
+define ASTNode* AllocateCall(ParserState* Parser, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+	UnfreezeParser(Parser, FreezeParser(Parser) - 1) /* Manually backtrack and consume the closing ')' for this call */
+	Token* CloseParen := ParserNextToken(Parser)
 	
 	CallExpression* Result := Alloc(#CallExpression) As CallExpression*
 	Result->Parameters := Parameters
@@ -1390,23 +1390,23 @@ define ASTNode* AllocateCall(ParserState* pState, Token* NameToken, ASTNode** Pa
 	return ResultNode
 }
 
-define ASTNode* MakeBuiltinCall(ParserState* pState, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
-	ASTNode* ResultNode := AllocateCall(pState, NameToken, Parameters, ParameterCount)
+define ASTNode* MakeBuiltinCall(ParserState* Parser, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+	ASTNode* ResultNode := AllocateCall(Parser, NameToken, Parameters, ParameterCount)
 	CallExpression* Result := ResultNode->CallNode
 	
 	SafeWideString* Name := NameToken->StringValue
 	
 	if (SafeStringEqualsAString(Name, "syscall")) {
 		Result->BuiltinID := BUILTIN_SYSCALL
-		ResultNode->ValueType := MakeType(pState->i64, 0)
+		ResultNode->ValueType := MakeType(Parser->i64, 0)
 		
-		if (pState->Config->OutputFormat = OUTPUT_PE) {
+		if (Parser->Config->OutputFormat = OUTPUT_PE) {
 			ASTWarn(ResultNode, "Windows syscall numbers change near-constantly, using the native API is a bad idea.")
 		}
 	}
 	else if (SafeStringEqualsAString(Name, "breakpoint") && ParameterCount = 0) {
 		Result->BuiltinID := BUILTIN_BREAKPOINT
-		ResultNode->ValueType := MakeType(pState->i8, 0)
+		ResultNode->ValueType := MakeType(Parser->i8, 0)
 	}
 	else {
 		TokenError(NameToken, "Builtin function not found.")
@@ -1415,8 +1415,8 @@ define ASTNode* MakeBuiltinCall(ParserState* pState, Token* NameToken, ASTNode**
 	return ResultNode
 }
 
-define ASTNode* MakeCall(ParserState* pState, HashMap* NameSpace, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
-	ASTNode* ResultNode := AllocateCall(pState, NameToken, Parameters, ParameterCount)
+define ASTNode* MakeCall(ParserState* Parser, HashMap* NameSpace, Token* NameToken, ASTNode** Parameters, i32 ParameterCount) {
+	ASTNode* ResultNode := AllocateCall(Parser, NameToken, Parameters, ParameterCount)
 	CallExpression* Result := ResultNode->CallNode
 	
 	SafeWideString* Name := NameToken->StringValue
@@ -1433,7 +1433,7 @@ define ASTNode* MakeCall(ParserState* pState, HashMap* NameSpace, Token* NameTok
 	FunctionDefine* FoundDefine := (FoundFunction->Value) As FunctionDefine*
 	
 	/* And walk the FunctionDefine* linked list, looking for an overload which matches our parameters */
-	FoundDefine := MatchFunction(pState, FoundDefine, ResultNode)
+	FoundDefine := MatchFunction(Parser, FoundDefine, ResultNode)
 	
 	Result->TargetFunction := FoundDefine
 	ResultNode->ValueType := FoundDefine->ReturnType
@@ -1447,29 +1447,29 @@ define ASTNode* MakeCall(ParserState* pState, HashMap* NameSpace, Token* NameTok
 ==========================================
 */
 
-define i32 FreezeParser(ParserState* pState) {
+define i32 FreezeParser(ParserState* Parser) {
 	/* Gets the tokenizer state in order to backtrack to said state */
 	
-	return pState->tState->TokenIndex
+	return Parser->Lexer->TokenIndex
 }
-define void UnfreezeParser(ParserState* pState, i32 Index) {
+define void UnfreezeParser(ParserState* Parser, i32 Index) {
 	/* Restores the tokenizer to a given state in order to backtrack */
 	
-	pState->tState->TokenIndex := Index
+	Parser->Lexer->TokenIndex := Index
 }
 
-define Token* ParserNextToken(ParserState* pState) {
+define Token* ParserNextToken(ParserState* Parser) {
 	/* Gets the next token */
 	
-	return GetNextToken(pState->tState)
+	return GetNextToken(Parser->Lexer)
 }
 
-define Token* ParserCurrentToken(ParserState* pState) {
-	TokenizerState* tState := pState->tState
+define Token* ParserCurrentToken(ParserState* Parser) {
+	LexerState* Lexer := Parser->Lexer
 	
-	tState->TokenIndex -= 1
+	Lexer->TokenIndex -= 1
 	
-	return GetNextToken(tState)
+	return GetNextToken(Lexer)
 }
 
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
@@ -1490,16 +1490,16 @@ define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
 	return false
 }
 
-define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
+define i8 ParserNextMatches(ParserState* Parser, i8 TokenType, i8 TokenValue) {
 	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
-	i32 FrozenState := FreezeParser(pState)
+	i32 FrozenState := FreezeParser(Parser)
 	
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := ParserNextToken(Parser)
 	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
 	
 	if !(Matches) {
 		/* Backtrack if the next token didn't match */
-		UnfreezeParser(pState, FrozenState)
+		UnfreezeParser(Parser, FrozenState)
 		
 		return false
 	}
@@ -1507,10 +1507,10 @@ define i8 ParserNextMatches(ParserState* pState, i8 TokenType, i8 TokenValue) {
 	return true
 }
 
-define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
+define Token* TryConsume(ParserState* Parser, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
 	/* Gets the next token and ensures it is a TokenText:TokenValue token (with Reason being an error message for when the next token doesn't match) */
 	
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := ParserNextToken(Parser)
 	
 	if (NextToken->Type = TOKEN_TYPE_EOF) {
 		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
@@ -1523,10 +1523,10 @@ define Token* TryConsume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* R
 	
 	return NextToken
 }
-define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reason) {
+define Token* Consume(ParserState* Parser, i8 TokenType, i8 TokenValue, i8* Reason) {
 	i8* ErrorMessage := 0
 	
-	Token* Result := TryConsume(pState, TokenType, TokenValue, Reason, &ErrorMessage)
+	Token* Result := TryConsume(Parser, TokenType, TokenValue, Reason, &ErrorMessage)
 	
 	if (ErrorMessage) {
 		TokenError(Result, Reason)
@@ -1544,13 +1544,13 @@ define Token* Consume(ParserState* pState, i8 TokenType, i8 TokenValue, i8* Reas
 declare void ParseProgram(ParserState*)
 declare void SetupAssembly(ParserState*)
 
-define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
-	/* Initializes pState and uses tState to parse a program */
+define ParserState* ParserStart(BuildConfig* Config, LexerState* Lexer) {
+	/* Initializes Parser and uses Lexer to parse a program */
 	
 	ParserState* P := Alloc(#ParserState) As ParserState*
 	
 	P->Config := Config
-	P->tState := tState
+	P->Lexer := Lexer
 	
 	P~>Globals->Initialize()
 	
@@ -1568,12 +1568,12 @@ define ParserState* ParserStart(BuildConfig* Config, TokenizerState* tState) {
 	return P
 }
 
-define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
+define VariableInfo* FindVariable(ParserState* Parser, Token* NameToken) {
 	/* Finds a variable, prioritizing locals over globals */
 	
 	SafeWideString* VariableName := NameToken->StringValue
 	
-	FunctionDefine* CurrentFunction := pState->CurrentFunction
+	FunctionDefine* CurrentFunction := Parser->CurrentFunction
 	VariableInfo* FoundVariable := 0
 	
 	if (CurrentFunction) {
@@ -1583,7 +1583,7 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	
 	if !(FoundVariable) {
 		/* If we didn't find the variable in the locals, then check the globals */
-		FoundVariable := pState~>Globals->Get(VariableName)
+		FoundVariable := Parser~>Globals->Get(VariableName)
 		
 		if (CurrentFunction) {
 			CurrentFunction->UsesGlobals := true
@@ -1601,16 +1601,16 @@ define VariableInfo* FindVariable(ParserState* pState, Token* NameToken) {
 	return FoundVariable
 }
 
-define void ParserAddGlobal(ParserState* pState, VariableInfo* NewGlobal, Token* SourceToken) {
+define void ParserAddGlobal(ParserState* Parser, VariableInfo* NewGlobal, Token* SourceToken) {
 	/* Adds a global variable to the current program */
 	
-	pState~>Globals->Add(NewGlobal, SourceToken)
+	Parser~>Globals->Add(NewGlobal, SourceToken)
 }
 
-define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* SourceToken) {
+define void ParserAddLocal(ParserState* Parser, VariableInfo* NewLocal, Token* SourceToken) {
 	/* Adds a local variable to the current function */
 	
-	pState->CurrentFunction~>Locals->Add(NewLocal, SourceToken)
+	Parser->CurrentFunction~>Locals->Add(NewLocal, SourceToken)
 }
 
 /*
@@ -1619,11 +1619,11 @@ define void ParserAddLocal(ParserState* pState, VariableInfo* NewLocal, Token* S
 ==========================================
 */
 
-define Type TryParseTypeName(ParserState* pState, i8 AllowArrayType, i8** ErrorMessage) {
+define Type TryParseTypeName(ParserState* Parser, i8 AllowArrayType, i8** ErrorMessage) {
 	/* Parses a type name, and returns a Type struct representing that type */
 	
 	/* Find the base type name */
-	Token* NameToken := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
+	Token* NameToken := TryConsume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
 	
 	if *(ErrorMessage) {
 		return 0 As Type
@@ -1634,39 +1634,39 @@ define Type TryParseTypeName(ParserState* pState, i8 AllowArrayType, i8** ErrorM
 	i8 PointerDepth := 0
 	
 	/* And the pointer depth of the type */
-	while (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+	while (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 		PointerDepth += 1
 	}
 	
 	/* Get (and return) a type (which might be incomplete) using the parsed info */
-	Type Result := TryGetType(pState, Name, PointerDepth, ErrorMessage)
+	Type Result := TryGetType(Parser, Name, PointerDepth, ErrorMessage)
 	
-	if (AllowArrayType && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-		Result := IncrementPointerType(pState, Result)
+	if (AllowArrayType && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+		Result := IncrementPointerType(Parser, Result)
 		
-		Token* SizeToken := TryConsume(pState, TOKEN_TYPE_INTEGER, 0, "Expected array type size", ErrorMessage)
+		Token* SizeToken := TryConsume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array type size", ErrorMessage)
 		
 		if !(*(ErrorMessage)) {
 			Result.ArraySize := (SizeToken->IntegerValue) As i16
 			Result.IsArray := true
 		}
 		
-		TryConsume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
+		TryConsume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
 	}
 	
 	return Result
 }
 
-define Type ParseTypeName(ParserState* pState) {
+define Type ParseTypeName(ParserState* Parser) {
 	i8* ErrorMessage := 0
-	i32 Frozen := FreezeParser(pState)
+	i32 Frozen := FreezeParser(Parser)
 	
-	Type Result := TryParseTypeName(pState, false, &ErrorMessage)
+	Type Result := TryParseTypeName(Parser, false, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		UnfreezeParser(pState, Frozen)
+		UnfreezeParser(Parser, Frozen)
 		
-		Token* ErrorToken := ParserNextToken(pState)
+		Token* ErrorToken := ParserNextToken(Parser)
 		
 		TokenError(ErrorToken, ErrorMessage)
 	}
@@ -1680,28 +1680,28 @@ declare void ParseAndAddStruct(ParserState*)
 declare void ParseAndAddBits(ParserState*)
 declare ASTNode* ParseExpression(ParserState*, i8)
 
-define void ParseProgram(ParserState* pState) {
+define void ParseProgram(ParserState* Parser) {
 	/* Parse a whole program */
 	
 	loop {
-		i32 FrozenState := FreezeParser(pState)
-		Token* NextToken := ParserNextToken(pState)
+		i32 FrozenState := FreezeParser(Parser)
+		Token* NextToken := ParserNextToken(Parser)
 		i8 NextType := NextToken->Type
 		
 		if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE)) {
-			ParseFunction(pState, pState~>Functions, KEYWORD_DEFINE)
+			ParseFunction(Parser, Parser~>Functions, KEYWORD_DEFINE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-			ParseFunction(pState, pState~>Functions, KEYWORD_DECLARE)
+			ParseFunction(Parser, Parser~>Functions, KEYWORD_DECLARE)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_DLLIMPORT)) {
-			ParseFunction(pState, pState~>Functions, KEYWORD_DLLIMPORT)
+			ParseFunction(Parser, Parser~>Functions, KEYWORD_DLLIMPORT)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
-			ParseAndAddStruct(pState)
+			ParseAndAddStruct(Parser)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
-			ParseAndAddBits(pState)
+			ParseAndAddBits(Parser)
 		}
 		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
 			break
@@ -1709,16 +1709,16 @@ define void ParseProgram(ParserState* pState) {
 		else if (NextType = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
-			UnfreezeParser(pState, FrozenState)
+			UnfreezeParser(Parser, FrozenState)
 			
 			i8* ErrorMessage := 0
 			
-			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
+			Type PotentialType := TryParseTypeName(Parser, true, &ErrorMessage)
 			
 			if ((PotentialType != 0) && (ErrorMessage = 0)) {
-				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
-				i32 DefaultValueExpressionStart := FreezeParser(pState)
-				Token* PotentialName := ParserNextToken(pState)
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(Parser)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(Parser)
+				Token* PotentialName := ParserNextToken(Parser)
 				
 				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, 0)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
@@ -1733,16 +1733,16 @@ define void ParseProgram(ParserState* pState) {
 					NewGlobal->IsGlobal := True
 					NewGlobal->IsParameter := False
 					
-					ParserAddGlobal(pState, NewGlobal, PotentialName)
+					ParserAddGlobal(Parser, NewGlobal, PotentialName)
 					
-					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
-						UnfreezeParser(pState, DefaultValueExpressionStart)
+					if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						UnfreezeParser(Parser, DefaultValueExpressionStart)
 						
-						i32 Index := GetArrayLength(pState->GlobalDefaults)
+						i32 Index := GetArrayLength(Parser->GlobalDefaults)
 						
-						pState->GlobalDefaults := ReAllocArray(pState->GlobalDefaults, 1)
+						Parser->GlobalDefaults := ReAllocArray(Parser->GlobalDefaults, 1)
 						
-						(pState->GlobalDefaults)[Index] := ParseExpression(pState, 0)
+						(Parser->GlobalDefaults)[Index] := ParseExpression(Parser, 0)
 					}
 				}
 			}
@@ -1753,15 +1753,15 @@ define void ParseProgram(ParserState* pState) {
 	}
 }
 
-define void ParseAndAddStruct(ParserState* pState) {
-	/* Parses a struct type, and adds it to pState */
+define void ParseAndAddStruct(ParserState* Parser) {
+	/* Parses a struct type, and adds it to Parser */
 	
 	/* Gets the type name */
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
+	Token* NameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Expected identifier for struct name")
 	SafeWideString* Name := NameToken->StringValue
 	
 	/* Check if there's already a type with this name */
-	HashMapElement* FoundElement := pState~>Types->Get(Name)
+	HashMapElement* FoundElement := Parser~>Types->Get(Name)
 	TypeInfo* NewType := 0
 	
 	if (FoundElement) {
@@ -1779,7 +1779,7 @@ define void ParseAndAddStruct(ParserState* pState) {
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		NewType := AddType(pState, Name, 0, TYPE_STRUCT)
+		NewType := AddType(Parser, Name, 0, TYPE_STRUCT)
 	}
 	
 	HashMap* Fields := NewType~>Fields
@@ -1790,10 +1790,10 @@ define void ParseAndAddStruct(ParserState* pState) {
 	Methods->Initialize()
 	StaticMethods->Initialize()
 	
-	i8 IsUnaligned := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
+	i8 IsUnaligned := ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
 	
 	/* Consumes the opening '{' */
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
 	
 	i16 NextFieldOffset := 0
 	i16 TotalSize := 0
@@ -1805,14 +1805,14 @@ define void ParseAndAddStruct(ParserState* pState) {
 		StructField* NextField := Alloc(#StructField) As StructField*
 		
 		if !(InUnion) {
-			if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
-				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
+			if (ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
+				Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
 				
 				InUnion := true
 			}
 			else {
-				i8 IsStaticMethod := ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_STATIC)
-				i8 IsMethod := IsStaticMethod || (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE))
+				i8 IsStaticMethod := ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_STATIC)
+				i8 IsMethod := IsStaticMethod || (ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_DEFINE) || ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE))
 				
 				if (IsMethod) {
 					HashMap* MethodNamespace := Methods
@@ -1827,8 +1827,8 @@ define void ParseAndAddStruct(ParserState* pState) {
 						ThisType := null
 					}
 					
-					i8 ParseMode := ParserCurrentToken(pState)->Value As i8
-					FunctionDefine* Method := ParseFunction(pState, MethodNamespace, ParseMode, ThisType)
+					i8 ParseMode := ParserCurrentToken(Parser)->Value As i8
+					FunctionDefine* Method := ParseFunction(Parser, MethodNamespace, ParseMode, ThisType)
 					
 					; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
 					;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
@@ -1836,9 +1836,9 @@ define void ParseAndAddStruct(ParserState* pState) {
 					Method->MethodOfTypeName := Name
 					
 					; Ignore commas after methods, they aren't actually needed for parsing
-					ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+					ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 					
-					if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 						break
 					}
 					
@@ -1849,14 +1849,14 @@ define void ParseAndAddStruct(ParserState* pState) {
 		
 		/* Parse the type of the field */
 		i8* ErrorMessage := 0
-		NextField->ValueType := TryParseTypeName(pState, true, &ErrorMessage)
+		NextField->ValueType := TryParseTypeName(Parser, true, &ErrorMessage)
 		
 		if (ErrorMessage) {
-			TokenError(ParserCurrentToken(pState), ErrorMessage)
+			TokenError(ParserCurrentToken(Parser), ErrorMessage)
 		}
 		
 		/* Get the name of the field */
-		Token* FieldNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected identifier for struct field name")
+		Token* FieldNameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected identifier for struct field name")
 		SafeWideString* FieldName := (FieldNameToken->Value) As SafeWideString*
 		NextField->Name := FieldName
 		
@@ -1896,16 +1896,16 @@ define void ParseAndAddStruct(ParserState* pState) {
 		
 		TotalSize := NextFieldOffset
 		
-		if (InUnion && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+		if (InUnion && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 			InUnion := false
 			NextFieldOffset += MaxUnionSize
 			TotalSize := NextFieldOffset
 		}
 		
 		; Ignore commas after fields, since they aren't needed for parsing
-		ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+		ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 			break
 		}
 	}
@@ -1915,14 +1915,14 @@ define void ParseAndAddStruct(ParserState* pState) {
 	NewType->IsIncomplete := false
 }
 
-define void ParseAndAddBits(ParserState* pState) {
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected name for bits type.")
+define void ParseAndAddBits(ParserState* Parser) {
+	Token* NameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected name for bits type.")
 	SafeWideString* BitsName := NameToken->Value As SafeWideString*
 	
-	Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
+	Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
 	
-	i32 BeforeType := FreezeParser(pState)
-	Type BackingType := ParseTypeName(pState)
+	i32 BeforeType := FreezeParser(Parser)
+	Type BackingType := ParseTypeName(Parser)
 	
 	TypeInfo* BackingBase := GetBaseType(BackingType)
 	i32 BackingDepth := GetPointerDepth(BackingType) As i32
@@ -1932,11 +1932,11 @@ define void ParseAndAddBits(ParserState* pState) {
 			So by getting the first+last token of the Type, we can just merge them and use them for the error context.
 		*/
 		
-		Token* LastTypeToken := ParserCurrentToken(pState)
+		Token* LastTypeToken := ParserCurrentToken(Parser)
 		
-		UnfreezeParser(pState, BeforeType)
+		UnfreezeParser(Parser, BeforeType)
 		
-		Token* FirstTypeToken := ParserNextToken(pState)
+		Token* FirstTypeToken := ParserNextToken(Parser)
 		
 		MergeContexts(FirstTypeToken~>Context, LastTypeToken~>Context, FirstTypeToken~>Context)
 		
@@ -1947,7 +1947,7 @@ define void ParseAndAddBits(ParserState* pState) {
 	i8 BackingTypeSizeBits := BackingTypeSize * 8
 	
 	/* Check if there's already a type with this name */
-	HashMapElement* FoundElement := pState~>Types->Get(BitsName)
+	HashMapElement* FoundElement := Parser~>Types->Get(BitsName)
 	TypeInfo* NewType := 0
 	
 	if (FoundElement) {
@@ -1968,7 +1968,7 @@ define void ParseAndAddBits(ParserState* pState) {
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		NewType := AddType(pState, BitsName, BackingTypeSize, TYPE_BITS)
+		NewType := AddType(Parser, BitsName, BackingTypeSize, TYPE_BITS)
 	}
 	
 	/* Initialize a hashmap for the bit fields */
@@ -1981,23 +1981,23 @@ define void ParseAndAddBits(ParserState* pState) {
 	/* Stores the total size of the bits (in bits, obviously) */
 	i16 TotalSize := 0
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
 	
 	loop {
 		StructField* NextField := Alloc(#StructField) As StructField*
 		
-		Token* OpenBracket := Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
+		Token* OpenBracket := Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
 		
-		i8 StartIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field start index.")->Value As i8
+		i8 StartIndex := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field start index.")->Value As i8
 		i8 EndIndex := StartIndex
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-			EndIndex := Consume(pState, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field end index.")->Value As i8
+		if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+			EndIndex := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected integer for bit field end index.")->Value As i8
 		}
 		
 		i8 FieldSize := EndIndex - StartIndex
 		
-		Token* CloseBracket := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected close bracket for bit field range.")
+		Token* CloseBracket := Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected close bracket for bit field range.")
 		
 		MergeContexts(OpenBracket~>Context, CloseBracket~>Context, OpenBracket~>Context)
 		
@@ -2005,7 +2005,7 @@ define void ParseAndAddBits(ParserState* pState) {
 			TokenError(OpenBracket, "Field size can not be negative, or bigger than the backing type.")
 		}
 		
-		SafeWideString* FieldName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected bit field name.")->Value
+		SafeWideString* FieldName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected bit field name.")->Value
 		
 		NextField->Name := FieldName
 		NextField->Offset := BackingTypeSize
@@ -2013,42 +2013,42 @@ define void ParseAndAddBits(ParserState* pState) {
 		NextField->BitEndIndex := EndIndex
 		
 		if (FieldSize <= 8) {
-			NextField->ValueType := MakeType(pState->i8, 0)
+			NextField->ValueType := MakeType(Parser->i8, 0)
 		}
 		else if (FieldSize <= 16) {
-			NextField->ValueType := MakeType(pState->i16, 0)
+			NextField->ValueType := MakeType(Parser->i16, 0)
 		}
 		else if (FieldSize <= 32) {
-			NextField->ValueType := MakeType(pState->i32, 0)
+			NextField->ValueType := MakeType(Parser->i32, 0)
 		}
 		else {
-			NextField->ValueType := MakeType(pState->i64, 0)
+			NextField->ValueType := MakeType(Parser->i64, 0)
 		}
 		
 		Fields->Set(FieldName, NextField)
 		
-		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+		if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 			/* If the next token is not a ',' break the loop */
 			break
 		}
 	}
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for bits body.")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for bits body.")
 }
 
 declare ASTNode* ParseStatement(ParserState*)
 
-define void ConsumeAndIgnoreBlock(ParserState* pState) {
+define void ConsumeAndIgnoreBlock(ParserState* Parser) {
 	/* Used for linux/windows statements to ignore code for the opposite OS.
 		This allows for syntax errors inside of !ThisOS code, but that doesn't really matter.
 	*/
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
 	
 	i32 Depth := 1
 	
 	loop {
-		Token* Next := ParserNextToken(pState)
+		Token* Next := ParserNextToken(Parser)
 		
 		if (TokenMatches(Next, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 			Depth -= 1
@@ -2063,11 +2063,11 @@ define void ConsumeAndIgnoreBlock(ParserState* pState) {
 	}
 }
 
-define Block* ParseBlock(ParserState* pState) {
+define Block* ParseBlock(ParserState* Parser) {
 	/* Parses and builds a block of statements */
 	
 	/* Consume the { */
-	Token* OpenBrace := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
+	Token* OpenBrace := Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
 	
 	/* Set up a buffer for the statements */
 	i16 StatementBufferSize := 8
@@ -2076,7 +2076,7 @@ define Block* ParseBlock(ParserState* pState) {
 	
 	i32 Depth := 1
 	
-	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {		
+	if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {		
 		loop {
 			/* Loop until NextMatches('}') */
 			
@@ -2089,42 +2089,42 @@ define Block* ParseBlock(ParserState* pState) {
 			
 			/* Parse a statement and put it into the statement list */
 			
-			i32 Start := FreezeParser(pState)
+			i32 Start := FreezeParser(Parser)
 			
-			Token* NextToken := ParserNextToken(pState)
+			Token* NextToken := ParserNextToken(Parser)
 			
 			/* Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the blocks following them */
 			if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
-				if (pState->Config->OutputFormat = OUTPUT_ELF) {
-					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+				if (Parser->Config->OutputFormat = OUTPUT_ELF) {
+					Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
 					Depth += 1
 				}
 				else {
-					ConsumeAndIgnoreBlock(pState)
+					ConsumeAndIgnoreBlock(Parser)
 				}
 			}
 			else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
-				if (pState->Config->OutputFormat = OUTPUT_PE) {
-					Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+				if (Parser->Config->OutputFormat = OUTPUT_PE) {
+					Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
 					Depth += 1
 				}
 				else {
-					ConsumeAndIgnoreBlock(pState)
+					ConsumeAndIgnoreBlock(Parser)
 				}
 			}
 			else {
-				UnfreezeParser(pState, Start)
-				Statements[StatementCount] := ParseStatement(pState)
+				UnfreezeParser(Parser, Start)
+				Statements[StatementCount] := ParseStatement(Parser)
 				StatementCount += 1
 			}
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_EOF, 0)) {
+			if (ParserNextMatches(Parser, TOKEN_TYPE_EOF, 0)) {
 				TokenError(OpenBrace, "Expected close brace for block")
 			}
 			
 			i8 BreakOuter := false
 			
-			while (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			while (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 				/* Only break the outer loop once all opening `{` for this block have been matched with a closing `}` */
 				
 				Depth -= 1
@@ -2166,7 +2166,7 @@ define VariableInfo* MakeMagicLocal(i8* Name, TypeInfo* BaseType, i8 IsParameter
 	return ThisMagic
 }
 
-define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8 Mode, TypeInfo* ThisType) {
+define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8 Mode, TypeInfo* ThisType) {
 	/* Parses:
 		 Define statements
 		 Declare statements
@@ -2174,15 +2174,15 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		Since (Define|Declare|DllImport) all have ~4 tokens in common, along with a (mostly) common list of parameters
 	*/
 	
-	Token* StartToken := ParserCurrentToken(pState)
+	Token* StartToken := ParserCurrentToken(Parser)
 	
 	i8 ForStatic := Mode = KEYWORD_STATIC
 	i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
 	i8 ForImport := Mode = KEYWORD_DLLIMPORT
 	
-	Type ReturnType := ParseTypeName(pState)
+	Type ReturnType := ParseTypeName(Parser)
 	
-	Token* NameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
+	Token* NameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Function names must be identifiers")
 	SafeWideString* Name := NameToken->StringValue
 	
 	/* Set up a buffer for parameters */
@@ -2194,7 +2194,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	HashMap* Locals := null
 	
 	if (ForDefine) {
-		/* For define statements, the parameters are added as locals, so pState->CurrentFunction needs to be set so
+		/* For define statements, the parameters are added as locals, so Parser->CurrentFunction needs to be set so
 			calling `ParserAddLocal` inside of the parameter list parsing loop won't crash.
 			`Locals` is copied onto the actual `FunctionDefine*` for this function after the parameters have been
 			parsed, and the matching overload has been found (if it exists)
@@ -2204,7 +2204,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		
 		TempDefine~>Locals->Initialize()
 		
-		pState->CurrentFunction := &TempDefine
+		Parser->CurrentFunction := &TempDefine
 	}
 	
 	if (ThisType != 0) {
@@ -2213,11 +2213,11 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		VariableInfo* ThisParameter := MakeMagicLocal("this", ThisType, true)
 		
 		if (ForDefine) {
-			/* Only actually add `this` as a local when we are defining a full function, and have pState->CurrentFunction set */
+			/* Only actually add `this` as a local when we are defining a full function, and have Parser->CurrentFunction set */
 			
-			Token* MagicBlameToken := ParserCurrentToken(pState)
+			Token* MagicBlameToken := ParserCurrentToken(Parser)
 			
-			ParserAddLocal(pState, ThisParameter, MagicBlameToken)
+			ParserAddLocal(Parser, ThisParameter, MagicBlameToken)
 		}
 		
 		ParameterList[0] := ThisParameter
@@ -2225,9 +2225,9 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	}
 	
 	/* Consume the parameter list opening '(' */
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Function parameter lists must start with (")
 	
-	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+	if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		/* If the next token isn't a ')', then parse the parameters (otherwise the function takes 0 parameters) */
 		
 		loop {
@@ -2236,31 +2236,31 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			
 			/* Max parameter count since I cba to expand the buffer. Todo: Fix this */
 			if (ParameterCount >= 16) {
-				TokenError(ParserNextToken(pState), "Max parameter limit reached")
+				TokenError(ParserNextToken(Parser), "Max parameter limit reached")
 			}
 			
 			/* Insert the VariableInfo structure into the parameter list */
 			ParameterList[ParameterCount] := NextParameter
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
-				Token* Start := ParserCurrentToken(pState)
+			if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+				Token* Start := ParserCurrentToken(Parser)
 				
-				Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
-				Consume(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+				Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+				Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
 				
-				MergeContexts(Start~>Context, ParserCurrentToken(pState)~>Context, Start~>Context)
+				MergeContexts(Start~>Context, ParserCurrentToken(Parser)~>Context, Start~>Context)
 				
 				if (ParameterCount > 4) {
 					TokenError(Start, "Only 4 regular paremeters can be passed with a variable argument.")
 				}
 				
 				Attribute := OPERATOR_DOT
-				NextParameter->Type := MakeType(pState->void, 1)
+				NextParameter->Type := MakeType(Parser->void, 1)
 				
 				if (ForDefine) {
-					Token* VariadicName := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+					Token* VariadicName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 					NextParameter->Name := VariadicName->StringValue
-					ParserAddLocal(pState, NextParameter, VariadicName)
+					ParserAddLocal(Parser, NextParameter, VariadicName)
 				}
 				
 				NextParameter->IsVariadic := true
@@ -2273,13 +2273,13 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			}
 			
 			/* Parse the parameter type */
-			NextParameter->Type := ParseTypeName(pState)
+			NextParameter->Type := ParseTypeName(Parser)
 			
 			if (ForDefine) {
 				/* Get the parameter name */
-				Token* NextParameterNameToken := Consume(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
+				Token* NextParameterNameToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Parameter names must be identifiers")
 				NextParameter->Name := NextParameterNameToken->StringValue
-				ParserAddLocal(pState, NextParameter, NextParameterNameToken)
+				ParserAddLocal(Parser, NextParameter, NextParameterNameToken)
 			}
 			
 			NextParameter->IsGlobal := false
@@ -2289,7 +2289,7 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			/* Update the parameter count */
 			ParameterCount += 1
 			
-			if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				/* If the next token isn't a comma, then break the loop, otherwise consume the command and continue */
 				break
 			}
@@ -2297,8 +2297,8 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 		
 		/* If the loop was broken by any token besides a ')', then there's something wrong */
 		
-		if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			TokenError(ParserNextToken(pState), "Expected closing paren for parameter list")
+		if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			TokenError(ParserNextToken(Parser), "Expected closing paren for parameter list")
 		}
 	}
 	
@@ -2360,13 +2360,13 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 			Namespace->Set(Name, NewDefine)
 		}
 		
-		NewDefine->LabelNumber := ParserNextLabel(pState)
+		NewDefine->LabelNumber := ParserNextLabel(Parser)
 	}
 	
 	/* Copy info parsed from the first part of this function into `NewDefine`, which is 100% correctly set by now */
 	
 	/* `(define|declare|dllimport) name(params)` will all get captured into `NewDefine~>Context`, which displays nicely */
-	MergeContexts(StartToken~>Context, ParserCurrentToken(pState)~>Context, NewDefine~>Context)
+	MergeContexts(StartToken~>Context, ParserCurrentToken(Parser)~>Context, NewDefine~>Context)
 	NewDefine->Name := Name
 	NewDefine->ReturnType := ReturnType
 	NewDefine->Attribute := Attribute
@@ -2381,19 +2381,19 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	NewDefine->ParameterCount := ParameterCount
 	
 	if (ForImport) {
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
 		
-		SafeWideString* FileName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file name expected")->Value
+		SafeWideString* FileName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Import source file name expected")->Value
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
-			Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source file extension expected")
+		if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+			Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Import source file extension expected")
 		}
 		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
 		
-		SafeWideString* FunctionName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Import source function name expected")->Value
+		SafeWideString* FunctionName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Import source function name expected")->Value
 		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
 		
 		NewDefine->IsImported := true
 		NewDefine->ImportFileName := FileName
@@ -2404,19 +2404,19 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 	NewDefine->HasFullDefinition := false
 	
 	if (ForDefine) {
-		pState->CurrentFunction := NewDefine
+		Parser->CurrentFunction := NewDefine
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
 			NewDefine->Attribute := KEYWORD_ASSEMBLY
 			
-			NewDefine->AssemblyBody := ParseAssembly(pState, false)->AssemblyValue
+			NewDefine->AssemblyBody := ParseAssembly(Parser, false)->AssemblyValue
 		}
 		else {
-			if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
+			if (ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
 				NewDefine->Attribute := KEYWORD_X64
 			}
 			
-			if (pState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+			if (Parser->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
 				i32 Length := Name->Length + 1
 				
 				if (ThisType != null) {
@@ -2453,21 +2453,21 @@ define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8
 				NewDefine->StringBufferSize := 0
 			}
 			
-			NewDefine->Body := ParseBlock(pState)
+			NewDefine->Body := ParseBlock(Parser)
 		}
 		
 		NewDefine->HasFullDefinition := true
-		pState->CurrentFunction := false
+		Parser->CurrentFunction := false
 		
 		if (ThisType = null && SafeStringEqualsAString(Name, "Main")) {
-			pState->MainFunction := NewDefine
+			Parser->MainFunction := NewDefine
 		}
 	}
 	
 	return NewDefine
 }
-define FunctionDefine* ParseFunction(ParserState* pState, HashMap* Namespace, i8 Mode) {
-	return ParseFunction(pState, Namespace, Mode, false As TypeInfo*)
+define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8 Mode) {
+	return ParseFunction(Parser, Namespace, Mode, false As TypeInfo*)
 }
 
 declare ASTNode* ParseIf(ParserState*)
@@ -2475,13 +2475,13 @@ declare ASTNode* ParseFor(ParserState*)
 declare ASTNode* ParseWhile(ParserState*)
 declare ASTNode* ParseTry(ParserState*)
 
-define ASTNode* ParseStatement(ParserState* pState) {
+define ASTNode* ParseStatement(ParserState* Parser) {
 	/* Parses a single statement */
 	
 	/* Freeze the parser just in case the next token isn't a keyword */
-	i32 FrozenState := FreezeParser(pState)
+	i32 FrozenState := FreezeParser(Parser)
 	
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := ParserNextToken(Parser)
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_KEYWORD) {
@@ -2493,71 +2493,71 @@ define ASTNode* ParseStatement(ParserState* pState) {
 			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
 			CopyContext(NextToken~>Context, Result~>Context)
 			
-			if !(pState->InLoop) {
+			if !(Parser->InLoop) {
 				ASTError(Result, "Continue/Break must be inside loops")
 			}
 		}
 		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 				/* If there isn't an expression to return, just pretend it is `return 0` */
 				
-				Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i8, 0))
+				Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(Parser->i8, 0))
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, Result, TYPE_NONE)
 			}
 			else {
 				/* Parse the expression to return */
-				ASTNode* ExpressionToReturn := ParseExpression(pState, 0)
+				ASTNode* ExpressionToReturn := ParseExpression(Parser, 0)
 				
-				ExpressionToReturn := DowncastIntegerType(pState, ExpressionToReturn)
-				Type ExpectedReturnType := pState->CurrentFunction->ReturnType
+				ExpressionToReturn := DowncastIntegerType(Parser, ExpressionToReturn)
+				Type ExpectedReturnType := Parser->CurrentFunction->ReturnType
 				
-				CheckTypes(pState, 0 As Type, ExpectedReturnType, ExpressionToReturn)
+				CheckTypes(Parser, 0 As Type, ExpectedReturnType, ExpressionToReturn)
 				
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 			}
 		}
 		else if (NextKeyword = KEYWORD_IF) {
-			Result := ParseIf(pState)
+			Result := ParseIf(Parser)
 		}
 		else if (NextKeyword = KEYWORD_FOR) {
-			Result := ParseFor(pState)
+			Result := ParseFor(Parser)
 		}
 		else if (NextKeyword = KEYWORD_LOOP) {
-			i8 OldInLoop := pState->InLoop
-			pState->InLoop := true
+			i8 OldInLoop := Parser->InLoop
+			Parser->InLoop := true
 			
-			Result := AllocateNewASTNode(NODE_TYPE_LOOP, ParseBlock(pState) As void*, TYPE_NONE)
+			Result := AllocateNewASTNode(NODE_TYPE_LOOP, ParseBlock(Parser) As void*, TYPE_NONE)
 			
-			pState->InLoop := OldInLoop
+			Parser->InLoop := OldInLoop
 		}
 		else if (NextKeyword = KEYWORD_WHILE) {
-			Result := ParseWhile(pState)
+			Result := ParseWhile(Parser)
 		}
 		else if (NextKeyword = KEYWORD_ASSEMBLY) {
-			Result := ParseAssembly(pState, true)
+			Result := ParseAssembly(Parser, true)
 		}
 		else if (NextKeyword = KEYWORD_TRY) {
-			Result := ParseTry(pState)
+			Result := ParseTry(Parser)
 		}
 	}
 	
 	if (Result = 0) {
 		/* When we don't have a result yet, this is either a declaration or a expression statement */
 		
-		UnfreezeParser(pState, FrozenState)
+		UnfreezeParser(Parser, FrozenState)
 		
 		if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
 			i8* ErrorMessage := 0
-			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
+			Type PotentialType := TryParseTypeName(Parser, true, &ErrorMessage)
 			
 			if ((PotentialType != 0) && (ErrorMessage = 0)) {
-				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
-				i32 DefaultValueExpressionStart := FreezeParser(pState)
-				Token* PotentialName := ParserNextToken(pState)
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(Parser)` can still be parsed as well */
+				i32 DefaultValueExpressionStart := FreezeParser(Parser)
+				Token* PotentialName := ParserNextToken(Parser)
 				
 				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
@@ -2572,10 +2572,10 @@ define ASTNode* ParseStatement(ParserState* pState) {
 					NewLocal->IsGlobal := False
 					NewLocal->IsParameter := False
 					
-					ParserAddLocal(pState, NewLocal, PotentialName)
+					ParserAddLocal(Parser, NewLocal, PotentialName)
 					
-					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
-						UnfreezeParser(pState, DefaultValueExpressionStart)
+					if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						UnfreezeParser(Parser, DefaultValueExpressionStart)
 					}
 					else {
 						/* The next token is not a `:=`, so the following tokens are not a value for this variable */
@@ -2584,22 +2584,22 @@ define ASTNode* ParseStatement(ParserState* pState) {
 				}
 				else {
 					/* Token after the type name was not an identifier */
-					UnfreezeParser(pState, FrozenState)
+					UnfreezeParser(Parser, FrozenState)
 				}
 			}
 			else {
-				UnfreezeParser(pState, FrozenState)
+				UnfreezeParser(Parser, FrozenState)
 			}
 		}
 		
 		/* This expression will either be at A) The start of the line or B) After a type name (for declarations) */
-		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(pState, 0) As void*, TYPE_NONE)
+		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(Parser, 0) As void*, TYPE_NONE)
 	}
 	
 	return Result
 }
 
-define ASTNode* ParseIf(ParserState* pState) {
+define ASTNode* ParseIf(ParserState* Parser) {
 	IfGroup* NewIf := Alloc(#IfGroup) As IfGroup*
 	
 	NewIf->Conditions := Alloc(10 * #ASTNode*) As ASTNode**
@@ -2608,7 +2608,7 @@ define ASTNode* ParseIf(ParserState* pState) {
 	i32 BranchIndex := 0
 	
 	loop {
-		if (BranchIndex = 0 || ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {
+		if (BranchIndex = 0 || ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {
 			if (BranchCapacity <= BranchIndex) {
 				BranchCapacity += 10
 			
@@ -2616,17 +2616,17 @@ define ASTNode* ParseIf(ParserState* pState) {
 				NewIf->Bodies := ReAlloc(NewIf->Bodies, BranchCapacity * 8)
 			}
 			
-			NewIf->Conditions[BranchIndex] := ParseExpression(pState, 0)
-			NewIf->Bodies[BranchIndex] := ParseBlock(pState)
+			NewIf->Conditions[BranchIndex] := ParseExpression(Parser, 0)
+			NewIf->Bodies[BranchIndex] := ParseBlock(Parser)
 		
 			BranchIndex += 1
 
-			if !(ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_ELSE)) {
+			if !(ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_ELSE)) {
 				break
 			}
 		}
 		else {
-			NewIf->ElseBranch := ParseBlock(pState)
+			NewIf->ElseBranch := ParseBlock(Parser)
 			break
 		}
 	}
@@ -2636,23 +2636,23 @@ define ASTNode* ParseIf(ParserState* pState) {
 	return AllocateNewASTNode(NODE_TYPE_IF, NewIf, TYPE_NONE)
 }
 
-define ASTNode* ParseFor(ParserState* pState) {
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for for loop.")
+define ASTNode* ParseFor(ParserState* Parser) {
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for for loop.")
 	
-	i32 InitializerStart := FreezeParser(pState)
+	i32 InitializerStart := FreezeParser(Parser)
 	
-	if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
-		UnfreezeParser(pState, InitializerStart)
+	if (ParserNextMatches(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
+		UnfreezeParser(Parser, InitializerStart)
 		
 		i8* ErrorMessage := 0
-		Type PotentialType := TryParseTypeName(pState, false, &ErrorMessage)
+		Type PotentialType := TryParseTypeName(Parser, false, &ErrorMessage)
 		
 		if ((PotentialType != 0) && (ErrorMessage = 0)) {
-			i32 ExpressionStart := FreezeParser(pState)
-			Token* PotentialName := ParserNextToken(pState)
+			i32 ExpressionStart := FreezeParser(Parser)
+			Token* PotentialName := ParserNextToken(Parser)
 			
 			if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE)) {
-				if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+				if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
 					
 					VariableInfo* NewLocal := AllocateNewVariableInfo()
@@ -2660,7 +2660,7 @@ define ASTNode* ParseFor(ParserState* pState) {
 					NewLocal->Name := NameString
 					NewLocal->Type := PotentialType
 					
-					ParserAddLocal(pState, NewLocal, PotentialName)
+					ParserAddLocal(Parser, NewLocal, PotentialName)
 					
 					InitializerStart := ExpressionStart /* Set the initializer expression to start after the type name */
 				}
@@ -2668,46 +2668,46 @@ define ASTNode* ParseFor(ParserState* pState) {
 		}
 	}
 	
-	UnfreezeParser(pState, InitializerStart)
+	UnfreezeParser(Parser, InitializerStart)
 	
 	ForLoop* NewLoop := Alloc(#ForLoop) As ForLoop*
 	
-	NewLoop->Initializer := ParseExpression(pState, 0)
+	NewLoop->Initializer := ParseExpression(Parser, 0)
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop initializer.")
-	NewLoop->Condition := ParseExpression(pState, 0)
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop initializer.")
+	NewLoop->Condition := ParseExpression(Parser, 0)
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop condition.")
-	NewLoop->Step := ParseExpression(pState, 0)
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop condition.")
+	NewLoop->Step := ParseExpression(Parser, 0)
 	
-	Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' in for loop.")
+	Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' in for loop.")
 	
-	i8 OldInLoop := pState->InLoop
-	pState->InLoop := true
+	i8 OldInLoop := Parser->InLoop
+	Parser->InLoop := true
 	
-	NewLoop->Body := ParseBlock(pState)
+	NewLoop->Body := ParseBlock(Parser)
 	
-	pState->InLoop := OldInLoop
+	Parser->InLoop := OldInLoop
 	
 	return AllocateNewASTNode(NODE_TYPE_FOR, NewLoop, TYPE_NONE)
 }
 
-define ASTNode* ParseWhile(ParserState* pState) {
+define ASTNode* ParseWhile(ParserState* Parser) {
 	WhileLoop* NewWhile := Alloc(#WhileLoop) As WhileLoop*
 	
-	NewWhile->Condition := ParseExpression(pState, 0)
+	NewWhile->Condition := ParseExpression(Parser, 0)
 	
-	i8 OldInLoop := pState->InLoop
-	pState->InLoop := true
+	i8 OldInLoop := Parser->InLoop
+	Parser->InLoop := true
 	
-	NewWhile->Body := ParseBlock(pState)
+	NewWhile->Body := ParseBlock(Parser)
 	
-	pState->InLoop := OldInLoop
+	Parser->InLoop := OldInLoop
 	
 	return AllocateNewASTNode(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
 }
 
-define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslate) {
+define ASTNode* TranslateTokenToNode(ParserState* Parser, Token* TokenToTranslate) {
 	/* Translates a token into an AST node with an eqaul value */
 	
 	ASTNode* Result := 0
@@ -2715,14 +2715,14 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
 		
-		Type ResultType := GetNumberType(pState, TokenToTranslate->IntegerValue)
+		Type ResultType := GetNumberType(Parser, TokenToTranslate->IntegerValue)
 		
 		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFIER) {
 		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
 		
-		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(pState->i32, 0))
+		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(Parser->i32, 0))
 		
 		if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
 			Result->IntegerValue := 1
@@ -2731,20 +2731,20 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 			Result->IntegerValue := 0
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "windows")) {
-			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_PE
+			Result->IntegerValue := Parser->Config->OutputFormat = OUTPUT_PE
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
-			Result->IntegerValue := pState->Config->OutputFormat = OUTPUT_ELF
+			Result->IntegerValue := Parser->Config->OutputFormat = OUTPUT_ELF
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "debug")) {
-			Result->IntegerValue := pState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
+			Result->IntegerValue := Parser->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
 		}
 		else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
-			Result->ValueType := MakeType(pState->void, 1)
+			Result->ValueType := MakeType(Parser->void, 1)
 			Result->NodeType := NODE_TYPE_ZERO
 		}
 		else {
-			VariableInfo* FoundVariable := FindVariable(pState, TokenToTranslate)
+			VariableInfo* FoundVariable := FindVariable(Parser, TokenToTranslate)
 			/* Using the found variable's type as the node type */
 			
 			Result->NodeType := NODE_TYPE_VARIABLE
@@ -2764,17 +2764,17 @@ define ASTNode* TranslateTokenToNode(ParserState* pState, Token* TokenToTranslat
 	return Result
 }
 
-define ASTNode** ParseParameterList(ParserState* pState, i8* OutParameterCount) {
+define ASTNode** ParseParameterList(ParserState* Parser, i8* OutParameterCount) {
 	i8 ParameterIndex := *OutParameterCount
 	ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
 	
 	/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
 	
-	if !(ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+	if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 		i8 IsFirstParameter := true
 		
-		while (IsFirstParameter || ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-			Parameters[ParameterIndex] := ParseExpression(pState, 0)
+		while (IsFirstParameter || ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+			Parameters[ParameterIndex] := ParseExpression(Parser, 0)
 			ParameterIndex += 1
 			
 			IsFirstParameter := false
@@ -2782,25 +2782,25 @@ define ASTNode** ParseParameterList(ParserState* pState, i8* OutParameterCount) 
 		
 		/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
 		
-		Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
+		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
 	}
 	
 	OutParameterCount[0] := ParameterIndex
 	return Parameters
 }
 
-define ASTNode* ParseExpressionOperand(ParserState* pState) {
+define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 	/* Parses and returns a single operand of an expression */
 	
-	Token* NextToken := ParserNextToken(pState)
+	Token* NextToken := ParserNextToken(Parser)
 	ASTNode* Result := 0
 	
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
 		/* If the next token is an (, then parse a subexpression and consume a closing ) */
 		
-		Result := ParseExpression(pState, 0)
+		Result := ParseExpression(Parser, 0)
 		
-		Token* CloseParen := Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren")
+		Token* CloseParen := Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren")
 		
 		MergeContexts(NextToken~>Context, CloseParen~>Context, Result~>Context)
 	}
@@ -2808,18 +2808,18 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		/* Else if the next token is an identifier */
 		
 		/* This check is fine, since x:(y) is never valid, nor is x:y */
-		i8 IsBuiltinOrStatic := ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+		i8 IsBuiltinOrStatic := ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
 		
 		i8 ParameterCount := 0
 		ASTNode** Parameters := null
 		
 		if (IsBuiltinOrStatic) {
-			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, NextToken~>Context)
+			MergeContexts(NextToken~>Context, ParserCurrentToken(Parser)~>Context, NextToken~>Context)
 			
-			if (ParserNextMatches(pState, TOKEN_TYPE_IDENTIFIER, 0)) {
+			if (ParserNextMatches(Parser, TOKEN_TYPE_IDENTIFIER, 0)) {
 				SafeWideString* StaticMethodType := NextToken->StringValue
 				
-				HashMapElement* FoundTypeElement := pState~>Types->Get(StaticMethodType)
+				HashMapElement* FoundTypeElement := Parser~>Types->Get(StaticMethodType)
 				
 				if !(FoundTypeElement) {
 					TokenError(NextToken, "Unknown type")
@@ -2827,29 +2827,29 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 				
 				TypeInfo* FoundType := FoundTypeElement->Value As TypeInfo*
 				
-				Token* StaticMethodNameToken := ParserCurrentToken(pState)
+				Token* StaticMethodNameToken := ParserCurrentToken(Parser)
 				MergeContexts(StaticMethodNameToken~>Context, NextToken~>Context, StaticMethodNameToken~>Context)
 				
-				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for static method call")
+				Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for static method call")
 				
-				Parameters := ParseParameterList(pState, &ParameterCount)
+				Parameters := ParseParameterList(Parser, &ParameterCount)
 				
-				return MakeCall(pState, FoundType~>StaticMethods, StaticMethodNameToken, Parameters, ParameterCount)
+				return MakeCall(Parser, FoundType~>StaticMethods, StaticMethodNameToken, Parameters, ParameterCount)
 			}
 		}
 		
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If the next-next token is an (, then this is a function call */
 			
-			Parameters := ParseParameterList(pState, &ParameterCount)
+			Parameters := ParseParameterList(Parser, &ParameterCount)
 			
 			/* Make a NODE_TYPE_CALL node for the function call */
 			
 			if (IsBuiltinOrStatic) {
-				Result := MakeBuiltinCall(pState, NextToken, Parameters, ParameterCount)
+				Result := MakeBuiltinCall(Parser, NextToken, Parameters, ParameterCount)
 			}
 			else {
-				Result := MakeCall(pState, pState~>Functions, NextToken, Parameters, ParameterCount)
+				Result := MakeCall(Parser, Parser~>Functions, NextToken, Parameters, ParameterCount)
 			}
 		}
 		else {
@@ -2858,11 +2858,11 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			}
 			
 			/* Else, this isn't a function call, and is just a normal variable */
-			Result := TranslateTokenToNode(pState, NextToken)
+			Result := TranslateTokenToNode(Parser, NextToken)
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
-		FunctionDefine* CurrentFunction := pState->CurrentFunction
+		FunctionDefine* CurrentFunction := Parser->CurrentFunction
 		
 		if !(CurrentFunction) {
 			TokenError(NextToken, "Strings can only be used inside functions.")
@@ -2883,7 +2883,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
 		CurrentFunction->StringBufferSize := NewSize
 		
-		TypeInfo* BaseType := pState->i8
+		TypeInfo* BaseType := Parser->i8
 		
 		if (CharacterSize = 1) {
 			for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
@@ -2891,7 +2891,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 			}
 		}
 		else {
-			BaseType := pState->i16
+			BaseType := Parser->i16
 			MoveMemory(&CurrentFunction->StringBuffer[Offset], StringText->Buffer, StringText->Length * 2)
 		}
 		
@@ -2901,7 +2901,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
 		/* A literal integer, just make a NODE_TYPE_INTEGER for it */
 		
-		Result := TranslateTokenToNode(pState, NextToken)
+		Result := TranslateTokenToNode(Parser, NextToken)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
 		/* A prefix operator, parse an expression only containing operators of a higher precedence than the prefix operator */
@@ -2909,34 +2909,34 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 		if (NextToken->Value = OPERATOR_POUND) {
 			/* Handle #TypeName by parsing a type name after the #, and setting the result to the length of TypeName as an i32 */
 			
-			i8 ConsumeClosingParan := ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			i8 ConsumeClosingParan := ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 			
-			Type GetSizeOfType := ParseTypeName(pState)
+			Type GetSizeOfType := ParseTypeName(Parser)
 			
 			if (ConsumeClosingParan) {
-				Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
+				Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
 			}
 			
-			Result := AllocateNewASTNode(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, MakeType(pState->i32, 0))
+			Result := AllocateNewASTNode(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, MakeType(Parser->i32, 0))
 			
-			MergeContexts(NextToken~>Context, ParserCurrentToken(pState)~>Context, Result~>Context)
+			MergeContexts(NextToken~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
 		}
 		else {
 			if (NextToken->Value = OPERATOR_AND) {
 				i8* ErrorMessage := 0
 				
-				i32 Frozen := FreezeParser(pState)
-				Token* MaybeFunction := TryConsume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Dummy", &ErrorMessage)
+				i32 Frozen := FreezeParser(Parser)
+				Token* MaybeFunction := TryConsume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Dummy", &ErrorMessage)
 				
 				if (MaybeFunction && !ErrorMessage) {
 					FunctionDefine* FoundDefine := null
 					Token* TailToken := MaybeFunction
 					
-					if (ParserNextMatches(pState, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+					if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 						Token* StaticMethodTypeName := MaybeFunction
-						Token* StaticMethodName := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Expected static method name")
+						Token* StaticMethodName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected static method name")
 						
-						HashMapElement* StaticMethodTypeElement := pState~>Types->Get(StaticMethodTypeName->StringValue)
+						HashMapElement* StaticMethodTypeElement := Parser~>Types->Get(StaticMethodTypeName->StringValue)
 						
 						if !(StaticMethodTypeElement) {
 							TokenError(StaticMethodTypeName, "Undefined type")
@@ -2955,7 +2955,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 						TailToken := StaticMethodName
 					}
 					else {
-						HashMapElement* FoundFunction := pState~>Functions->Get(MaybeFunction->StringValue)
+						HashMapElement* FoundFunction := Parser~>Functions->Get(MaybeFunction->StringValue)
 						
 						if (FoundFunction) {
 							FoundDefine := FoundFunction->Value As FunctionDefine*
@@ -2963,7 +2963,7 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 					}
 					
 					if (FoundDefine) {
-						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(pState->void, 1))
+						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(Parser->void, 1))
 						MergeContexts(MaybeFunction~>Context, TailToken~>Context, Result~>Context)
 						
 						if (FoundDefine->Next != null) {
@@ -2971,19 +2971,19 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 						}
 					}
 					else {
-						UnfreezeParser(pState, Frozen)
+						UnfreezeParser(Parser, Frozen)
 					}
 				}
 				else {
-					UnfreezeParser(pState, Frozen)
+					UnfreezeParser(Parser, Frozen)
 				}
 			}
 			
 			if !(Result) {
-				Result := ParseExpression(pState, GetPrefixPrecedence(NextToken))
+				Result := ParseExpression(Parser, GetPrefixPrecedence(NextToken))
 			}
 			
-			Result := MakeUnary(pState, NextToken, Result)
+			Result := MakeUnary(Parser, NextToken, Result)
 		}
 	}
 	else {
@@ -2995,13 +2995,13 @@ define ASTNode* ParseExpressionOperand(ParserState* pState) {
 	return Result
 }
 
-define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
+define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 	/* Parses and returns and expression only containing operators with higher precedence than Precedence */
 	
-	ASTNode* Result := ParseExpressionOperand(pState)
+	ASTNode* Result := ParseExpressionOperand(Parser)
 	
-	i32 FrozenState := FreezeParser(pState)
-	Token* OperatorToken := ParserNextToken(pState)
+	i32 FrozenState := FreezeParser(Parser)
+	Token* OperatorToken := ParserNextToken(Parser)
 	
 	while (OperatorToken->Type = TOKEN_TYPE_OPERATOR && GetPrecedence(OperatorToken) >= Precedence) {
 		i8 NewPrecedence := GetPrecedence(OperatorToken)
@@ -3018,9 +3018,9 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 		if (Operator = OPERATOR_OPEN_BRACKET) {
 			/* If the next operator is [, then parse the index expression (for the right operand) and consume the closing ] */
 			
-			Operand := ParseExpression(pState, 0)
+			Operand := ParseExpression(Parser, 0)
 			
-			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
+			Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
 		}
 		else if (Operator = OPERATOR_AS) {
 			/* Else if the next operator is 'as' then parse a type name as the right operand */
@@ -3028,30 +3028,30 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			; Note: This needs a hack to give the result node a correct context, since `ParseTypeName` doesn't
 			;  produce a context
 			
-			i32 BeforeType := FreezeParser(pState)
-			ErrorContext* TypeStart := ParserNextToken(pState)~>Context
-			UnfreezeParser(pState, BeforeType)
+			i32 BeforeType := FreezeParser(Parser)
+			ErrorContext* TypeStart := ParserNextToken(Parser)~>Context
+			UnfreezeParser(Parser, BeforeType)
 			
-			Type CastToType := ParseTypeName(pState)
+			Type CastToType := ParseTypeName(Parser)
 			
-			i32 AfterType := FreezeParser(pState)
-			UnfreezeParser(pState, AfterType - 1)
-			ErrorContext* TypeEnd := ParserNextToken(pState)~>Context
-			UnfreezeParser(pState, AfterType)
+			i32 AfterType := FreezeParser(Parser)
+			UnfreezeParser(Parser, AfterType - 1)
+			ErrorContext* TypeEnd := ParserNextToken(Parser)~>Context
+			UnfreezeParser(Parser, AfterType)
 			
 			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 			MergeContexts(TypeStart, TypeEnd, Operand~>Context)
 		}
 		else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
-			Token* Right := Consume(pState, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")
+			Token* Right := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")
 			
-			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(pState->i64, 0))
+			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(Parser->i64, 0))
 			CopyContext(Right~>Context, Operand~>Context)
 		}
 		else {
 			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
 			
-			Operand := ParseExpression(pState, NewPrecedence)
+			Operand := ParseExpression(Parser, NewPrecedence)
 		}
 		
 		if (Operator = OPERATOR_STAR) {
@@ -3062,8 +3062,8 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			; Note: The ugly freezing/unfreezing here is since `ParserNextMatches` can't check for all
 			;  assignment operators at once.
 			
-			i32 BeforeMaybeAssignment := FreezeParser(pState)
-			Token* MaybeAssignmentOperator := ParserNextToken(pState)
+			i32 BeforeMaybeAssignment := FreezeParser(Parser)
+			Token* MaybeAssignmentOperator := ParserNextToken(Parser)
 			
 			if (MaybeAssignmentOperator->Type = TOKEN_TYPE_OPERATOR) {
 				i32 AssignmentOperator := MaybeAssignmentOperator->IntegerValue As i32
@@ -3083,12 +3083,12 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			
 			; The token after the right side of the `*` was not an assignment operator, continue like normal
 			
-			UnfreezeParser(pState, BeforeMaybeAssignment)
+			UnfreezeParser(Parser, BeforeMaybeAssignment)
 		}
 		
 		/* Fold the left/operator/right into just the left */
 		
-		if (CouldBeMethodCall && ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+		if (CouldBeMethodCall && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call */
 			
 			Type LeftType := Result->ValueType
@@ -3111,48 +3111,48 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 				; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
 				;  and the compiler will make sure to pass the address of `this` instead of the value.
 				
-				Result->ValueType := IncrementPointerType(pState, Result->ValueType)
+				Result->ValueType := IncrementPointerType(Parser, Result->ValueType)
 			}
 			
 			/* The first parameter is `this`, so we any actual parameters are offset by 1 */
 			i8 ParameterCount := 1
-			ASTNode** Parameters := ParseParameterList(pState, &ParameterCount)
+			ASTNode** Parameters := ParseParameterList(Parser, &ParameterCount)
 			
 			/* Result = the left side of the struct access, which is passed as the `this` parameter */
 			Parameters[0] := Result
 			
-			Result := MakeCall(pState, LeftBase~>Methods, Right, Parameters, ParameterCount)
+			Result := MakeCall(Parser, LeftBase~>Methods, Right, Parameters, ParameterCount)
 		}
 		else {
-			Result := MakeBinary(pState, Result, OperatorToken, Operand)
+			Result := MakeBinary(Parser, Result, OperatorToken, Operand)
 		}
 		
 		/* Update where to restore the parser to once the expression ends */
-		FrozenState := FreezeParser(pState)
+		FrozenState := FreezeParser(Parser)
 		
 		/* Update the next operator */
-		OperatorToken := ParserNextToken(pState)
+		OperatorToken := ParserNextToken(Parser)
 	}
 	
-	UnfreezeParser(pState, FrozenState)
+	UnfreezeParser(Parser, FrozenState)
 	
 	return Result
 }
 
-define ASTNode* ParseTry(ParserState* pState) {
+define ASTNode* ParseTry(ParserState* Parser) {
 	TryCatch* Result := Alloc(#TryCatch)
 	
-	Result->Body := ParseBlock(pState)
+	Result->Body := ParseBlock(Parser)
 	
-	if (ParserNextMatches(pState, TOKEN_TYPE_KEYWORD, KEYWORD_CATCH)) {
-		if (ParserNextMatches(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+	if (ParserNextMatches(Parser, TOKEN_TYPE_KEYWORD, KEYWORD_CATCH)) {
+		if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			i8* ErrorMessage := 0
 			
-			Type PotentialType := TryParseTypeName(pState, true, &ErrorMessage)
+			Type PotentialType := TryParseTypeName(Parser, true, &ErrorMessage)
 			
 			if ((PotentialType != 0) && (ErrorMessage = 0)) {
-				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(pState)` can still be parsed as well */
-				Token* PotentialName := ParserNextToken(pState)
+				/* Holds the parser state right after `Type` would have been parsed, so `PotentialType := ParseTypeName(Parser)` can still be parsed as well */
+				Token* PotentialName := ParserNextToken(Parser)
 				
 				if (TokenMatches(PotentialName, TOKEN_TYPE_IDENTIFIER, 0)) {
 					/* If we parsed a type name, and then found another identifier after the type name, this is a declaration */
@@ -3167,11 +3167,11 @@ define ASTNode* ParseTry(ParserState* pState) {
 					CatchCodeVariable->IsGlobal := False
 					CatchCodeVariable->IsParameter := False
 					
-					ParserAddLocal(pState, CatchCodeVariable, PotentialName)
+					ParserAddLocal(Parser, CatchCodeVariable, PotentialName)
 				}
 			}
 			else {
-				ASTNode* CatchCodeNode := TranslateTokenToNode(pState, ParserNextToken(pState))
+				ASTNode* CatchCodeNode := TranslateTokenToNode(Parser, ParserNextToken(Parser))
 				
 				if (CatchCodeNode->NodeType != NODE_TYPE_VARIABLE) {
 					ASTError(CatchCodeNode, "Expected variable name")
@@ -3182,10 +3182,10 @@ define ASTNode* ParseTry(ParserState* pState) {
 			
 			Result->CatchCodeVariable := CatchCodeVariable
 			
-			Consume(pState, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for 'catch ('")
+			Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for 'catch ('")
 		}
 		
-		Result->CatchBody := ParseBlock(pState)
+		Result->CatchBody := ParseBlock(Parser)
 	}
 	
 	return AllocateNewASTNode(NODE_TYPE_TRY, Result, TYPE_NONE)

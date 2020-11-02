@@ -13,7 +13,7 @@ struct Label {
 
 struct CompilerState {
 	BuildConfig* Config,
-	ParserState* pState,
+	ParserState* Parser,
 	FunctionDefine* CurrentFunction,
 	
 	union {
@@ -71,9 +71,9 @@ struct CompilerState {
 	; Number of functions present in output file
 	i16 FunctionCount
 	
-	define void Initialize(BuildConfig* Config, ParserState* pState) {
+	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
-		this->pState := pState
+		this->Parser := Parser
 		
 		this->CodeBufferSize := 0x10000
 		this->CodeBuffer := Alloc(0x10000) As i8*
@@ -86,7 +86,7 @@ struct CompilerState {
 		this->LabelCount := 0
 		this->LabelBufferCapacity := 10
 		
-		this->LabelIndex := (pState->LabelCount) + 1
+		this->LabelIndex := (Parser->LabelCount) + 1
 		this->RegisterStackIndex := 0
 		
 		this->ParameterRegistersMaxSave := 0
@@ -118,17 +118,17 @@ struct CompilerState {
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
 declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
 
-define void DumpGlobals(CompilerState* cState) {
+define void DumpGlobals(CompilerState* Compiler) {
 	/* Walk the globals hashmap and print the offset/size of each */
-	ParserState* pState := cState->pState
+	ParserState* Parser := Compiler->Parser
 	
-	VariableHashMap* Globals := pState~>Globals
+	VariableHashMap* Globals := Parser~>Globals
 	HashMap* RawGlobals := Globals->Map
 	
 	void* Elements := RawGlobals->Elements
 	
 	i32 MaxOffset := Globals->NextOffset
-	i32 Base := cState->GlobalBase
+	i32 Base := Compiler->GlobalBase
 	
 	i32 MaxIndex := RawGlobals->BufferMaxCount
 	
@@ -162,7 +162,7 @@ define void DumpGlobals(CompilerState* cState) {
 	}
 }
 
-define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i8 IsOverload) {
+define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunction, i8 IsOverload) {
 	/* Print a function in the format:
 			Address Of Function - Size of function (Call count of function) Name
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
@@ -174,7 +174,7 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		Format := "^60%x - %i	(%i)	"
 	}
 	
-	Print(Format, cState->CodeBase + TargetFunction->CodeOffset, cState->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
+	Print(Format, Compiler->CodeBase + TargetFunction->CodeOffset, Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
 	
 	if (TargetFunction->IsMethod) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
@@ -213,17 +213,17 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 	Print("^F0\n")
 }
 
-define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload) {
+define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunction, i8 IsOverload) {
 	/* Compiles either:
 		A single function (BaseFunction)
 		Or an entire linked list of function overloads, starting with BaseFunction
 	*/
 	
-	i32 FunctionOffset := cState->Index
+	i32 FunctionOffset := Compiler->Index
 	
 	if (BaseFunction->IsImported) {
-		if (cState->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
-			CompileImportStub(cState, BaseFunction)
+		if (Compiler->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
+			CompileImportStub(Compiler, BaseFunction)
 		}
 	}
 	else if !(BaseFunction->HasFullDefinition) {
@@ -233,20 +233,20 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 		i8 IsMain := SafeStringEqualsAString(BaseFunction->Name, "Main")
 		
 		if (BaseFunction->CallCount != 0) {
-			cState->FunctionCount += 1
-			FunctionOffset := CompileFunction(cState, BaseFunction, IsMain)
+			Compiler->FunctionCount += 1
+			FunctionOffset := CompileFunction(Compiler, BaseFunction, IsMain)
 		}
 		
 		BaseFunction->CodeOffset := FunctionOffset
 	}
 	
-	if (cState->Config->DumpInfo & DUMP_FUNCTIONS) {
+	if (Compiler->Config->DumpInfo & DUMP_FUNCTIONS) {
 		/* If we're dumping a function in an overload chain, then print it as an overload
 			Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
 			 and still need to print it as an overload
 		*/
 		
-		PrintFunction(cState, BaseFunction, BaseFunction->Next != null || IsOverload)
+		PrintFunction(Compiler, BaseFunction, BaseFunction->Next != null || IsOverload)
 	}
 	
 	if !(IsOverload) {
@@ -255,12 +255,12 @@ define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction,
 		while (BaseFunction->Next) {
 			BaseFunction := BaseFunction->Next
 			
-			CompileOverload(cState, BaseFunction, true)
+			CompileOverload(Compiler, BaseFunction, true)
 		}
 	}
 }
 
-define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map) {
+define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 	/* Compiles a hashmap containing FunctionDefine*'s as if it were a linear array 
 		Returns true if the main function was found
 	*/
@@ -274,7 +274,7 @@ define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map) {
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				CompileOverload(cState, NextFunction, false)
+				CompileOverload(Compiler, NextFunction, false)
 				
 				/* Update the current element to be the next element in the linked list */
 				FoundElement := FoundElement->NextElement
@@ -283,44 +283,44 @@ define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map) {
 	}
 }
 
-define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
-	CountReferences(pState)
-	EliminateGlobals(pState~>Globals)
+define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
+	CountReferences(Parser)
+	EliminateGlobals(Parser~>Globals)
 	
 	CompilerState C
-	CompilerState* cState := &C
+	CompilerState* Compiler := &C
 	
-	cState->Initialize(Config, pState)
+	Compiler->Initialize(Config, Parser)
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		cState->GlobalBase := Config->ImageBase + 0x10
-		cState->CodeBase := Config->ImageBase + pState~>Globals->NextOffset + 0x10
+		Compiler->GlobalBase := Config->ImageBase + 0x10
+		Compiler->CodeBase := Config->ImageBase + Parser~>Globals->NextOffset + 0x10
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		cState->ELF := BuildELFBuilder()
+		Compiler->ELF := BuildELFBuilder()
 		
-		cState->GlobalBase := Config->ImageBase + 64 + 0x1000
-		cState->CodeBase := pState~>Globals->NextOffset + 564 + 0x2000
+		Compiler->GlobalBase := Config->ImageBase + 64 + 0x1000
+		Compiler->CodeBase := Parser~>Globals->NextOffset + 564 + 0x2000
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		cState->PE := BuildBuilder()
+		Compiler->PE := BuildBuilder()
 		
-		cState->PE->ImportFixupBase := cState->CodeBuffer
-		cState->PE->PE->ImageBase := Config->ImageBase
+		Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
+		Compiler->PE->PE->ImageBase := Config->ImageBase
 		
-		cState->GlobalBase := Config->ImageBase + cState->PE->NextRVA
-		cState->CodeBase := 0x3000
+		Compiler->GlobalBase := Config->ImageBase + Compiler->PE->NextRVA
+		Compiler->CodeBase := 0x3000
 	}
 
 	if (Config->DumpInfo & DUMP_GLOBALS) {
-		DumpGlobals(cState)
+		DumpGlobals(Compiler)
 	}
 	
 	; Compile all global functions
-	CompileFunctionHashMap(cState, pState~>Functions)
+	CompileFunctionHashMap(Compiler, Parser~>Functions)
 	
 	; Loop through each custom type
-	HashMap* Types := pState~>Types
+	HashMap* Types := Parser~>Types
 	
 	i32 ElementCount := Types->BufferMaxCount
 	void* Elements := Types->Elements
@@ -334,8 +334,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 				
 				/* If the type is a struct then compile any methods it might have */
 				if (NextType->IsStructType) {
-					CompileFunctionHashMap(cState, NextType~>Methods)
-					CompileFunctionHashMap(cState, NextType~>StaticMethods)
+					CompileFunctionHashMap(Compiler, NextType~>Methods)
+					CompileFunctionHashMap(Compiler, NextType~>StaticMethods)
 				}
 				
 				FoundElement := FoundElement->NextElement
@@ -343,18 +343,18 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		}
 	}
 	
-	if (pState->MainFunction = null) {
+	if (Parser->MainFunction = null) {
 		SwapOutputStream()
 		Print("^C0Main function not found, aborting.^F0")
 		Exit(1)
 	}
 	
-	i32 MainOffset := pState->MainFunction->CodeOffset
+	i32 MainOffset := Parser->MainFunction->CodeOffset
 	
-	ResolveAllLabels(cState)
+	ResolveAllLabels(Compiler)
 	
 	if (Config->DumpInfo & DUMP_FUNCTIONS) {
-		Print("\t^10Globals use %i bytes\n\t%i total bytes of code generated.\n\t%i total functions compiled.^F0\n", pState~>Globals->NextOffset, cState->Index, cState->FunctionCount)
+		Print("\t^10Globals use %i bytes\n\t%i total bytes of code generated.\n\t%i total functions compiled.^F0\n", Parser~>Globals->NextOffset, Compiler->Index, Compiler->FunctionCount)
 	}
 	
 	FileDelete(OutputFilePath)
@@ -375,8 +375,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		; The "bin" format is pretty much a 64 bit `.com` file. Except it contains an image base
 		
-		i32 CodeBase := pState~>Globals->NextOffset + 0x10
-		i32 FileSize := CodeBase + cState->Index
+		i32 CodeBase := Parser~>Globals->NextOffset + 0x10
+		i32 FileSize := CodeBase + Compiler->Index
 		
 		void* Binary := Alloc(FileSize)
 		i8* BinaryBytes := Binary As i8*
@@ -385,42 +385,42 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
 		((Binary + 8) As i64*)[0] := Config->ImageBase
 		
-		for (i32 CodeIndex := 0, CodeIndex < cState->Index, CodeIndex += 1) {
-			BinaryBytes[CodeBase + CodeIndex] := cState->CodeBuffer[CodeIndex]
+		for (i32 CodeIndex := 0, CodeIndex < Compiler->Index, CodeIndex += 1) {
+			BinaryBytes[CodeBase + CodeIndex] := Compiler->CodeBuffer[CodeIndex]
 		}
 		
 		Result := FileWrite(OutputFileHandle, Binary, FileSize)
 		BytesWritten := FileSize
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		AddDataSection(cState->ELF, pState~>Globals->NextOffset)
-		AddCodeSection(cState->ELF, cState->CodeBuffer, cState->Index)
+		AddDataSection(Compiler->ELF, Parser~>Globals->NextOffset)
+		AddCodeSection(Compiler->ELF, Compiler->CodeBuffer, Compiler->Index)
 		
-		FinalizeELFBuilder(cState->ELF, MainOffset, Config->ImageBase)
+		FinalizeELFBuilder(Compiler->ELF, MainOffset, Config->ImageBase)
 		
-		Result := FileWrite(OutputFileHandle, cState->ELF->Buffer, cState->ELF->BufferSize)
-		BytesWritten := cState->ELF->BufferSize
+		Result := FileWrite(OutputFileHandle, Compiler->ELF->Buffer, Compiler->ELF->BufferSize)
+		BytesWritten := Compiler->ELF->BufferSize
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		AddData(cState->PE, pState~>Globals->NextOffset)
+		AddData(Compiler->PE, Parser~>Globals->NextOffset)
 		
-		i64 TextRVA := AddCode(cState->PE, cState->CodeBuffer, cState->Index, MainOffset)
+		i64 TextRVA := AddCode(Compiler->PE, Compiler->CodeBuffer, Compiler->Index, MainOffset)
 		
-		; for (i32 RelocationIndex := 0, RelocationIndex < (cState->CodeRelocationCount), RelocationIndex += 1) {
-		; 	i32 NextRelocationOffset := (cState->CodeRelocations)[RelocationIndex]
+		; for (i32 RelocationIndex := 0, RelocationIndex < (Compiler->CodeRelocationCount), RelocationIndex += 1) {
+		; 	i32 NextRelocationOffset := (Compiler->CodeRelocations)[RelocationIndex]
 		; 	
 		; 	i32 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
 		; 	i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
 		; 	
 		; 	/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
 		; 	
-		; 	AddRelocation(cState->PE, PageRVA, OffsetInPage, false)
+		; 	AddRelocation(Compiler->PE, PageRVA, OffsetInPage, false)
 		; }
 		
-		FinalizeBuilder(cState->PE)
+		FinalizeBuilder(Compiler->PE)
 		
-		Result := FileWrite(OutputFileHandle, cState->PE->Buffer, cState->PE->BufferSize)
-		BytesWritten := cState->PE->BufferSize
+		Result := FileWrite(OutputFileHandle, Compiler->PE->Buffer, Compiler->PE->BufferSize)
+		BytesWritten := Compiler->PE->BufferSize
 	}
 	
 	if (Result < 0) {
@@ -429,7 +429,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		Exit(1)
 	}
 	
-	Print("^10Done writing output file, %i bytes written, file format contains %i bytes of overhead^F0\n", BytesWritten, BytesWritten - cState->Index)
+	Print("^10Done writing output file, %i bytes written, file format contains %i bytes of overhead^F0\n", BytesWritten, BytesWritten - Compiler->Index)
 	
 	FileClose(OutputFileHandle)
 }
@@ -448,56 +448,56 @@ define i8 StackIndexToRegister(i8 Index) {
 
 
 
-define i8 PushRegisterStack(CompilerState* cState) {
-	i8 Index := cState->RegisterStackIndex
+define i8 PushRegisterStack(CompilerState* Compiler) {
+	i8 Index := Compiler->RegisterStackIndex
 	
 	i8 TrueIndex := Index % 7
 	i8 Result := StackIndexToRegister(TrueIndex)
 	
 	if (Index >= 8) {
-		EmitPush_R64(cState, Result)
+		EmitPush_R64(Compiler, Result)
 	}
 
-	cState->RegisterStackIndex += 1
+	Compiler->RegisterStackIndex += 1
 	
 	return Result
 }
-define i8 TopOfRegisterStack(CompilerState* cState) {
-	return StackIndexToRegister(cState->RegisterStackIndex)
+define i8 TopOfRegisterStack(CompilerState* Compiler) {
+	return StackIndexToRegister(Compiler->RegisterStackIndex)
 }
-define i8 PopRegisterStack(CompilerState* cState) {
-	cState->RegisterStackIndex -= 1
+define i8 PopRegisterStack(CompilerState* Compiler) {
+	Compiler->RegisterStackIndex -= 1
 	
-	i8 Index := cState->RegisterStackIndex
+	i8 Index := Compiler->RegisterStackIndex
 	
 	i8 TrueIndex := Index % 7
 	i8 Result := StackIndexToRegister(TrueIndex)
 	
 	if (Index >= 8) {
-		EmitPop_R64(cState, Result)
+		EmitPop_R64(Compiler, Result)
 	}
 	
 	return Result
 }
 
-define void EnsureCodeBufferSize(CompilerState* cState) {
-	if ((cState->Index + 0x100) >= (cState->CodeBufferSize)) {
-		cState->CodeBufferSize += 0x5000
-		cState->CodeBuffer := ReAlloc(cState->CodeBuffer, cState->CodeBufferSize)
+define void EnsureCodeBufferSize(CompilerState* Compiler) {
+	if ((Compiler->Index + 0x100) >= (Compiler->CodeBufferSize)) {
+		Compiler->CodeBufferSize += 0x5000
+		Compiler->CodeBuffer := ReAlloc(Compiler->CodeBuffer, Compiler->CodeBufferSize)
 		
-		if (cState->Config->OutputFormat = OUTPUT_PE) {
-			cState->PE->ImportFixupBase := cState->CodeBuffer
+		if (Compiler->Config->OutputFormat = OUTPUT_PE) {
+			Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
 		}
 	}
 }
 
-define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
-	i32 Index := cState->CodeRelocationCount
+define void AddCodeRelocation(CompilerState* Compiler, i32 Offset) {
+	i32 Index := Compiler->CodeRelocationCount
 	
-	cState->CodeRelocations := ReAlloc(cState->CodeRelocations, (Index + 1) * 8)
-	(cState->CodeRelocations)[Index] := Offset
+	Compiler->CodeRelocations := ReAlloc(Compiler->CodeRelocations, (Index + 1) * 8)
+	(Compiler->CodeRelocations)[Index] := Offset
 	
-	cState->CodeRelocationCount += 1
+	Compiler->CodeRelocationCount += 1
 }
 
 
@@ -507,11 +507,11 @@ define void AddCodeRelocation(CompilerState* cState, i32 Offset) {
 ==========================================
 */
 
-define i32 GetVariableOffset(CompilerState* cState, VariableInfo* TargetVariable, i8* FitsDisp8) {
+define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariable, i8* FitsDisp8) {
 	i32 Offset := TargetVariable->StackOffset
 	
 	if !(TargetVariable->IsGlobal) {
-		if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
 			Offset += 0x10
 		}
 	}
@@ -529,9 +529,9 @@ define i32 GetVariableOffset(CompilerState* cState, VariableInfo* TargetVariable
 
 /* Todo: Merge these three functions into one */
 
-define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
+define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
+	i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
 	
 	i8 BaseRegister := RBP
 	
@@ -540,28 +540,28 @@ define void CompileGetVariableAddress(CompilerState* cState, i8 ResultRegister, 
 	}
 	
 	if (UseDisp8) {
-		EmitLea_R64_R64_DISP8(cState, ResultRegister, BaseRegister, Offset As i8)
+		EmitLea_R64_R64_DISP8(Compiler, ResultRegister, BaseRegister, Offset As i8)
 	}
 	else {
-		EmitLea_R64_R64_DISP32(cState, ResultRegister, BaseRegister, Offset)
+		EmitLea_R64_R64_DISP32(Compiler, ResultRegister, BaseRegister, Offset)
 	}
 	
 	if (BaseRegister = R15) {
-		AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
+		AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
 	}
 }
 
 declare void CompileExpression(CompilerState*, i8, ASTNode*)
 
-define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, VariableInfo* TargetVariable) {
+define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->Type.IsArray) {
-		return CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
+		return CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
 	}
 	
 	if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
-		return CompileExpression(cState, ResultRegister, TargetVariable->LastValue)
+		return CompileExpression(Compiler, ResultRegister, TargetVariable->LastValue)
 	}
 	
 	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
@@ -570,11 +570,11 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 			Any time this could be abused *should* be caught by type checking 
 		*/
 		
-		CompileGetVariableAddress(cState, ResultRegister, TargetVariable)
+		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
 	}
 	else {
 		i8 UseDisp8 := false
-		i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
+		i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
 		
 		i8 BaseRegister := RBP
 		
@@ -583,24 +583,24 @@ define void CompileGetVariableValue(CompilerState* cState, i8 ResultRegister, Va
 		}
 		
 		;if (UseDisp8) {
-		;	EmitMove_RX_RIX_DISP8(cState, ResultRegister, BaseRegister, Offset As i8, TargetSize)
+		;	EmitMove_RX_RIX_DISP8(Compiler, ResultRegister, BaseRegister, Offset As i8, TargetSize)
 		;}
 		;else {
-		;	EmitMove_RX_RIX_DISP32(cState, ResultRegister, BaseRegister, Offset, TargetSize)
+		;	EmitMove_RX_RIX_DISP32(Compiler, ResultRegister, BaseRegister, Offset, TargetSize)
 		;}
 		
-		EmitMove_RX_RIX_DISPX(cState, ResultRegister, BaseRegister, Offset, UseDisp8, TargetSize)
+		EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, BaseRegister, Offset, UseDisp8, TargetSize)
 		
 		if (BaseRegister = R15) {
-			AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
+			AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
 		}
 	}
 }
-define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetVariable, i8 SourceRegister) {
+define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* TargetVariable, i8 SourceRegister) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(cState, TargetVariable, &UseDisp8)
+	i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
 	
 	i8 BaseRegister := RBP
 	
@@ -609,14 +609,14 @@ define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetV
 	}
 	
 	if (UseDisp8) {
-		EmitMove_RIX_DISP8_RX(cState, BaseRegister, SourceRegister, Offset As i8, TargetSize)
+		EmitMove_RIX_DISP8_RX(Compiler, BaseRegister, SourceRegister, Offset As i8, TargetSize)
 	}
 	else {
-		EmitMove_RIX_DISP32_RX(cState, BaseRegister, SourceRegister, Offset, TargetSize)
+		EmitMove_RIX_DISP32_RX(Compiler, BaseRegister, SourceRegister, Offset, TargetSize)
 	}
 	
 	if (BaseRegister = R15) {
-		AddCodeRelocation(cState, (cState->Index) - (!UseDisp8 * 3) + 1)
+		AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
 	}
 }
 
@@ -627,63 +627,63 @@ define void CompileSetVariableValue(CompilerState* cState, VariableInfo* TargetV
 ==========================================
 */
 
-define void Cast(CompilerState* cState, i8 Register, i8 Size) {
-	EmitMove_R64_RX(cState, Register, Register, Size)
+define void Cast(CompilerState* Compiler, i8 Register, i8 Size) {
+	EmitMove_R64_RX(Compiler, Register, Register, Size)
 }
 
-define void CompileImportStub(CompilerState* cState, FunctionDefine* FunctionToCompile) {
+define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionToCompile) {
 	/* Compiles an imported function by emitting a jump to the actual function */
 	
-	SetLabel(cState, FunctionToCompile->LabelNumber)
+	SetLabel(Compiler, FunctionToCompile->LabelNumber)
 	
-	EmitMove_R64_I64(cState, RBX, 0)
+	EmitMove_R64_I64(Compiler, RBX, 0)
 	
-	AddImport(cState->PE, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, (cState->Index) - 8)
-	AddCodeRelocation(cState, cState->Index - 8)
+	AddImport(Compiler->PE, FunctionToCompile->ImportFileName, FunctionToCompile->ImportFunctionName, (Compiler->Index) - 8)
+	AddCodeRelocation(Compiler, Compiler->Index - 8)
 	
-	EmitJump_RI64(cState, RBX)
+	EmitJump_RI64(Compiler, RBX)
 }
 
 declare void CompileBlock(CompilerState*, Block*)
 declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
-define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToCompile, i8 IsMain) {
+define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
 	; First though, we'll prefix the function's code with any strings which it uses
-	i32 StringsLabel := NextLabel(cState)
+	i32 StringsLabel := NextLabel(Compiler)
 	
 	if (FunctionToCompile->StringBufferSize) {
-		SetLabel(cState, StringsLabel)
+		SetLabel(Compiler, StringsLabel)
 		
-		cState->CurrentFunctionStringsLabel := StringsLabel
+		Compiler->CurrentFunctionStringsLabel := StringsLabel
 		
 		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
-			PushByte(cState, FunctionToCompile->StringBuffer[CharacterIndex])
+			PushByte(Compiler, FunctionToCompile->StringBuffer[CharacterIndex])
 		}
 	}
 	
-	i32 FunctionOffset := cState->Index
-	SetLabel(cState, FunctionToCompile->LabelNumber)
+	i32 FunctionOffset := Compiler->Index
+	SetLabel(Compiler, FunctionToCompile->LabelNumber)
 	
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
-		CompileAssembly(cState, FunctionToCompile->AssemblyBody)
+		CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
 		return FunctionOffset
 	}
 	
 	if (FunctionToCompile->Body->StatementCount = 0) {
 		/* Empty functions don't deserve any prelude code. */
 		
-		EmitReturn(cState)
+		EmitReturn(Compiler)
 		return FunctionOffset
 	}
 	
-	cState->RegisterStackIndex := 0
-	cState->CurrentFunction := FunctionToCompile
+	Compiler->RegisterStackIndex := 0
+	Compiler->CurrentFunction := FunctionToCompile
 	
-	i8 USE_SYSTEMV := true /* cState->OutputELF */
+	i8 USE_SYSTEMV := true /* Compiler->OutputELF */
 	
 	if (FunctionToCompile->Attribute = KEYWORD_X64) {
 		; Force a function to be compiled using the x64 ABI
@@ -712,7 +712,7 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 		StackParameterCount := ParameterCount - MAX_REGISTER_PARAMETERS
 		
 		/* Also, store RSP in RBX for extracting the stack parameters with smaller offsets */
-		EmitMove_R64_R64(cState, RBX, RSP)
+		EmitMove_R64_R64(Compiler, RBX, RSP)
 	}
 	
 	/* Set up the stack frame for this function */
@@ -723,10 +723,10 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 		LocalSpace += 8
 	}
 	
-	EmitPush_R64(cState, RBP)
-	EmitMove_R64_R64(cState, RBP, RSP)
+	EmitPush_R64(Compiler, RBP)
+	EmitMove_R64_R64(Compiler, RBP, RSP)
 	
-	if (IsMain && cState->Config->OutputFormat = OUTPUT_ELF  && ParameterCount <= 2) {
+	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF  && ParameterCount <= 2) {
 		/* When compiling main for SystemV, load the first two parameter registers (if they exist) 
 			With ArgC and ArgV loaded from the stack since:
 				RBP + 0 = ArgC
@@ -736,16 +736,16 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
 		*/
 		
-		;EmitMove_RX_RIX_DISP8(cState, RDI, RBP, 8, 8)
-		EmitMove_RX_RIX_DISPX(cState, RDI, RBP, 8, true, 8)
-		EmitLea_R64_R64_DISP8(cState, RSI, RBP, 16)
+		;EmitMove_RX_RIX_DISP8(Compiler, RDI, RBP, 8, 8)
+		EmitMove_RX_RIX_DISPX(Compiler, RDI, RBP, 8, true, 8)
+		EmitLea_R64_R64_DISP8(Compiler, RSI, RBP, 16)
 	}
 	
-	if (cState->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
-		EmitMove_R32_I32(cState, RAX, 0x12345678)
-		EmitPush_R64(cState, RAX)
-		EmitLea_R64_Label(cState, RAX, StringsLabel)
-		EmitPush_R64(cState, RAX)
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+		EmitMove_R32_I32(Compiler, RAX, 0x12345678)
+		EmitPush_R64(Compiler, RAX)
+		EmitLea_R64_Label(Compiler, RAX, StringsLabel)
+		EmitPush_R64(Compiler, RAX)
 		
 		; Extend LocalSpace to account for extra offset from RBP to local variables
 		LocalSpace += 0x8
@@ -753,7 +753,7 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 	
 	if (LocalSpace) {
 		/* Only emit an instruction to allocate space for locals when we have locals */
-		EmitSub_R64_IX(cState, RSP, LocalSpace)
+		EmitSub_R64_IX(Compiler, RSP, LocalSpace)
 	}
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
@@ -777,7 +777,7 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 		}
 		
 		/* And write the parameter register's value into the parameter's stack space */
-		CompileSetVariableValue(cState, NextParameter, NextParameterRegister)
+		CompileSetVariableValue(Compiler, NextParameter, NextParameterRegister)
 	}
 	
 	for (i8 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
@@ -791,19 +791,19 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 		i8 NextParameterOffset := (StackParameterIndex + 1) * 8
 		i8 NextParameterSize := GetTypeSize(NextStackParameter->Type) As i8
 		
-		;EmitMove_RX_RIX_DISP8(cState, RAX, RBX, NextParameterOffset, NextParameterSize)
-		EmitMove_RX_RIX_DISPX(cState, RAX, RBX, NextParameterOffset, true, NextParameterSize)
+		;EmitMove_RX_RIX_DISP8(Compiler, RAX, RBX, NextParameterOffset, NextParameterSize)
+		EmitMove_RX_RIX_DISPX(Compiler, RAX, RBX, NextParameterOffset, true, NextParameterSize)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
-		CompileSetVariableValue(cState, NextStackParameter, RAX)
+		CompileSetVariableValue(Compiler, NextStackParameter, RAX)
 	}
 	
-	if (cState->pState~>Globals->NextOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
-		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
+	if (Compiler->Parser~>Globals->NextOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
+		EmitMove_R32_I32(Compiler, R15, Compiler->GlobalBase)
 	}
 	
 	if (IsMain) {
-		ASTNode** GlobalDefaults := cState->pState->GlobalDefaults
+		ASTNode** GlobalDefaults := Compiler->Parser->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
 		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
@@ -811,7 +811,7 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 			
 			if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
-				CompileExpression(cState, RAX, NextGlobalDefault)
+				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
 	}
@@ -827,58 +827,58 @@ define i32 CompileFunction(CompilerState* cState, FunctionDefine* FunctionToComp
 			since every function automatically gets Leave;Ret emitted for it.
 		*/
 		
-		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
+		ASTNode* LasLexerment := Body->Statements[BodyCount - 1]
 		
-		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
-			ReturnExpression := LastStatement->ReturnExpression
+		if (LasLexerment->NodeType = NODE_TYPE_RETURN) {
+			ReturnExpression := LasLexerment->ReturnExpression
 			Body->StatementCount -= 1
 		}
 	}
 	
-	cState->CompilingMain := IsMain
+	Compiler->CompilingMain := IsMain
 	
-	CompileBlock(cState, Body)
+	CompileBlock(Compiler, Body)
 	
 	if (ReturnExpression) {
-		CompileExpression(cState, RAX, ReturnExpression)
+		CompileExpression(Compiler, RAX, ReturnExpression)
 		
 		i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
-		i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunction->ReturnType)
+		i16 ReturnTypeSize := GetTypeSize(Compiler->CurrentFunction->ReturnType)
 		
 		if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
-			Cast(cState, RAX, ReturnValueSize As i8)
+			Cast(Compiler, RAX, ReturnValueSize As i8)
 		}
 	}
 	
-	EmitLeave(cState)
+	EmitLeave(Compiler)
 	
-	if (IsMain && cState->Config->OutputFormat = OUTPUT_ELF) {
-		EmitMove_R64_R64(cState, RDI, RAX)
-		EmitMove_R32_I32(cState, RAX, 60)
-		EmitSysCall(cState)
+	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF) {
+		EmitMove_R64_R64(Compiler, RDI, RAX)
+		EmitMove_R32_I32(Compiler, RAX, 60)
+		EmitSysCall(Compiler)
 	}
 	else {
-		EmitReturn(cState)
+		EmitReturn(Compiler)
 	}
 	
-	if (cState->RegisterStackIndex != 0) {
+	if (Compiler->RegisterStackIndex != 0) {
 		ContextError(FunctionToCompile~>Context, "[INTERNAL] Register stack not empty")
 	}
 	
-	cState->CurrentFunction := null
+	Compiler->CurrentFunction := null
 	
 	return FunctionOffset
 }
 
 declare void Compile(CompilerState*, ASTNode*)
 
-define void CompileBlock(CompilerState* cState, Block* BlockToCompile) {
+define void CompileBlock(CompilerState* Compiler, Block* BlockToCompile) {
 	/* Compiles a block of statements */
 	
 	for (i32 Index := 0, Index < BlockToCompile->StatementCount, Index += 1) {
-		ASTNode* NextStatement := (BlockToCompile->Statements)[Index]
+		ASTNode* NexLexerment := (BlockToCompile->Statements)[Index]
 		
-		Compile(cState, NextStatement)
+		Compile(Compiler, NexLexerment)
 	}
 }
 
@@ -896,74 +896,74 @@ declare void CompileCall(CompilerState*, i8, ASTNode*)
 
 declare void CompileUnwindTry(CompilerState*, i8)
 
-define void Compile(CompilerState* cState, ASTNode* NodeToCompile) {
+define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
 	i8 NodeType := NodeToCompile->NodeType
 	
 	if (NodeType = NODE_TYPE_RETURN) {
-		CompileReturn(cState, NodeToCompile->ReturnExpression)
+		CompileReturn(Compiler, NodeToCompile->ReturnExpression)
 	}
 	else if (NodeType = NODE_TYPE_IF) {
-		CompileIf(cState, NodeToCompile->IfNode)
+		CompileIf(Compiler, NodeToCompile->IfNode)
 	}
 	else if (NodeType = NODE_TYPE_FOR) {
-		CompileFor(cState, NodeToCompile->ForNode)
+		CompileFor(Compiler, NodeToCompile->ForNode)
 	}
 	else if (NodeType = NODE_TYPE_LOOP) {
-		CompileLoop(cState, NodeToCompile->LoopBody)
+		CompileLoop(Compiler, NodeToCompile->LoopBody)
 	}
 	else if (NodeType = NODE_TYPE_WHILE) {
-		CompileWhile(cState, NodeToCompile->WhileNode)
+		CompileWhile(Compiler, NodeToCompile->WhileNode)
 	}
 	else if (NodeType = NODE_TYPE_TRY) {
-		CompileTry(cState, NodeToCompile->TryNode)
+		CompileTry(Compiler, NodeToCompile->TryNode)
 	}
 	else if (NodeType = NODE_TYPE_CONTINUEBREAK) {
-		CompileUnwindTry(cState, false)
+		CompileUnwindTry(Compiler, false)
 		
 		if (NodeToCompile->IsContinue) {
-			EmitJump_Label(cState, cState->CurrentLoopContinueLabel)
+			EmitJump_Label(Compiler, Compiler->CurrentLoopContinueLabel)
 		}
 		else {
-			EmitJump_Label(cState, cState->CurrentLoopBreakLabel)
+			EmitJump_Label(Compiler, Compiler->CurrentLoopBreakLabel)
 		}
 	}
 	else if (NodeType = NODE_TYPE_EXPRESSION) {
-		CompileExpression(cState, RAX, NodeToCompile->ExpressionStatement)
+		CompileExpression(Compiler, RAX, NodeToCompile->ExpressionStatement)
 	}
 	else if (NodeType = NODE_TYPE_ASSEMBLY) {
-		CompileAssembly(cState, NodeToCompile->AssemblyValue)
+		CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
 	}
 }
 
-define void CompileReturn(CompilerState* cState, ASTNode* ReturnExpression) {
+define void CompileReturn(CompilerState* Compiler, ASTNode* ReturnExpression) {
 	/* Compile the expression to return */
 	
-	CompileUnwindTry(cState, true)
+	CompileUnwindTry(Compiler, true)
 	
-	CompileExpression(cState, RAX, ReturnExpression)
+	CompileExpression(Compiler, RAX, ReturnExpression)
 	
 	i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
-	i16 ReturnTypeSize := GetTypeSize(cState->CurrentFunction->ReturnType)
+	i16 ReturnTypeSize := GetTypeSize(Compiler->CurrentFunction->ReturnType)
 	
 	/* And cast it up to (at least) 4 bytes, to ensure no garbage is left in RAX */
 	
 	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
-		Cast(cState, RAX, ReturnValueSize As i8)
+		Cast(Compiler, RAX, ReturnValueSize As i8)
 	}
 	
-	EmitLeave(cState)
+	EmitLeave(Compiler)
 	
-	if (cState->CompilingMain && cState->Config->OutputFormat = OUTPUT_ELF) {
+	if (Compiler->CompilingMain && Compiler->Config->OutputFormat = OUTPUT_ELF) {
 		/* If returning from Main() on Linux, actually call sys_exit() to ensure that the program exits correctly. */
 		
-		EmitMove_R64_R64(cState, RDI, RAX)
-		EmitMove_R32_I32(cState, RAX, 60)
-		EmitSysCall(cState)
+		EmitMove_R64_R64(Compiler, RDI, RAX)
+		EmitMove_R32_I32(Compiler, RAX, 60)
+		EmitSysCall(Compiler)
 	}
 	else {
-		EmitReturn(cState)
+		EmitReturn(Compiler)
 	}
 }
 
@@ -973,7 +973,7 @@ define i8 IsComparison(Token* OperatorToken) {
 	return (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
 }
 
-define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression, i32 JumpToLabel) {
+define void CompileCondition(CompilerState* Compiler, ASTNode* ConditionExpression, i32 JumpToLabel) {
 	/* Checks ConditionExpression for being false, and jumps to JumpToLabel if it is 
 		This might seem a bit backwards, but loops/if statements all check for false, and jump out (or to the next branch)
 		 depending on their conditions being false, which eliminates lots of extra jumping
@@ -993,73 +993,73 @@ define void CompileCondition(CompilerState* cState, ASTNode* ConditionExpression
 		i8 IsEquals := (Operator = OPERATOR_EQUAL || Operator = OPERATOR_BANG_EQUAL)
 		
 		if (IsEquals && (Right->NodeType = NODE_TYPE_INTEGER && Right->IntegerValue = 0)) {
-			CompileExpression(cState, RAX, BinaryNode->Left)
+			CompileExpression(Compiler, RAX, BinaryNode->Left)
 			
-			EmitOr_RX_RX(cState, RAX, RAX, GetTypeSize(BinaryNode->Left->ValueType) As i8)
+			EmitOr_RX_RX(Compiler, RAX, RAX, GetTypeSize(BinaryNode->Left->ValueType) As i8)
 			
 			if (Operator = OPERATOR_EQUAL) {
-				EmitJNZ_Label(cState, JumpToLabel)
+				EmitJNZ_Label(Compiler, JumpToLabel)
 			}
 			else {
-				EmitJEZ_Label(cState, JumpToLabel)
+				EmitJEZ_Label(Compiler, JumpToLabel)
 			}
 		}
 		else {
-			CompileBinary(cState, RAX, ConditionExpression->ValueType, BinaryNode, true)
+			CompileBinary(Compiler, RAX, ConditionExpression->ValueType, BinaryNode, true)
 			
 			/* Use inverted conditions to decide if this branch had a false condition, and to jump past it or not */
 			
 			if (Operator = OPERATOR_EQUAL) {
-				EmitJNZ_Label(cState, JumpToLabel)
+				EmitJNZ_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_BANG_EQUAL) {
-				EmitJEZ_Label(cState, JumpToLabel)
+				EmitJEZ_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_LESS) {
-				EmitJGE_Label(cState, JumpToLabel)
+				EmitJGE_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_LESS_EQAUL) {
-				EmitJGT_Label(cState, JumpToLabel)
+				EmitJGT_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_GREATER) {
-				EmitJLE_Label(cState, JumpToLabel)
+				EmitJLE_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_GREATER_EQAUL) {
-				EmitJLT_Label(cState, JumpToLabel)
+				EmitJLT_Label(Compiler, JumpToLabel)
 			}
 			else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
-				EmitJEZ_Label(cState, JumpToLabel)
+				EmitJEZ_Label(Compiler, JumpToLabel)
 			}
 		}
 	}
 	else if (ConditionType = NODE_TYPE_UNARY && (UnaryNode->Operator->Value As i8) = OPERATOR_BANG) {
-		CompileUnary(cState, RAX, ConditionExpression->ValueType, UnaryNode, true)
-		EmitJNZ_Label(cState, JumpToLabel)
+		CompileUnary(Compiler, RAX, ConditionExpression->ValueType, UnaryNode, true)
+		EmitJNZ_Label(Compiler, JumpToLabel)
 	}
 	else {
 		/* In this case, the expression is not conditional, and we will need to check the result for being 0 or not */
 		
-		CompileExpression(cState, RAX, ConditionExpression)
-		EmitTest_RX_RX(cState, RAX, RAX, GetTypeSize(ConditionExpression->ValueType) As i8)
-		EmitJEZ_Label(cState, JumpToLabel)
+		CompileExpression(Compiler, RAX, ConditionExpression)
+		EmitTest_RX_RX(Compiler, RAX, RAX, GetTypeSize(ConditionExpression->ValueType) As i8)
+		EmitJEZ_Label(Compiler, JumpToLabel)
 	}
 }
 
-define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
+define void CompileIf(CompilerState* Compiler, IfGroup* IfToCompile) {
 	i32 BranchCount := IfToCompile->BranchCount
 	i32 HasElse := (IfToCompile->ElseBranch) != 0
 	
-	i32 EndLabel := NextLabel(cState)
-	i32 NextBranch := NextLabel(cState)
+	i32 EndLabel := NextLabel(Compiler)
+	i32 NextBranch := NextLabel(Compiler)
 	
-	i8 ConditionResultRegister := PushRegisterStack(cState)
+	i8 ConditionResultRegister := PushRegisterStack(Compiler)
 	
 	for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex += 1) {
-		SetLabel(cState, NextBranch)
-		NextBranch := NextLabel(cState)
+		SetLabel(Compiler, NextBranch)
+		NextBranch := NextLabel(Compiler)
 		
-		CompileCondition(cState, IfToCompile->Conditions[BranchIndex], NextBranch)
-		CompileBlock(cState, IfToCompile->Bodies[BranchIndex])
+		CompileCondition(Compiler, IfToCompile->Conditions[BranchIndex], NextBranch)
+		CompileBlock(Compiler, IfToCompile->Bodies[BranchIndex])
 		
 		if (HasElse || (BranchIndex != (BranchCount - 1))) {
 			/* Only emit a jump to the end label if: We have an 'else', or we are not the last branch 
@@ -1067,19 +1067,19 @@ define void CompileIf(CompilerState* cState, IfGroup* IfToCompile) {
 				
 			*/
 			
-			EmitJump_Label(cState, EndLabel)
+			EmitJump_Label(Compiler, EndLabel)
 		}
 	}
 	
-	PopRegisterStack(cState)
+	PopRegisterStack(Compiler)
 	
-	SetLabel(cState, NextBranch)
+	SetLabel(Compiler, NextBranch)
 	
 	if (IfToCompile->ElseBranch) {
-		CompileBlock(cState, IfToCompile->ElseBranch)
+		CompileBlock(Compiler, IfToCompile->ElseBranch)
 	}
 	
-	SetLabel(cState, EndLabel)
+	SetLabel(Compiler, EndLabel)
 }
 
 /* Helpers to save/restore the current loop's continue/break labels (for nested loops) */
@@ -1088,108 +1088,108 @@ bits LoopLables As i64 {
 	[0:31] ContinueLabel,
 	[32:63] BreakLabel
 }
-define i64 EnterLoop(CompilerState* cState, i32 ContinueLabel, i32 BreakLabel) {
-	LoopLables Result := cState->CurrentLoopContinueLabel
-	Result.BreakLabel := cState->CurrentLoopBreakLabel
+define i64 EnterLoop(CompilerState* Compiler, i32 ContinueLabel, i32 BreakLabel) {
+	LoopLables Result := Compiler->CurrentLoopContinueLabel
+	Result.BreakLabel := Compiler->CurrentLoopBreakLabel
 	
-	cState->CurrentLoopContinueLabel := ContinueLabel
-	cState->CurrentLoopBreakLabel := BreakLabel
+	Compiler->CurrentLoopContinueLabel := ContinueLabel
+	Compiler->CurrentLoopBreakLabel := BreakLabel
 	
 	return Result As i64
 }
-define void ExitLoop(CompilerState* cState, i64 PackedLoopState) {
-	LoopLables LoopState := PackedLoopState As LoopLables
+define void ExitLoop(CompilerState* Compiler, i64 PackedLooParser) {
+	LoopLables LooParser := PackedLooParser As LoopLables
 	
-	cState->CurrentLoopContinueLabel := LoopState.ContinueLabel
-	cState->CurrentLoopBreakLabel := LoopState.BreakLabel
+	Compiler->CurrentLoopContinueLabel := LooParser.ContinueLabel
+	Compiler->CurrentLoopBreakLabel := LooParser.BreakLabel
 }
 
 
 /* Actual loop compiling functions */
 
-define void CompileFor(CompilerState* cState, ForLoop* ForToCompile) {
-	CompileExpression(cState, RAX, ForToCompile->Initializer)
+define void CompileFor(CompilerState* Compiler, ForLoop* ForToCompile) {
+	CompileExpression(Compiler, RAX, ForToCompile->Initializer)
 	
-	i32 StartLabel := NextLabel(cState)
-	i32 ContinueLabel := NextLabel(cState)
-	i32 EndLabel := NextLabel(cState)
+	i32 StartLabel := NextLabel(Compiler)
+	i32 ContinueLabel := NextLabel(Compiler)
+	i32 EndLabel := NextLabel(Compiler)
 	
-	SetLabel(cState, StartLabel)
+	SetLabel(Compiler, StartLabel)
 	
-	CompileCondition(cState, ForToCompile->Condition, EndLabel)
+	CompileCondition(Compiler, ForToCompile->Condition, EndLabel)
 	
-	i32 TryDepth := cState->ScopedTryDepth
-	cState->ScopedTryDepth := 0
-	i64 LoopState := EnterLoop(cState, ContinueLabel, EndLabel)
+	i32 TryDepth := Compiler->ScopedTryDepth
+	Compiler->ScopedTryDepth := 0
+	i64 LooParser := EnterLoop(Compiler, ContinueLabel, EndLabel)
 
 	/* Prelude stuff done, condition is checked, so now we can compile the body */	
 	
-	CompileBlock(cState, ForToCompile->Body)
+	CompileBlock(Compiler, ForToCompile->Body)
 	
-	SetLabel(cState, ContinueLabel) /* On continue (or after the body ends naturally) execute the step, and jump to the condition check */
-	CompileExpression(cState, RAX, ForToCompile->Step)
+	SetLabel(Compiler, ContinueLabel) /* On continue (or after the body ends naturally) execute the step, and jump to the condition check */
+	CompileExpression(Compiler, RAX, ForToCompile->Step)
 	
-	EmitJump_Label(cState, StartLabel)
+	EmitJump_Label(Compiler, StartLabel)
 	
-	SetLabel(cState, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
+	SetLabel(Compiler, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
 	
-	ExitLoop(cState, LoopState)
-	cState->ScopedTryDepth := TryDepth
+	ExitLoop(Compiler, LooParser)
+	Compiler->ScopedTryDepth := TryDepth
 }
 
-define void CompileLoop(CompilerState* cState, Block* LoopBody) {
-	i32 StartLabel := NextLabel(cState)
-	i32 EndLabel := NextLabel(cState)
+define void CompileLoop(CompilerState* Compiler, Block* LoopBody) {
+	i32 StartLabel := NextLabel(Compiler)
+	i32 EndLabel := NextLabel(Compiler)
 	
-	i32 TryDepth := cState->ScopedTryDepth
-	cState->ScopedTryDepth := 0
-	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
+	i32 TryDepth := Compiler->ScopedTryDepth
+	Compiler->ScopedTryDepth := 0
+	i64 LooParser := EnterLoop(Compiler, StartLabel, EndLabel)
 	
-	SetLabel(cState, StartLabel)
+	SetLabel(Compiler, StartLabel)
 	
-	CompileBlock(cState, LoopBody)
+	CompileBlock(Compiler, LoopBody)
 	
-	EmitJump_Label(cState, StartLabel)
-	SetLabel(cState, EndLabel)
+	EmitJump_Label(Compiler, StartLabel)
+	SetLabel(Compiler, EndLabel)
 	
-	ExitLoop(cState, LoopState)
-	cState->ScopedTryDepth := TryDepth
+	ExitLoop(Compiler, LooParser)
+	Compiler->ScopedTryDepth := TryDepth
 }
 
-define void CompileWhile(CompilerState* cState, WhileLoop* WhileToCompile) {
-	i32 StartLabel := NextLabel(cState)
-	i32 EndLabel := NextLabel(cState)
+define void CompileWhile(CompilerState* Compiler, WhileLoop* WhileToCompile) {
+	i32 StartLabel := NextLabel(Compiler)
+	i32 EndLabel := NextLabel(Compiler)
 	
-	i32 TryDepth := cState->ScopedTryDepth
-	cState->ScopedTryDepth := 0
-	i64 LoopState := EnterLoop(cState, StartLabel, EndLabel)
+	i32 TryDepth := Compiler->ScopedTryDepth
+	Compiler->ScopedTryDepth := 0
+	i64 LooParser := EnterLoop(Compiler, StartLabel, EndLabel)
 	
-	SetLabel(cState, StartLabel)
+	SetLabel(Compiler, StartLabel)
 	
-	CompileCondition(cState, WhileToCompile->Condition, EndLabel)
-	CompileBlock(cState, WhileToCompile->Body)
+	CompileCondition(Compiler, WhileToCompile->Condition, EndLabel)
+	CompileBlock(Compiler, WhileToCompile->Body)
 	
-	EmitJump_Label(cState, StartLabel)
-	SetLabel(cState, EndLabel)
+	EmitJump_Label(Compiler, StartLabel)
+	SetLabel(Compiler, EndLabel)
 	
-	ExitLoop(cState, LoopState)
-	cState->ScopedTryDepth := TryDepth
+	ExitLoop(Compiler, LooParser)
+	Compiler->ScopedTryDepth := TryDepth
 }
 
-define void CompileGetStorageValue(CompilerState* cState, ASTNode* ValueToGet) { 
+define void CompileGetStorageValue(CompilerState* Compiler, ASTNode* ValueToGet) { 
 	
 	
 }
-define void CompileSetStorageValue(CompilerState* cState, ASTNode* ValueToSet, i8 RegisterToSetTo) {
-	
-}
-
-define void CompileGetStorageValuePointer(CompilerState* cState, ASTNode* ValueToGet) {
+define void CompileSetStorageValue(CompilerState* Compiler, ASTNode* ValueToSet, i8 RegisterToSetTo) {
 	
 }
 
+define void CompileGetStorageValuePointer(CompilerState* Compiler, ASTNode* ValueToGet) {
+	
+}
 
-define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode* ExpressionToCompile) {
+
+define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
@@ -1202,7 +1202,7 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 		i64 IntegerValue := ExpressionToCompile->IntegerValue
 		
 		if (IntegerValue = 0) {
-			EmitXor_RX_RX(cState, ResultRegister, ResultRegister, 4)
+			EmitXor_RX_RX(Compiler, ResultRegister, ResultRegister, 4)
 		}
 		else {
 			i8 IntegerSize := GetNumberSize(IntegerValue)
@@ -1211,49 +1211,49 @@ define void CompileExpression(CompilerState* cState, i8 ResultRegister, ASTNode*
 				ResultSize := 4
 			}
 			
-			EmitMove_RX_IX(cState, ResultRegister, IntegerValue, ResultSize)
+			EmitMove_RX_IX(Compiler, ResultRegister, IntegerValue, ResultSize)
 		}
 	}
 	else if (ExpressionType = NODE_TYPE_ZERO) {
-		EmitXor_RX_RX(cState, ResultRegister, ResultRegister, 4)
+		EmitXor_RX_RX(Compiler, ResultRegister, ResultRegister, 4)
 	}
 	else if (ExpressionType = NODE_TYPE_VARIABLE) {
 		VariableInfo* TargetVariable := ExpressionToCompile->VariableValue
 		
-		CompileGetVariableValue(cState, ResultRegister, TargetVariable)
+		CompileGetVariableValue(Compiler, ResultRegister, TargetVariable)
 	}
 	else if (ExpressionType = NODE_TYPE_UNARY) {
 		UnaryExpression* UnaryNode := ExpressionToCompile->UnaryNode
 	
-		CompileUnary(cState, ResultRegister, ResultType, UnaryNode, false)
+		CompileUnary(Compiler, ResultRegister, ResultType, UnaryNode, false)
 	}
 	else if (ExpressionType = NODE_TYPE_BINARY) {
 		/* Calls into CompileBinary with the correct parameters extracted from ExpressionToCompile */
 		
 		BinaryExpression* BinaryNode := ExpressionToCompile->BinaryNode
 		
-		CompileBinary(cState, ResultRegister, ResultType, BinaryNode, false)
+		CompileBinary(Compiler, ResultRegister, ResultType, BinaryNode, false)
 	}
 	else if (ExpressionType = NODE_TYPE_STRUCT_ACCESS) {
 		StructAccessExpression* AccessNode := ExpressionToCompile->AccessNode
 		
-		CompileGetStructAccess(cState, ResultRegister, AccessNode)
+		CompileGetStructAccess(Compiler, ResultRegister, AccessNode)
 	}
 	else if (ExpressionType = NODE_TYPE_CALL) {
-		CompileCall(cState, ResultRegister, ExpressionToCompile)
+		CompileCall(Compiler, ResultRegister, ExpressionToCompile)
 	}
 	else if (ExpressionType = NODE_TYPE_STRING) {		
-		EmitLea_R64_Label(cState, ResultRegister, cState->CurrentFunctionStringsLabel)
-		OffsetLabel(cState, ExpressionToCompile->StringOffsetValue)
+		EmitLea_R64_Label(Compiler, ResultRegister, Compiler->CurrentFunctionStringsLabel)
+		OffsetLabel(Compiler, ExpressionToCompile->StringOffsetValue)
 	}
 	else if (ExpressionType = NODE_TYPE_GET_TYPE_SIZE) {
 		i32 OperandTypeSize := GetTypeStorageSize(ExpressionToCompile->TypeValue)
 		
-		EmitMove_RX_IX(cState, ResultRegister, OperandTypeSize, 4)
+		EmitMove_RX_IX(Compiler, ResultRegister, OperandTypeSize, 4)
 	}
 }
 
-define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node) {
+define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
@@ -1264,11 +1264,11 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 		/* Dummy branch to stop TargetFunction (a null pointer for `syscall(X, ...)`) from being accessed */
 	}
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
-		EmitInt3(cState)
+		EmitInt3(Compiler)
 		
 		return 0
 	}
-	else if (cState->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
+	else if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
 		ASTError(Node, "Calls to DllImported functions are not allowed when the target output format is not PE.")
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
@@ -1280,16 +1280,16 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	i8 ExtraPadding := false
 	i8 HasSavedRAX := false
 	
-	if (cState->NoClobberA && ResultRegister != RAX) {
-		EmitPush_R64(cState, RAX)
+	if (Compiler->NoClobberA && ResultRegister != RAX) {
+		EmitPush_R64(Compiler, RAX)
 		HasSavedRAX := true
 		
-		cState->NoClobberA := false
+		Compiler->NoClobberA := false
 	}
 	
 	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
 	
-	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (cState->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
+	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (Compiler->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
 	
 	i8 REGISTER_PARAMETER_COUNT := 4
 	
@@ -1301,31 +1301,31 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 		StackParameterCount := ParameterCount - REGISTER_PARAMETER_COUNT
 	}
 	
-	i8 RegisterStackIndex := cState->RegisterStackIndex
+	i8 RegisterStackIndex := Compiler->RegisterStackIndex
 	i8 StackIsAligned := RegisterStackIndex >= 8 && (RegisterStackIndex % 2 != 0)
 	
 	if (StackParameterCount % 2 || StackIsAligned && !HasSavedRAX) {
-		EmitPush_R64(cState, RBX)
+		EmitPush_R64(Compiler, RBX)
 		ExtraPadding := true
 	}
 	
-	cState->RegisterStackIndex := 3
+	Compiler->RegisterStackIndex := 3
 	
-	i8 OldNoClobberCD89 := cState->NoClobberCD89
-	cState->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
+	i8 OldNoClobberCD89 := Compiler->NoClobberCD89
+	Compiler->NoClobberCD89 := true /* Ensure none of the parameter registers are used for another operation without being saved */
 	
-	i32 OldMaxSave := cState->ParameterRegistersMaxSave
-	i32 OldMinSave := cState->ParameterRegistersMinSave
+	i32 OldMaxSave := Compiler->ParameterRegistersMaxSave
+	i32 OldMinSave := Compiler->ParameterRegistersMinSave
 	i8 ShouldSaveRegisters := OldMaxSave != OldMinSave
 	
 	if (ShouldSaveRegisters) {
 		for (i32 SaveIndex := OldMinSave, SaveIndex < OldMaxSave, SaveIndex += 1) {
-			EmitPush_R64(cState, GetSystemVRegister(SaveIndex))
+			EmitPush_R64(Compiler, GetSystemVRegister(SaveIndex))
 		}
 	}
 	
 	i32 RegisterParameterCount := ParameterCount - StackParameterCount
-	cState->ParameterRegistersMaxSave := RegisterParameterCount
+	Compiler->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
 	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attribute = OPERATOR_DOT)
@@ -1340,20 +1340,20 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
 				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
 				
-				CompileExpression(cState, RBX, NextVariadic)
+				CompileExpression(Compiler, RBX, NextVariadic)
 				
 				i16 NextVariadicSize := GetTypeSize(NextVariadic->ValueType)
 				
 				if (NextVariadicSize <= 4) {
 					/* Any parameter which is smaller than 4 bytes will not 0 the upper 32 bits of a register, so we manually cast them up */
-					Cast(cState, RBX, NextVariadicSize As i8)
+					Cast(Compiler, RBX, NextVariadicSize As i8)
 				}
 				
-				EmitPush_R64(cState, RBX)
+				EmitPush_R64(Compiler, RBX)
 			}
 			
-			EmitMove_R32_I32(cState, RBX, VariadicCount)
-			EmitPush_R64(cState, RBX)
+			EmitMove_R32_I32(Compiler, RBX, VariadicCount)
+			EmitPush_R64(Compiler, RBX)
 		}
 		
 		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
@@ -1386,8 +1386,8 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 				else if (ParameterIndex = 0) {ThisParameterRegister := RCX}
 			}
 			
-			cState->ParameterRegistersMinSave := ParameterIndex + 1
-			CompileExpression(cState, ThisParameterRegister, NextParameterValue)
+			Compiler->ParameterRegistersMinSave := ParameterIndex + 1
+			CompileExpression(Compiler, ThisParameterRegister, NextParameterValue)
 			
 			i16 ActualSize := GetTypeSize(NextParameterValue->ValueType)
 			
@@ -1400,35 +1400,35 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 			}
 			
 			if (ActualSize < ExpectedSize) {
-				Cast(cState, ThisParameterRegister, ActualSize As i8)
+				Cast(Compiler, ThisParameterRegister, ActualSize As i8)
 			}
 			
 			if (ParameterIndex >= REGISTER_PARAMETER_COUNT) {
-				EmitPush_R64(cState, ThisParameterRegister)
+				EmitPush_R64(Compiler, ThisParameterRegister)
 			}
 		}
 		
 		if (IS_VARIADIC) {			
 			i8 VariadicRegister := GetSystemVRegister(VariadicBase)
 			
-			EmitLea_R64_SIB(cState, VariadicRegister, 1, RSP, RSP)
+			EmitLea_R64_SIB(Compiler, VariadicRegister, 1, RSP, RSP)
 			
 			VariadicCount += 1
 		}
 	}
 
-	cState->NoClobberCD89 := OldNoClobberCD89
+	Compiler->NoClobberCD89 := OldNoClobberCD89
 	
 	if (IS_SYSCALL) {
-		EmitSysCall(cState)
+		EmitSysCall(Compiler)
 	}
 	else if (USE_SYSTEMV || !TargetFunction->IsImported) {
-		EmitCall_Label(cState, TargetFunction->LabelNumber)
+		EmitCall_Label(Compiler, TargetFunction->LabelNumber)
 	}
 	else {
-		EmitSub_R64_I8(cState, RSP, 0x20) /* Shadown space */
-		EmitCall_Label(cState, TargetFunction->LabelNumber)
-		EmitAdd_R64_I8(cState, RSP, 0x20)
+		EmitSub_R64_I8(Compiler, RSP, 0x20) /* Shadown space */
+		EmitCall_Label(Compiler, TargetFunction->LabelNumber)
+		EmitAdd_R64_I8(Compiler, RSP, 0x20)
 	}
 	
 	i32 StackAdd := StackParameterCount
@@ -1438,67 +1438,67 @@ define void CompileCall(CompilerState* cState, i8 ResultRegister, ASTNode* Node)
 	}
 	
 	if (StackAdd) {
-		EmitAdd_R64_I32(cState, RSP, StackAdd * 8)
+		EmitAdd_R64_I32(Compiler, RSP, StackAdd * 8)
 	}
 	
 	if (ShouldSaveRegisters) {
 		for (SaveIndex := OldMaxSave, SaveIndex > OldMinSave, SaveIndex -= 1) {
-			EmitPop_R64(cState, GetSystemVRegister(SaveIndex - 1))
+			EmitPop_R64(Compiler, GetSystemVRegister(SaveIndex - 1))
 		}
 	}
 	
-	cState->ParameterRegistersMaxSave := OldMaxSave
-	cState->ParameterRegistersMinSave := OldMinSave
+	Compiler->ParameterRegistersMaxSave := OldMaxSave
+	Compiler->ParameterRegistersMinSave := OldMinSave
 	
 	if (ExtraPadding) {
-		EmitPop_R64(cState, RBX)
+		EmitPop_R64(Compiler, RBX)
 	}
 	
 	if (ResultRegister != RAX) {
-		EmitMove_R64_RX(cState, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType) As i8)
+		EmitMove_R64_RX(Compiler, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType) As i8)
 	}
 	
 	if (HasSavedRAX) {
-		EmitPop_R64(cState, RAX)
-		cState->NoClobberA := true
+		EmitPop_R64(Compiler, RAX)
+		Compiler->NoClobberA := true
 	}
 	
-	cState->RegisterStackIndex := RegisterStackIndex
+	Compiler->RegisterStackIndex := RegisterStackIndex
 }
 
 declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpression*)
 
-define void CompileStructAccessLeft(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+define void CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	ASTNode* Left := TargetAccess->Left
 	
 	if (TargetAccess->Operator->Value = OPERATOR_DOT) {
 		if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			return CompileGetStructAccessPointer(cState, ResultRegister, Left->AccessNode)
+			return CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
 		}
 		else if (Left->NodeType = NODE_TYPE_VARIABLE) {
-			return CompileGetVariableAddress(cState, ResultRegister, Left->VariableValue)
+			return CompileGetVariableAddress(Compiler, ResultRegister, Left->VariableValue)
 		}
 	}
 	
-	CompileExpression(cState, ResultRegister, Left)
+	CompileExpression(Compiler, ResultRegister, Left)
 }
 
-define void CompileGetStructAccessPointer(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+define void CompileGetStructAccessPointer(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
 	i16 TargetFieldSize := GetTypeSize(TargetField->ValueType)
 	
-	CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
+	CompileStructAccessLeft(Compiler, ResultRegister, TargetAccess)
 	
 	i32 FieldOffset := TargetField->Offset
 	
 	if (FieldOffset != 0) {
-		EmitLea_R64_R64_DISPX(cState, ResultRegister, ResultRegister, FieldOffset)
+		EmitLea_R64_R64_DISPX(Compiler, ResultRegister, ResultRegister, FieldOffset)
 	}
 }
 
-define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	if (TargetAccess->Operator->Value = OPERATOR_TILDE_GREATER) {
-		return CompileGetStructAccessPointer(cState, ResultRegister, TargetAccess)
+		return CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
 	}
 	
 	StructField* TargetField := TargetAccess->TargetField
@@ -1507,7 +1507,7 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 	i32 FieldOffset := TargetField->Offset
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		CompileExpression(cState, ResultRegister, TargetAccess->Left)
+		CompileExpression(Compiler, ResultRegister, TargetAccess->Left)
 		
 		TargetFieldSize := FieldOffset
 		
@@ -1519,41 +1519,41 @@ define void CompileGetStructAccess(CompilerState* cState, i8 ResultRegister, Str
 			ShiftRightBy := -ShiftLeftBy
 		}
 		else if (ShiftLeftBy) { 
-			EmitSAL_RX_I8(cState, ResultRegister, ShiftLeftBy, TargetFieldSize)
+			EmitSAL_RX_I8(Compiler, ResultRegister, ShiftLeftBy, TargetFieldSize)
 		}
 		
 		if (ShiftRightBy) {
-			EmitSAR_RX_I8(cState, ResultRegister, ShiftRightBy, TargetFieldSize)
+			EmitSAR_RX_I8(Compiler, ResultRegister, ShiftRightBy, TargetFieldSize)
 		}
 	}
 	else {
-		CompileStructAccessLeft(cState, ResultRegister, TargetAccess)
+		CompileStructAccessLeft(Compiler, ResultRegister, TargetAccess)
 		
 		if (FieldOffset = 0 && ResultRegister != R13) {
-			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, TargetFieldSize)
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, TargetFieldSize)
 		}
 		;else if (FieldOffset >= 112) {
-		;	EmitMove_RX_RIX_DISP32(cState, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
+		;	EmitMove_RX_RIX_DISP32(Compiler, ResultRegister, ResultRegister, FieldOffset, TargetFieldSize)
 		;}
 		else {
-			;EmitMove_RX_RIX_DISP8(cState, ResultRegister, ResultRegister, FieldOffset As i8, TargetFieldSize)
-			EmitMove_RX_RIX_DISPX(cState, ResultRegister, ResultRegister, FieldOffset, !(FieldOffset >= 112), TargetFieldSize) 
+			;EmitMove_RX_RIX_DISP8(Compiler, ResultRegister, ResultRegister, FieldOffset As i8, TargetFieldSize)
+			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, ResultRegister, FieldOffset, !(FieldOffset >= 112), TargetFieldSize) 
 		}
 	}
 }
 
 declare void CompileSetArrayAccess(CompilerState*, i8, ASTNode*, ASTNode*, i8)
 
-define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, StructAccessExpression* TargetAccess) {
+define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
 	
-	i8 ResultPointerRegister := PushRegisterStack(cState)
+	i8 ResultPointerRegister := PushRegisterStack(Compiler)
 	
 	i32 FieldOffset := TargetField->Offset
 	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType)
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		CompileExpression(cState, ResultPointerRegister, TargetAccess->Left)
+		CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
 		
 		TargetFieldSize := TargetField->Offset
 		
@@ -1573,51 +1573,51 @@ define void CompileSetStructAccess(CompilerState* cState, i8 ValueRegister, Stru
 		
 		i64 Mask := ~(PartialMask >> StartIndex << StartIndex)
 		
-		EmitMove_RX_IX(cState, RDI, Mask, TargetFieldSize)
-		EmitAnd_RX_RX(cState, ResultPointerRegister, RDI, TargetFieldSize)
+		EmitMove_RX_IX(Compiler, RDI, Mask, TargetFieldSize)
+		EmitAnd_RX_RX(Compiler, ResultPointerRegister, RDI, TargetFieldSize)
 		
 		if (ShiftLeftBy) { 
-			EmitSAL_RX_I8(cState, ValueRegister, ShiftLeftBy, TargetFieldSize)
+			EmitSAL_RX_I8(Compiler, ValueRegister, ShiftLeftBy, TargetFieldSize)
 		}
 		
-		EmitSAR_RX_I8(cState, ValueRegister, ShiftRightBy, TargetFieldSize)
-		EmitOr_RX_RX(cState, ResultPointerRegister, ValueRegister, TargetFieldSize)
+		EmitSAR_RX_I8(Compiler, ValueRegister, ShiftRightBy, TargetFieldSize)
+		EmitOr_RX_RX(Compiler, ResultPointerRegister, ValueRegister, TargetFieldSize)
 		
 		ASTNode* Left := TargetAccess->Left
 		i8 LeftNodeType := Left->NodeType
 		
 		if (LeftNodeType = NODE_TYPE_VARIABLE) {
-			CompileSetVariableValue(cState, Left->VariableValue, ResultPointerRegister)
+			CompileSetVariableValue(Compiler, Left->VariableValue, ResultPointerRegister)
 		}
 		else if (LeftNodeType = NODE_TYPE_STRUCT_ACCESS) {
-			CompileSetStructAccess(cState, ResultPointerRegister, Left->AccessNode)
+			CompileSetStructAccess(Compiler, ResultPointerRegister, Left->AccessNode)
 		}
 		else if (LeftNodeType = NODE_TYPE_BINARY) {
-			CompileSetArrayAccess(cState, ValueRegister, Left->BinaryNode->Left, Left->BinaryNode->Right, ResultPointerRegister)
+			CompileSetArrayAccess(Compiler, ValueRegister, Left->BinaryNode->Left, Left->BinaryNode->Right, ResultPointerRegister)
 		}
 	}
 	else {
-		CompileStructAccessLeft(cState, ResultPointerRegister, TargetAccess)
+		CompileStructAccessLeft(Compiler, ResultPointerRegister, TargetAccess)
 		
 		i8 TargetSize := GetTypeSize(TargetField->ValueType) As i8
 		
 		if (FieldOffset = 0 && ResultPointerRegister != R13) {
-			EmitMove_RIX_RX(cState, ResultPointerRegister, ValueRegister, TargetSize)
+			EmitMove_RIX_RX(Compiler, ResultPointerRegister, ValueRegister, TargetSize)
 		}
 		else if (FieldOffset >= 112) {
-			EmitMove_RIX_DISP32_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset, TargetSize)
+			EmitMove_RIX_DISP32_RX(Compiler, ResultPointerRegister, ValueRegister, FieldOffset, TargetSize)
 		}
 		else {
-			EmitMove_RIX_DISP8_RX(cState, ResultPointerRegister, ValueRegister, FieldOffset As i8, TargetSize)
+			EmitMove_RIX_DISP8_RX(Compiler, ResultPointerRegister, ValueRegister, FieldOffset As i8, TargetSize)
 		}
 	}
 	
-	PopRegisterStack(cState)
+	PopRegisterStack(Compiler)
 }
 
-define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister, i8 GetAddress) {
+define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister, i8 GetAddress) {
 	i8 PointerRegister := ResultRegister
-	CompileExpression(cState, PointerRegister, Pointer)
+	CompileExpression(Compiler, PointerRegister, Pointer)
 	
 	Type PointerType := Pointer->ValueType
 	
@@ -1641,49 +1641,49 @@ define void CompileArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode
 		}
 		
 		if (IsSet || GetAddress) {
-			EmitLea_R64_R64_DISPX(cState, ResultRegister, PointerRegister, IndexAsDisplacement)
+			EmitLea_R64_R64_DISPX(Compiler, ResultRegister, PointerRegister, IndexAsDisplacement)
 			
 			if (IsSet) {
-				EmitMove_RIX_RX(cState, ResultRegister, ValueRegister, IndexScale)
+				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale)
 			}
 		}
 		else {
-			EmitMove_RX_RIX_DISPX(cState, ResultRegister, PointerRegister, IndexAsDisplacement, DisplacementSize, IndexScale)
+			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, PointerRegister, IndexAsDisplacement, DisplacementSize, IndexScale)
 		}
 	}
 	else {
-		i8 IndexRegister := PushRegisterStack(cState)
-		CompileExpression(cState, IndexRegister, Index)
+		i8 IndexRegister := PushRegisterStack(Compiler)
+		CompileExpression(Compiler, IndexRegister, Index)
 		
 		i8 IndexSize := GetTypeSize(Index->ValueType) As i8
 		
 		if (IndexSize < 4) {
-			Cast(cState, IndexRegister, IndexSize)
+			Cast(Compiler, IndexRegister, IndexSize)
 		}
 		
 		if (IsSet || GetAddress) {
-			EmitLea_R64_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			EmitLea_R64_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
 			
 			if (IsSet) {
-				EmitMove_RIX_RX(cState, ResultRegister, ValueRegister, IndexScale)
+				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale)
 			}
 		}
 		else {
-			EmitMove_RX_SIB(cState, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			EmitMove_RX_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
 		}
 		
-		PopRegisterStack(cState)
+		PopRegisterStack(Compiler)
 	}
 }
 
-define void CompileGetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
-	CompileArrayAccess(cState, ResultRegister, Pointer, Index, -1 As i8, GetAddress)
+define void CompileGetArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 GetAddress) {
+	CompileArrayAccess(Compiler, ResultRegister, Pointer, Index, -1 As i8, GetAddress)
 }
-define void CompileSetArrayAccess(CompilerState* cState, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
-	CompileArrayAccess(cState, ResultRegister, Pointer, Index, ValueRegister, false)
+define void CompileSetArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNode* Pointer, ASTNode* Index, i8 ValueRegister) {
+	CompileArrayAccess(Compiler, ResultRegister, Pointer, Index, ValueRegister, false)
 }
 
-define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type ResultType, UnaryExpression* ExpressionToCompile, i8 DiscardResult) {
+define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, UnaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a unary operator and operand */
 	
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
@@ -1696,135 +1696,135 @@ define void CompileUnary(CompilerState* cState, i8 ResultRegister, Type ResultTy
 		if (OperandType = NODE_TYPE_VARIABLE) {
 			VariableInfo* OperandVariable := Operand->VariableValue
 			
-			CompileGetVariableAddress(cState, ResultRegister, OperandVariable)
+			CompileGetVariableAddress(Compiler, ResultRegister, OperandVariable)
 		}
 		else if (OperandType = NODE_TYPE_STRUCT_ACCESS) {
 			StructAccessExpression* OperandStructAccess := Operand->AccessNode
 			
-			CompileGetStructAccessPointer(cState, ResultRegister, OperandStructAccess)
+			CompileGetStructAccessPointer(Compiler, ResultRegister, OperandStructAccess)
 		}
 		else if (OperandType = NODE_TYPE_BINARY) {
 			BinaryExpression* OperandExpression := Operand->BinaryNode
 			
 			if (OperandExpression->Operator->Value = OPERATOR_OPEN_BRACKET) {
-				CompileGetArrayAccess(cState, ResultRegister, OperandExpression->Left, OperandExpression->Right, true)
+				CompileGetArrayAccess(Compiler, ResultRegister, OperandExpression->Left, OperandExpression->Right, true)
 			}
 		}
 		else if (OperandType = NODE_TYPE_DEFINE) {
 			FunctionDefine* OperandFunction := Operand->DefineNode
 			
-			EmitLea_RAX_Label(cState, OperandFunction->LabelNumber)
-			EmitMove_R64_R64(cState, ResultRegister, RAX)
+			EmitLea_RAX_Label(Compiler, OperandFunction->LabelNumber)
+			EmitMove_R64_R64(Compiler, ResultRegister, RAX)
 		}
 	}
 	else {
 		/* Only compile the operand when the operator isn't `&` (since it doesn't use the operand value) */
-		CompileExpression(cState, ResultRegister, ExpressionToCompile->Operand)
+		CompileExpression(Compiler, ResultRegister, ExpressionToCompile->Operand)
 		
 		if (Operator = OPERATOR_STAR) {
-			EmitMove_RX_RIX(cState, ResultRegister, ResultRegister, ResultSize)
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, ResultSize)
 		}
 		else if (Operator = OPERATOR_MINUS) {
-			EmitNeg_RX(cState, ResultRegister, ResultSize)
+			EmitNeg_RX(Compiler, ResultRegister, ResultSize)
 		}
 		else if (Operator = OPERATOR_TILDE) {
-			EmitNot_RX(cState, ResultRegister, ResultSize)
+			EmitNot_RX(Compiler, ResultRegister, ResultSize)
 		}
 		else if (Operator = OPERATOR_BANG) {
-			EmitTest_RX_RX(cState, ResultRegister, ResultRegister, GetTypeSize(ExpressionToCompile->Operand->ValueType) As i8)
+			EmitTest_RX_RX(Compiler, ResultRegister, ResultRegister, GetTypeSize(ExpressionToCompile->Operand->ValueType) As i8)
 			
 			if !(DiscardResult) {
 				/* If the caller uses the FLAGS register, it doesn't need a 'true' result, and can just use what's in the FLAGS register */
-				EmitSetE_R8(cState, ResultRegister)
+				EmitSetE_R8(Compiler, ResultRegister)
 			}
 		}
 	}
 }
 
-define void CompileBinaryOperator(CompilerState* cState, i8 Operator, i8 ResultSize, i8 LeftRegister, i8 RightRegister) {
+define void CompileBinaryOperator(CompilerState* Compiler, i8 Operator, i8 ResultSize, i8 LeftRegister, i8 RightRegister) {
 	i8 ResultRegister := LeftRegister
 	
 	if (Operator = OPERATOR_PLUS) {
-		EmitAdd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		EmitAdd_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 	}
 	else if (Operator = OPERATOR_MINUS) {
-		EmitSub_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		EmitSub_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 	}
 	else if (Operator = OPERATOR_STAR) {
 		if (ResultSize = 1) {
 			/* Do 8 bit multiplication as 16 bit, and cast the result back down to 8 bits (since there is no imul r8, r8 instruction */
-			EmitIMul_RX_RX(cState, LeftRegister, RightRegister, 2)
-			Cast(cState, LeftRegister, 1)
+			EmitIMul_RX_RX(Compiler, LeftRegister, RightRegister, 2)
+			Cast(Compiler, LeftRegister, 1)
 		}
 		else {	
-			EmitIMul_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+			EmitIMul_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 		}
 	}
 	else if (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT) {
 		if (LeftRegister != RAX) {
-			EmitMove_R64_R64(cState, RBX, RAX)
-			EmitMove_R64_R64(cState, RAX, LeftRegister)
+			EmitMove_R64_R64(Compiler, RBX, RAX)
+			EmitMove_R64_R64(Compiler, RAX, LeftRegister)
 		}
-		if (cState->NoClobberCD89) {
-			EmitPush_R64(cState, RDX)
+		if (Compiler->NoClobberCD89) {
+			EmitPush_R64(Compiler, RDX)
 		}
 		
 		if (ResultSize = 1) {
 			/* Handle 8 bit division through a 16 bit operation, which will have a result casted down 
 				(8 bit IDIV uses AL/AH, which CodeGen isn't set up to encode)
 			*/
-			EmitCXX(cState, 2)
-			EmitIDiv_RAX_RX(cState, RightRegister, 2)
+			EmitCXX(Compiler, 2)
+			EmitIDiv_RAX_RX(Compiler, RightRegister, 2)
 		}
 		else {
-			EmitCXX(cState, ResultSize)
-			EmitIDiv_RAX_RX(cState, RightRegister, ResultSize)
+			EmitCXX(Compiler, ResultSize)
+			EmitIDiv_RAX_RX(Compiler, RightRegister, ResultSize)
 		}
 		
 		if (Operator = OPERATOR_SLASH && ResultRegister != RAX) {
-			EmitMove_RX_RX(cState, ResultRegister, RAX, ResultSize)
+			EmitMove_RX_RX(Compiler, ResultRegister, RAX, ResultSize)
 		}
 		else if (Operator = OPERATOR_PERCENT && ResultRegister != RDX) {
-			EmitMove_RX_RX(cState, ResultRegister, RDX, ResultSize)
+			EmitMove_RX_RX(Compiler, ResultRegister, RDX, ResultSize)
 		}
 		
-		if (cState->NoClobberCD89) {
-			EmitPop_R64(cState, RDX)
+		if (Compiler->NoClobberCD89) {
+			EmitPop_R64(Compiler, RDX)
 		}
 		if (LeftRegister != RAX) {
-			EmitMove_R64_R64(cState, RAX, RBX)
+			EmitMove_R64_R64(Compiler, RAX, RBX)
 		}
 		
 		if (ResultSize = 1) {
-			Cast(cState, ResultRegister, 1)
+			Cast(Compiler, ResultRegister, 1)
 		}
 	}
 	else if (Operator = OPERATOR_EQUAL) {
-		EmitSetE_R8(cState, ResultRegister)
+		EmitSetE_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_BANG_EQUAL) {
-		EmitSetNE_R8(cState, ResultRegister)
+		EmitSetNE_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_LESS) {
-		EmitSetL_R8(cState, ResultRegister)
+		EmitSetL_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_LESS_EQAUL) {
-		EmitSetLE_R8(cState, ResultRegister)
+		EmitSetLE_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_GREATER) {
-		EmitSetG_R8(cState, ResultRegister)
+		EmitSetG_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_GREATER_EQAUL) {
-		EmitSetGE_R8(cState, ResultRegister)
+		EmitSetGE_R8(Compiler, ResultRegister)
 	}
 	else if (Operator = OPERATOR_XOR) {
-		EmitXor_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		EmitXor_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 	}
 	else if (Operator = OPERATOR_AND) {
-		EmitAnd_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		EmitAnd_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 	}
 	else if (Operator = OPERATOR_OR) {
-		EmitOr_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+		EmitOr_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 	}
 }
 
@@ -1836,7 +1836,7 @@ define i8 FindFirstBitSet(i64 Number) asm {
 	ret
 }
 
-define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
+define void CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
 	ASTNode* Left := ExpressionToCompile->Left
@@ -1861,75 +1861,75 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 		BinaryExpression* LeftExpression := Left->BinaryNode
 		UnaryExpression* LeftUnary := Left->UnaryNode
 		
-		i8 WorkRegister := PushRegisterStack(cState)
+		i8 WorkRegister := PushRegisterStack(Compiler)
 		
 		if (Operator = OPERATOR_COLON_EQUAL) {
-			CompileExpression(cState, ResultRegister, Right)
+			CompileExpression(Compiler, ResultRegister, Right)
 			
 			if (RightSize < LeftSize) {
-				Cast(cState, ResultRegister, RightSize)
+				Cast(Compiler, ResultRegister, RightSize)
 			}
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				CompileSetVariableValue(cState, TargetVariable, ResultRegister)
+				CompileSetVariableValue(Compiler, TargetVariable, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
-				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
+				CompileSetStructAccess(Compiler, ResultRegister, LeftAccess)
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
-				CompileSetArrayAccess(cState, RBX, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+				CompileSetArrayAccess(Compiler, RBX, LeftExpression->Left, LeftExpression->Right, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_UNARY) {
-				CompileExpression(cState, WorkRegister, LeftUnary->Operand)
+				CompileExpression(Compiler, WorkRegister, LeftUnary->Operand)
 				
-				EmitMove_RIX_RX(cState, WorkRegister, ResultRegister, ResultSize)
+				EmitMove_RIX_RX(Compiler, WorkRegister, ResultRegister, ResultSize)
 			}
 		}
 		else {				
-			CompileExpression(cState, WorkRegister, Right)
+			CompileExpression(Compiler, WorkRegister, Right)
 			
 			if (RightSize < LeftSize) {
-				Cast(cState, WorkRegister, RightSize)
+				Cast(Compiler, WorkRegister, RightSize)
 			}
 			
 			/* Get old value of left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				i32 Start := cState->Index
-				i32 Offset := GetVariableOffset(cState, TargetVariable, null)
+				i32 Start := Compiler->Index
+				i32 Offset := GetVariableOffset(Compiler, TargetVariable, null)
 				
 				if (Operator = OPERATOR_PLUS_EQUAL) {
-					EmitAdd_RIX_DISPX_RX(cState, RBP, WorkRegister, Offset, ResultSize)
+					EmitAdd_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
 				}
 				else if (Operator = OPERATOR_MINUS_EQUAL) {
-					EmitSub_RIX_DISPX_RX(cState, RBP, WorkRegister, Offset, ResultSize)
+					EmitSub_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
 				}
 				
-				if (cState->Index != Start) {
-					PopRegisterStack(cState)
+				if (Compiler->Index != Start) {
+					PopRegisterStack(Compiler)
 					return 0
 				}
 				
-				CompileGetVariableValue(cState, ResultRegister, TargetVariable)
+				CompileGetVariableValue(Compiler, ResultRegister, TargetVariable)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
-				CompileGetStructAccess(cState, ResultRegister, LeftAccess)
+				CompileGetStructAccess(Compiler, ResultRegister, LeftAccess)
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
-				CompileGetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, false)
+				CompileGetArrayAccess(Compiler, ResultRegister, LeftExpression->Left, LeftExpression->Right, false)
 			}
 			else if (LeftType = NODE_TYPE_UNARY) {
 				; For `*(A) X= (Y)` we save `(A)` in a temp register instead of compiling it twice, since
 				;  that would raise code size, and maybe run code with side effects twice
 				
-				; Since `X=` operators are always along on a line, the register stack should be
+				; Since `X=` operators are always alone on a line, the register stack should be
 				;  totally empty, so there's no harm in using an extra temp anyways
 				
-				i8 DereferenceRegister := PushRegisterStack(cState)
+				i8 DereferenceRegister := PushRegisterStack(Compiler)
 				
-				CompileExpression(cState, DereferenceRegister, LeftUnary->Operand)
+				CompileExpression(Compiler, DereferenceRegister, LeftUnary->Operand)
 				
-				EmitMove_RX_RIX(cState, ResultRegister, DereferenceRegister, ResultSize)
+				EmitMove_RX_RIX(Compiler, ResultRegister, DereferenceRegister, ResultSize)
 			}
 			
 			/* Translate X= operators into just X operators, so CompileBinaryOperator does the correct operation */
@@ -1941,40 +1941,40 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			}
 			
 			/* Do the actual operation */
-			CompileBinaryOperator(cState, Operator, ResultSize, ResultRegister, WorkRegister)
+			CompileBinaryOperator(Compiler, Operator, ResultSize, ResultRegister, WorkRegister)
 			
 			/* Store the new value for each valid left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				CompileSetVariableValue(cState, TargetVariable, ResultRegister)
+				CompileSetVariableValue(Compiler, TargetVariable, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_STRUCT_ACCESS) {
-				CompileSetStructAccess(cState, ResultRegister, LeftAccess)
+				CompileSetStructAccess(Compiler, ResultRegister, LeftAccess)
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
-				CompileSetArrayAccess(cState, WorkRegister, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+				CompileSetArrayAccess(Compiler, WorkRegister, LeftExpression->Left, LeftExpression->Right, ResultRegister)
 			}
 			else if (LeftType = NODE_TYPE_UNARY) {
-				EmitMove_RIX_RX(cState, DereferenceRegister, ResultRegister, ResultSize)
+				EmitMove_RIX_RX(Compiler, DereferenceRegister, ResultRegister, ResultSize)
 				
-				PopRegisterStack(cState)
+				PopRegisterStack(Compiler)
 			}
 		}
 		
-		PopRegisterStack(cState)
+		PopRegisterStack(Compiler)
 	}
 	else if (Operator = OPERATOR_OPEN_BRACKET) {
-		CompileGetArrayAccess(cState, ResultRegister, Left, Right, false)
+		CompileGetArrayAccess(Compiler, ResultRegister, Left, Right, false)
 	}
 	else {
 		/* As long as we're not compiling an assignment, compile the left operand into the result register */
 		
-		CompileExpression(cState, LeftRegister, Left)
+		CompileExpression(Compiler, LeftRegister, Left)
 		
-		i8 OldClobberA := cState->NoClobberA
+		i8 OldClobberA := Compiler->NoClobberA
 		
 		if (LeftRegister = RAX) {
-			cState->NoClobberA := true
+			Compiler->NoClobberA := true
 		}
 		
 		if (Operator = OPERATOR_AS) {
@@ -1984,64 +1984,64 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			if (Left->NodeType != NODE_TYPE_INTEGER) {
 				/* Only emit cast instructions for values which aren't integers, since integer casts are done at compile time */
 				
-				Cast(cState, LeftRegister, GetTypeSize(RightType) As i8)
+				Cast(Compiler, LeftRegister, GetTypeSize(RightType) As i8)
 			}
 		}
 		else if (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_SHORT_CIRCUIT) {
 			if (NodeHasSideEffects(Right)) {
-				i32 End := NextLabel(cState)
+				i32 End := NextLabel(Compiler)
 				
-				EmitTest_RX_RX(cState, LeftRegister, LeftRegister, LeftSize)
+				EmitTest_RX_RX(Compiler, LeftRegister, LeftRegister, LeftSize)
 				
 				if !(DiscardResult) {
-					EmitSetNE_R8(cState, ResultRegister)
+					EmitSetNE_R8(Compiler, ResultRegister)
 				}
 				
 				if (Operator = OPERATOR_LOGICAL_AND) {
-					EmitJEZ_Label(cState, End)
+					EmitJEZ_Label(Compiler, End)
 				}
 				else if (Operator = OPERATOR_LOGICAL_OR) {
-					EmitJNZ_Label(cState, End)
+					EmitJNZ_Label(Compiler, End)
 				}
 				
-				CompileExpression(cState, LeftRegister, Right)
+				CompileExpression(Compiler, LeftRegister, Right)
 				
-				EmitTest_RX_RX(cState, LeftRegister, LeftRegister, RightSize)
+				EmitTest_RX_RX(Compiler, LeftRegister, LeftRegister, RightSize)
 				
 				if !(DiscardResult) {
-					EmitSetNE_R8(cState, ResultRegister)
+					EmitSetNE_R8(Compiler, ResultRegister)
 				}
 				
-				SetLabel(cState, End)
+				SetLabel(Compiler, End)
 			}
 			else {
-				RightRegister := PushRegisterStack(cState)
-				CompileExpression(cState, RightRegister, Right)
+				RightRegister := PushRegisterStack(Compiler)
+				CompileExpression(Compiler, RightRegister, Right)
 				
 				i8 MaxOperandSize := LeftSize
 				
 				if (RightSize > LeftSize) {
 					MaxOperandSize := RightSize
-					Cast(cState, LeftRegister, LeftSize)
+					Cast(Compiler, LeftRegister, LeftSize)
 				}
 				else if (RightSize < LeftSize) {
-					Cast(cState, RightRegister, RightSize)
+					Cast(Compiler, RightRegister, RightSize)
 				}
 				
 				if (Operator = OPERATOR_LOGICAL_AND) {
-					EmitIMul_RX_RX(cState, LeftRegister, RightRegister, MaxOperandSize)
+					EmitIMul_RX_RX(Compiler, LeftRegister, RightRegister, MaxOperandSize)
 				}
 				else if (Operator = OPERATOR_LOGICAL_OR) {
-					EmitAdd_RX_RX(cState, LeftRegister, RightRegister, MaxOperandSize)
+					EmitAdd_RX_RX(Compiler, LeftRegister, RightRegister, MaxOperandSize)
 				}
 				
-				EmitOr_RX_RX(cState, LeftRegister, LeftRegister, MaxOperandSize)
+				EmitOr_RX_RX(Compiler, LeftRegister, LeftRegister, MaxOperandSize)
 				
 				if !(DiscardResult) {
-					EmitSetNE_R8(cState, ResultRegister)
+					EmitSetNE_R8(Compiler, ResultRegister)
 				}
 				
-				PopRegisterStack(cState)
+				PopRegisterStack(Compiler)
 				
 				return 0
 			}
@@ -2049,38 +2049,38 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 		else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
 			if (Right->NodeType = NODE_TYPE_INTEGER) {
 				if (Operator = OPERATOR_LESS_LESS) {
-					EmitSAL_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, ResultSize)
+					EmitSAL_RX_I8(Compiler, LeftRegister, Right->IntegerValue As i8, ResultSize)
 				}
 				else {
-					EmitSAR_RX_I8(cState, LeftRegister, Right->IntegerValue As i8, ResultSize)
+					EmitSAR_RX_I8(Compiler, LeftRegister, Right->IntegerValue As i8, ResultSize)
 				}
 			}
 			else {
 				i8 LeftWasRCX := LeftRegister = RCX
 				
 				if (LeftWasRCX) {
-					LeftRegister := PushRegisterStack(cState)
-					EmitMove_RX_RX(cState, LeftRegister, RCX, ResultSize)
+					LeftRegister := PushRegisterStack(Compiler)
+					EmitMove_RX_RX(Compiler, LeftRegister, RCX, ResultSize)
 				}
-				else if (cState->NoClobberCD89) {
-					EmitPush_R64(cState, RCX)
+				else if (Compiler->NoClobberCD89) {
+					EmitPush_R64(Compiler, RCX)
 				}
 				
-				CompileExpression(cState, RCX, Right)
+				CompileExpression(Compiler, RCX, Right)
 				
 				if (Operator = OPERATOR_LESS_LESS) {
-					EmitSHL_RX_CL(cState, LeftRegister, ResultSize)
+					EmitSHL_RX_CL(Compiler, LeftRegister, ResultSize)
 				}
 				else if (Operator = OPERATOR_GREATER_GREATER) {
-					EmitSHR_RX_CL(cState, LeftRegister, ResultSize)
+					EmitSHR_RX_CL(Compiler, LeftRegister, ResultSize)
 				}
 				
 				if (LeftWasRCX) {
-					EmitMove_RX_RX(cState, RCX, LeftRegister, ResultSize)
-					PopRegisterStack(cState)
+					EmitMove_RX_RX(Compiler, RCX, LeftRegister, ResultSize)
+					PopRegisterStack(Compiler)
 				}
-				else if (cState->NoClobberCD89) {
-					EmitPop_R64(cState, RCX)
+				else if (Compiler->NoClobberCD89) {
+					EmitPop_R64(Compiler, RCX)
 				}
 			}
 		}
@@ -2088,31 +2088,31 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			i8 IsComparison := IsComparison(ExpressionToCompile->Operator)
 			
 			if (IsComparison) {
-				Type TrueResultType := GetBinaryResultType(cState->pState, Left->ValueType, Right->ValueType, null)
+				Type TrueResultType := GetBinaryResultType(Compiler->Parser, Left->ValueType, Right->ValueType, null)
 				
 				ResultSize := GetTypeSize(TrueResultType)
 			}
 			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */
 			if (LeftSize < ResultSize) {
-				Cast(cState, LeftRegister, LeftSize)
+				Cast(Compiler, LeftRegister, LeftSize)
 			}
 			
 			i8 IsDivision := (Operator = OPERATOR_SLASH || Operator = OPERATOR_PERCENT)
 			
 			if (IsDivision && Right->NodeType = NODE_TYPE_INTEGER && IsPowerOfTwo(Right->IntegerValue)) {
 				if (Operator = OPERATOR_SLASH) {
-					EmitSAR_RX_I8(cState, LeftRegister, FindFirstBitSet(Right->IntegerValue), LeftSize)
+					EmitSAR_RX_I8(Compiler, LeftRegister, FindFirstBitSet(Right->IntegerValue), LeftSize)
 				}
 				else {
 					i64 Mask := Right->IntegerValue - 1
 					
 					if (LeftSize <= 4) {
-						EmitAnd_RX_IX(cState, LeftRegister, Mask As i32, LeftSize)
+						EmitAnd_RX_IX(Compiler, LeftRegister, Mask As i32, LeftSize)
 					}
 					else {
-						EmitMove_R64_I64(cState, RBX, Mask)
-						EmitAnd_RX_RX(cState, LeftRegister, RBX, 8)
+						EmitMove_R64_I64(Compiler, RBX, Mask)
+						EmitAnd_RX_RX(Compiler, LeftRegister, RBX, 8)
 					}
 				}
 				
@@ -2134,32 +2134,32 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 					/* There are no imm64 encodings, only imm8 and imm32 */
 					
 					if (Operator = OPERATOR_PLUS) {
-						EmitAdd_R64_IX(cState, ResultRegister, RightInteger As i32)
+						EmitAdd_R64_IX(Compiler, ResultRegister, RightInteger As i32)
 					}
 					else if (Operator = OPERATOR_MINUS) {
-						EmitSub_R64_IX(cState, ResultRegister, RightInteger As i32)
+						EmitSub_R64_IX(Compiler, ResultRegister, RightInteger As i32)
 					}
 					
 					/* When we optimized this expression, we need to return early to skip it being
 						compiled like normal
 					*/
 					
-					cState->NoClobberA := OldClobberA
+					Compiler->NoClobberA := OldClobberA
 					return 0
 				}
 			}
 			
 			/* Allocate a new register for the right operand */
 			
-			RightRegister := PushRegisterStack(cState)
-			CompileExpression(cState, RightRegister, Right)
+			RightRegister := PushRegisterStack(Compiler)
+			CompileExpression(Compiler, RightRegister, Right)
 			
 			if (RightSize < ResultSize) {
-				Cast(cState, RightRegister, RightSize)
+				Cast(Compiler, RightRegister, RightSize)
 			}
 			
 			if (IsComparison) {
-				EmitCmp_RX_RX(cState, LeftRegister, RightRegister, ResultSize)
+				EmitCmp_RX_RX(Compiler, LeftRegister, RightRegister, ResultSize)
 			}
 			
 			/* Also uses uses the correct instruction for two ResultType sized operands (casting should be done this is called) */
@@ -2172,76 +2172,76 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 				*/
 			}
 			else {
-				CompileBinaryOperator(cState, Operator, ResultSize, LeftRegister, RightRegister)
+				CompileBinaryOperator(Compiler, Operator, ResultSize, LeftRegister, RightRegister)
 			}
 			
-			PopRegisterStack(cState) /* Pop the right register */
+			PopRegisterStack(Compiler) /* Pop the right register */
 		}
 		
-		cState->NoClobberA := OldClobberA
+		Compiler->NoClobberA := OldClobberA
 	}
 }
 
-define void CompileUnwindTry(CompilerState* cState, i8 ForReturn) {
+define void CompileUnwindTry(CompilerState* Compiler, i8 ForReturn) {
 	; Ensures that the current function's stack frame is restored
 	; 	For `return`, this means all `Try` stack frame modifications 
 	; 	For `continue`/`break`, this means only `Try` stack frame modifications inside of the current loop
 	
-	i32 Total := cState->ScopedTryDepth
+	i32 Total := Compiler->ScopedTryDepth
 	
 	if (ForReturn) {
-		Total := cState->TotalTryDepth
+		Total := Compiler->TotalTryDepth
 	}
 	
 	for (i32 Index := 0, Index < Total, Index += 1) {
-		EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
-		EmitPop_R64_DISP8(cState, RBP, 8)
+		EmitPop_R64_DISP8(Compiler, RBP, 0)	; Restore saved stack frame
+		EmitPop_R64_DISP8(Compiler, RBP, 8)
 	}
 }
 
-define void CompileTry(CompilerState* cState, TryCatch* TryToCompile) {
-	i32 AfterCatchLabel := NextLabel(cState)
-	i32 TryEndLabel := NextLabel(cState)
+define void CompileTry(CompilerState* Compiler, TryCatch* TryToCompile) {
+	i32 AfterCatchLabel := NextLabel(Compiler)
+	i32 TryEndLabel := NextLabel(Compiler)
 	
 	; try {
-	EmitPush_R64_DISP8(cState, RBP, 8) ; Save the old stack frame
-	EmitPush_R64_DISP8(cState, RBP, 0)
+	EmitPush_R64_DISP8(Compiler, RBP, 8) ; Save the old stack frame
+	EmitPush_R64_DISP8(Compiler, RBP, 0)
 	
-	EmitMove_R64_R64(cState, RBX, RSP)		; Save (RSP | Magic) into stack frame
-	EmitAdd_R64_I8(cState, RBX, 1)
-	EmitMove_RIX_DISP8_RX(cState, RBP, RBX, 0, 8)
+	EmitMove_R64_R64(Compiler, RBX, RSP)		; Save (RSP | Magic) into stack frame
+	EmitAdd_R64_I8(Compiler, RBX, 1)
+	EmitMove_RIX_DISP8_RX(Compiler, RBP, RBX, 0, 8)
 	
-	EmitLea_R64_Label(cState, RBX, TryEndLabel)		; Save (CatchLocation) into stack frame
-	EmitMove_RIX_DISP8_RX(cState, RBP, RBX, 8, 8)
+	EmitLea_R64_Label(Compiler, RBX, TryEndLabel)		; Save (CatchLocation) into stack frame
+	EmitMove_RIX_DISP8_RX(Compiler, RBP, RBX, 8, 8)
 	
-	cState->TotalTryDepth += 1
-	cState->ScopedTryDepth += 1
-	CompileBlock(cState, TryToCompile->Body)
-	cState->ScopedTryDepth -= 1
-	cState->TotalTryDepth -= 1
+	Compiler->TotalTryDepth += 1
+	Compiler->ScopedTryDepth += 1
+	CompileBlock(Compiler, TryToCompile->Body)
+	Compiler->ScopedTryDepth -= 1
+	Compiler->TotalTryDepth -= 1
 	
-	EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
-	EmitPop_R64_DISP8(cState, RBP, 8)
+	EmitPop_R64_DISP8(Compiler, RBP, 0)	; Restore saved stack frame
+	EmitPop_R64_DISP8(Compiler, RBP, 8)
 	; }
 	
 	if (TryToCompile->CatchBody) {
-		EmitJump_Label(cState, AfterCatchLabel)
+		EmitJump_Label(Compiler, AfterCatchLabel)
 	}
 	
 	; catch {
-	SetLabel(cState, TryEndLabel)
+	SetLabel(Compiler, TryEndLabel)
 	
 	if (TryToCompile->CatchBody) {
-		EmitPop_R64_DISP8(cState, RBP, 0)	; Restore saved stack frame
-		EmitPop_R64_DISP8(cState, RBP, 8)
+		EmitPop_R64_DISP8(Compiler, RBP, 0)	; Restore saved stack frame
+		EmitPop_R64_DISP8(Compiler, RBP, 8)
 		
 		if (TryToCompile->CatchCodeVariable) {
-			CompileSetVariableValue(cState, TryToCompile->CatchCodeVariable, RDI)
+			CompileSetVariableValue(Compiler, TryToCompile->CatchCodeVariable, RDI)
 		}
 		
-		CompileBlock(cState, TryToCompile->CatchBody)
+		CompileBlock(Compiler, TryToCompile->CatchBody)
 		
-		SetLabel(cState, AfterCatchLabel)
+		SetLabel(Compiler, AfterCatchLabel)
 	}
 	; }
 }

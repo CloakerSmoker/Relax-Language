@@ -1,20 +1,20 @@
-define void PushIX(CompilerState* cState, i64 Number, i8 Size) {
-	if (Size = 1) {PushByte(cState, Number As i8)}
-	else if (Size = 2) {PushI16(cState, Number As i16)}
-	else if (Size = 4) {PushI32(cState, Number As i32)}
-	else {PushI64(cState, Number)}
+define void PushIX(CompilerState* Compiler, i64 Number, i8 Size) {
+	if (Size = 1) {PushByte(Compiler, Number As i8)}
+	else if (Size = 2) {PushI16(Compiler, Number As i16)}
+	else if (Size = 4) {PushI32(Compiler, Number As i32)}
+	else {PushI64(Compiler, Number)}
 }
-define void PushOpcode(CompilerState* cState, Instruction* I) {
+define void PushOpcode(CompilerState* Compiler, Instruction* I) {
 	if (I->Flags & E_2_BYTE_OPCODE) {
-		PushByte(cState, (I->Opcode >> 8) & 0xFF As i16)
-		PushByte(cState, I->Opcode & 0xFF As i16)
+		PushByte(Compiler, (I->Opcode >> 8) & 0xFF As i16)
+		PushByte(Compiler, I->Opcode & 0xFF As i16)
 	}
 	else {
-		PushByte(cState, I->Opcode)
+		PushByte(Compiler, I->Opcode)
 	}
 }
 
-define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOperand* ForOperand, InstructionOperand* Other) {
+define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOperand* ForOperand, InstructionOperand* Other) {
 	i8 Mode := 0
 	i8 Reg := 0
 	i8 RM := 0
@@ -99,7 +99,7 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 	else if (OperationSize = 2) {
 		/* 0x66 for 16 bit operations */
 		
-		EmitLegacySizePrefix(cState)
+		EmitLegacySizePrefix(Compiler)
 	}
 	
 	/* Nothing for 32 bit operations, they are default */
@@ -107,30 +107,30 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 	if (OperationSize = 1) {
 		/* For byte operations, emit REX_BASE to ensure sil/dil/spl/bpl can be accessed, and not ah/bh/dh/ch */
 		
-		PushByte(cState, REX | REX_BASE)
+		PushByte(Compiler, REX | REX_BASE)
 	}
 	else if (REX != REX_BASE) {
-		PushByte(cState, REX)
+		PushByte(Compiler, REX)
 	}
 	
 	if (OperationSize = 1 && !(I->Flags & E_BYTE_OPCODE_N1)) {
-		PushByte(cState, (I->Opcode - 1) As i16)
+		PushByte(Compiler, (I->Opcode - 1) As i16)
 	}
 	else {
-		PushOpcode(cState, I)
+		PushOpcode(Compiler, I)
 	}
 	
-	EmitModRM(cState, Mode, Reg, RM)
+	EmitModRM(Compiler, Mode, Reg, RM)
 	
 	if (RM = 4 && SIB != 0) {
-		PushByte(cState, SIB)
+		PushByte(Compiler, SIB)
 	}
 	
 	if (DispSize = 1) {
-		PushByte(cState, DispValue As i8)
+		PushByte(Compiler, DispValue As i8)
 	}
 	else if (DispSize = 4) {
-		PushI32(cState, DispValue)
+		PushI32(Compiler, DispValue)
 	}
 	
 	
@@ -141,14 +141,14 @@ define void EmitAssembly(CompilerState* cState, Instruction* I, InstructionOpera
 			OperationSize := 4
 		}
 		
-		PushIX(cState, Other->IntegerValue, OperationSize)
+		PushIX(Compiler, Other->IntegerValue, OperationSize)
 	}
 	else {
 		if (I->Flags & E_IMM8) {
-			PushByte(cState, Other->IntegerValue As i8)
+			PushByte(Compiler, Other->IntegerValue As i8)
 		}
 		else if (I->Flags & E_IMM32) {
-			PushI32(cState, Other->IntegerValue As i32)
+			PushI32(Compiler, Other->IntegerValue As i32)
 		}
 	}
 }
@@ -159,9 +159,9 @@ define void ResolveOperandFunctionReference(InstructionOperand* Operand) {
 	}
 }
 
-define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile) {
+define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompile) {
 	if (ToCompile->Type = INSTRUCTION_LABEL) {
-		SetLabel(cState, ToCompile->LabelNumber)
+		SetLabel(Compiler, ToCompile->LabelNumber)
 		return 0
 	}
 	
@@ -188,47 +188,47 @@ define void CompileInstruction(CompilerState* cState, InstructionNode* ToCompile
 	i8 REX := REX_BASE | REX_W
 	
 	if (MemoryOperand) {
-		EmitAssembly(cState, Base, MemoryOperand, OtherOperand)
+		EmitAssembly(Compiler, Base, MemoryOperand, OtherOperand)
 	}
 	else {		
 		if (Base->Flags & E_LABEL) {
 			if (Base->Flags & E_REX_W) {
-				PushByte(cState, REX)
+				PushByte(Compiler, REX)
 			}
 			
-			PushOpcode(cState, Base)
-			UseLabel(cState, OperandOne->LabelNumber)
+			PushOpcode(Compiler, Base)
+			UseLabel(Compiler, OperandOne->LabelNumber)
 		}
 		else if (Base->Flags & E_REG_IN_OPCODE) {
 			i8 TargetRegister := OperandOne->RegisterNumber
 			
-			PushByte(cState, REX)
-			PushByte(cState, Base->Opcode + ClampRegisterNumber(TargetRegister))
+			PushByte(Compiler, REX)
+			PushByte(Compiler, Base->Opcode + ClampRegisterNumber(TargetRegister))
 			
 			if (Base->Flags & E_IMM8) {
-				PushByte(cState, OperandTwo->IntegerValue As i8)
+				PushByte(Compiler, OperandTwo->IntegerValue As i8)
 			}
 			else if (Base->Flags & E_IMM32) {
-				PushI32(cState, OperandTwo->IntegerValue As i32)
+				PushI32(Compiler, OperandTwo->IntegerValue As i32)
 			}
 			else if (Base->Flags & E_IMM64) {
-				PushI64(cState, OperandTwo->IntegerValue)
+				PushI64(Compiler, OperandTwo->IntegerValue)
 			}
 		}
 		else {
 			if (Base->Flags & E_NEEDS_66) {
-				PushByte(cState, 0x66)
+				PushByte(Compiler, 0x66)
 			}
 			if (Base->Flags & E_REX_W) {
-				PushByte(cState, REX)
+				PushByte(Compiler, REX)
 			}
 			
-			PushOpcode(cState, Base)
+			PushOpcode(Compiler, Base)
 		}
 	}
 }
 
-define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
+define void CompileAssembly(CompilerState* Compiler, AssemblyBlock* ToCompile) {
 	; Since there's 16 different registers you could assign, we just reserve 16 ASTNode* inside of the
 	;  AssemblyBlock struct, which is fine since only like 10 will ever be allocated
 	for (i8 RegisterValueIndex := 0, RegisterValueIndex < 16, RegisterValueIndex += 1) {
@@ -240,8 +240,8 @@ define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
 			;  compiled a value for, the safest bet is to just push the value on the stack
 			;   and pop them into the actual registers after we know the registers can't get
 			;    clobbered anymore.
-			CompileExpression(cState, RAX, ThisRegisterValue)
-			EmitPush_R64(cState, RAX)
+			CompileExpression(Compiler, RAX, ThisRegisterValue)
+			EmitPush_R64(Compiler, RAX)
 		}
 	}
 	
@@ -252,17 +252,17 @@ define void CompileAssembly(CompilerState* cState, AssemblyBlock* ToCompile) {
 		if (ThisRegisterValue != null) {
 			; Pop the register values into the target registers in reverse order, since they are pushed
 			;  in order
-			EmitPop_R64(cState, RegisterValueIndex)
+			EmitPop_R64(Compiler, RegisterValueIndex)
 		}
 	}
 	
 	for (i32 InstructionIndex := 0, InstructionIndex < ToCompile->InstructionCount, InstructionIndex += 1) {
-		CompileInstruction(cState, ToCompile->Instructions[InstructionIndex])
+		CompileInstruction(Compiler, ToCompile->Instructions[InstructionIndex])
 	}
 	
-	FunctionDefine* CurrentFunction := cState->CurrentFunction
+	FunctionDefine* CurrentFunction := Compiler->CurrentFunction
 	
 	if (CurrentFunction && CurrentFunction->UsesGlobals) {
-		EmitMove_R32_I32(cState, R15, cState->GlobalBase)
+		EmitMove_R32_I32(Compiler, R15, Compiler->GlobalBase)
 	}
 }
