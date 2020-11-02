@@ -298,6 +298,8 @@ struct FunctionDefine {
 	i8 UsesGlobals,
 	i8 IsMethod,
 	
+	i32 CodeOffset,
+	
 	i8 TempValue
 }
 
@@ -1245,7 +1247,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			}
 		}
 	}
-	else if (Operator = OPERATOR_COLON_EQUAL) {
+	else if (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT) {
 		/* If this is an assignment do some extra type checking */
 		
 		if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
@@ -1265,7 +1267,7 @@ define ASTNode* MakeBinary(ParserState* pState, ASTNode* Left, Token* OperatorTo
 			ASTError(Left, "Local structs can't be assigned")
 		}
 		else if !(Left->IsStorageValue) {
-			ASTError(Left, "Left side of ':=' must be a storage value")
+			ASTError(Left, "Left side of assignment operator must be a storage value")
 		}
 		else if (Left->NodeType = NODE_TYPE_UNARY) {
 			; Only true for `*X := Y`, result type is whatever `*X` would be. And thanks to
@@ -3050,6 +3052,38 @@ define ASTNode* ParseExpression(ParserState* pState, i8 Precedence) {
 			/* Else, no special case, just parse and expression at the expected precedence level as the right operand */
 			
 			Operand := ParseExpression(pState, NewPrecedence)
+		}
+		
+		if (Operator = OPERATOR_STAR) {
+			; If we have `(a) * (b) := (c)`, we can safely assume that it was intended as `(a); *(b) := (c)`, 
+			;  since the original version is totally nonsensical 
+			;   (as a multiplication can never result in a storage value)
+			
+			; Note: The ugly freezing/unfreezing here is since `ParserNextMatches` can't check for all
+			;  assignment operators at once.
+			
+			i32 BeforeMaybeAssignment := FreezeParser(pState)
+			Token* MaybeAssignmentOperator := ParserNextToken(pState)
+			
+			if (MaybeAssignmentOperator->Type = TOKEN_TYPE_OPERATOR) {
+				i32 AssignmentOperator := MaybeAssignmentOperator->IntegerValue As i32
+				
+				if (OPERATOR_FIRST_ASSIGNMENT <= AssignmentOperator && AssignmentOperator <= OPERATOR_LAST_ASSIGNMENT) {
+					; We can force the correct interpretation by backtracking to right before the last operator 
+					; (which happens to be the `*`). Then, if we just return `(a)` we leave `*(b) := (c)` 
+					;  to be parsed by the next call to `ParseExpression`, resulting in two 
+					;   seperate expressions which are both semantically and logically correct.
+					
+					; Even better is that the "unfreeze and return" is default behavior for the end of an
+					;  expression so we can just break out of the expression parsing loop
+					
+					break
+				}
+			}
+			
+			; The token after the right side of the `*` was not an assignment operator, continue like normal
+			
+			UnfreezeParser(pState, BeforeMaybeAssignment)
 		}
 		
 		/* Fold the left/operator/right into just the left */

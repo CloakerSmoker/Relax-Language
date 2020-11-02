@@ -25,6 +25,7 @@ struct CompilerState {
 	
 	/* Address (in loaded output file) where globals will live */
 	i32 GlobalBase,
+	i32 CodeBase,
 	
 	/* Buffer containing assembled (but not linked) code */
 	i8* CodeBuffer,
@@ -161,7 +162,7 @@ define void DumpGlobals(CompilerState* cState) {
 	}
 }
 
-define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i32 FunctionOffset, i64 CODE_BASE, i8 IsOverload) {
+define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction, i8 IsOverload) {
 	/* Print a function in the format:
 			Address Of Function - Size of function (Call count of function) Name
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
@@ -173,7 +174,7 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 		Format := "^60%x - %i	(%i)	"
 	}
 	
-	Print(Format, CODE_BASE + FunctionOffset, cState->Index - FunctionOffset, TargetFunction->CallCount)
+	Print(Format, cState->CodeBase + TargetFunction->CodeOffset, cState->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
 	
 	if (TargetFunction->IsMethod) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
@@ -212,17 +213,16 @@ define void PrintFunction(CompilerState* cState, FunctionDefine* TargetFunction,
 	Print("^F0\n")
 }
 
-define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload, i64 CODE_BASE, i32* MainOffset) {
+define void CompileOverload(CompilerState* cState, FunctionDefine* BaseFunction, i8 IsOverload) {
 	/* Compiles either:
 		A single function (BaseFunction)
 		Or an entire linked list of function overloads, starting with BaseFunction
 	*/
 	
 	i32 FunctionOffset := cState->Index
-	i8 Result := false
 	
 	if (BaseFunction->IsImported) {
-		if (Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
+		if (cState->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
 			CompileImportStub(cState, BaseFunction)
 		}
 	}
@@ -237,38 +237,34 @@ define i8 CompileOverload(BuildConfig* Config, CompilerState* cState, FunctionDe
 			FunctionOffset := CompileFunction(cState, BaseFunction, IsMain)
 		}
 		
-		if (IsMain) {
-			/* If we found the main function, let the callee know for linking's sake. */
-			
-			Result := true
-			MainOffset[0] := FunctionOffset
-		}
+		BaseFunction->CodeOffset := FunctionOffset
 	}
 	
-	if (Config->DumpInfo & DUMP_FUNCTIONS) {
+	if (cState->Config->DumpInfo & DUMP_FUNCTIONS) {
 		/* If we're dumping a function in an overload chain, then print it as an overload
 			Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
 			 and still need to print it as an overload
 		*/
 		
-		PrintFunction(cState, BaseFunction, FunctionOffset, CODE_BASE, !!BaseFunction->Next || IsOverload)
+		PrintFunction(cState, BaseFunction, BaseFunction->Next != null || IsOverload)
 	}
 	
-	if (BaseFunction->Next) {
-		/* Recursively compile an entire overload chain */
+	if !(IsOverload) {
+		; If this is the start of an overload chain, then we need to compile any/all functions in the chain
 		
-		Result |= CompileOverload(Config, cState, BaseFunction->Next, true, CODE_BASE, MainOffset)
+		while (BaseFunction->Next) {
+			BaseFunction := BaseFunction->Next
+			
+			CompileOverload(cState, BaseFunction, true)
+		}
 	}
-	
-	return Result
 }
 
-define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, HashMap* Map, i64 CODE_BASE, i32* MainOffset) {
+define void CompileFunctionHashMap(CompilerState* cState, HashMap* Map) {
 	/* Compiles a hashmap containing FunctionDefine*'s as if it were a linear array 
 		Returns true if the main function was found
 	*/
 	
-	i8 Result := false
 	void* Elements := Map->Elements
 	
 	for (i32 ElementIndex := 0, ElementIndex < (Map->BufferMaxCount), ElementIndex += 1) {
@@ -278,15 +274,13 @@ define i8 CompileFunctionHashMap(BuildConfig* Config, CompilerState* cState, Has
 			while (FoundElement) {
 				FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
 				
-				Result |= CompileOverload(Config, cState, NextFunction, false, CODE_BASE, MainOffset)
+				CompileOverload(cState, NextFunction, false)
 				
 				/* Update the current element to be the next element in the linked list */
 				FoundElement := FoundElement->NextElement
 			}
 		}
 	}
-	
-	return Result
 }
 
 define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFilePath) {
@@ -294,42 +288,36 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	EliminateGlobals(pState~>Globals)
 	
 	CompilerState C
+	CompilerState* cState := &C
 	
-	C.Initialize(Config, pState)
-	
-	i64 CODE_BASE := 0x3000
+	cState->Initialize(Config, pState)
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		C.GlobalBase := Config->ImageBase + 0x10
-		
-		CODE_BASE := Config->ImageBase + pState~>Globals->NextOffset + 0x10
+		cState->GlobalBase := Config->ImageBase + 0x10
+		cState->CodeBase := Config->ImageBase + pState~>Globals->NextOffset + 0x10
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		C.ELF := BuildELFBuilder()
+		cState->ELF := BuildELFBuilder()
 		
-		C.GlobalBase := Config->ImageBase + 64 + 0x1000
-		
-		CODE_BASE := pState~>Globals->NextOffset + 564 + 0x2000
+		cState->GlobalBase := Config->ImageBase + 64 + 0x1000
+		cState->CodeBase := pState~>Globals->NextOffset + 564 + 0x2000
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		C.PE := BuildBuilder()
+		cState->PE := BuildBuilder()
 		
-		C.PE->ImportFixupBase := C.CodeBuffer
-		C.PE->PE->ImageBase := Config->ImageBase
+		cState->PE->ImportFixupBase := cState->CodeBuffer
+		cState->PE->PE->ImageBase := Config->ImageBase
 		
-		C.GlobalBase := Config->ImageBase + C.PE->NextRVA
+		cState->GlobalBase := Config->ImageBase + cState->PE->NextRVA
+		cState->CodeBase := 0x3000
 	}
-	
-	CompilerState* cState := &C
 
 	if (Config->DumpInfo & DUMP_GLOBALS) {
 		DumpGlobals(cState)
 	}
 	
-	i32 MainOffset := 0
-	
 	; Compile all global functions
-	i8 FoundMain := CompileFunctionHashMap(Config, cState, pState~>Functions, CODE_BASE, &MainOffset)
+	CompileFunctionHashMap(cState, pState~>Functions)
 	
 	; Loop through each custom type
 	HashMap* Types := pState~>Types
@@ -344,10 +332,10 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 			while (FoundElement) {
 				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
 				
-				/* If the type is a struct compile any methods */
+				/* If the type is a struct then compile any methods it might have */
 				if (NextType->IsStructType) {
-					CompileFunctionHashMap(Config, cState, NextType~>Methods, CODE_BASE, &MainOffset)
-					CompileFunctionHashMap(Config, cState, NextType~>StaticMethods, CODE_BASE, &MainOffset)
+					CompileFunctionHashMap(cState, NextType~>Methods)
+					CompileFunctionHashMap(cState, NextType~>StaticMethods)
 				}
 				
 				FoundElement := FoundElement->NextElement
@@ -355,11 +343,13 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 		}
 	}
 	
-	if !(MainOffset) {
+	if (pState->MainFunction = null) {
 		SwapOutputStream()
-		Print("^50Main function not found, aborting.^F0")
+		Print("^C0Main function not found, aborting.^F0")
 		Exit(1)
 	}
+	
+	i32 MainOffset := pState->MainFunction->CodeOffset
 	
 	ResolveAllLabels(cState)
 	
@@ -383,6 +373,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* pState, i8* OutputFi
 	i32 BytesWritten := 0
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
+		; The "bin" format is pretty much a 64 bit `.com` file. Except it contains an image base
+		
 		i32 CodeBase := pState~>Globals->NextOffset + 0x10
 		i32 FileSize := CodeBase + cState->Index
 		
@@ -1926,6 +1918,19 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			else if (LeftType = NODE_TYPE_BINARY) {
 				CompileGetArrayAccess(cState, ResultRegister, LeftExpression->Left, LeftExpression->Right, false)
 			}
+			else if (LeftType = NODE_TYPE_UNARY) {
+				; For `*(A) X= (Y)` we save `(A)` in a temp register instead of compiling it twice, since
+				;  that would raise code size, and maybe run code with side effects twice
+				
+				; Since `X=` operators are always along on a line, the register stack should be
+				;  totally empty, so there's no harm in using an extra temp anyways
+				
+				i8 DereferenceRegister := PushRegisterStack(cState)
+				
+				CompileExpression(cState, DereferenceRegister, LeftUnary->Operand)
+				
+				EmitMove_RX_RIX(cState, ResultRegister, DereferenceRegister, ResultSize)
+			}
 			
 			/* Translate X= operators into just X operators, so CompileBinaryOperator does the correct operation */
 			if (Operator <= OPERATOR_PERCENT_EQUAL) {	
@@ -1948,6 +1953,11 @@ define void CompileBinary(CompilerState* cState, i8 ResultRegister, Type ResultT
 			}
 			else if (LeftType = NODE_TYPE_BINARY) {
 				CompileSetArrayAccess(cState, WorkRegister, LeftExpression->Left, LeftExpression->Right, ResultRegister)
+			}
+			else if (LeftType = NODE_TYPE_UNARY) {
+				EmitMove_RIX_RX(cState, DereferenceRegister, ResultRegister, ResultSize)
+				
+				PopRegisterStack(cState)
 			}
 		}
 		

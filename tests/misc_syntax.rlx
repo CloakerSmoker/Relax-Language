@@ -93,14 +93,19 @@ define i32 Main() {
 	i32 Result := 0
 	i32* pResult := &Result
 	
+	*pResult := 0xAA
+	
 	if (BestFit || BestFitRating < 200000) {
 		;Print("1")
-		*pResult := 1
+		i32 d := 1
+		*pResult += 0x55
 	}
 	else {
 		;Print("0")
 		*pResult := 0
 	}
+	
+	*pResult &= 1
 	
 	Print("%i", Result)
 	
