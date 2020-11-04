@@ -85,6 +85,25 @@ struct SafeWideString {
 		this->Print()
 		Print("\n")
 	}
+	
+	define i8 Equals(SafeWideString* Other) {
+		
+	}
+	define i8 Equals(i8* Other) {
+		i32 OtherLength := StringLength(Other)
+		
+		if (OtherLength != this->Length) {
+			return false
+		}
+		
+		for (i32 Index := 0, Index < OtherLength, Index += 1) {
+			if (Lower(Other[Index]) != Lower(this->ASCIICharacterAt(Index))) {
+				return false
+			}
+		}
+		
+		return true
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {

@@ -1,7 +1,11 @@
 DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
 DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
 
+#Require "./src/lib/Exception.rlx"
+
 define void Exit(i32 ExitCode) {
+	Throw(ExitCode)
+	
 	windows {
 		TerminateProcess(GetCurrentProcess(), ExitCode)
 	}
@@ -161,7 +165,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	i32 SourceLength := 0
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
 	
-	LexerState* Lexer := NewLexer(Config, AToS(InputFilePath), Source, SourceLength)
+	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
 	
 	ParserState* Parser := ParserStart(Config, Lexer)
 	

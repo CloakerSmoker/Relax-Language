@@ -1,33 +1,18 @@
-struct Token {
-	ErrorContext Context,
+
+DllImport i8 QueryPerformanceCounter(i64*) {Kernel32.dll, QueryPerformanceCounter}
+DllImport i8 QueryPerformanceFrequency(i64*) {Kernel32.dll, QueryPerformanceCounter}
+
+define i64 Time() {
+	i64 _Time := 0
 	
-	union {
-		void* Value,
-		i64 IntegerValue,
-		SafeWideString* StringValue
-	},
+	QueryPerformanceCounter(&_Time)
 	
-	i8 Type
+	return _Time
 }
 
-struct LexerState {
-	BuildConfig* Config,
-	SafeWideString* SourceFilePath,
-	
-	HashMap* IncludedFiles,
-	HashMap Keywords,
-	
-	i16* Source,
-	i32 SourceIndex,
-	i32 SourceLength,
-	
-	Token** Tokens,
-	i32 TokenIndex,
-	i32 MaxTokenIndex,
-	i32 CurrentLineNumber,
-	i16 CurrentLineStart,
-	i32 TokenCapacity
-}
+
+
+; Constants end around line 130
 
 i8 TOKEN_TYPE_EOF := 0
 i8 TOKEN_TYPE_NONE := 100
@@ -154,360 +139,383 @@ i8 KEYWORD_TRY := 18
 i8 KEYWORD_CATCH := 19
 
 i8 KEYWORD_X64 := 20
-
 i8 KEYWORD_STATIC := 21
 
-define LexerState* NewLexer(BuildConfig* Config, SafeWideString* SourceFilePath, HashMap* IncludedFiles, i16* Source, i32 SourceLength) {
-	LexerState* NewState := Alloc(#LexerState) As LexerState*
+struct Token {
+	ErrorContext Context
 	
-	NewState->Config := Config
+	union {
+		void* Value
+		i64 IntegerValue
+		SafeWideString* StringValue
+	}
 	
-	NewState->SourceFilePath := SourceFilePath
+	union {
+		i8 Type
+		i16 Padding
+	}
 	
-	NewState->IncludedFiles := IncludedFiles
-	
-	NewState->Source := Source
-	NewState->SourceLength := SourceLength
-	
-	NewState->Tokens := Alloc(8 * 300) As Token**
-	
-	NewState->SourceIndex := 0
-	NewState->TokenIndex := 0
-	NewState->MaxTokenIndex := 0
-	NewState->CurrentLineNumber := 1
-	
-	HashMap* K := NewState~>Keywords
-	
-	K->Initialize()
-	K->IgnoreCase := true
-	
-	K->Set("declare", 	KEYWORD_DECLARE)
-	K->Set("define", 	KEYWORD_DEFINE)
-	K->Set("dllimport", KEYWORD_DLLIMPORT)
-	K->Set("if", 		KEYWORD_IF)
-	K->Set("else", 		KEYWORD_ELSE)
-	K->Set("for", 		KEYWORD_FOR)
-	K->Set("while",		KEYWORD_WHILE)
-	K->Set("loop", 		KEYWORD_LOOP)
-	K->Set("continue", 	KEYWORD_CONTINUE)
-	K->Set("break", 	KEYWORD_BREAK)
-	K->Set("struct", 	KEYWORD_STRUCT)
-	K->Set("return", 	KEYWORD_RETURN)
-	K->Set("union", 	KEYWORD_UNION)
-	K->Set("bits", 		KEYWORD_BITS)
-	K->Set("unaligned", KEYWORD_UNALIGNED)
-	K->Set("windows", 	KEYWORD_WINDOWS)
-	K->Set("linux", 	KEYWORD_LINUX)
-	K->Set("asm", 		KEYWORD_ASSEMBLY)
-	K->Set("try", 		KEYWORD_TRY)
-	K->Set("catch", 	KEYWORD_CATCH)
-	K->Set("x64", 		KEYWORD_X64)
-	K->Set("static", 	KEYWORD_STATIC)
-	
-	return NewState
-}
-define LexerState* NewLexer(BuildConfig* Config, SafeWideString* SourceFilePath, i16* Source, i32 SourceLength) {
-	return NewLexer(Config, SourceFilePath, NewHashMap(), Source, SourceLength)
+	define void Error(i8* Message) {
+		ContextError(this~>Context, Message)
+	}
 }
 
-define Token* PushToken(LexerState* Lexer, void* Value, i16* Source, i32 PositionInSource, i32 LengthInSource, i8 Type) {
-	/* Ensure the token buffer has space for another token */
+struct LexerState {
+	BuildConfig* Config,
+	SafeWideString* SourceFilePath,
 	
-	if (Lexer->MaxTokenIndex >= Lexer->TokenCapacity) {
-		Lexer->TokenCapacity += 300
+	HashMap* IncludedFiles,
+	HashMap Keywords,
+	
+	union {
+		i16* Source,
+		i16* SourceText
+	}
+	
+	i32 SourceIndex,
+	i32 SourceLength,
+	
+	i32 TokenIndex,
+	i32 MaxTokenIndex,
+	i32 CurrentLineNumber,
+	i16 CurrentLineStart,
+	i32 TokenCapacity
+	
+	LexerState* Parent
+	LexerState* Child
+	
+	union {
+		void* Buffer
+		Token** Tokens
+	}
+	
+	i32 CurrentTokenStart
+	
+	static LexerState* New(BuildConfig* Config, LexerState* Parent, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+		LexerState* this := Alloc(#LexerState)
 		
-		Lexer->Tokens := ReAlloc(Lexer->Tokens, 8 * (Lexer->TokenCapacity)) As Token**
-	}
-	
-	i32 Index := Lexer->MaxTokenIndex
-	
-	Token* OutputToken := Alloc(#Token) As Token*
-	
-	/* Insert the token into the token list */
-	(Lexer->Tokens)[Index] := OutputToken
-	
-	Lexer->MaxTokenIndex += 1
-	
-	/* Populate the token */
-	OutputToken->Type := Type
-	OutputToken->Value := Value
-	
-	OutputToken->Context.SourceFilePath := Lexer->SourceFilePath
-	OutputToken->Context.LineNumber := Lexer->CurrentLineNumber
-	OutputToken->Context.Source := Source
-	OutputToken->Context.PositionInSource := PositionInSource
-	OutputToken->Context.LengthInSource := LengthInSource
-	
-	return OutputToken
-}
-define Token* MakeToken(LexerState* Lexer, i32 PositionInSource, i8 Type, void* Value) {
-	return PushToken(Lexer, Value, Lexer->Source, PositionInSource, (Lexer->SourceIndex) - PositionInSource, Type)
-}
-define Token* MakeToken(LexerState* Lexer, i32 PositionInSource, i8 Type, i64 Value) {
-	return PushToken(Lexer, Value As void*, Lexer->Source, PositionInSource, (Lexer->SourceIndex) - PositionInSource, Type)
-}
-
-define SafeWideString* MakeSafeStringToken(LexerState* Lexer, i32 StartingIndex) {
-	SafeWideString* NewSafeString := AllocateNewSafeString()
-
-	NewSafeString->Length := Lexer->SourceIndex - StartingIndex
-	NewSafeString->Buffer := Lexer->Source + (StartingIndex * 2)
-
-	return NewSafeString
-}
-
-/* Both the Token and ASTNode struct have the same first 2 fields as ErrorContext, making them safe to cast down to
-	ErrorContext for PrintErrorHeader calls.
- */
-
-define void Error(Token* AtToken, i8* Message) {
-	SwapOutputStream()
-	
-	PrettyError(AtToken As ErrorContext*, Message, Red | Bright)
-	Exit(1)
-}
-
-define void TokenError(Token* AtToken, i8* Message) {
-	ContextError(AtToken~>Context, Message)
-}
-
-define i16 PeekNextCharacter(LexerState* Lexer) {
-	return Lower((Lexer->Source)[Lexer->SourceIndex])
-}
-define void Backtrack(LexerState* Lexer) {
-	i16 ThisCharacter := PeekNextCharacter(Lexer)
-	
-	Lexer->SourceIndex -= 1
-	
-	i32 LastCharacter := PeekNextCharacter(Lexer)
-	
-	if (LastCharacter = 10) {
-		Lexer->CurrentLineNumber -= 1
-	}
-}
-define i16 GetNextCharacter(LexerState* Lexer) {
-	i16 NextCharacter := PeekNextCharacter(Lexer)
-	Lexer->SourceIndex += 1
-	
-	if (NextCharacter = 10) {
-		Lexer->CurrentLineNumber += 1
-	}
-	
-	return NextCharacter
-}
-define i16 GetNextCharacterRaw(LexerState* Lexer) {
-	i16 Result := (Lexer->Source)[Lexer->SourceIndex]
-	
-	GetNextCharacter(Lexer)
-	
-	return Result
-}
-define i8 NextCharacterMatches(LexerState* Lexer, i8 CharacterToCheck) {
-	if (PeekNextCharacter(Lexer) = CharacterToCheck) {
-		GetNextCharacter(Lexer)
-		return 1
-	}
-	
-	return 0
-}
-
-define i8 TokenizerAtEnd(LexerState* Lexer) {
-	return (Lexer->SourceIndex) > (Lexer->SourceLength)
-}
-
-define i64 TokenizeNumber(LexerState* Lexer, i8 NextCharacter, i32 StartingIndex, i8* Success) {
-	i64 Base := 10
-	i32 LeadingCharacters := 0
-	
-	if (NextCharacterMatches(Lexer, 'x')) {
-		Base := 16
-		LeadingCharacters := 1
-	}
-	else if (NextCharacterMatches(Lexer, 'b')) {
-		Base := 2
-		LeadingCharacters := 1
-	}
-	
-	;while (IsNumeric(NextCharacter, Base) && !(TokenizerAtEnd(Lexer))) {
-	;	NextCharacter := GetNextCharacter(Lexer)
-	;}
-	
-	loop {
-		NextCharacter := GetNextCharacter(Lexer)
+		this->Config := Config
+		this->Parent := Parent
 		
-		if !(IsNumeric(NextCharacter, Base) || NextCharacter = '_') {
-			Backtrack(Lexer)
-			break
+		this->Source := Source
+		this->SourceLength := SourceLength
+		this->SourceFilePath := SourceFilePath
+		
+		if (Parent = null) {
+			this->IncludedFiles := HashMap:New()
+			
+			this->TokenCapacity := 300
+			this->Buffer := Alloc(this->TokenCapacity * 8)
 		}
-		else if (TokenizerAtEnd(Lexer)) {
-			break
+		else {
+			this->IncludedFiles := Parent->IncludedFiles
+		}
+		
+		this->CurrentLineNumber := 1
+		
+		HashMap* Keywords := this~>Keywords
+	
+		Keywords->Initialize()
+		Keywords->IgnoreCase := true
+		
+		Keywords->Set("declare", 	KEYWORD_DECLARE)
+		Keywords->Set("define", 	KEYWORD_DEFINE)
+		Keywords->Set("dllimport", 	KEYWORD_DLLIMPORT)
+		Keywords->Set("if", 		KEYWORD_IF)
+		Keywords->Set("else", 		KEYWORD_ELSE)
+		Keywords->Set("for", 		KEYWORD_FOR)
+		Keywords->Set("while",		KEYWORD_WHILE)
+		Keywords->Set("loop", 		KEYWORD_LOOP)
+		Keywords->Set("continue", 	KEYWORD_CONTINUE)
+		Keywords->Set("break", 		KEYWORD_BREAK)
+		Keywords->Set("struct", 	KEYWORD_STRUCT)
+		Keywords->Set("return", 	KEYWORD_RETURN)
+		Keywords->Set("union", 		KEYWORD_UNION)
+		Keywords->Set("bits", 		KEYWORD_BITS)
+		Keywords->Set("unaligned", 	KEYWORD_UNALIGNED)
+		Keywords->Set("windows", 	KEYWORD_WINDOWS)
+		Keywords->Set("linux", 		KEYWORD_LINUX)
+		Keywords->Set("asm", 		KEYWORD_ASSEMBLY)
+		Keywords->Set("try", 		KEYWORD_TRY)
+		Keywords->Set("catch", 		KEYWORD_CATCH)
+		Keywords->Set("x64", 		KEYWORD_X64)
+		Keywords->Set("static", 	KEYWORD_STATIC)
+		
+		return this
+	}
+	static LexerState* New(BuildConfig* Config, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+		return LexerState:New(Config, null, Source, SourceLength, SourceFilePath)
+	}
+	static LexerState* New(LexerState* Parent, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+		return LexerState:New(Parent->Config, Parent, Source, SourceLength, SourceFilePath)
+	}
+	
+	define i8 PeekNextCharacter() {
+		return Lower(this->Source[this->SourceIndex]) As i8
+	}
+	define i8 GetNextCharacter() {
+		i8 Result := this->PeekNextCharacter()
+		
+		this->SourceIndex += 1
+		
+		if (Result = 0xA) {
+			this->CurrentLineNumber += 1
+		}
+		
+		return Result
+	}
+	define i8 GetNextCharacterRaw() {
+		i8 Result := this->Source[this->SourceIndex]
+		
+		this->GetNextCharacter()
+		
+		return Result
+	}
+	define void Backtrack() {
+		this->SourceIndex -= 1
+		
+		if (this->PeekNextCharacter() = 0xA) {
+			this->CurrentLineNumber -= 1
 		}
 	}
 	
-	/* Convert the number to string which we can then parse into a number */
-	SafeWideString* ConstantNumberString := MakeSafeStringToken(Lexer, StartingIndex + (Base != 10) * 2)
+	define i8 NextCharacterMatches(i8 TargetCharacter) {
+		if (this->PeekNextCharacter() = TargetCharacter) {
+			this->GetNextCharacter()
+			return true
+		}
+		
+		return false
+	}
+	define i8 AtEnd() {
+		return this->SourceIndex > this->SourceLength
+	}
 	
-	SafeWideString* NumberString := ConstantNumberString->Clone()
+	define void EnsureCapacity(i32 NeededCapacity) {
+		if (this->MaxTokenIndex + NeededCapacity >= this->TokenCapacity) {
+			this->TokenCapacity += 300
+			
+			this->Buffer := ReAlloc(this->Buffer, this->TokenCapacity * 8)
+		}
+	}
+	define Token* GetToken(i32 TokenIndex) {
+		return this->Tokens[TokenIndex]
+	}
 	
-	ConstantNumberString->Free()
-	
-	for (i32 Index := 0, Index < NumberString->Length, Index += 1) {
-		if (NumberString->ASCIICharacterAt(Index) = '_') {
-			NumberString->Remove(Index, 1)
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i32 Length, i16* SourceText, SafeWideString* SourceFilePath) {
+		if (this->Parent != null) {
+			return this->Parent->AppendToken(TokenType, TokenValue, LineNumber, Position, Length, SourceText, SourceFilePath)
+		}
+		else {
+			this->EnsureCapacity(1)
+			
+			Token* NewToken := Alloc(#Token)
+			this->Tokens[this->MaxTokenIndex] := NewToken
+			
+			NewToken->Type := TokenType
+			NewToken->Value := TokenValue
+			
+			ErrorContext* Context := NewToken~>Context
+			
+			Context->SourceFilePath := SourceFilePath
+			Context->Source := SourceText
+			Context->LineNumber := LineNumber
+			Context->PositionInSource := Position
+			Context->LengthInSource := Length
+			
+			this->MaxTokenIndex += 1
+			
+			return NewToken
 		}
 	}
 	
-	i64 Result := WToI(NumberString->Buffer, NumberString->Length, Base, Success)
-	
-	NumberString->Free()
-	
-	return Result
-}
-
-define Token* GetNextToken(LexerState* Lexer) {
-	/* Gathers a single token, and sets/returns CurrentToken */
-	
-	i32 Index := Lexer->TokenIndex
-	Lexer->TokenIndex += 1
-	
-	if (Index < Lexer->MaxTokenIndex) {
-		/* If we already have a token in the token list for this index, return it instead */
-		
-		return Lexer->Tokens[Index]
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position, i32 Length) {
+		return this->AppendToken(TokenType, TokenValue, this->CurrentLineNumber, Position, Length, this->SourceText, this->SourceFilePath)
+	}
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position) {
+		return this->AppendToken(TokenType, TokenValue, Position, this->SourceIndex - Position)
+	}
+	define Token* AppendToken(i8 TokenType, void* TokenValue) {
+		return this->AppendToken(TokenType, TokenValue, this->CurrentTokenStart)
+	}
+	define Token* AppendToken(i8 TokenType, i64 TokenValue) {
+		return this->AppendToken(TokenType, TokenValue As void*, this->CurrentTokenStart)
 	}
 	
-	Token* ErrorToken := 0
+	define Token* AppendOperator(i8 OperatorValue) {
+		return this->AppendToken(TOKEN_TYPE_OPERATOR, OperatorValue)
+	}
+	define Token* AppendPunctuation(i8 PunctuationValue) {
+		return this->AppendToken(TOKEN_TYPE_PUNCTUATION, PunctuationValue)
+	}
 	
-	while !(TokenizerAtEnd(Lexer)) {
-		i32 StartingIndex := Lexer->SourceIndex
-		i16 NextCharacter := GetNextCharacter(Lexer)
-
-		if (PeekNextCharacter(Lexer) = '=') {
-			/* If the next character is '=', check for the X= operators first */
+	define SafeWideString* GetString(i32 StartIndex, i32 EndIndex) {
+		return SafeWideString:New(EndIndex - StartIndex, this->SourceText + StartIndex * 2)
+	}
+	define SafeWideString* GetString(i32 StartIndex) {
+		return this->GetString(StartIndex, this->SourceIndex)
+	}
+	
+	define i64 ProcessNumber(i32 StartIndex) {
+		i64 Base := 10
+		
+		if (this->NextCharacterMatches('x')) {
+			Base := 16
+		}
+		else if (this->NextCharacterMatches('b')) {
+			Base := 2
+		}
+	
+		loop {
+			i8 NextCharacter := this->GetNextCharacter()
 			
-			GetNextCharacter(Lexer)
-			
-			i8 NewType := TOKEN_TYPE_NONE
-			
-			if (NextCharacter = ':') {
-				NewType := OPERATOR_COLON_EQUAL
+			if !(IsNumeric(NextCharacter, Base) || NextCharacter = '_') {
+				this->Backtrack()
+				break
 			}
-			else if (NextCharacter = '+') {
-				NewType := OPERATOR_PLUS_EQUAL
+			else if (this->AtEnd()) {
+				break
 			}
-			else if (NextCharacter = '-') {
-				NewType := OPERATOR_MINUS_EQUAL
-			}
-			else if (NextCharacter = '*') {
-				NewType := OPERATOR_STAR_EQUAL
-			}
-			else if (NextCharacter = '/') {
-				NewType := OPERATOR_SLASH_EQUAL
-			}
-			else if (NextCharacter = '%') {
-				NewType := OPERATOR_PERCENT_EQUAL
-			}
-			else if (NextCharacter = '&') {
-				NewType := OPERATOR_AND_EQUAL
-			}
-			else if (NextCharacter = '|') {
-				NewType := OPERATOR_OR_EQUAL
-			}
-			else if (NextCharacter = '^') {
-				NewType := OPERATOR_XOR_EQUAL
-			}
-			else if (NextCharacter = '<') {
-				NewType := OPERATOR_LESS_EQAUL
-			}
-			else if (NextCharacter = '>') {
-				NewType := OPERATOR_GREATER_EQAUL
-			}
-			else if (NextCharacter = '!') {
-				NewType := OPERATOR_BANG_EQUAL
+		}
+		
+		SafeWideString* RawNumericLiteral := this->GetString(StartIndex + (Base != 10) * 2)
+		
+		SafeWideString* NumericLiteral := RawNumericLiteral->Clone()
+		
+		RawNumericLiteral->Free()
+		
+		for (i32 Index := 0, Index < NumericLiteral->Length, Index += 1) {
+			if (NumericLiteral->ASCIICharacterAt(Index) = '_') {
+				NumericLiteral->Remove(Index, 1)
+			}	
+		}
+		
+		i64 Result := WToI(NumericLiteral->Buffer, NumericLiteral->Length, Base, null)
+		
+		NumericLiteral->Free()
+		
+		return Result
+	}
+	
+	define i8 LookupCompoundAssignment(i8 NextCharacter) {
+		i8 NewType := TOKEN_TYPE_NONE
+		
+		if 		(NextCharacter = ':') 	{NewType := OPERATOR_COLON_EQUAL	}
+		else if (NextCharacter = '+') 	{NewType := OPERATOR_PLUS_EQUAL		}
+		else if (NextCharacter = '-') 	{NewType := OPERATOR_MINUS_EQUAL	}
+		else if (NextCharacter = '*') 	{NewType := OPERATOR_STAR_EQUAL		}
+		else if (NextCharacter = '/') 	{NewType := OPERATOR_SLASH_EQUAL	}
+		else if (NextCharacter = '%') 	{NewType := OPERATOR_PERCENT_EQUAL	}
+		else if (NextCharacter = '&') 	{NewType := OPERATOR_AND_EQUAL		}
+		else if (NextCharacter = '|') 	{NewType := OPERATOR_OR_EQUAL		}
+		else if (NextCharacter = '^') 	{NewType := OPERATOR_XOR_EQUAL		}
+		else if (NextCharacter = '<') 	{NewType := OPERATOR_LESS_EQAUL		}
+		else if (NextCharacter = '>') 	{NewType := OPERATOR_GREATER_EQAUL	}
+		else if (NextCharacter = '!') 	{NewType := OPERATOR_BANG_EQUAL		}
+		
+		return NewType
+	}
+	
+	declare Token* GetNextToken(i8)
+	
+	define Token* GetNextToken() {
+		return this->GetNextToken(1)
+	}
+	
+	define Token* GetNextToken(i8 IsNotReinvoke) {		
+		i32 TokenIndex := this->TokenIndex
+		this->TokenIndex += IsNotReinvoke
+		
+		if (TokenIndex < this->MaxTokenIndex) {
+			return this->GetToken(TokenIndex)
+		}
+		
+		if (this->AtEnd()) {
+			if (this->Parent) {
+				return null
 			}
 			else {
-				/* If we didn't match and X= operator, backtrack and continue like normal */
-				Backtrack(Lexer)
-			}
-			
-			if (NewType != TOKEN_TYPE_NONE) {
-				/* But if we did match an X=, return the matched operator */
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, NewType)
+				return this->AppendToken(TOKEN_TYPE_EOF, null)
 			}
 		}
 		
-		if (NextCharacter = ''') {
-			/* If the next character is an open single quote, then consume a single character as an integer */
+		if (this->Child != null) {
+			Token* Result := this->Child->GetNextToken(false)
 			
-			i64 LiteralValue := 0
-			i8* LiteralValueBytes := (&LiteralValue) As i8*
-			
-			for (i32 LiteralIndex := 0, LiteralIndex < 8, LiteralIndex += 1) {
-				i8 LiteralCharacter := GetNextCharacterRaw(Lexer)				
-				
-				LiteralValueBytes[LiteralIndex] := LiteralCharacter
-				
-				if (PeekNextCharacter(Lexer) = ''') {
-					break
-				}
+			if (Result != null) {
+				return Result
 			}
-			
-			NextCharacter := GetNextCharacter(Lexer)
-			
-			if (NextCharacter != ''') {
-				/* And make sure there's a close single quote */
-				ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-				TokenError(ErrorToken, "Expected close single quote for character constant")
+			else {
+				Free(this->Child)
+				this->Child := null
 			}
-			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_INTEGER, LiteralValue)
 		}
-		else if (NextCharacter = '=') {
+		
+		i32 StartingIndex := this->SourceIndex
+		this->CurrentTokenStart := StartingIndex
+		i8 NextCharacter := this->GetNextCharacter()
+		
+		if (this->NextCharacterMatches('=')) {
+			i8 NewType := this->LookupCompoundAssignment(NextCharacter)
+			
+			if (NewType = TOKEN_TYPE_NONE) {
+				/* If we didn't match and X= operator, backtrack and continue like normal */
+				this->Backtrack()
+			}
+			else {
+				/* But if we did match an X=, return the matched operator */
+				return this->AppendOperator(NewType)
+			}
+		}
+		
+		if (NextCharacter = '=') {
 			/* Manually compare for all of the operators */
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_EQUAL)
+			return this->AppendOperator(OPERATOR_EQUAL)
 		}
 		else if (NextCharacter = '+') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+			return this->AppendOperator(OPERATOR_PLUS)
 		}
 		else if (NextCharacter = '-') {
-			if (NextCharacterMatches(Lexer, '>')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS_GREATER)
+			if (this->NextCharacterMatches('>')) {
+				return this->AppendOperator(OPERATOR_MINUS_GREATER)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+			return this->AppendOperator(OPERATOR_MINUS)
 		}
 		else if (NextCharacter = '~') {
-			if (NextCharacterMatches(Lexer, '>')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE_GREATER)
+			if (this->NextCharacterMatches('>')) {
+				return this->AppendOperator(OPERATOR_TILDE_GREATER)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_TILDE)
+			return this->AppendOperator(OPERATOR_TILDE)
 		}
 		else if (NextCharacter = '*') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)
+			return this->AppendOperator(OPERATOR_STAR)
 		}
 		else if (NextCharacter = ';') {
-			i32 StartingLine := Lexer->CurrentLineNumber
+			i32 StartingLine := this->CurrentLineNumber
 			
-			while (Lexer->CurrentLineNumber = StartingLine && !TokenizerAtEnd(Lexer)) {
-				GetNextCharacter(Lexer)
+			while (this->CurrentLineNumber = StartingLine && !this->AtEnd()) {
+				this->GetNextCharacter()
 			}
+			
+			return this->GetNextToken(false)
 		}
 		else if (NextCharacter = '/') {
-			if (NextCharacterMatches(Lexer, '*')) {
+			if (this->NextCharacterMatches('*')) {
 				i8 Depth := 1
 				
 				loop {
-					NextCharacter := GetNextCharacter(Lexer)
+					NextCharacter := this->GetNextCharacter()
 					
-					if (NextCharacter = '*' && PeekNextCharacter(Lexer) = '/') {
-						GetNextCharacter(Lexer)
+					if (NextCharacter = '*' && this->PeekNextCharacter() = '/') {
+						this->GetNextCharacter()
 						
 						Depth -= 1
 					}
-					else if (NextCharacter = '/' && PeekNextCharacter(Lexer) = '*') {
-						GetNextCharacter(Lexer)
+					else if (NextCharacter = '/' && this->PeekNextCharacter() = '*') {
+						this->GetNextCharacter()
 						
 						Depth += 1
 					}
@@ -516,101 +524,124 @@ define Token* GetNextToken(LexerState* Lexer) {
 						break
 					}
 					
-					if (TokenizerAtEnd(Lexer)) {
-						ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '/')
-						TokenError(ErrorToken, "Expected closing comment character")
+					if (this->AtEnd()) {
+						this->AppendToken(0, null, StartingIndex, 2)->Error("Unclosed block comment")
 					}
 				}
 				
-				continue
+				return this->GetNextToken(false)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_SLASH)
+			return this->AppendOperator(OPERATOR_SLASH)
 		}
 		else if (NextCharacter = '%') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_PERCENT)
+			return this->AppendOperator(OPERATOR_PERCENT)
 		}
 		else if (NextCharacter = '.') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_DOT)
+			return this->AppendOperator(OPERATOR_DOT)
 		}
 		else if (NextCharacter = '<') {
-			if (NextCharacterMatches(Lexer, '<')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS_LESS)
+			if (this->NextCharacterMatches('<')) {
+				return this->AppendOperator(OPERATOR_LESS_LESS)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LESS)
+			return this->AppendOperator(OPERATOR_LESS)
 		}
 		else if (NextCharacter = '>') {
-			if (NextCharacterMatches(Lexer, '>')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER_GREATER)
+			if (this->NextCharacterMatches('>')) {
+				return this->AppendOperator(OPERATOR_GREATER_GREATER)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_GREATER)
+			return this->AppendOperator(OPERATOR_GREATER)
 		}
 		else if (NextCharacter = '^') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_XOR)
+			return this->AppendOperator(OPERATOR_XOR)
 		}
 		else if (NextCharacter = '&') {
-			if (NextCharacterMatches(Lexer, '&')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_AND)
+			if (this->NextCharacterMatches('&')) {
+				return this->AppendOperator(OPERATOR_LOGICAL_AND)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AND)
+			return this->AppendOperator(OPERATOR_AND)
 		}
 		else if (NextCharacter = '|') {
-			if (NextCharacterMatches(Lexer, '|')) {
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_LOGICAL_OR)
+			if (this->NextCharacterMatches('|')) {
+				return this->AppendOperator(OPERATOR_LOGICAL_OR)
 			}
 			
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OR)
+			return this->AppendOperator(OPERATOR_OR)
 		}
 		else if (NextCharacter = '!') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_BANG)
+			return this->AppendOperator(OPERATOR_BANG)
 		}
 		else if (NextCharacter = ':') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+			return this->AppendOperator(OPERATOR_COLON)
 		}
 		else if (NextCharacter = '(') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+			return this->AppendPunctuation(PUNCTUATION_OPEN_PAREN)
 		}
 		else if (NextCharacter = ')') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)
+			return this->AppendPunctuation(PUNCTUATION_CLOSE_PAREN)
 		}
 		else if (NextCharacter = '{') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+			return this->AppendPunctuation(PUNCTUATION_OPEN_BRACE)
 		}
 		else if (NextCharacter = '}') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)
+			return this->AppendPunctuation(PUNCTUATION_CLOSE_BRACE)
 		}
 		else if (NextCharacter = '[') {
-			/* [ Is an operator in order for Array->A.B[Something] to parse correctly */
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
+			; `[` Is an operator in order for `Array->A.B[Something]` to parse correctly, since `[` does have
+			;  precedence and can't be treated as a regular character
+			return this->AppendOperator(OPERATOR_OPEN_BRACKET)
 		}
 		else if (NextCharacter = ']') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)
+			return this->AppendPunctuation(PUNCTUATION_CLOSE_BRACKET)
 		}
 		else if (NextCharacter = ',') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			return this->AppendPunctuation(PUNCTUATION_COMMA)
 		}
 		else if (NextCharacter = '@') {
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)
+			return this->AppendPunctuation(PUNCTUATION_AT)
+		}
+		else if (NextCharacter = ''') {
+			; If the next character is an open single quote, then consume 1-8 characters as a single integer
+			
+			i64 LiteralValue := 0
+			i8* LiteralValueBytes := &LiteralValue As i8*
+			
+			for (i32 LiteralIndex := 0, LiteralIndex < 8, LiteralIndex += 1) {
+				LiteralValueBytes[LiteralIndex] := this->GetNextCharacterRaw()
+				
+				if (this->PeekNextCharacter() = ''' || this->AtEnd()) {
+					break
+				}
+			}
+			
+			NextCharacter := this->GetNextCharacter()
+			
+			if (NextCharacter != ''') {
+				; Make sure there's a closing single quote
+				
+				this->AppendToken(0, null, StartingIndex, 1)->Error("Expected close single quote for character constant")
+			}
+			
+			return this->AppendToken(TOKEN_TYPE_INTEGER, LiteralValue)
 		}
 		else if (NextCharacter = '"') {
-			NextCharacter := 0
-			
-			; When tokenizing a string, first we need to find the bounds of the string
+			; When tokenizing a string, first we need to find the bounds of the string so we can extract it
+			;  from the source, and process any escape sequences
 			
 			i32 Length := 0
 			
-			while !(TokenizerAtEnd(Lexer)) {
-				NextCharacter := GetNextCharacter(Lexer)
+			while !(this->AtEnd()) {
+				NextCharacter := this->GetNextCharacter()
 				
 				Length += 1
 				
 				if (NextCharacter = '\') {
 					; If we find an escaped character, just skip over it
 					
-					GetNextCharacter(Lexer)
+					this->GetNextCharacter()
 					Length += 1
 				}
 				else if (NextCharacter = '"') {
@@ -620,27 +651,26 @@ define Token* GetNextToken(LexerState* Lexer) {
 				}
 			}
 			
-			if (TokenizerAtEnd(Lexer)) {
+			if (this->AtEnd()) {
 				; If we're at EOF, then this string is missing a close quote
 				
-				ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, '"')
-				TokenError(ErrorToken, "Expected close quote before EOF")
+				this->AppendToken(0, null, StartingIndex, 1)->Error("Expected close quote before EOF")
 			}
 			
 			; Allow the `r`, `w`, and `rw` suffixes to mark a string as:
 			;  raw, wide characters, or both
-			i8 SkipEscapes := NextCharacterMatches(Lexer, 'r')
-			i8 WideCharacters := NextCharacterMatches(Lexer, 'w')
+			i8 SkipEscapes := this->NextCharacterMatches('r')
+			i8 WideCharacters := this->NextCharacterMatches('w')
 			
-			; TODO: Add an `l` suffix to get string length instead, maybe
-			
-			; Since `MakeSafeStringToken` returns a sort-of slice out of the original source string
+			; Since `GetString` returns a sort-of slice out of the original source string
 			;  we need to clone it before actually replacing any escape sequences, otherwise
-			;   error printouts would show strings after the are escaped
-			SafeWideString* ConstantStringLiteral := MakeSafeStringToken(Lexer, StartingIndex + 1)
+			;   error printouts would show strings after they are escaped
+			SafeWideString* ConstantStringLiteral := this->GetString(StartingIndex + 1)
 			
-			; Since `Lexer->SourceIndex` is used in `MakeSafeStringToken` to determine the length of the
+			; Since `this->SourceIndex` is used in `GetString` to determine the length of the
 			;  string, we need to correct the length to not include the closing quote, and any suffixes
+			;   (this could have been passed directly to `GetString`, but it would have made the line too long)
+			
 			ConstantStringLiteral->Length -= 1 + SkipEscapes + WideCharacters
 			
 			SafeWideString* StringLiteral := ConstantStringLiteral->Clone()
@@ -650,13 +680,13 @@ define Token* GetNextToken(LexerState* Lexer) {
 			; Only actually replace escape sequences when we're not working with a raw string
 			
 			if !(SkipEscapes) {
-				; Beforehand, we need to use the target output format to decide if `\n` is actually
+				; First, we need to use the target output format to decide if `\n` is actually
 				;  `\r\n` or just `\n`
 				
 				i16 NewLine := 0x0A0D
 				i32 NewLineLength := 2
 				
-				if (Lexer->Config->OutputFormat = OUTPUT_ELF) {
+				if (this->Config->OutputFormat = OUTPUT_ELF) {
 					NewLine := 0x0A
 					NewLineLength := 1
 				}
@@ -692,120 +722,108 @@ define Token* GetNextToken(LexerState* Lexer) {
 			
 			; Return the string as a TOKEN_TYPE_STRING 
 			;  (or TOKEN_TYPE_WIDE_STRING depending on the `w` suffix)
-			return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_STRING + WideCharacters, StringLiteral)
+			return this->AppendToken(TOKEN_TYPE_STRING + WideCharacters, StringLiteral)
 		}
 		else if (IsNumeric(NextCharacter)) {
-			i8 NumberIsValid := false
-			
-			ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_INTEGER, TokenizeNumber(Lexer, NextCharacter As i8, StartingIndex, &NumberIsValid))
-			
-			if !(NumberIsValid) {
-				TokenError(ErrorToken, "Invalid numeric literal")
-			}
-			
-			return ErrorToken
+			return this->AppendToken(TOKEN_TYPE_INTEGER, this->ProcessNumber(StartingIndex))
 		}
 		else if (IsAlpha(NextCharacter) || NextCharacter = '_') {
 			if (NextCharacter = 'a') {
-				if (GetNextCharacter(Lexer) = 's' && IsWhiteSpace(PeekNextCharacter(Lexer))) {
-					return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_AS)
+				if (this->GetNextCharacter() = 's' && IsWhiteSpace(this->PeekNextCharacter())) {
+					return this->AppendOperator(OPERATOR_AS)
 				}
 				
-				Backtrack(Lexer)
+				this->Backtrack()
 			}
 			
-			while (IsAlphaNumeric(NextCharacter)) {
-				if (TokenizerAtEnd(Lexer)) {
-					break
-				}
-				
-				NextCharacter := GetNextCharacter(Lexer)
+			while (IsAlphaNumeric(NextCharacter) && !this->AtEnd()) {
+				NextCharacter := this->GetNextCharacter()
 			}
 			
-			if !(TokenizerAtEnd(Lexer)) {
-				Backtrack(Lexer)
+			if !(this->AtEnd()) {
+				this->Backtrack()
 			}
 			
 			/* Gather all alphanumeric characters in a row */
 			
-			SafeWideString* TokenText := MakeSafeStringToken(Lexer, StartingIndex) As SafeWideString*
+			SafeWideString* TokenText := this->GetString(StartingIndex)
 			
-			HashMapElement* FoundKeyword := Lexer~>Keywords->Get(TokenText)
+			HashMapElement* FoundKeyword := this~>Keywords->Get(TokenText)
 			
 			if (FoundKeyword) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
-				FreeSafeString(TokenText)
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_KEYWORD, FoundKeyword->Value As i8)
+				TokenText->Free()
+				
+				return this->AppendToken(TOKEN_TYPE_KEYWORD, FoundKeyword->Value As i8)
 			}
 			else {
 				/* Otherwise, make an identifier token */
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_IDENTIFIER, TokenText As void*)
+				return this->AppendToken(TOKEN_TYPE_IDENTIFIER, TokenText)
 			}
 		}
 		else if (NextCharacter = '#') {
-			NextCharacter := PeekNextCharacter(Lexer)
+			NextCharacter := this->PeekNextCharacter()
 			
-			while (IsAlphaNumeric(NextCharacter) && (!TokenizerAtEnd(Lexer))) {
-				NextCharacter := GetNextCharacter(Lexer)
+			while (IsAlphaNumeric(NextCharacter) && !this->AtEnd()) {
+				NextCharacter := this->GetNextCharacter()
 			}
 
-			if !(TokenizerAtEnd(Lexer)) {
-				Backtrack(Lexer)
+			if !(this->AtEnd()) {
+				this->Backtrack()
 			}
 			
-			SafeWideString* DirectiveText := MakeSafeStringToken(Lexer, StartingIndex + 1) As SafeWideString*
+			SafeWideString* DirectiveText := this->GetString(StartingIndex + 1)
 			
-			i8 IsRequire := SafeStringEqualsAString(DirectiveText, "require")
+			i8 IsRequire := DirectiveText->Equals("require")
 			
-			if (IsRequire || SafeStringEqualsAString(DirectiveText, "include")) {
-				StartingIndex := Lexer->SourceIndex + 1
+			if (IsRequire || DirectiveText->Equals("include")) {
+				StartingIndex := this->SourceIndex + 1
 				
-				GetNextCharacter(Lexer)
+				this->GetNextCharacter()
 				
-				NextCharacter := PeekNextCharacter(Lexer)
+				NextCharacter := this->PeekNextCharacter()
 				
 				i8 ExpectCloseQuote := false
 				
 				if (NextCharacter = '"') {
-					GetNextCharacter(Lexer)
-					NextCharacter := PeekNextCharacter(Lexer)
+					this->GetNextCharacter()
+					NextCharacter := this->PeekNextCharacter()
 					
 					StartingIndex += ExpectCloseQuote := true
 				}
 				
-				while (IsPath(NextCharacter, ExpectCloseQuote)) {
-					NextCharacter := GetNextCharacter(Lexer)
+				while (IsPath(NextCharacter, ExpectCloseQuote) && !this->AtEnd()) {
+					NextCharacter := this->GetNextCharacter()
 				}
 				
-				if !(TokenizerAtEnd(Lexer)) {
-					Backtrack(Lexer)
+				if !(this->AtEnd()) {
+					this->Backtrack()
 				}
 				
-				SafeWideString* IncludePath := MakeSafeStringToken(Lexer, StartingIndex) As SafeWideString*
+				SafeWideString* IncludePath := this->GetString(StartingIndex)
 				
 				if (ExpectCloseQuote) {
-					if !(NextCharacterMatches(Lexer, '"')) {
-						ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, PeekNextCharacter(Lexer))
-						TokenError(ErrorToken, "Expected closing quote for include/require path.")
+					if !(this->NextCharacterMatches('"')) {
+						this->AppendToken(0, null, StartingIndex, 1)->Error("Expected closing quote for include/require path.")
 					}
 				}
 				
 				if (IsRequire) {
-					HashMapElement* FoundFile := Lexer->IncludedFiles->Get(IncludePath)
+					HashMapElement* FoundFile := this->IncludedFiles->Get(IncludePath)
 					
 					if (FoundFile) {
-						continue
+						return this->GetNextToken(false)
 					}
 				}
 				
-				Lexer->IncludedFiles->Set(IncludePath, true)
+				this->IncludedFiles->Set(IncludePath, true)
 				
 				Print("Including file: '")
-				PrintSafeString(IncludePath)
+				IncludePath->Print()
 				Print("'\n")
 				
 				i32 EndIndex := IncludePath->Length
-				i16 OldFollowingCharacter := (IncludePath->Buffer)[EndIndex]
+				i16 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
 				
 				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 				
@@ -814,62 +832,39 @@ define Token* GetNextToken(LexerState* Lexer) {
 				
 				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				
-				LexerState* IncludeTokenizer := NewLexer(Lexer->Config, IncludePath, Lexer->IncludedFiles, IncludeFileText, IncludeFileSize)
+				this->Child := LexerState:New(this, IncludeFileText, IncludeFileSize, IncludePath)
 				
-				loop {
-					Token* NextIncludeToken := GetNextToken(IncludeTokenizer)
-					
-					if (NextIncludeToken->Type = TOKEN_TYPE_EOF) {
-						break
-					}
-					
-					Token* IncludeToken := PushToken(Lexer, NextIncludeToken->Value, 0 As i16*, 0, 0, NextIncludeToken->Type)
-					CopyContext(NextIncludeToken~>Context, IncludeToken~>Context)
-				}
-				
-				; Print("Done including file\n")
-				
-				Lexer->TokenIndex -= 1
-				
-				return GetNextToken(Lexer)
+				return this->GetNextToken(false)
 			}
-			else if (SafeStringEqualsAString(DirectiveText, "ImageBase")) {
-				if !(IsWhiteSpace(GetNextCharacter(Lexer))) {
+			else if (DirectiveText->Equals("ImageBase")) {
+				if !(IsWhiteSpace(this->GetNextCharacter())) {
 					Print("Expected whitespace after #ImageBase.")
 					Exit(1)
 				}
 				
-				i8 ImageBaseValid := false
+				this->GetNextCharacter()
 				
-				NextCharacter := GetNextCharacter(Lexer)
+				this->Config->ImageBase := this->ProcessNumber(this->SourceIndex - 1)
 				
-				i64 NewImageBase := TokenizeNumber(Lexer, NextCharacter As i8, StartingIndex + 11, &ImageBaseValid)
-				
-				if !(ImageBaseValid && NewImageBase) {
-					ErrorToken := MakeToken(Lexer, StartingIndex + 11, TOKEN_TYPE_DEBUG_CHARACTER, '#')
-					TokenError(ErrorToken, "Invalid Image Base")
-				}
-				
-				Lexer->Config->ImageBase := NewImageBase
-				
-				continue
+				return this->GetNextToken(false)
 			}
 			else {
-				Lexer->SourceIndex := StartingIndex + 1
+				this->SourceIndex := StartingIndex + 1
 				
-				return MakeToken(Lexer, StartingIndex, TOKEN_TYPE_OPERATOR, OPERATOR_POUND)
+				return this->AppendOperator(OPERATOR_POUND)
 			}
 		}
 		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
 			/* Ignore null characters and whitespace */
 			
-			continue
+			return this->GetNextToken(false)
 		}
 		else {
-			ErrorToken := MakeToken(Lexer, StartingIndex, TOKEN_TYPE_DEBUG_CHARACTER, NextCharacter)
-			TokenError(ErrorToken, "Unexpected character")
+			this->AppendToken(0, null, StartingIndex, 1)->Error("Unexpected character")
 		}
 	}
-	
-	return MakeToken(Lexer, Lexer->SourceLength, TOKEN_TYPE_EOF, 0)
+}
+
+define void TokenError(Token* AtToken, i8* Message) {
+	ContextError(AtToken~>Context, Message)
 }

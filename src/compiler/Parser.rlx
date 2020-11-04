@@ -735,17 +735,15 @@ define Type TryGetType(ParserState* Parser, SafeWideString* TypeName, i16 Pointe
 declare i32 FreezeParser(ParserState*)
 declare void UnfreezeParser(ParserState*, i32)
 declare Token* ParserNextToken(ParserState*)
+declare Token* ParserCurrentToken(ParserState*)
 
 define Type GetType(ParserState* Parser, SafeWideString* TypeName, i8 PointerDepth) {
 	i8* ErrorMessage := 0
 	
-	i32 BeforeType := FreezeParser(Parser)
 	Type Result := TryGetType(Parser, TypeName, PointerDepth, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		UnfreezeParser(Parser, BeforeType)
-		
-		Token* BadToken := ParserNextToken(Parser)
+		Token* BadToken := ParserCurrentToken(Parser)
 		
 		TokenError(BadToken, ErrorMessage)
 	}
@@ -1450,10 +1448,16 @@ define ASTNode* MakeCall(ParserState* Parser, HashMap* NameSpace, Token* NameTok
 define i32 FreezeParser(ParserState* Parser) {
 	/* Gets the tokenizer state in order to backtrack to said state */
 	
+	;PrintStackDump(0)
+	
+	;Print("Freeze At %i\n", Parser->Lexer->TokenIndex)
+	
 	return Parser->Lexer->TokenIndex
 }
 define void UnfreezeParser(ParserState* Parser, i32 Index) {
 	/* Restores the tokenizer to a given state in order to backtrack */
+	
+	;Print("UnFreeze To %i\n", Index)
 	
 	Parser->Lexer->TokenIndex := Index
 }
@@ -1461,15 +1465,13 @@ define void UnfreezeParser(ParserState* Parser, i32 Index) {
 define Token* ParserNextToken(ParserState* Parser) {
 	/* Gets the next token */
 	
-	return GetNextToken(Parser->Lexer)
+	return Parser->Lexer->GetNextToken()
 }
 
 define Token* ParserCurrentToken(ParserState* Parser) {
-	LexerState* Lexer := Parser->Lexer
+	Parser->Lexer->TokenIndex -= 1
 	
-	Lexer->TokenIndex -= 1
-	
-	return GetNextToken(Lexer)
+	return Parser->Lexer->GetNextToken()
 }
 
 define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
@@ -2273,6 +2275,7 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 			}
 			
 			/* Parse the parameter type */
+			
 			NextParameter->Type := ParseTypeName(Parser)
 			
 			if (ForDefine) {

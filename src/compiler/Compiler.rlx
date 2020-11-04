@@ -168,13 +168,12 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 		With the type signature of the function optionally printed afterwards, if the function is overloaded.
 	*/
 	
-	i8* Format := "%x - %i	(%i)	"
-	
 	if (TargetFunction->CallCount = 0) {
-		Format := "^60%x - %i	(%i)	"
+		Print("^60	 - 	(0)	")
 	}
-	
-	Print(Format, Compiler->CodeBase + TargetFunction->CodeOffset, Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
+	else {
+		Print("%x	 - %i	(%i)	", Compiler->CodeBase + TargetFunction->CodeOffset, Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
+	}
 	
 	if (TargetFunction->IsMethod) {
 		PrintSafeString(TargetFunction->MethodOfTypeName)
@@ -219,7 +218,7 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 		Or an entire linked list of function overloads, starting with BaseFunction
 	*/
 	
-	i32 FunctionOffset := Compiler->Index
+	;BaseFunction->CodeOffset := Compiler->Index
 	
 	if (BaseFunction->IsImported) {
 		if (Compiler->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
@@ -234,10 +233,8 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 		
 		if (BaseFunction->CallCount != 0) {
 			Compiler->FunctionCount += 1
-			FunctionOffset := CompileFunction(Compiler, BaseFunction, IsMain)
+			BaseFunction->CodeOffset := CompileFunction(Compiler, BaseFunction, IsMain)
 		}
-		
-		BaseFunction->CodeOffset := FunctionOffset
 	}
 	
 	if (Compiler->Config->DumpInfo & DUMP_FUNCTIONS) {
