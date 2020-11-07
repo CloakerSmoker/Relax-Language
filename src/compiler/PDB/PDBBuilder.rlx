@@ -40,60 +40,117 @@ define void PrintArray(void* Array, i8 Size, i32 Count) {
 
 #Require "./src/compiler/PDB/MSF.rlx"
 #Require "./src/compiler/PDB/CodeView.rlx"
-#Require "./src/compiler/PDB/DBi.rlx"
+#Require "./src/compiler/PDB/DBI.rlx"
 
-i32 PDB_STRING_TABLE_SIGNATURE := 0xEFFEEFFE
-
-struct PDBStringTableHeader {
-	i32 Signature
-	i32 HashVersion
-	i32 ByteSize
-}
-
-struct PDBStringTableBuilder {
-
+struct PDBBuilder {
+	MSFBuilder* MSF
+	PDBStringTableBuilder* StringTable
+	TPIStreamBuilder* TPI
+	TPIStreamBuilder* IPI
+	DBIStreamBuilder* DBI
+	CVSymbolStreamBuilder* Symbols
+	CVDebugLinesBuilder* LineNumbers
 	
+	static PDBBuilder* New() {
+		PDBBuilder* this := Alloc(#PDBBuilder)
+		
+		this->MSF := MSFBuilder:New()
+		this->MSF->AllocateStreamDirectory()
+		
+		this->StringTable := PDBStringTableBuilder:New()
+		this->TPI := TPIStreamBuilder:New()
+		this->IPI := TPIStreamBuilder:New()
+		
+		this->DBI := DBIStreamBuilder:New(this->TPI, this->StringTable)
+		
+		this->Symbols := this->DBI->ModuleSymbols
+		this->LineNumbers := this->DBI->ModuleLines
+		
+		return this
+	}
 	
+	define void DBITest() {
+		this->DBI->SetModule("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r)
+		this->DBI->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r)
+		this->DBI->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r)
+		
+		i32 CharPP := this->TPI->AppendPointer(CV_KIND_I8, 2)
+		
+		CVSymbolStreamBuilder* M := this->DBI->ModuleSymbols
+		
+		i32 S := M->AppendProcedure(CV_KIND_I32, "Main", 4, CV_KIND_I64, CharPP)
+		
+		M->ExtendProcedureSize(S, M->AppendBasePointerRelative(0, CV_KIND_I64, "ArgC", 4))
+		M->ExtendProcedureSize(S, M->AppendBasePointerRelative(8, CharPP, "ArgV", 4))
+		
+		M->AppendEnd(S)
+		
+		
+		CVDebugLinesBuilder* Q := this->DBI->ModuleLines
+		
+		Q->StartGroup("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r, 1, 0x10000, 200)
+		Q->AddLine(0, 20)
+		Q->AddLine(100, 40)
+		Q->EndGroup()
+		
+		this->DBI->ModuleSymbols->PrintSymbols()
+		this->DBI->ModuleLines->Print()
+		
+		Print("DBI Done\n")
+	}
+	
+	define void TPITest() {
+		TPIStreamBuilder* B := this->TPI
+		
+		i32 PointerPointerIndex := this->TPI->AppendPointer(CV_KIND_I64, 5)
+		i32 PointerPointerIndex2 := this->TPI->AppendPointer(CV_KIND_I8, 2)
+		
+		CVStructBuilder* Bu := CVStructBuilder:New("Struct1", 16)
+		
+		Bu->AddDataMember(PointerPointerIndex, 0, "Field1")
+		Bu->AddDataMember(PointerPointerIndex2, 8, "Field2")
+		
+		i32 BuFields := this->TPI->AppendCVRecord(Bu->MakeFieldListRecord())
+		i32 Struct1 := this->TPI->AppendCVRecord(Bu->MakeStructRecord(BuFields))
+		
+		this->TPI->AppendProcedure(Struct1, CV_KIND_I8, CV_KIND_I16)
+		
+		this->TPI->AppendBitField(CV_KIND_I64, 3, 9)
+		
+		this->TPI->PrintTypeRecords()
+		
+		Print("TPI Done\n")
+	}
+	
+	define void WriteToFile(i8* FilePath) {
+		this->MSF->SetStreamData(MSF_MSF_STREAM_INDEX, null, 0x1000)
+		
+		this->DBI->WriteStreams(this->MSF)
+		this->TPI->WriteStreams(this->MSF, MSF_TPI_STREAM_INDEX)
+		this->IPI->WriteStreams(this->MSF, MSF_IPI_STREAM_INDEX)
+		
+		this->StringTable->WriteStream(this->MSF)
+		
+		this->MSF->Finalize()
+		
+		this->MSF->WriteToFile(FilePath)
+	}
 }
-
-declare TPIStreamBuilder* TPITest(MSFBuilder*)
-declare void IPITest(MSFBuilder*)
 
 define i32 Main() {
-	MSFBuilder* B := Alloc(#MSFBuilder)
+	PDBBuilder* PDB := PDBBuilder:New()
 	
-	B->Initialize()
-	B->AllocateStreamDirectory()
+	PDB->DBITest()
+	PDB->TPITest()
 	
-	; Unfinished streams:
-	B->SetNamedStreamData("/names", null, 0x1000)
-	B->SetStreamData(MSF_MSF_STREAM_INDEX, null, 0x1000)				; MSF ??? stream
-	B->SetStreamData(MSF_IPI_STREAM_INDEX, null, 0)				; IPI Stream
+	PDB->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\dummy.pdb"r)
 	
-	IPITest(B)
-	
-	; Mostly finished streams:
-	TPIStreamBuilder* T := TPITest(B)
-	WriteDBI(B, T)
-	
-	T->PrintTypeRecords()
-	T->SerializeTPI()
-	Print("TPI Done\n")
-	
-	Print("SSA: ")
-	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
-	
-	; Totally finished streams (MSF format, PDB stream):
-	B->Finalize()
-	
-	Print("SSA: ")
-	PrintArray(B->StreamDirectory->GetStreamSizesArray(), 4, B->StreamDirectory->NumberOfStreams)
-	
-	B->WriteToFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\dummy.pdb"r)
+	Print("StreamSizeArray: ")
+	PrintArray(PDB->MSF->StreamDirectory->GetStreamSizesArray(), 4, PDB->MSF->StreamDirectory->NumberOfStreams)
 	
 	Print("MSF Done\n")
 	
-	B->SuperBlock->Print()
+	PDB->MSF->SuperBlock->Print()
 	
 	;i64 F := FileOpen("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\AutoHotkey.pdb"r, FILE_READ)
 	;
@@ -112,46 +169,4 @@ define i32 Main() {
 	;Print("B->Get %i = %x\n", R, StreamNumber)
 	;
 	;return 0
-}
-
-define void IPITest(MSFBuilder* Builder) {
-	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
-	
-	B->SerializeIPI()
-}
-
-define TPIStreamBuilder* TPITest(MSFBuilder* Builder) {
-	TPIStreamBuilder* B := TPIStreamBuilder:New(Builder)
-	
-	i32 PointerPointerIndex := B->AppendPointer(CV_KIND_I64, 5)
-	i32 PointerPointerIndex2 := B->AppendPointer(CV_KIND_I8, 2)
-	
-	CVStructBuilder* Bu := CVStructBuilder:New("Struct1", 16)
-	
-	Bu->AddDataMember(PointerPointerIndex, 0, "Field1")
-	Bu->AddDataMember(PointerPointerIndex2, 8, "Field2")
-	
-	i32 BuFields := B->AppendCVRecord(Bu->MakeFieldListRecord())
-	i32 Struct1 := B->AppendCVRecord(Bu->MakeStructRecord(BuFields))
-	
-	;CVProcedureBuilder* Pu := CVProcedureBuilder:New()
-	;
-	;Pu->SetReturnType(Struct1)
-	;Pu->AppendParameter(CV_KIND_I8)
-	;Pu->AppendParameter(CV_KIND_I16)
-	;
-	;i32 PuParams := B->AppendCVRecord(Pu->MakeParameterListRecord())
-	;B->AppendCVRecord(Pu->MakeProcedureRecord(PuParams))
-	
-	B->AppendProcedure(Struct1, CV_KIND_I8, CV_KIND_I16)
-	
-	B->AppendBitField(CV_KIND_I64, 3, 9)
-	
-	;B->PrintTypeRecords()
-	
-	;Print("TPI Done\n")
-	
-	;B->Serialize()
-	
-	return B
 }

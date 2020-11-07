@@ -256,7 +256,7 @@ struct DBIStreamBuilder {
 	
 	i32 BufferSize
 	
-	static DBIStreamBuilder* New(TPIStreamBuilder* Types) {
+	static DBIStreamBuilder* New(TPIStreamBuilder* Types, PDBStringTableBuilder* Strings) {
 		DBIStreamBuilder* this := Alloc(#DBIStreamBuilder)
 		
 		this->BufferSize := #DBIStreamHeader
@@ -266,7 +266,7 @@ struct DBIStreamBuilder {
 		
 		this->FileInfo := DBIFileInfoSubstreamBuilder:New()
 		this->ModuleSymbols := CVSymbolStreamBuilder:New(Types)
-		this->ModuleLines := CVDebugLinesBuilder:New()
+		this->ModuleLines := CVDebugLinesBuilder:New(Strings)
 		
 		return this
 	}
@@ -352,38 +352,4 @@ struct DBIStreamBuilder {
 		
 		this->SerializeInto(StreamBuffer, SectionHeadersStream)
 	}
-}
-
-define void WriteDBI(MSFBuilder* ToBuilder, TPIStreamBuilder* Types) {
-	DBIStreamBuilder* B := DBIStreamBuilder:New(Types)
-	
-	B->SetModule("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Main.rlx"r)
-	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Lexer.rlx"r)
-	B->AddSourceFile("C:\Users\Connor\Desktop\fuck\Relax-Language\src\compiler\Parser.rlx"r)
-	
-	i32 CharPP := Types->AppendPointer(CV_KIND_I8, 2)
-	
-	CVSymbolStreamBuilder* M := B->ModuleSymbols
-	
-	i32 S := M->AppendProcedure(CV_KIND_I32, "Main", 4, CV_KIND_I64, CharPP)
-	
-	M->ExtendProcedureSize(S, M->AppendBasePointerRelative(0, CV_KIND_I64, "ArgC", 4))
-	M->ExtendProcedureSize(S, M->AppendBasePointerRelative(8, CharPP, "ArgV", 4))
-	
-	M->AppendEnd(S)
-	
-	
-	CVDebugLinesBuilder* Q := B->ModuleLines
-	
-	Q->StartGroup(0, 1, 0x10000, 200)
-	Q->AddLine(0, 20)
-	Q->AddLine(100, 40)
-	Q->EndGroup()
-	
-	B->ModuleSymbols->PrintSymbols()
-	B->ModuleLines->Print()
-	
-	B->WriteStreams(ToBuilder)
-	
-	Print("DBI Done\n")
 }

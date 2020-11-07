@@ -382,8 +382,6 @@ struct TPIStreamBuilder {
 	;  handles serializing the TPI stream/writing it into the backing MSF file. Additionally, handles
 	;   allocating and writing the TPI hash stream.
 	
-	MSFBuilder* Builder
-	
 	union {
 		TPIStreamHeader* Header
 		void* Buffer
@@ -394,10 +392,8 @@ struct TPIStreamBuilder {
 	i32 BufferSize
 	i32 RecordOffsetCount
 	
-	static TPIStreamBuilder* New(MSFBuilder* Builder) {
+	static TPIStreamBuilder* New() {
 		TPIStreamBuilder* this := Alloc(#TPIStreamBuilder)
-		
-		this->Builder := Builder
 		
 		this->BufferSize := #TPIStreamHeader
 		this->Buffer := Alloc(this->BufferSize)
@@ -638,18 +634,18 @@ struct TPIStreamBuilder {
 		Print("^F0")
 	}
 	
-	define void Serialize(i32 StreamIndex) {
+	define void WriteStreams(MSFBuilder* Builder, i32 StreamIndex) {
 		this->Header->IndexOffsetBufferLength := this->RecordOffsetCount * #RecordOffsetEntry
 		
-		this->Header->HashStreamIndex := this->Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
+		this->Header->HashStreamIndex := Builder->AppendStream(this->RecordOffsetArray, this->RecordOffsetCount * #RecordOffsetEntry)
 		
-		this->Builder->SetStreamData(StreamIndex, this->Buffer, this->BufferSize)
+		Builder->SetStreamData(StreamIndex, this->Buffer, this->BufferSize)
 	}
-	define void SerializeTPI() {
-		this->Serialize(MSF_TPI_STREAM_INDEX)
+	define void WriteTPI(MSFBuilder* Builder) {
+		this->WriteStreams(Builder, MSF_TPI_STREAM_INDEX)
 	}
-	define void SerializeIPI() {
-		this->Serialize(MSF_IPI_STREAM_INDEX)
+	define void WriteIPI(MSFBuilder* Builder) {
+		this->WriteStreams(Builder, MSF_IPI_STREAM_INDEX)
 	}
 }
 
@@ -883,6 +879,29 @@ struct CVSingleLineGroupHeader {
 	CVLineNumberEntry{0} Lines
 }
 
+i32 DEBUG_SECTION_CHECKSUMS := 0xF4
+i8 CV_CHECKSUM_MD5 := 1
+
+struct CVFileChecksumHeader {
+	i32 Type
+	i32 TotalLength
+	
+	i32 FileNameOffset
+	i8 ChecksumByteSize
+	i8 ChecksumKind
+	i8{0} ChecksumData
+	
+	define i32 GetSize() {
+		return Align(this->ChecksumByteSize + #CVFileChecksumHeader, 4)
+	}
+	define void* GetData() {
+		return this~>ChecksumData
+	}
+}
+
+#Require "./src/compiler/PDB/MD5.rlx"
+#Require "./src/lib/File.rlx"
+
 struct CVDebugLinesBuilder {
 	void* Buffer
 	
@@ -891,9 +910,12 @@ struct CVDebugLinesBuilder {
 	i32 CurrentGroupHeaderOffset
 	i32 CurrentGroupLineCount
 	
-	static CVDebugLinesBuilder* New() { 
+	PDBStringTableBuilder* Strings
+	
+	static CVDebugLinesBuilder* New(PDBStringTableBuilder* Strings) { 
 		CVDebugLinesBuilder* this := Alloc(#CVDebugLinesBuilder)
 		
+		this->Strings := Strings
 		this->Buffer := Alloc(4)
 		
 		return this
@@ -927,6 +949,29 @@ struct CVDebugLinesBuilder {
 		Header->ContributionSize := CodeSize
 		Header->NameOffset := NameOffset
 	}
+	define void StartGroup(i8* Name, i32 Segment, i32 RVA, i32 CodeSize) {
+		i32 NameLength := StringLength(Name)
+		i32 Size := Align(MD5_DIGEST_SIZE + #CVFileChecksumHeader, 4)
+		
+		i32 HeaderOffset := this->GetSize()
+		CVFileChecksumHeader* Header := this->Append(Size)
+		
+		Header->Type := DEBUG_SECTION_CHECKSUMS
+		Header->TotalLength := Size - 8
+		
+		Header->FileNameOffset := this->Strings->FindOrAddString(Name, NameLength)
+		Header->ChecksumKind := CV_CHECKSUM_MD5
+		Header->ChecksumByteSize := MD5_DIGEST_SIZE
+		
+		i64 File := FileOpen(Name, FILE_READ)
+		i32 FileSize := FileGetSize(File)
+		void* FileData := FileReadAll(File)
+		FileClose(File)
+		
+		MD5->Hash(FileData, FileSize, Header->GetData())
+		
+		this->StartGroup(HeaderOffset, Segment, RVA, CodeSize)
+	}
 	define void AddLine(i32 Offset, i32 Number) {
 		this->CurrentGroupLineCount += 1
 		
@@ -949,17 +994,22 @@ struct CVDebugLinesBuilder {
 		
 		while (Offset != End) {
 			CVSingleLineGroupHeader* Header := this->Buffer + Offset
-			i32 NumberOfLines := Header->NumberOfLines
 			
-			Print("%i lines for (%x, %x) {\n", NumberOfLines, Header->ContributionRVA, Header->ContributionRVA + Header->ContributionSize)
+			Print("next group type, length = (%x, %i)\n", Header->Type, Header->TotalLength)
 			
-			for (i32 LineIndex := 0, LineIndex < NumberOfLines, LineIndex += 1) {
-				CVLineNumberEntry* NextLine := &Header~>Lines[LineIndex]
+			if (Header->Type = DEBUG_SECTION_LINES) {
+				i32 NumberOfLines := Header->NumberOfLines
 				
-				Print("	Line %i = %x+\n", NextLine->GetLineNumber(), NextLine->Offset)
+				Print("%i lines for (%x, %x) {\n", NumberOfLines, Header->ContributionRVA, Header->ContributionRVA + Header->ContributionSize)
+				
+				for (i32 LineIndex := 0, LineIndex < NumberOfLines, LineIndex += 1) {
+					CVLineNumberEntry* NextLine := &Header~>Lines[LineIndex]
+					
+					Print("	Line %i = %x+\n", NextLine->GetLineNumber(), NextLine->Offset)
+				}
+				
+				Print("}\n")
 			}
-			
-			Print("}\n")
 			
 			Offset += Header->TotalLength + 8
 		}

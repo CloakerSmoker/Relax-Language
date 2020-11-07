@@ -75,9 +75,16 @@ define void Print(i64 Number) {
 	ClearPrintBuffer()
 	PrintString(IToA(Number, 10, PrintBuffer))
 }
-define void PrintHex(i64 Number) {
+define void PrintHex(i64 Number, i8 WithZeroX) {
 	ClearPrintBuffer()
-	PrintString(IToA(Number, 16, PrintBuffer))
+	PrintString(IToA(Number, 16, PrintBuffer, WithZeroX))
+}
+define void PrintHex(i64 Number) {
+	PrintHex(Number, true)
+}
+define void PrintBinary(i64 Number) {
+	ClearPrintBuffer()
+	PrintString(IToA(Number, 2, PrintBuffer))
 }
 
 declare void SetColor(i8, i8)
@@ -109,6 +116,9 @@ define void Print(i8* Format, ... Args) {
 			}
 			else if (Next = 'l') {
 				PrintLiteral(NextArg As i64)
+			}
+			else if (Next = 'b') {
+				PrintBinary(NextArg As i64)
 			}
 			
 			ArgIndex += 1

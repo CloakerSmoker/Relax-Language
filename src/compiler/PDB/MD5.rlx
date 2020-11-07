@@ -1,0 +1,253 @@
+struct MD5Result {
+	i64 Low
+	i64 High
+}
+
+i32 MD5_DIGEST_SIZE := 16
+
+struct MD5Hasher {
+	i32{64} K
+	i32{64} R
+	
+	static MD5Hasher* New() {
+		MD5Hasher* this := Alloc(#MD5Hasher)
+		
+		i32* K := this~>K
+		i32* R := this~>R
+		
+		K[0] := 0xd76aa478
+		K[1] := 0xe8c7b756
+		K[2] := 0x242070db
+		K[3] := 0xc1bdceee
+		K[4] := 0xf57c0faf
+		K[5] := 0x4787c62a
+		K[6] := 0xa8304613
+		K[7] := 0xfd469501
+		K[8] := 0x698098d8
+		K[9] := 0x8b44f7af
+		K[10] := 0xffff5bb1
+		K[11] := 0x895cd7be
+		K[12] := 0x6b901122
+		K[13] := 0xfd987193
+		K[14] := 0xa679438e
+		K[15] := 0x49b40821
+		K[16] := 0xf61e2562
+		K[17] := 0xc040b340
+		K[18] := 0x265e5a51
+		K[19] := 0xe9b6c7aa
+		K[20] := 0xd62f105d
+		K[21] := 0x02441453
+		K[22] := 0xd8a1e681
+		K[23] := 0xe7d3fbc8
+		K[24] := 0x21e1cde6
+		K[25] := 0xc33707d6
+		K[26] := 0xf4d50d87
+		K[27] := 0x455a14ed
+		K[28] := 0xa9e3e905
+		K[29] := 0xfcefa3f8
+		K[30] := 0x676f02d9
+		K[31] := 0x8d2a4c8a
+		K[32] := 0xfffa3942
+		K[33] := 0x8771f681
+		K[34] := 0x6d9d6122
+		K[35] := 0xfde5380c
+		K[36] := 0xa4beea44
+		K[37] := 0x4bdecfa9
+		K[38] := 0xf6bb4b60
+		K[39] := 0xbebfbc70
+		K[40] := 0x289b7ec6
+		K[41] := 0xeaa127fa
+		K[42] := 0xd4ef3085
+		K[43] := 0x04881d05
+		K[44] := 0xd9d4d039
+		K[45] := 0xe6db99e5
+		K[46] := 0x1fa27cf8
+		K[47] := 0xc4ac5665
+		K[48] := 0xf4292244
+		K[49] := 0x432aff97
+		K[50] := 0xab9423a7
+		K[51] := 0xfc93a039
+		K[52] := 0x655b59c3
+		K[53] := 0x8f0ccc92
+		K[54] := 0xffeff47d
+		K[55] := 0x85845dd1
+		K[56] := 0x6fa87e4f
+		K[57] := 0xfe2ce6e0
+		K[58] := 0xa3014314
+		K[59] := 0x4e0811a1
+		K[60] := 0xf7537e82
+		K[61] := 0xbd3af235
+		K[62] := 0x2ad7d2bb
+		K[63] := 0xeb86d391
+		
+		R[0] := 7
+		R[1] := 12
+		R[2] := 17
+		R[3] := 22
+		R[4] := 7
+		R[5] := 12
+		R[6] := 17
+		R[7] := 22
+		R[8] := 7
+		R[9] := 12
+		R[10] := 17
+		R[11] := 22
+		R[12] := 7
+		R[13] := 12
+		R[14] := 17
+		R[15] := 22
+		R[16] := 5
+		R[17] := 9
+		R[18] := 14
+		R[19] := 20
+		R[20] := 5
+		R[21] := 9
+		R[22] := 14
+		R[23] := 20
+		R[24] := 5
+		R[25] := 9
+		R[26] := 14
+		R[27] := 20
+		R[28] := 5
+		R[29] := 9
+		R[30] := 14
+		R[31] := 20
+		R[32] := 4
+		R[33] := 11
+		R[34] := 16
+		R[35] := 23
+		R[36] := 4
+		R[37] := 11
+		R[38] := 16
+		R[39] := 23
+		R[40] := 4
+		R[41] := 11
+		R[42] := 16
+		R[43] := 23
+		R[44] := 4
+		R[45] := 11
+		R[46] := 16
+		R[47] := 23
+		R[48] := 6
+		R[49] := 10
+		R[50] := 15
+		R[51] := 21
+		R[52] := 6
+		R[53] := 10
+		R[54] := 15
+		R[55] := 21
+		R[56] := 6
+		R[57] := 10
+		R[58] := 15
+		R[59] := 21
+		R[60] := 6
+		R[61] := 10
+		R[62] := 15
+		R[63] := 21
+		
+		return this
+	}
+	
+	define i32 RotateLeft(i32 N, i8 RotateBy) {
+		return (N << RotateBy) | (N >> (32 As i8 - RotateBy))
+	}
+	
+	define void Hash(void* Data, i32 Length, MD5Result* Out) {
+		i32* K := this~>K
+		i32* R := this~>R
+		
+		i32 PartialHashA := 0x67452301
+		i32 PartialHashB := 0xefcdab89
+		i32 PartialHashC := 0x98badcfe
+		i32 PartialHashD := 0x10325476
+		
+		for (i32 NewLength := Length + 1, NewLength % (512 / 8) != 448 / 8, NewLength += 1) {}
+		
+		i8* WorkBuffer := Alloc(NewLength + 8)
+		i32* WorkWords := Alloc(16 * #i32)
+		
+		MoveMemory(WorkBuffer, Data, Length)
+		
+		WorkBuffer[Length] := 0x80
+		*(WorkBuffer + NewLength As i32*) := Length * 8
+		
+		;Print("Length = %x, NewLength = %x, Overall size = %x\n", Length, NewLength, NewLength + 8)
+		
+		for (i32 Offset := 0, Offset < NewLength, Offset += (512 / 8)) {
+			MoveMemory(WorkWords, WorkBuffer + Offset, 16 * #i32)
+			
+			;Print("WorkWords: ")
+			;PrintArray("\n%i", WorkWords, 4, 16)
+			;Print("\n")
+			
+			i32 A := PartialHashA
+			i32 B := PartialHashB
+			i32 C := PartialHashC
+			i32 D := PartialHashD
+			
+			;Print("[i = _] A=%i, B=%i, C=%i, D=%i\n", A As i64, B As i64, C As i64, D As i64)
+			
+			;Print("Hashing %x .. %x\n", Offset, Offset + 16 * #i32)
+			
+			for (i32 Index := 0, Index < 64, Index += 1) {
+				i32 F := 0
+				i32 G := 0
+				
+				if (Index < 16) {
+					F := (B & C) | ((~B) & D)
+					G := Index
+				}
+				else if (Index < 32) {
+					F := (D & B) | ((~D) & C)
+					G := (Index * 5 + 1) % 16
+				}
+				else if (Index < 48) {
+					F := B ^ C ^ D
+					G := (Index * 3 + 5) % 16
+				}
+				else {
+					F := C ^ (B | (~D))
+					G := (Index * 7) % 16
+				}
+				
+				F += A + K[Index] + WorkWords[G]
+				
+				A := D
+				D := C
+				C := B
+				B += this->RotateLeft(F, R[Index] As i8)
+				
+				;Print("[i = %i] A=%i, B=%i, C=%i, D=%i\n", Index, A As i64, B As i64, C As i64, D As i64)
+			}
+			
+			;Print("Done with 64 rounds\n")
+			
+			PartialHashA += A
+			PartialHashB += B
+			PartialHashC += C
+			PartialHashD += D
+		}
+		
+		Free(WorkBuffer)
+		Free(WorkWords)
+		
+		i32* ResultBuffer := Out As i32*
+		
+		ResultBuffer[0] := PartialHashA
+		ResultBuffer[1] := PartialHashB
+		ResultBuffer[2] := PartialHashC
+		ResultBuffer[3] := PartialHashD
+	}
+	
+	define void PrintDigest(MD5Result* Result) {
+		PrintLiteral('0x')
+		
+		i8* Bytes := Result As i8*
+		
+		for (i32 Index := 0, Index < 16, Index += 1) {
+			PrintHex(Bytes[Index] As i64 & 0xFF, false)
+		}
+	}
+}
+
+MD5Hasher* MD5 := MD5Hasher:New()

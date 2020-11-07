@@ -158,7 +158,7 @@ define void MemoryReverse(i8* Buffer, i32 Length) {
 	}
 }
 
-define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
+define i8* IToA(i64 Number, i64 Base, i8* Buffer, i8 PrintExtra) {
 	if (Buffer = null) {
 		Buffer := Alloc(100)
 	}
@@ -171,7 +171,7 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 		if (Base = 10) {
 			Number := -Number
 		}
-		else if (Base = 16) {
+		else if (Base = 16 || Base = 2) {
 			/* Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string */
 			
 			Number := Number & 0x7FFFFFFFFFFFFFFF
@@ -200,7 +200,7 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 		}
 	}
 	
-	if (Base = 16) {
+	if (Base = 16 && PrintExtra) {
 		Buffer[Index] := 'x'
 		Buffer[Index + 1] := '0'
 		Index += 2
@@ -209,6 +209,9 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 	MemoryReverse(Buffer, Index)
 	
 	return Buffer
+}
+define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
+	return IToA(Number, Base, Buffer, true)
 }
 define i8* IToA(i64 Number, i64 Base) {
 	return IToA(Number, Base, null)

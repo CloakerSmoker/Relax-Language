@@ -37,11 +37,8 @@ define i32 PDBHashStringV1(i8* String, i32 Length) {
 	
 	return Result ^ (Result >> 16)
 }
-define i16 PDBHashLookupKeyV1(i8* Key, i32 KeyLength) {
-	return PDBHashStringV1(Key, KeyLength) As i16
-}
 
-define i16 PDBCallHasher(void* this, i8* Key, i32 KeyLength, void* Implementation) asm {
+define i32 PDBCallHasher(void* this, i8* Key, i32 KeyLength, void* Implementation) asm {
 	jmp, rcx
 }
 define i8* PDBCallStorageKeyToLookupKey(void* this, i32 Offset, void* Implementation) asm {
@@ -57,7 +54,7 @@ struct PDBHashmapTraits {
 	void* LookupKeyToStorageKey,
 	void* TrueThis,
 	
-	define i16 Hash(i8* Key, i32 KeyLength) {
+	define i32 Hash(i8* Key, i32 KeyLength) {
 		return PDBCallHasher(this->TrueThis, Key, KeyLength, this->Hasher)
 	},
 	define i8* StorageKeyToLookupKey(i32 Offset) {
@@ -120,16 +117,12 @@ struct PDBSparceBitVector {
 		return 1 << ((Index % 32) As i8)
 	},
 	define i32 Get(i32 Index) {
-		Index += 1
-		
 		i32 Value := this->FindWord(Index)[0]
 		i32 Mask := this->FindBitMask(Index)
 		
 		return !!(Value & Mask)
 	},
 	define void Set(i32 Index, i8 To) {
-		Index += 1
-		
 		i32* TargetWord := this->FindWord(Index)
 		i32 Mask := this->FindBitMask(Index)
 		i32 NewValue := TargetWord[0]
@@ -277,7 +270,7 @@ struct PDBHashmap {
 	},
 	define PDBHashmapBucket* FindFirst(i8* Key, i32 KeyLength) {
 		i32 Hash := this->Traits->Hash(Key, KeyLength)
-		i32 BaseIndex := (Hash % this->Header->Capacity) - 1
+		i32 BaseIndex := Hash % this->Header->Capacity
 		
 		Print("FindFirst(%s, %i), Hash = %x, Bi = %i\n", Key, KeyLength, Hash, BaseIndex)
 		
@@ -400,18 +393,35 @@ struct PDBNamedStreamMapHeader {
 	i8{1} StringBuffer
 }
 
-declare i16 PDBNamedStreamMapHash(PDBNamedStreamMapBuilder*, i8*, i32)
-declare i8* PDBNamedStreamMapStorageKeyToLookupKey(PDBNamedStreamMapBuilder*, i32)
-declare i32 PDBNamedStreamMapLookupKeyToStorageKey(PDBNamedStreamMapBuilder*, i8*, i32)
+define i32 AbsoluteValue(i32 Value) {
+	if (Value < 0) {
+		return -Value
+	}
+	
+	return Value
+}
 
 struct PDBNamedStreamMapBuilder {
 	union {
-		PDBNamedStreamMapHeader* Header,
+		PDBNamedStreamMapHeader* Header
 		void* Buffer
-	},
+	}
 	
-	PDBHashmapTraits* Traits,
-	PDBHashmap* OffsetIndexMap,
+	PDBHashmapTraits* Traits
+	PDBHashmap* OffsetIndexMap
+	
+	declare i8* GetString(i32)
+	declare i32 AppendString(i8*, i32)
+	
+	static i32 Hash(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
+		return PDBHashStringV1(Key, KeyLength) & 0xFFFF
+	}
+	static i8* StorageKeyToLookupKey(PDBNamedStreamMapBuilder* this, i32 Offset) {
+		return this->GetString(Offset)
+	}
+	static i32 LookupKeyToStorageKey(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
+		return this->AppendString(Key, KeyLength)
+	}
 	
 	static PDBNamedStreamMapBuilder* Load(void* Buffer) {
 		PDBNamedStreamMapBuilder* this := Alloc(#PDBNamedStreamMapBuilder)
@@ -420,9 +430,9 @@ struct PDBNamedStreamMapBuilder {
 		
 		this->Traits := Alloc(#PDBHashmapTraits)
 		this->Traits->TrueThis := this
-		this->Traits->Hasher := &PDBNamedStreamMapHash
-		this->Traits->StorageKeyToLookupKey := &PDBNamedStreamMapStorageKeyToLookupKey
-		this->Traits->LookupKeyToStorageKey := &PDBNamedStreamMapLookupKeyToStorageKey
+		this->Traits->Hasher := &PDBNamedStreamMapBuilder:Hash
+		this->Traits->StorageKeyToLookupKey := &PDBNamedStreamMapBuilder:StorageKeyToLookupKey
+		this->Traits->LookupKeyToStorageKey := &PDBNamedStreamMapBuilder:LookupKeyToStorageKey
 		
 		this->OffsetIndexMap := PDBHashmap:Load(Buffer + this->Header->StringBufferSize + 4, this->Traits)
 		
@@ -435,13 +445,13 @@ struct PDBNamedStreamMapBuilder {
 		
 		this->Traits := Alloc(#PDBHashmapTraits)
 		this->Traits->TrueThis := this
-		this->Traits->Hasher := &PDBNamedStreamMapHash
-		this->Traits->StorageKeyToLookupKey := &PDBNamedStreamMapStorageKeyToLookupKey
-		this->Traits->LookupKeyToStorageKey := &PDBNamedStreamMapLookupKeyToStorageKey
+		this->Traits->Hasher := &PDBNamedStreamMapBuilder:Hash
+		this->Traits->StorageKeyToLookupKey := &PDBNamedStreamMapBuilder:StorageKeyToLookupKey
+		this->Traits->LookupKeyToStorageKey := &PDBNamedStreamMapBuilder:LookupKeyToStorageKey
 		
 		this->OffsetIndexMap := Alloc(#PDBHashmap)
 		this->OffsetIndexMap->Initialize(this->Traits)
-	},
+	}
 	
 	static PDBNamedStreamMapBuilder* New() {
 		PDBNamedStreamMapBuilder* this := Alloc(#PDBNamedStreamMapBuilder)
@@ -465,19 +475,19 @@ struct PDBNamedStreamMapBuilder {
 		
 		StreamNumber[0] := Entry->Value
 		return true
-	},
+	}
 	define i8 Get(i8* String, i32* StreamNumber) {
 		return this->Get(String, StringLength(String), StreamNumber)
-	},
+	}
 	define void Set(i8* String, i32 StringLength, i32 StreamNumber) {
 		this->OffsetIndexMap->Set(String, StringLength, StreamNumber)
-	},
+	}
 	define void Set(i8* String, i32 StreamNumber) {
 		this->OffsetIndexMap->Set(String, StreamNumber)
-	},
+	}
 	define i8* GetString(i32 Offset) {
 		return this->Header~>StringBuffer + Offset
-	},
+	}
 	define i32 AppendString(i8* String, i32 StringLength) {
 		i32 OldSize := this->Header->StringBufferSize
 		i32 NewSize := OldSize + StringLength + 1
@@ -489,7 +499,11 @@ struct PDBNamedStreamMapBuilder {
 		MoveMemory(OldBufferEnd, String, StringLength)
 		
 		return OldSize
-	},
+	}
+
+	define i32 GetSize() {
+		return 4 + this->Header->StringBufferSize + this->OffsetIndexMap->GetSize()
+	}
 	define void* SerializeInto(void* RawBuffer) {
 		i32* Buffer := RawBuffer As i32*
 		
@@ -507,28 +521,6 @@ struct PDBNamedStreamMapBuilder {
 		
 		return this->OffsetIndexMap->SerializeInto(RawBuffer)
 	}
-	
-	define i32 GetSize() {
-		return 4 + this->Header->StringBufferSize + this->OffsetIndexMap->GetSize()
-	}
-}
-
-define i32 AbsoluteValue(i32 Value) {
-	if (Value < 0) {
-		return -Value
-	}
-	
-	return Value
-}
-
-define i32 PDBNamedStreamMapHash(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
-	return AbsoluteValue(PDBHashLookupKeyV1(Key, KeyLength) As i32)
-}
-define i8* PDBNamedStreamMapStorageKeyToLookupKey(PDBNamedStreamMapBuilder* this, i32 Offset) {
-	return this->GetString(Offset)
-}
-define i32 PDBNamedStreamMapLookupKeyToStorageKey(PDBNamedStreamMapBuilder* this, i8* Key, i32 KeyLength) {
-	return this->AppendString(Key, KeyLength)
 }
 
 struct PDBStreamHeader unaligned {
@@ -574,7 +566,8 @@ struct PDBStreamBuilder {
 }
 
 struct MSFSuperBlock {
-	i8{0x20} Magic,
+	i8{0x18} MagicString,
+	i64 MagicNumber
 	i32 BlockSize,			; Should be 4096
 	i32 FreeBlockMapBlock,	; Block index (only allowed to be 1 or 2)
 	i32 NumberOfBlocks,		; Total block count, (NumberOfBlocks * BlockSize) = FileSize
@@ -705,7 +698,7 @@ struct MSFStreamDirectory {
 			
 			; Update this stream's size, and how many blocks the stream has been relieved of or allocated
 			SizesArray[StreamIndex] := NewSize
-			OutBlocksNeeded[0] := BlockCountDifference
+			*OutBlocksNeeded := BlockCountDifference
 			
 			; Finally, we return a pointer to where `OutBlocksNeeded` block numbers should be written after
 			;  they are allocated for this stream
@@ -732,7 +725,7 @@ struct MSFStreamDirectory {
 			
 			; Update how many streams are in the directory, and how many blocks the new stream will need
 			this->NumberOfStreams := StreamIndex + 1
-			OutBlocksNeeded[0] := this->GetStreamBlockCountFromSize(NewSize)
+			*OutBlocksNeeded := this->GetStreamBlockCountFromSize(NewSize)
 			
 			; And finally return a pointer to where blocks allocated for this stream should be written.
 			;  Since any proceeding streams are given 0 size, they take up 0 bytes in the block index array
@@ -747,8 +740,8 @@ struct MSFStreamDirectory {
 		i32 BlockNumberCount := 0
 		i32* BlockNumbers := this->SetStreamSize(StreamIndex, Size, &BlockNumberCount)
 		
-		OutBlockCount[0] := BlockNumberCount
-		OutStreamNumber[0] := StreamIndex
+		*OutBlockCount := BlockNumberCount
+		*OutStreamNumber := StreamIndex
 		
 		return (BlockNumbers As i64 - this As i64) As i32
 	}
@@ -773,17 +766,25 @@ struct MSFBuilder {
 	
 	PDBStreamBuilder* PDBStreamBuilder
 	
+	declare void Initialize()
+	
+	static MSFBuilder* New() {
+		MSFBuilder* this := Alloc(#MSFBuilder)
+		
+		this->Initialize()
+		
+		return this
+	}
+	
 	declare void AllocateBlock()
 	
 	define void Initialize() {
 		this->Buffer := Alloc(0x3000)
 		this->SuperBlock->NumberOfBlocks := 3
 		
-		i8* MagicBuffer := this->SuperBlock~>Magic
+		MoveMemory(this->SuperBlock~>MagicString, "Microsoft C/C++ MSF 7.00", 24)
 		
-		MoveMemory(MagicBuffer, "Microsoft C/C++ MSF 7.00", 24)
-		
-		(MagicBuffer + 24 As i64*)[0] := MSF_MAGIC
+		this->SuperBlock->MagicNumber := MSF_MAGIC
 		
 		i8* BlockMapBuffer := this->Buffer + 0x1000
 		
@@ -935,6 +936,11 @@ struct MSFBuilder {
 		
 		return this->GetStreamBuffer(StreamIndex)
 	}
+	define void* CreateUninitializedNamedStream(i8* StreamName, i32 StreamSize) {
+		i32 StreamNumber := this->SetNamedStreamData(StreamName, null, StreamSize)
+		
+		return this->GetStreamBuffer(StreamNumber)
+	}
 	
 	define i32 PointerToOffset(void* PointerIntoBuffer) {
 		return (PointerIntoBuffer - this->Buffer) As i32
@@ -958,5 +964,132 @@ struct MSFBuilder {
 		FileWrite(File, this->Buffer, this->GetSize())
 		
 		FileClose(File)
+	}
+}
+
+i32 PDB_STRING_TABLE_SIGNATURE := 0xEFFEEFFE
+i32 PDB_STRING_TABLE_HASH_VERSION := 1
+
+struct PDBStringTableHeader {
+	i32 Signature
+	i32 HashVersion
+	i32 ByteSize
+	
+	define void* GetEnd() {
+		return this + #PDBStringTableHeader
+	}
+}
+
+struct PDBStringTableHashHeader {
+	i32 BucketCount
+	i32{0} Buckets
+}
+
+struct PDBStringTableHash {
+	i32 Hash
+	i32 Offset
+}
+
+struct PDBStringTableBuilder {
+	void* Strings
+	
+	i32 StringsSize
+	
+	i32 StringCount
+	i32 BucketCount
+	
+	PDBStringTableHash* Hashes
+	
+	static PDBStringTableBuilder* New() {
+		PDBStringTableBuilder* this := Alloc(#PDBStringTableBuilder)
+		
+		this->Strings := Alloc(4)
+		this->StringsSize := 1
+		this->Hashes := Alloc(8)
+		
+		this->BucketCount := 1
+		
+		return this
+	}
+	
+	define PDBStringTableHash* GetHash(i32 Index) {
+		return this->Hashes + (Index * #PDBStringTableHash)
+	}
+	
+	define i32 FindOrAddString(i8* String, i32 StringLength) {
+		for (i32 Index := 0, Index < this->StringCount, Index += 1) {
+			PDBStringTableHash* FoundHashPair := this->GetHash(Index)
+			
+			if (PDBHashStringV1(String, StringLength) = FoundHashPair->Hash) {
+				return FoundHashPair->Offset
+			}
+		}
+		
+		i32 StringOffset := this->StringsSize
+		i32 HashIndex := this->StringCount
+		
+		this->StringCount += 1
+		
+		; "official" method to get the number of buckets
+		if (this->BucketCount * 3 / 4 < this->StringCount) {
+			this->BucketCount := this->BucketCount * 3 / 2 + 1
+		}
+		
+		this->StringsSize += StringLength + 1
+		this->Strings := ReAlloc(this->Strings, this->StringsSize)
+		this->Hashes := ReAlloc(this->Hashes, this->StringCount * #PDBStringTableHash)
+		
+		PDBStringTableHash* HashPair := this->GetHash(HashIndex)
+		
+		HashPair->Hash := PDBHashStringV1(String, StringLength)
+		HashPair->Offset := StringOffset
+		
+		MoveMemory(this->Strings + StringOffset, String, StringLength)
+		
+		return StringOffset
+	}
+	define i32 FindOrAddString(i8* String) {
+		return this->FindOrAddString(String, StringLength(String))
+	}
+	
+	define i32 GetSize() {
+		return this->StringsSize + 4 + 4 * this->BucketCount + 4 + #PDBStringTableHeader
+	}
+	define void WriteStream(MSFBuilder* Builder) {
+		void* Buffer := Builder->CreateUninitializedNamedStream("/names", this->GetSize())
+		
+		; Header and name buffer
+		
+		PDBStringTableHeader* Header := Buffer As PDBStringTableHeader*
+		
+		Header->Signature := PDB_STRING_TABLE_SIGNATURE
+		Header->HashVersion := PDB_STRING_TABLE_HASH_VERSION
+		Header->ByteSize := this->StringsSize
+		
+		MoveMemory(Header->GetEnd(), this->Strings, this->StringsSize)
+		
+		; Hash header and buckets
+		
+		PDBStringTableHashHeader* HashHeader := Header->GetEnd() + this->StringsSize
+		
+		i32 BucketCount := this->BucketCount
+		
+		HashHeader->BucketCount := BucketCount
+		
+		i32* Buckets := HashHeader~>Buckets
+		
+		for (i32 StringIndex := 0, StringIndex < this->StringCount, StringIndex += 1) {
+			PDBStringTableHash* HashPair := this->GetHash(StringIndex)
+			i32 Hash := HashPair->Hash
+			
+			for (i32 BucketIndex := 0, BucketIndex < BucketCount, BucketIndex += 1) {
+				i32 HashIndex := (Hash + BucketIndex) % BucketCount
+				
+				if (Buckets[HashIndex] = 0) {
+					Buckets[HashIndex] := HashPair->Offset
+					break
+				}
+			}
+		}
 	}
 }
