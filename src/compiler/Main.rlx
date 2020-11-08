@@ -1,11 +1,7 @@
 DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
 DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
 
-#Require "./src/lib/Exception.rlx"
-
 define void Exit(i32 ExitCode) {
-	Throw(ExitCode)
-	
 	windows {
 		TerminateProcess(GetCurrentProcess(), ExitCode)
 	}

@@ -167,6 +167,16 @@ struct HashMap {
 	define void Set(i8* Key, i32 KeyLength, void* Value) {
 		this->Upsert(this->HashString(Key, KeyLength), Value)
 	}
+	
+	define HashMapElement* Get(i64 Key) {
+		return this->GetElement(Key)
+	}
+	define void Set(i64 Key, void Value) {
+		this->Upsert(Key, Value As void*)
+	}
+	define void Set(i64 Key, void* Value) {
+		this->Upsert(Key, Value)
+	}
 }
 
 define HashMap* NewHashMap() {

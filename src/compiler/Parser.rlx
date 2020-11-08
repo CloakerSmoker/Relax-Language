@@ -1448,16 +1448,10 @@ define ASTNode* MakeCall(ParserState* Parser, HashMap* NameSpace, Token* NameTok
 define i32 FreezeParser(ParserState* Parser) {
 	/* Gets the tokenizer state in order to backtrack to said state */
 	
-	;PrintStackDump(0)
-	
-	;Print("Freeze At %i\n", Parser->Lexer->TokenIndex)
-	
 	return Parser->Lexer->TokenIndex
 }
 define void UnfreezeParser(ParserState* Parser, i32 Index) {
 	/* Restores the tokenizer to a given state in order to backtrack */
-	
-	;Print("UnFreeze To %i\n", Index)
 	
 	Parser->Lexer->TokenIndex := Index
 }

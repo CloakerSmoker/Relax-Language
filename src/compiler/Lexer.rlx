@@ -1,17 +1,3 @@
-
-DllImport i8 QueryPerformanceCounter(i64*) {Kernel32.dll, QueryPerformanceCounter}
-DllImport i8 QueryPerformanceFrequency(i64*) {Kernel32.dll, QueryPerformanceCounter}
-
-define i64 Time() {
-	i64 _Time := 0
-	
-	QueryPerformanceCounter(&_Time)
-	
-	return _Time
-}
-
-
-
 ; Constants end around line 130
 
 i8 TOKEN_TYPE_EOF := 0
@@ -816,7 +802,7 @@ struct LexerState {
 					}
 				}
 				
-				this->IncludedFiles->Set(IncludePath, true)
+				this->IncludedFiles->Set(IncludePath, IncludePath)
 				
 				Print("Including file: '")
 				IncludePath->Print()

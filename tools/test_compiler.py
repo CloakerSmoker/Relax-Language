@@ -65,7 +65,7 @@ for test_path in os.listdir(tests_dir):
     #f'{compiler_path} -i "{source_file}" -o "{binary_file}" {compiler_extra}'
 
     # Compiler is ran in the main/current dir so `#Include` can use regular paths
-    compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
+    compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True, timeout=1)
     stderr_text = compile_result.stderr.decode('UTF-8')
     no_stderr = len(stderr_text) == 0
     
@@ -89,7 +89,7 @@ for test_path in os.listdir(tests_dir):
         test_run_command = run_command_format.format(binary_file, platform_extension, test_input.strip())
         #f'{binary_file} {test_input.strip()}'
 
-        test_result = subprocess.run(test_run_command, cwd=tests_dir, shell=True, capture_output=True)
+        test_result = subprocess.run(test_run_command, cwd=tests_dir, shell=True, capture_output=True, timeout=1)
         stdout_text = test_result.stdout.decode('UTF-8')
         stderr_text = test_result.stderr.decode('UTF-8')
 

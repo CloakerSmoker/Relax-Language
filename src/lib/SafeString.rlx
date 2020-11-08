@@ -104,6 +104,10 @@ struct SafeWideString {
 		
 		return true
 	}
+	
+	define i8* ToString() {
+		return WToA(this->Buffer, this->Length)
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {
