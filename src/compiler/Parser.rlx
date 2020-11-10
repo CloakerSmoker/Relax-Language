@@ -284,6 +284,7 @@ struct FunctionDefine {
 	},
 	union {
 		i8* StringBuffer,
+		void* ConstantsBuffer,
 		SafeWideString* ImportFunctionName
 	},
 	
@@ -292,7 +293,11 @@ struct FunctionDefine {
 	i8 Attribute,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
-	i32 StringBufferSize,
+	
+	union {
+		i32 StringBufferSize,
+		i32 ConstantBufferSize
+	}
 	
 	i32 CallCount,
 	i8 UsesGlobals,
@@ -2792,6 +2797,8 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 	Token* NextToken := ParserNextToken(Parser)
 	ASTNode* Result := 0
 	
+	FunctionDefine* CurrentFunction := Parser->CurrentFunction
+	
 	if (NextToken->Type = TOKEN_TYPE_PUNCTUATION && NextToken->Value = PUNCTUATION_OPEN_PAREN) {
 		/* If the next token is an (, then parse a subexpression and consume a closing ) */
 		
@@ -2859,8 +2866,6 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
-		FunctionDefine* CurrentFunction := Parser->CurrentFunction
-		
 		if !(CurrentFunction) {
 			TokenError(NextToken, "Strings can only be used inside functions.")
 		}
@@ -2982,6 +2987,99 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 			
 			Result := MakeUnary(Parser, NextToken, Result)
 		}
+	}
+	else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+		i32 BeforeElementType := FreezeParser(Parser)
+		Type ElementType := ParseTypeName(Parser)
+		i32 ConstantOffset := CurrentFunction->ConstantBufferSize
+		
+		if (ParserNextMatches(Parser, TOKEN_TYPE_IDENTIFIER, 0)) {
+			Token* ShouldBeFile := ParserCurrentToken(Parser)
+			
+			if !(ShouldBeFile->StringValue->Equals("file")) {
+				ShouldBeFile->Error("Unexpected token")
+			}
+			
+			Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after 'file'")
+			Token* FilePathToken := Consume(Parser, TOKEN_TYPE_STRING, 0, "Expected file path")
+			Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
+			
+			i8* RawFilePath := FilePathToken->StringValue->ToString()
+			
+			i64 File := FileOpen(RawFilePath, FILE_READ)
+			
+			if (File < 0) {
+				ManualErrorMessagePrelude()
+				Print("\nCouldn't open file, error code %x\n", FileGetError(File))
+				FilePathToken->Error(null)
+			}
+			
+			i32 FileSize := FileGetSize(File)
+			
+			CurrentFunction->ConstantBufferSize += FileSize + 1
+			CurrentFunction->ConstantsBuffer := ReAlloc(CurrentFunction->ConstantsBuffer, CurrentFunction->ConstantBufferSize)
+			
+			void* FileBuffer := CurrentFunction->ConstantsBuffer + ConstantOffset
+			
+			FileRead(File, FileBuffer, FileSize)
+			
+			FileClose(File)
+			Free(RawFilePath)
+		}
+		else {
+			if (GetBaseType(ElementType)->IsBuiltin = false || GetPointerDepth(ElementType) != 0) {
+				UnfreezeParser(Parser, BeforeElementType)
+				ParserNextToken(Parser)->Error("Element type must be a built in, non-pointer type")
+			}
+			
+			Consume(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after array element type")
+			
+			i32 ElementSize := GetTypeSize(ElementType)
+			i32 BeforeElements := FreezeParser(Parser)
+			i32 ElementCount := 0
+			
+			loop {
+				Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array element value")
+				
+				ElementCount += 1
+				
+				if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					continue
+				}
+				else if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					break
+				}
+			}
+			
+			CurrentFunction->ConstantBufferSize += 8 + ElementCount * ElementSize
+			CurrentFunction->ConstantsBuffer := ReAlloc(CurrentFunction->ConstantsBuffer, CurrentFunction->ConstantBufferSize)
+			
+			void* ElementBuffer := CurrentFunction->ConstantsBuffer + ConstantOffset
+			i32 ElementIndex := 0
+			
+			UnfreezeParser(Parser, BeforeElements)
+			
+			loop {
+				Token* NextElementToken := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array element value")
+				ASTNode* NextElementNode := TranslateTokenToNode(Parser, NextElementToken)
+				
+				CheckTypes(Parser, NextElementNode->ValueType, ElementType, NextElementNode)
+				
+				*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
+				ElementIndex += 1
+				
+				if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					continue
+				}
+				else if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					break
+				}
+			}
+		}
+		
+		Result := AllocateNewASTNode(NODE_TYPE_STRING, ConstantOffset, IncrementPointerType(Parser, ElementType))
+		
+		MergeContexts(NextToken~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
 	}
 	else {
 		/* Else, this token isn't something we expected here, so error out */

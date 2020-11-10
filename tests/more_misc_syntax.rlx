@@ -1,0 +1,18 @@
+#Require "./src/lib/Console.rlx"
+
+struct SingleCharacter {
+	i8 Value
+}
+
+define i32 Main() {
+	i64* Literals := {i64: 'abc', 'def', 'ghi'}
+	SingleCharacter* ThisFile := {SingleCharacter file: "./tests/more_misc_syntax.rlx"}
+	
+	for (i32 Index := 0, Index < 3, Index += 1) {
+		Print("%l ", Literals[Index])
+	}
+	
+	PrintCharacters(ThisFile As i8*, 8)
+	
+	return 0
+}

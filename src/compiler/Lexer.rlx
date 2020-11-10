@@ -144,6 +144,20 @@ struct Token {
 	define void Error(i8* Message) {
 		ContextError(this~>Context, Message)
 	}
+	
+	define i8 Is(i8 Type, i64 Value) {
+		if (this->Type != Type) {
+			return false
+		}
+		
+		if (Type = TOKEN_TYPE_IDENTIFIER || Type = TOKEN_TYPE_STRING || Type = TOKEN_TYPE_INTEGER) {
+			/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
+			
+			return true
+		} 
+		
+		return this->Value = Value
+	}
 }
 
 struct LexerState {
@@ -740,7 +754,7 @@ struct LexerState {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
 				TokenText->Free()
 				
-				return this->AppendToken(TOKEN_TYPE_KEYWORD, FoundKeyword->Value As i8)
+				return this->AppendToken(TOKEN_TYPE_KEYWORD, FoundKeyword->Value)
 			}
 			else {
 				/* Otherwise, make an identifier token */
