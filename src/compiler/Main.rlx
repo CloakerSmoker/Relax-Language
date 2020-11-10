@@ -24,6 +24,8 @@ i8 DEBUG_NONE := 0
 i8 DEBUG_EMIT_FUNCTION_NAMES := 1
 
 struct BuildConfig {
+	LexerState* Lexer,
+	
 	i64 ImageBase,
 	i8 OutputFormat,
 	i8 TargetABI,
@@ -81,6 +83,29 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	FileClose(FileHandle)
 	
 	return Source
+}
+
+BuildConfig* CurrentConfig := null
+
+define void CompilerUnhandledExceptionHandler(i64 Code) {
+	Print("Lexer State: \n")
+	
+	LexerState* Lexer := CurrentConfig->Lexer
+	LexerState* Child := Lexer
+	
+	for (i32 Depth := 0, Child != null, Depth += 1) {
+		for (i32 Tabs := 0, Tabs < Depth, Tabs += 1) {
+			Print("	")
+		}
+		
+		Print("'")
+		Child->SourceFilePath->Print()
+		Print("' on line %i\n", Child->CurrentLineNumber)
+		
+		Child := Child->Child
+	}
+	
+	UnhandledExceptionHandler(Code)
 }
 
 define i32 Main(i64 ArgC, i8** ArgV) {	
@@ -155,6 +180,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 	}
 	
+	CurrentConfig := Config
+	UnhandledExceptionHandler := &CompilerUnhandledExceptionHandler
+	
 	Config->TargetABI := ABI_SYSTEMV
 	Config->ImageBase := DEFAULT_IMAGE_BASE
 	
@@ -162,6 +190,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
 	
 	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
+	Config->Lexer := Lexer
 	
 	ParserState* Parser := ParserStart(Config, Lexer)
 	

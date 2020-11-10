@@ -6,11 +6,11 @@ define void PushIX(CompilerState* Compiler, i64 Number, i8 Size) {
 }
 define void PushOpcode(CompilerState* Compiler, Instruction* I) {
 	if (I->Flags & E_2_BYTE_OPCODE) {
-		PushByte(Compiler, (I->Opcode >> 8) & 0xFF As i16)
-		PushByte(Compiler, I->Opcode & 0xFF As i16)
+		PushByte(Compiler, I~>Opcode[1])
+		PushByte(Compiler, I~>Opcode[0])
 	}
 	else {
-		PushByte(Compiler, I->Opcode)
+		PushByte(Compiler, I~>Opcode[0])
 	}
 }
 
@@ -203,7 +203,7 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 			i8 TargetRegister := OperandOne->RegisterNumber
 			
 			PushByte(Compiler, REX)
-			PushByte(Compiler, Base->Opcode + ClampRegisterNumber(TargetRegister))
+			PushByte(Compiler, Base~>Opcode[0] + ClampRegisterNumber(TargetRegister))
 			
 			if (Base->Flags & E_IMM8) {
 				PushByte(Compiler, OperandTwo->IntegerValue As i8)

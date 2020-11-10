@@ -1,0 +1,298 @@
+DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
+DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
+
+define void Exit(i32 ExitCode) {
+	windows {
+		TerminateProcess(GetCurrentProcess(), ExitCode)
+	}
+	linux {
+		syscall:(60, ExitCode)
+	}
+}
+
+i8 OUTPUT_PE := 0
+i8 OUTPUT_ELF := 1
+i8 OUTPUT_BIN := 2
+
+i8 ABI_X64 := 1
+i8 ABI_SYSTEMV := 2
+
+i8 DUMP_FUNCTIONS := 1
+i8 DUMP_GLOBALS := 2
+
+i8 DEBUG_NONE := 0
+i8 DEBUG_EMIT_FUNCTION_NAMES := 1
+
+struct BuildConfig {
+	i64 ImageBase,
+	i8 OutputFormat,
+	i8 TargetABI,
+	i8 DumpInfo,
+	i8 DebugMode
+}
+
+#Require "./src/lib/Memory.rlx"
+#Require "./src/lib/File.rlx"
+#Require "./src/lib/Console.rlx"
+
+define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
+	i64 FileHandle := FileOpen(FilePath, FILE_READ)
+	
+	if (FileHandle < 0) {
+		SwapOutputStream()
+		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		Exit(1)
+	}
+	
+	i32 FileSize := FileGetSize(FileHandle)
+	
+	if (OutFileSize != 0) {
+		OutFileSize[0] := FileSize
+	}
+	
+	void* FileBuffer := Alloc(FileSize)
+	
+	i64 ReadResult := FileRead(FileHandle, FileBuffer, FileSize)
+	
+	if (ReadResult < 0) {
+		SwapOutputStream()
+		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		
+		Exit(1)
+	}
+	
+	i16* Source := AToW(FileBuffer As i8*, FileSize)
+	
+	Free(FileBuffer)
+	FileClose(FileHandle)
+	
+	return Source
+}
+
+#Require "./src/lib/SafeString.rlx"
+#Require "./src/lib/HashMap.rlx"
+#Require "./src/lib/Debug.rlx"
+
+#Require "./src/compiler/Utility.rlx"
+#Require "./src/compiler/Lexer.rlx"
+
+struct SerializedInstruction {
+	i8{6} Name
+	
+	union {
+		i8{2} Opcode
+		i16 PackedOpcode
+	}
+	
+	i32 OperandMask
+	
+	i16 Flags
+	i16 Extra
+}
+
+;ret c3 - no_rm -
+;
+;not f7 m op_ext|rm_op1 2
+;
+;neg f7 m op_ext|rm_op1 3
+;
+;and 23 r,m rm_op2 0
+;and 20 m,r rm_op1 3
+;and 80 m,i op_ext|rm_op1|imm8 4
+;and 81 m,i op_ext|rm_op1|imm32 4
+;
+;mov c7 m,i op_ext|rm_op1|immx 0
+;mov b8 m,i64 no_rm|reg_in_opcode|imm64 0
+;mov 8b r,m rm_op2, 0
+;mov 89 m,r rm_op1, 0
+
+define void BuildSymbolMap(HashMap* M) {
+	M->IgnoreCase := true
+	
+	M->Set("_", 0)
+	
+	M->Set("M8", 0x1)
+	M->Set("M16", 0x2)
+	M->Set("M32", 0x4)
+	M->Set("M64", 0x8)
+	
+	M->Set("R8", 0x10)
+	M->Set("R16", 0x20)
+	M->Set("R32", 0x40)
+	M->Set("R64", 0x80)
+	
+	M->Set("I8", 0x100)
+	M->Set("I16", 0x200)
+	M->Set("I32", 0x400)
+	M->Set("I64", 0x800)
+	
+	M->Set("L", 0x1000)
+	M->Set("R", 0xF0)
+	M->Set("M", 0xFF)
+	M->Set("I", 0x700)
+	
+	M->Set("rm64", 0x88)
+	M->Set("hr", 0xE0)
+	M->Set("hm", 0xEE)
+	M->Set("hrm", 0xE0 | 0xF)
+	
+	M->Set("NO_RM", 0x1)
+	M->Set("RM_OP1", 0x2)
+	M->Set("RM_OP2", 0x4)
+	
+	M->Set("OP_EXT", 0x8)
+	
+	M->Set("IMM8", 0x10)
+	M->Set("IMM32", 0x20)
+	M->Set("IMM64", 0x40)
+	
+	M->Set("REG_IN_OPCODE", 0x80)
+	
+	M->Set("DIF_SIZES", 0x100)
+	
+	M->Set("BYTE_OPCODE_N1", 0x200)
+	
+	M->Set("IMMX", 0x400)
+	
+	M->Set("LABEL", 0x800)
+	
+	M->Set("TWO_B_OPCODE", 0x1000)
+	
+	M->Set("REX_W", 0x2000)
+	
+	M->Set("NEEDS_66", 0x4000)
+	
+	M->Set("COND_JUMP", 0x1000 | 0x800)
+	M->Set("ONE_OP_W_EXT", 0x2 | 0x8)
+}
+
+struct InstructionSerializer {
+	LexerState* Lexer
+	SerializedInstruction Instruction
+	i64 File
+	
+	static InstructionSerializer* New(LexerState* Lexer, i64 File) {
+		InstructionSerializer* this := Alloc(#InstructionSerializer)
+		
+		BuildSymbolMap(Lexer~>Keywords)
+		
+		this->Lexer := Lexer
+		this->File := File
+		
+		return this
+	}
+	
+	define i8 NextMatches(i8 Type, i32 Value) {
+		i32 BeforeNext := this->Lexer->TokenIndex
+		
+		Token* Next := this->Lexer->GetNextToken()
+		
+		if (Next->Type = Type && Next->Value = Value) {
+			return true
+		}
+		
+		this->Lexer->TokenIndex := BeforeNext
+		
+		return false
+	}
+	
+	define void SerializeAll() {
+		LexerState* Lexer := this->Lexer
+		SerializedInstruction* Instruction := this~>Instruction
+		
+		while !(this->Lexer->AtEnd()) {
+			SafeWideString* Name := Lexer->GetNextToken()->StringValue
+			
+			if (this->Lexer->AtEnd()) {
+				break
+			}
+			
+			Print("Starting instruction '")
+			Name->Print()
+			Print("'\n")
+			
+			for (i32 NameIndex := 0, NameIndex < 6, NameIndex += 1) {
+				Instruction~>Name[NameIndex] := Name->ASCIICharacterAt(NameIndex, 0)
+			}
+			
+			Instruction->PackedOpcode := Lexer->GetNextToken()->IntegerValue & 0xFFFF
+			
+			Print("	Opcode = %x\n", Instruction->PackedOpcode)
+			
+			Instruction->OperandMask := 0
+			
+			for (i8 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
+				Token* OperandToken := Lexer->GetNextToken()
+				
+				if (OperandToken->Type != TOKEN_TYPE_KEYWORD) {
+					OperandToken->Error("Undefined symbol")
+				}
+				
+				i32 OperandMask := OperandToken->Value << (OperandIndex * 16 As i8)
+				
+				Print("		Operand[%i] = %x\n", OperandIndex, OperandToken->Value)
+				
+				Instruction->OperandMask |= OperandMask
+				
+				if (this->NextMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					continue
+				}
+				
+				break
+			}
+			
+			Print("	Operands = %x\n", Instruction->OperandMask)
+			
+			Instruction->Flags := 0
+			
+			loop {
+				Instruction->Flags |= Lexer->GetNextToken()->Value
+				
+				if !(this->NextMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OR)) {
+					break
+				}
+			}
+			
+			if (Instruction~>Opcode[1] != 0) {
+				; For two byte opcodes, add the two byte opcode flag
+				Instruction->Flags |= 0x1000
+			}
+			
+			Print("	Flags = %x (two byte? %i)\n", Instruction->Flags, !!(Instruction->Flags & 0x1000))
+			
+			Instruction->Extra := Lexer->GetNextToken()->Value
+			
+			Print("	Extra = %x\n", Instruction->Extra)
+			
+			FileWrite(this->File, this~>Instruction, #SerializedInstruction)
+			
+			Print("Wrote '")
+			Name->Print()
+			Print("'\n")
+		}
+		
+		FileSeek(this->File, #SerializedInstruction - 1, SEEK_RELATIVE)
+		FileWrite(this->File, " ", 1)
+	}
+}
+
+define void Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
+	
+	if (ArgC != 3) {
+		Print("^50Missing instruction definition in/out file path\n")
+	}
+	
+	i32 SourceLength := 0
+	i16* SourceText := OpenAndRead(ArgV[1], &SourceLength)
+	
+	LexerState* Lexer := LexerState:New(null, SourceText, SourceLength, AToS(ArgV[1]))
+	
+	i64 OutputFile := FileOpen(ArgV[2], FILE_WRITE | FILE_CREATE_NEW)
+	
+	InstructionSerializer* S := InstructionSerializer:New(Lexer, OutputFile)
+	
+	S->SerializeAll()
+	
+	FileClose(OutputFile)
+}

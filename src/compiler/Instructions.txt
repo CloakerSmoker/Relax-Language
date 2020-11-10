@@ -1,0 +1,109 @@
+; m8
+; m16
+; m32
+; m64
+; r8
+; r16
+; r32
+; r64
+; i8
+; i16
+; i32
+; i64
+; l
+; r
+; m
+; i
+; rm64
+; hrm
+
+; NO_RM
+; RM_OP1
+; RM_OP2
+; OP_EXT
+; IMM8
+; IMM32
+; IMM64
+; REG_IN_OPCODE
+; DIF_SIZES
+; BYTE_OPCODE_N1
+; IMMX
+; LABEL
+; TWO_B_OPCODE
+; REX_W
+; NEEDS_66
+; ONE_OP_W_EXT
+; COND_JUMP
+
+not		0xF7 	m 		OP_EXT|RM_OP1 				2
+ret		0xC3 	_ 		NO_RM 						_
+neg		0xF7 	m 		OP_EXT|RM_OP1 				3
+
+and		0x23 	r,m 	RM_OP2 						_
+and		0x20 	m,r 	RM_OP1 						_
+and		0x80 	m,i 	OP_EXT|RM_OP1|IMM8 			4
+and		0x81 	m,i 	OP_EXT|RM_OP1|IMM32 		4
+
+mov		0xC7 	m,i 	OP_EXT|RM_OP1|IMMX			0
+mov		0xB8 	m,i64 	NO_RM|REG_IN_OPCODE|IMM64 	_
+mov		0x8B 	r,m 	RM_OP2 						_
+mov		0x89 	m,r 	RM_OP1 						_
+
+inc		0xFF	m		ONE_OP_W_EXT				0
+dec		0xFF	m		ONE_OP_W_EXT				1
+
+jmp		0xE9	l		LABEL						_
+jmp		0xFF	m		ONE_OP_W_EXT				4
+
+je		0x0F84	l		COND_JUMP					_
+jz		0x0F84	l		COND_JUMP					_
+
+jne		0x0F85	l		COND_JUMP					_
+jnz		0x0F85	l		COND_JUMP					_
+
+jgt		0x0F8F	l		COND_JUMP					_
+jge		0x0F8D	l		COND_JUMP					_
+jlt		0x0F8C	l		COND_JUMP					_
+jle		0x0F8E	l		COND_JUMP					_
+
+call	0xE8	l		LABEL						_
+call	0xFF	rm64	ONE_OP_W_EXT				2
+
+test	0xF7	m,i		ONE_OP_W_EXT				0
+test	0x85	m,r		RM_OP1						_
+
+cmp		0x83	hrm,i8	ONE_OP_W_EXT|IMM8			7
+
+xchg	0x87	m,r		RM_OP1						_
+xchg	0x87	r,m		RM_OP2						_
+
+iret	0xCF	_		NO_RM|REX_W					_
+
+lea		0x8D	r,m		RM_OP2						_
+
+xor		0x81	m,i		RM_OP1|IMMX|OP_EXT			6
+xor		0x31	m,r		RM_OP1						_
+xor		0x33	r,m		RM_OP2						_
+
+push	0x50	r64		REG_IN_OPCODE|NO_RM			_
+push	0xFF	rm64	ONE_OP_W_EXT				6
+
+pop		0x58	r64		REG_IN_OPCODE|NO_RM			_
+pop		0x8F	rm64	ONE_OP_W_EXT				0
+
+inb		0xEC	_		NO_RM						_
+inw		0xED	_		NO_RM|NEEDS_66				_
+ind		0xED	_		NO_RM						_
+
+outb	0xEE	_		NO_RM						_
+outw	0xEF	_		NO_RM|NEEDS_66				_
+outd	0xEF	_		NO_RM						_
+
+lidt	0x0F01	m64		ONE_OP_W_EXT				_
+cli		0xFA	_		NO_RM						_
+sti		0xFB	_		NO_RM						_
+
+bsr		0x0FBD	hr,hm	RM_OP2						_
+bsf		0x0FBC	hr,hm	RM_OP2						_
+
+lock	0xF0	_		NO_RM						_

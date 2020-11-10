@@ -631,6 +631,8 @@ define void Cast(CompilerState* Compiler, i8 Register, i8 Size) {
 define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionToCompile) {
 	/* Compiles an imported function by emitting a jump to the actual function */
 	
+	FunctionToCompile->CodeOffset := Compiler->Index
+	
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
 	
 	EmitMove_R64_I64(Compiler, RBX, 0)
