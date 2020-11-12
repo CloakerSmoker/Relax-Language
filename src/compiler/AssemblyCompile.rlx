@@ -162,68 +162,68 @@ define void ResolveOperandFunctionReference(InstructionOperand* Operand) {
 define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompile) {
 	if (ToCompile->Type = INSTRUCTION_LABEL) {
 		SetLabel(Compiler, ToCompile->LabelNumber)
-		return 0
 	}
-	
-	InstructionOperand* OperandOne := ToCompile->Operands[0]
-	InstructionOperand* OperandTwo := ToCompile->Operands[1]
-	
-	ResolveOperandFunctionReference(OperandOne)
-	ResolveOperandFunctionReference(OperandTwo)
-	
-	InstructionOperand* MemoryOperand := 0
-	InstructionOperand* OtherOperand := 0
-	
-	Instruction* Base := ToCompile->Base
-	
-	if (Base->Flags & E_RM_IS_OP1) {
-		MemoryOperand := OperandOne
-		OtherOperand := OperandTwo
-	}
-	else if (Base->Flags & E_RM_IS_OP2) {
-		MemoryOperand := OperandTwo
-		OtherOperand := OperandOne
-	}
-	
-	i8 REX := REX_BASE | REX_W
-	
-	if (MemoryOperand) {
-		EmitAssembly(Compiler, Base, MemoryOperand, OtherOperand)
-	}
-	else {		
-		if (Base->Flags & E_LABEL) {
-			if (Base->Flags & E_REX_W) {
-				PushByte(Compiler, REX)
-			}
-			
-			PushOpcode(Compiler, Base)
-			UseLabel(Compiler, OperandOne->LabelNumber)
+	else {
+		InstructionOperand* OperandOne := ToCompile->Operands[0]
+		InstructionOperand* OperandTwo := ToCompile->Operands[1]
+		
+		ResolveOperandFunctionReference(OperandOne)
+		ResolveOperandFunctionReference(OperandTwo)
+		
+		InstructionOperand* MemoryOperand := 0
+		InstructionOperand* OtherOperand := 0
+		
+		Instruction* Base := ToCompile->Base
+		
+		if (Base->Flags & E_RM_IS_OP1) {
+			MemoryOperand := OperandOne
+			OtherOperand := OperandTwo
 		}
-		else if (Base->Flags & E_REG_IN_OPCODE) {
-			i8 TargetRegister := OperandOne->RegisterNumber
-			
-			PushByte(Compiler, REX)
-			PushByte(Compiler, Base~>Opcode[0] + ClampRegisterNumber(TargetRegister))
-			
-			if (Base->Flags & E_IMM8) {
-				PushByte(Compiler, OperandTwo->IntegerValue As i8)
-			}
-			else if (Base->Flags & E_IMM32) {
-				PushI32(Compiler, OperandTwo->IntegerValue As i32)
-			}
-			else if (Base->Flags & E_IMM64) {
-				PushI64(Compiler, OperandTwo->IntegerValue)
-			}
+		else if (Base->Flags & E_RM_IS_OP2) {
+			MemoryOperand := OperandTwo
+			OtherOperand := OperandOne
 		}
-		else {
-			if (Base->Flags & E_NEEDS_66) {
-				PushByte(Compiler, 0x66)
+		
+		i8 REX := REX_BASE | REX_W
+		
+		if (MemoryOperand) {
+			EmitAssembly(Compiler, Base, MemoryOperand, OtherOperand)
+		}
+		else {		
+			if (Base->Flags & E_LABEL) {
+				if (Base->Flags & E_REX_W) {
+					PushByte(Compiler, REX)
+				}
+				
+				PushOpcode(Compiler, Base)
+				UseLabel(Compiler, OperandOne->LabelNumber)
 			}
-			if (Base->Flags & E_REX_W) {
+			else if (Base->Flags & E_REG_IN_OPCODE) {
+				i8 TargetRegister := OperandOne->RegisterNumber
+				
 				PushByte(Compiler, REX)
+				PushByte(Compiler, Base~>Opcode[0] + ClampRegisterNumber(TargetRegister))
+				
+				if (Base->Flags & E_IMM8) {
+					PushByte(Compiler, OperandTwo->IntegerValue As i8)
+				}
+				else if (Base->Flags & E_IMM32) {
+					PushI32(Compiler, OperandTwo->IntegerValue As i32)
+				}
+				else if (Base->Flags & E_IMM64) {
+					PushI64(Compiler, OperandTwo->IntegerValue)
+				}
 			}
-			
-			PushOpcode(Compiler, Base)
+			else {
+				if (Base->Flags & E_NEEDS_66) {
+					PushByte(Compiler, 0x66)
+				}
+				if (Base->Flags & E_REX_W) {
+					PushByte(Compiler, REX)
+				}
+				
+				PushOpcode(Compiler, Base)
+			}
 		}
 	}
 }

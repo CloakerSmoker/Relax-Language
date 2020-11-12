@@ -121,131 +121,6 @@ define void SetupAssembly(ParserState* Parser) {
 			break
 		}
 	}
-	
-	;
-	;/* Ret */
-	;I->Set("ret", MakeInstruction(null, 0xC3, 0, E_NO_RM, 0))
-	;
-	;/* Not */
-	;I->Set("not", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 2)) /* Not, memory */
-	;
-	;/* Neg */
-	;I->Set("neg", MakeInstruction(null, 0xF7, O_M, E_1OP_WEXT, 3)) /* Neg, memory */
-	;
-	;/* And */
-	;Instruction* And := MakeInstruction(null, 0x23, O_RM, E_RM_IS_OP2, 0) /* And, register, memory  */
-	;MakeInstruction(And, 0x20, O_MR, E_RM_IS_OP1, 0) /* And, memory, register */
-	;MakeInstruction(And, 0x80, O_MI, E_RM_IS_OP1 | E_IMM8 | E_OP_EXT, 4) /* And, memory, byte */
-	;MakeInstruction(And, 0x81, O_MI, E_RM_IS_OP1 | E_IMM32 | E_OP_EXT, 4) /* And, memory, dword */
-	;I->Set("and", And)
-	;
-	;/* Mov */
-	;Instruction* Mov := MakeInstruction(null, 0xC7, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 0) /* Mov, register, <i32 */
-	;MakeInstruction(Mov, 0xB8, O_M | (OP_I64 << 16), E_NO_RM | E_REG_IN_OPCODE | E_IMM64, 0) /* Mov, register, i64 */
-	;MakeInstruction(Mov, 0x8B, O_RM, E_RM_IS_OP2, 0) /* Mov, register, memory */
-	;MakeInstruction(Mov, 0x89, O_MR, E_RM_IS_OP1, 0) /* Mov, memory, register */
-	;I->Set("mov", Mov)
-	;
-	;/* Inc */
-	;I->Set("inc", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 0)) /* Inc, memory */
-	;
-	;/* Dec */
-	;I->Set("dec", MakeInstruction(null, 0xFF, O_M, E_1OP_WEXT, 1)) /* Dec, memory */
-	;
-	;/* Jumps (including conditionals) */
-	;
-	;/* Jmp */
-	;Instruction* Jmp := MakeInstruction(null, 0xE9, O_L, E_LABEL, 0) /* Jmp, :label */
-	;MakeInstruction(Jmp, 0xFF, O_M, E_1OP_WEXT, 4) /* Jmp, register */
-	;I->Set("jmp", Jmp)
-	;
-	;/* Je */
-	;Instruction* JE := MakeInstruction(null, 0x0F84, O_L, E_CJMP, 0)
-	;I->Set("je", JE)
-	;I->Set("jz", JE)
-	;
-	;/* Jcc */
-	;I->Set("jgt", MakeInstruction(null, 0x0F8F, O_L, E_CJMP, 0))
-	;I->Set("jge", MakeInstruction(null, 0x0F8D, O_L, E_CJMP, 0))
-	;I->Set("jlt", MakeInstruction(null, 0x0F8C, O_L, E_CJMP, 0))
-	;I->Set("jle", MakeInstruction(null, 0x0F8E, O_L, E_CJMP, 0))
-	;
-	;/* Jne */
-	;Instruction* JNE := MakeInstruction(null, 0x0F85, O_L, E_CJMP, 0)
-	;I->Set("jne", JNE)
-	;I->Set("jnz", JNE)
-	;
-	;/* Call */
-	;Instruction* Call := MakeInstruction(null, 0xE8, O_L, E_LABEL, 0) /* Call, :label */
-	;MakeInstruction(Call, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 2) /* Call, memory64 */
-	;I->Set("call", Call)
-	;
-	;
-	;/* Comparisons */
-	;
-	;/* Test */
-	;Instruction* Test := MakeInstruction(null, 0xF7, O_M | (O_I << 16), E_1OP_WEXT, 0) /* Test, memory, immX */
-	;MakeInstruction(Test, 0x85, O_MR, E_RM_IS_OP1, 0) /* Test, memory, register */
-	;I->Set("test", Test)
-	;
-	;Instruction* Cmp := MakeInstruction(null, 0x83, (OP_HR | OP_M) | (OP_I8 << 16), E_RM_IS_OP1, 0)
-	;
-	;/* Misc (again) */
-	;
-	;/* XChg */
-	;Instruction* XChg := MakeInstruction(null, 0x87, O_MR, E_RM_IS_OP1, 0) /* XChg, memory, register */
-	;MakeInstruction(XChg, 0x87, O_RM, E_RM_IS_OP2, 0) /* XChg, register, memory */
-	;I->Set("xchg", XChg) /* Yes, I know both of these encode to the same thing, but I'm not adding another encoding flag just for this single instruction where operand order doesn't matter */
-	;
-	;/* IRet */
-	;I->Set("iret", MakeInstruction(null, 0xCF, 0, E_NO_RM | E_REX_W, 0))
-	;
-	;/* Lea */
-	;I->Set("lea", MakeInstruction(null, 0x8D, O_RM, E_RM_IS_OP2, 0))
-	;
-	;/* Xor */
-	;Instruction* Xor := MakeInstruction(null, 0x81, O_MI, E_RM_IS_OP1 | E_IMM_X | E_OP_EXT, 6)
-	;MakeInstruction(Xor, 0x31, O_MR, E_RM_IS_OP1, 0)
-	;MakeInstruction(Xor, 0x33, O_RM, E_RM_IS_OP2, 0)
-	;I->Set("xor", Xor)
-	;
-	;/* Stack */
-	;
-	;/* Push */
-	;Instruction* Push := MakeInstruction(null, 0x50, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
-	;MakeInstruction(Push, 0xFF, OP_M64 | OP_R64, E_1OP_WEXT, 6)
-	;I->Set("push", Push)
-	;
-	;/* Pop */
-	;Instruction* Pop := MakeInstruction(null, 0x58, OP_R64, E_REG_IN_OPCODE | E_NO_RM, 0)
-	;MakeInstruction(Pop, 0x8F, OP_M64 | OP_R64, E_1OP_WEXT, 0)
-	;I->Set("pop", Pop)
-	;
-	;/* IO */
-	;
-	;/* In */
-	;I->Set("inb", MakeInstruction(null, 0xEC, 0, E_NO_RM, 0))
-	;I->Set("inw", MakeInstruction(null, 0xED, 0, E_NO_RM | E_NEEDS_66, 0))
-	;I->Set("ind", MakeInstruction(null, 0xED, 0, E_NO_RM, 0))
-	;
-	;/* Out */
-	;I->Set("outb", MakeInstruction(null, 0xEE, 0, E_NO_RM, 0))
-	;I->Set("outw", MakeInstruction(null, 0xEF, 0, E_NO_RM | E_NEEDS_66, 0))
-	;I->Set("outd", MakeInstruction(null, 0xEF, 0, E_NO_RM, 0))
-	;
-	;/* Interrupts */
-	;
-	;I->Set("lidt", MakeInstruction(null, 0x0F01, OP_M64, E_1OP_WEXT | E_2_BYTE_OPCODE, 3))
-	;I->Set("cli", MakeInstruction(null, 0xFA, 0, E_NO_RM, 0))
-	;I->Set("sti", MakeInstruction(null, 0xFB, 0, E_NO_RM, 0))
-	;
-	;/* Bit scans */
-	;
-	;I->Set("bsr", MakeInstruction(null, 0x0FBD, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
-	;I->Set("bsf", MakeInstruction(null, 0x0FBC, O_RM, E_RM_IS_OP2 | E_BYTE_OPCODE_N1 | E_2_BYTE_OPCODE, 0))
-	;
-	;/* Prefixes (which can just be treated as regular instructions) */
-	;I->Set("lock", MakeInstruction(null, 0xF0, 0, E_NO_RM, 0))
 }
 
 define Instruction* FindInstruction(ParserState* Parser, SafeWideString* Name, i32 EncodedOperands) {
@@ -275,7 +150,7 @@ define Instruction* FindInstruction(ParserState* Parser, SafeWideString* Name, i
 	return 0 As Instruction*
 }
 
-define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize) {
+define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize, i8** ErrorMessage) {
 	i8* InvalidName := "Invalid register name."
 	
 	i32 RegisterSize := 0
@@ -285,7 +160,8 @@ define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize
 	
 	/* Any one register name is maximum four characters long. */
 	if (NameString->Length > 4) {
-		TokenError(NameToken, InvalidName)
+		*ErrorMessage := InvalidName
+		return 0
 	}
 	
 	i8 FirstCharacter := NameString->ASCIICharacterAt(0, ' ')
@@ -429,20 +305,30 @@ define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize
 		}
 	}
 	else {
-		TokenError(NameToken, InvalidName)
+		*ErrorMessage := InvalidName
 	}
 	
 	if (RegisterSize = 0) {
-		TokenError(NameToken, InvalidName)
+		*ErrorMessage := InvalidName
 	}
 	else if (Offset != NameString->Length) {
-		TokenError(NameToken, "Malformed register name.")
+		*ErrorMessage := "Malformed register name."
 	}
 	else if (RequiredSize && (RegisterSize != RequiredSize)) {
-		TokenError(NameToken, "Incorrect register size.")
+		*ErrorMessage := "Incorrect register size."
 	}
 	
 	return RegisterNumber | (RegisterSize << 8)
+}
+define i32 LookupRegister(ParserState* Parser, Token* NameToken, i8 RequiredSize) {
+	i8* ErrorMessage := null
+	i32 Result := LookupRegister(Parser, NameToken, RequiredSize, &ErrorMessage)
+	
+	if (ErrorMessage != null) {
+		TokenError(NameToken, ErrorMessage)
+	}
+	
+	return Result
 }
 
 struct SIBInfo {
@@ -604,12 +490,39 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* Parser, AssemblyBlo
 		Next->Size := Next->Type << OP_M_OFFSET
 	}
 	else if (TokenMatches(NextToken, TOKEN_TYPE_IDENTIFIER, 0)) {
-		i32 Register := LookupRegister(Parser, NextToken, 0)
+		i8* Error := null
 		
-		Next->Size := ((Register >> 8) & 0x0F)
-		Next->Type := Next->Size << OP_R_OFFSET
+		i32 Register := LookupRegister(Parser, NextToken, 0, &Error)
 		
-		Next->RegisterNumber := Register & 0x0F
+		if (Error != null) {
+			Next->Type := O_L
+			
+			SafeWideString* LabelName := NextToken->StringValue
+			
+			HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
+			InstructionNode* FoundLabel := 0
+			
+			if (FoundLabelElement) {
+				FoundLabel := FoundLabelElement->Value As InstructionNode*
+			}
+			else {
+				FoundLabel := Alloc(#InstructionNode)
+				
+				FoundLabel->Type := INSTRUCTION_LABEL_INCOMPLETE
+				FoundLabel->LabelName := LabelName
+				FoundLabel->LabelNumber := ParserNextLabel(Parser)
+				
+				ThisBlock~>Labels->Set(LabelName, FoundLabel)
+			}
+			
+			Next->LabelNumber := FoundLabel->LabelNumber
+		}
+		else {
+			Next->Size := ((Register >> 8) & 0x0F)
+			Next->Type := Next->Size << OP_R_OFFSET
+			
+			Next->RegisterNumber := Register & 0x0F
+		}
 		
 		CopyContext(NextToken~>Context, Next~>Context)
 	}
@@ -641,32 +554,6 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* Parser, AssemblyBlo
 		
 		MergeContexts(NextToken~>Context, FunctionToken~>Context, Next~>Context)
 	}
-	else if (TokenMatches(NextToken, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-		Next->Type := O_L
-		
-		Token* LabelToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
-		SafeWideString* LabelName := LabelToken->StringValue
-		
-		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
-		InstructionNode* FoundLabel := 0
-		
-		if (FoundLabelElement) {
-			FoundLabel := FoundLabelElement->Value As InstructionNode*
-		}
-		else {
-			FoundLabel := Alloc(#InstructionNode)
-			
-			FoundLabel->Type := INSTRUCTION_LABEL_INCOMPLETE
-			FoundLabel->LabelName := LabelName
-			FoundLabel->LabelNumber := ParserNextLabel(Parser)
-			
-			ThisBlock~>Labels->Set(LabelName, FoundLabel)
-		}
-		
-		Next->LabelNumber := FoundLabel->LabelNumber
-		
-		MergeContexts(NextToken~>Context, LabelToken~>Context, Next~>Context)
-	}
 	else {
 		TokenError(NextToken, "Unexpected token.")
 	}
@@ -675,39 +562,34 @@ define InstructionOperand* ParseAssemblyOperand(ParserState* Parser, AssemblyBlo
 }
 
 define InstructionNode* ParseInstruction(ParserState* Parser, AssemblyBlock* ThisBlock) {
-	InstructionNode* Result := 0
+	Token* InstructionToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected instruction name.")
+	SafeWideString* InstructionName := InstructionToken->StringValue
 	
 	if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-		Token* LabelToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected label name.")
-		SafeWideString* LabelName := LabelToken->StringValue
-		
-		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
+		HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(InstructionName)
 		InstructionNode* FoundLabel := 0
 		
 		if (FoundLabelElement) {
 			FoundLabel := FoundLabelElement->Value As InstructionNode*
 			
 			if (FoundLabel->Type != INSTRUCTION_LABEL_INCOMPLETE) {
-				TokenError(LabelToken, "Duplicate label definition")
+				TokenError(InstructionToken, "Duplicate label definition")
 			}
 		}
 		else {
 			FoundLabel := Alloc(#InstructionNode)
 			FoundLabel->LabelNumber := ParserNextLabel(Parser)
 			
-			ThisBlock~>Labels->Set(LabelName, FoundLabel)
+			ThisBlock~>Labels->Set(InstructionName, FoundLabel)
 		}
 		
 		FoundLabel->Type := INSTRUCTION_LABEL
-		FoundLabel->LabelName := LabelName
+		FoundLabel->LabelName := InstructionName
 		
-		Result := FoundLabel
+		return FoundLabel
 	}
 	else {
-		Result := Alloc(#InstructionNode)
-		
-		Token* InstructionToken := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected instruction name.")
-		SafeWideString* InstructionName := InstructionToken->StringValue
+		InstructionNode* Result := Alloc(#InstructionNode)
 		
 		i32 OperandTypes := 0
 		i32 OperandSize := 0
@@ -772,9 +654,9 @@ define InstructionNode* ParseInstruction(ParserState* Parser, AssemblyBlock* Thi
 		
 		Result->Base := Found
 		Result->Operands := Operands
+		
+		return Result
 	}
-	
-	return Result
 }
 
 define ASTNode* ParseAssembly(ParserState* Parser, i8 InFunction) {
