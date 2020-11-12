@@ -68,6 +68,8 @@ struct CompilerState {
 	i32 ScopedTryDepth,
 	i32 TotalTryDepth
 	
+	i32 GlobalStringsLabel
+	
 	; Number of functions present in output file
 	i16 FunctionCount
 	
@@ -308,6 +310,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->GlobalBase := Config->ImageBase + Compiler->PE->NextRVA
 		Compiler->CodeBase := 0x3000
 	}
+	
+	Compiler->GlobalStringsLabel := NextLabel(Compiler)
 
 	if (Config->DumpInfo & DUMP_GLOBALS) {
 		DumpGlobals(Compiler)
@@ -656,13 +660,19 @@ declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 	
+	if (IsMain) {
+		SetLabel(Compiler, Compiler->GlobalStringsLabel)
+		
+		for (i32 ConstantByteIndex := 0, ConstantByteIndex < Compiler->Parser->GlobalConstantBufferSize, ConstantByteIndex += 1) {
+			PushByte(Compiler, Compiler->Parser->GlobalConstantsBuffer[ConstantByteIndex])
+		}
+	}
+	
 	; First though, we'll prefix the function's code with any strings which it uses
 	i32 StringsLabel := NextLabel(Compiler)
 	
 	if (FunctionToCompile->StringBufferSize) {
 		SetLabel(Compiler, StringsLabel)
-		
-		Compiler->CurrentFunctionStringsLabel := StringsLabel
 		
 		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
 			PushByte(Compiler, FunctionToCompile->StringBuffer[CharacterIndex])
@@ -688,6 +698,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	Compiler->RegisterStackIndex := 0
 	Compiler->CurrentFunction := FunctionToCompile
+	Compiler->CurrentFunctionStringsLabel := StringsLabel
 	
 	i8 USE_SYSTEMV := true /* Compiler->OutputELF */
 	
@@ -809,6 +820,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	if (IsMain) {
+		Compiler->CurrentFunctionStringsLabel := Compiler->GlobalStringsLabel
+		
 		ASTNode** GlobalDefaults := Compiler->Parser->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
 		
@@ -820,6 +833,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
+		
+		Compiler->CurrentFunctionStringsLabel := StringsLabel
 	}
 	
 	/* Compile the body of the function */

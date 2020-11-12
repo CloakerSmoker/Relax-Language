@@ -143,6 +143,9 @@ define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 		
 		Visitor->VisitChildren(Node)
 	}
+	else if (NodeType = NODE_TYPE_STRING) {
+		Visitor->SetState(true)
+	}
 }
 
 define i8 NodeHasSideEffects(ASTNode* Node) {
@@ -152,6 +155,7 @@ define i8 NodeHasSideEffects(ASTNode* Node) {
 	Visitor->AllowType(NODE_TYPE_UNARY)
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_STRUCT_ACCESS)
+	Visitor->AllowType(NODE_TYPE_STRING)
 	
 	Visitor->SetVisitFunction(&NodeHasSideEffectsVisitor)
 	

@@ -345,6 +345,9 @@ struct ParserState {
 	FunctionDefine* CurrentFunction,
 	FunctionDefine* MainFunction,
 	
+	i8* GlobalConstantsBuffer
+	i32 GlobalConstantBufferSize
+	
 	i8 InLoop,
 	
 	i32 LabelCount
@@ -1577,6 +1580,8 @@ define ParserState* ParserStart(BuildConfig* Config, LexerState* Lexer) {
 	P~>Functions->Initialize()
 	
 	P~>Types->Initialize()
+	
+	P->GlobalConstantsBuffer := Alloc(4)
 	
 	CreateDefaultTypes(P)
 	SetupAssembly(P)
@@ -2936,35 +2941,43 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 		}
 	}
 	else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
-		if !(CurrentFunction) {
-			TokenError(NextToken, "Strings can only be used inside functions.")
+		i8* Buffer := Parser->GlobalConstantsBuffer
+		i32 Offset := Parser->GlobalConstantBufferSize
+		
+		if (CurrentFunction) {
+			Offset := CurrentFunction->StringBufferSize
+			Buffer := CurrentFunction->StringBuffer
 		}
 		
 		i8 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
-		
 		SafeWideString* StringText := NextToken->StringValue
-		
-		i32 Offset := CurrentFunction->StringBufferSize
 		
 		if (Offset % CharacterSize) {
 			Offset += 1
 		}
 		
 		i32 NewSize := Offset + (StringText->Length + 1) * CharacterSize
+		Buffer := ReAlloc(Buffer, NewSize)
 		
-		CurrentFunction->StringBuffer := ReAlloc(CurrentFunction->StringBuffer, NewSize)
-		CurrentFunction->StringBufferSize := NewSize
+		if (CurrentFunction) {
+			CurrentFunction->StringBufferSize := NewSize
+			CurrentFunction->StringBuffer := Buffer
+		}
+		else {
+			Parser->GlobalConstantBufferSize := NewSize
+			Parser->GlobalConstantsBuffer := Buffer
+		}
 		
 		TypeInfo* BaseType := Parser->i8
 		
 		if (CharacterSize = 1) {
 			for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-				CurrentFunction->StringBuffer[Offset + Index] := StringText->Buffer[Index]
+				Buffer[Offset + Index] := StringText->Buffer[Index]
 			}
 		}
 		else {
 			BaseType := Parser->i16
-			MoveMemory(&CurrentFunction->StringBuffer[Offset], StringText->Buffer, StringText->Length * 2)
+			MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length * 2)
 		}
 		
 		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(BaseType, 1))
@@ -3061,7 +3074,16 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 	else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 		i32 BeforeElementType := FreezeParser(Parser)
 		Type ElementType := ParseTypeName(Parser)
-		i32 ConstantOffset := CurrentFunction->ConstantBufferSize
+		
+		i32 ConstantOffset := Parser->GlobalConstantBufferSize
+		i8* ConstantsBuffer := Parser->GlobalConstantsBuffer
+		
+		if (CurrentFunction) {
+			ConstantOffset := CurrentFunction->ConstantBufferSize
+			ConstantsBuffer := CurrentFunction->ConstantsBuffer
+		}
+		
+		i32 NewConstantBufferSize := ConstantOffset
 		
 		if (ParserNextMatches(Parser, TOKEN_TYPE_IDENTIFIER, 0)) {
 			Token* ShouldBeFile := ParserCurrentToken(Parser)
@@ -3086,10 +3108,10 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 			
 			i32 FileSize := FileGetSize(File)
 			
-			CurrentFunction->ConstantBufferSize += FileSize + 1
-			CurrentFunction->ConstantsBuffer := ReAlloc(CurrentFunction->ConstantsBuffer, CurrentFunction->ConstantBufferSize)
+			NewConstantBufferSize += FileSize + 1
+			ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 			
-			void* FileBuffer := CurrentFunction->ConstantsBuffer + ConstantOffset
+			void* FileBuffer := ConstantsBuffer + ConstantOffset
 			
 			FileRead(File, FileBuffer, FileSize)
 			
@@ -3121,19 +3143,16 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 				}
 			}
 			
-			CurrentFunction->ConstantBufferSize += 8 + ElementCount * ElementSize
-			CurrentFunction->ConstantsBuffer := ReAlloc(CurrentFunction->ConstantsBuffer, CurrentFunction->ConstantBufferSize)
+			NewConstantBufferSize += 8 + ElementCount * ElementSize
+			ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 			
-			void* ElementBuffer := CurrentFunction->ConstantsBuffer + ConstantOffset
+			void* ElementBuffer := ConstantsBuffer + ConstantOffset
 			i32 ElementIndex := 0
 			
 			UnfreezeParser(Parser, BeforeElements)
 			
 			loop {
 				Token* NextElementToken := Consume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array element value")
-				ASTNode* NextElementNode := TranslateTokenToNode(Parser, NextElementToken)
-				
-				CheckTypes(Parser, NextElementNode->ValueType, ElementType, NextElementNode)
 				
 				*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
 				ElementIndex += 1
@@ -3145,6 +3164,15 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 					break
 				}
 			}
+		}
+		
+		if (CurrentFunction) {
+			CurrentFunction->ConstantBufferSize := NewConstantBufferSize
+			CurrentFunction->ConstantsBuffer := ConstantsBuffer
+		}
+		else {
+			Parser->GlobalConstantBufferSize := NewConstantBufferSize
+			Parser->GlobalConstantsBuffer := ConstantsBuffer
 		}
 		
 		Result := AllocateNewASTNode(NODE_TYPE_STRING, ConstantOffset, IncrementPointerType(Parser, ElementType))
