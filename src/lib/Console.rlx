@@ -15,6 +15,7 @@ define i64 GetStdHandle(i32 HandleNumber) {
 		if (HandleNumber = -10) {return 0}
 		else if (HandleNumber = -11) {return 1}
 		else if (HandleNumber = -12) {return 2}
+		else {return 3}
 	}
 }
 
@@ -41,6 +42,7 @@ define void PrintNewLine() {
 	}
 	linux {
 		i8 NewLine := 0x0A
+		
 		FileWrite(STDOUT, &NewLine As void*, 1)
 	}
 }
@@ -179,17 +181,15 @@ define void PrintANSIEscape(i8 Foreground, i8 Background) {
 i8 NO_COLORS := false
 
 define void SetColor(i8 Foreground, i8 Background) {
-	if (NO_COLORS) {
-		return 0
-	}
-	
-	linux {
-		PrintANSIEscape(Foreground, Background)
-	}
-	windows {
-		Background := Background << 4
-		
-		SetConsoleTextAttribute(STDOUT, Foreground | Background)
+	if !(NO_COLORS) {
+		linux {
+			PrintANSIEscape(Foreground, Background)
+		}
+		windows {
+			Background := Background << 4
+			
+			SetConsoleTextAttribute(STDOUT, Foreground | Background)
+		}
 	}
 }
 define void ResetColors() {

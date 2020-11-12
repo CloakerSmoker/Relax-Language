@@ -7,6 +7,8 @@ define i64 GetProcessHeap() {
 	windows {
 		return _GetProcessHeap()
 	}
+	
+	return 0
 }
 
 i64 hProcessHeap := GetProcessHeap()
@@ -33,9 +35,9 @@ define void* ReAlloc(void* Memory, i64 NewSize) {
 	}
 }
 
-define i8 Free(void* Memory) {
+define void Free(void* Memory) {
 	windows {
-		return HeapFree(hProcessHeap, 0, Memory)
+		HeapFree(hProcessHeap, 0, Memory)
 	}
 }
 
@@ -103,28 +105,28 @@ define void FreeArray(void* ArrayBuffer) {
 }
 
 
-DllImport void* VirtualAlloc(void*, i64, i32, i32) {Kernel32.dll, VirtualAlloc}
-DllImport void VirtualProtect(void*, i64, i32, i32*) {Kernel32.dll, VirtualProtect}
-DllImport void VirtualFree(void*, i64, i32) {Kernel32.dll, VirtualFree}
-
-i32 MEM_COMMIT_RESERVE := 0x3000
-i32 PAGE_READ_WRITE := 0x4
-i32 PAGE_READ_EXECUTE := 0x20
-i32 MEM_RELEASE := 0x8000
-
-define void* AllocExecutableMemory(i64 Size) {
-	windows {
-		return VirtualAlloc(null, Size, MEM_COMMIT_RESERVE, PAGE_READ_WRITE)
-	}
-}
-define void LockExecutableMemory(void* Memory, i64 Size) {
-	windows {
-		i32 OldProtection := 0
-		VirtualProtect(Memory, Size, PAGE_READ_EXECUTE, &OldProtection)
-	}
-}
-define void FreeExecutableMemory(void* Memory) {
-	windows {
-		VirtualFree(Memory, 0, MEM_RELEASE)
-	}
-}
+;DllImport void* VirtualAlloc(void*, i64, i32, i32) {Kernel32.dll, VirtualAlloc}
+;DllImport void VirtualProtect(void*, i64, i32, i32*) {Kernel32.dll, VirtualProtect}
+;DllImport void VirtualFree(void*, i64, i32) {Kernel32.dll, VirtualFree}
+;
+;i32 MEM_COMMIT_RESERVE := 0x3000
+;i32 PAGE_READ_WRITE := 0x4
+;i32 PAGE_READ_EXECUTE := 0x20
+;i32 MEM_RELEASE := 0x8000
+;
+;define void* AllocExecutableMemory(i64 Size) {
+;	windows {
+;		return VirtualAlloc(null, Size, MEM_COMMIT_RESERVE, PAGE_READ_WRITE)
+;	}
+;}
+;define void LockExecutableMemory(void* Memory, i64 Size) {
+;	windows {
+;		i32 OldProtection := 0
+;		VirtualProtect(Memory, Size, PAGE_READ_EXECUTE, &OldProtection)
+;	}
+;}
+;define void FreeExecutableMemory(void* Memory) {
+;	windows {
+;		VirtualFree(Memory, 0, MEM_RELEASE)
+;	}
+;}

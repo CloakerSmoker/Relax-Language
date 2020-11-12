@@ -43,11 +43,13 @@ define i16* FindLastLine(i16* Base, i32 Offset) {
 			return (WString - Index) + 2
 		}
 		else if ((WString - Index) <= Base) {
-			return Base
+			break
 		}
 		
 		Index += 1
 	}
+	
+	return Base
 }
 
 define void PrintSpaces(i32 Count) {

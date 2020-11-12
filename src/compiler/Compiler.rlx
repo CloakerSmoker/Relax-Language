@@ -550,15 +550,20 @@ define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister
 
 declare void CompileExpression(CompilerState*, i8, ASTNode*)
 
-define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
+
+; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
+;  functions which return 'void'
+define i32 CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->Type.IsArray) {
-		return CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
+		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
+		return 0
 	}
 	
 	if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
-		return CompileExpression(Compiler, ResultRegister, TargetVariable->LastValue)
+		CompileExpression(Compiler, ResultRegister, TargetVariable->LastValue)
+		return 0
 	}
 	
 	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
@@ -592,6 +597,8 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 			AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
 		}
 	}
+	
+	return 0
 }
 define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* TargetVariable, i8 SourceRegister) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
@@ -1252,7 +1259,10 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	}
 }
 
-define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
+
+; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
+;  functions which return 'void'
+define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := CallNode->TargetFunction
 	
@@ -1463,23 +1473,31 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	}
 	
 	Compiler->RegisterStackIndex := RegisterStackIndex
+	
+	return 0
 }
 
 declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpression*)
 
-define void CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
+;  functions which return 'void'
+define i32 CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	ASTNode* Left := TargetAccess->Left
 	
 	if (TargetAccess->Operator->Value = OPERATOR_DOT) {
 		if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			return CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
+			CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
+			return 0
 		}
 		else if (Left->NodeType = NODE_TYPE_VARIABLE) {
-			return CompileGetVariableAddress(Compiler, ResultRegister, Left->VariableValue)
+			CompileGetVariableAddress(Compiler, ResultRegister, Left->VariableValue)
+			return 0
 		}
 	}
 	
 	CompileExpression(Compiler, ResultRegister, Left)
+	
+	return 0
 }
 
 define void CompileGetStructAccessPointer(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
@@ -1495,9 +1513,12 @@ define void CompileGetStructAccessPointer(CompilerState* Compiler, i8 ResultRegi
 	}
 }
 
-define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
+;  functions which return 'void'
+define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	if (TargetAccess->Operator->Value = OPERATOR_TILDE_GREATER) {
-		return CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
+		CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
+		return 0
 	}
 	
 	StructField* TargetField := TargetAccess->TargetField
@@ -1539,6 +1560,8 @@ define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, S
 			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, ResultRegister, FieldOffset, !(FieldOffset >= 112), TargetFieldSize) 
 		}
 	}
+	
+	return 0
 }
 
 declare void CompileSetArrayAccess(CompilerState*, i8, ASTNode*, ASTNode*, i8)
@@ -1835,7 +1858,9 @@ define i8 FindFirstBitSet(i64 Number) asm {
 	ret
 }
 
-define void CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
+; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
+;  functions which return 'void'
+define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
 	ASTNode* Left := ExpressionToCompile->Left
@@ -2179,6 +2204,8 @@ define void CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Resul
 		
 		Compiler->NoClobberA := OldClobberA
 	}
+	
+	return 0
 }
 
 define void CompileUnwindTry(CompilerState* Compiler, i8 ForReturn) {

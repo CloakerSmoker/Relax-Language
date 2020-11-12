@@ -195,26 +195,25 @@ define void PopX64Volitile() asm {
 }
 
 define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
-	windows {
-		PushX64Volitile()
-		
-		WindowsContextRecord* Context := ExceptionInfo->ContextRecord
-		StackFrame* Handler := FindHandler(Context->RBP)
-		
-		Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
-		
-		if (Handler = null) {
-			Context->RIP := &CallUnhandledExceptionHandler
-		}
-		else {
-			Context->RBP := Handler
-			Context->RSP := Handler->LastFrame - 1
-			Context->RIP := Handler->ReturnAddress
-		}
-		
-		PopX64Volitile()
-		return -1
+	PushX64Volitile()
+	
+	WindowsContextRecord* Context := ExceptionInfo->ContextRecord
+	StackFrame* Handler := FindHandler(Context->RBP)
+	
+	Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
+	
+	if (Handler = null) {
+		Context->RIP := &CallUnhandledExceptionHandler
 	}
+	else {
+		Context->RBP := Handler
+		Context->RSP := Handler->LastFrame - 1
+		Context->RIP := Handler->ReturnAddress
+	}
+	
+	PopX64Volitile()
+	
+	return -1
 }
 
 DllImport i8 SetErrorMode(i32) {Kernel32.dll, SetErrorMode}
@@ -226,10 +225,10 @@ define void* SetupExceptionTranslation() {
 		SetErrorMode(1)
 		
 		SetUnhandledExceptionFilter(&WindowsExceptionFilter)
-		AddVectoredExceptionHandler(1, &WindowsExceptionFilter)
-		
-		return null
+		AddVectoredExceptionHandler(1, &WindowsExceptionFilter)		
 	}
+	
+	return null
 }
 
 void* DummyNameForExceptionTranslation := SetupExceptionTranslation()

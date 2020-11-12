@@ -1,24 +1,25 @@
 #Require ./src/lib/Console.rlx
 
-define i64 ReturnParam(i64 A, i64* B) {
-	asm {
-		mov, {rsi} as i8*, di
-		mov, rax, rdi
-		mov, ax, 90
-		
-		mov, si, di
-		mov, six, dix
-	}
+define i64 ReturnParam(i64 A, i64* B) asm {
+	mov, {rsi} as i8*, di
+	
+	mov, rax, rdi
+	mov, ax, 90
+	
+	mov, si, di
+	mov, six, dix
+	ret
 }
-define i32 Abc(i64 a) {
-	asm {
-		mov, rax, rdi
-		:start
-		dec, rax
-		test, rax, rax
-		jnz, :start
-	}
+
+define i32 Abc(i64 a) asm {
+	mov, rax, rdi
+	start:
+	dec, rax
+	test, rax, rax
+	jnz, start
+	ret
 }
+
 define i32 IncRAX() asm {
 	push, rax
 	lock xchg, rbx, {rsp} as i64*
@@ -46,4 +47,6 @@ define i32 Main() {
 	Print(Abc(1))
 	
 	asm {mov, rax, 0}
+	
+	return 0
 }

@@ -87,7 +87,7 @@ struct SafeWideString {
 	}
 	
 	define i8 Equals(SafeWideString* Other) {
-		
+		return false
 	}
 	define i8 Equals(i8* Other) {
 		i32 OtherLength := StringLength(Other)
@@ -162,6 +162,8 @@ define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
 		
 		Index += 1
 	}
+	
+	return false
 }
 
 define void PrintSafeString(SafeWideString* StringToPrint) {

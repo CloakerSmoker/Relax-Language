@@ -861,6 +861,7 @@ struct LexerState {
 		}
 		else {
 			this->AppendToken(0, null, StartingIndex, 1)->Error("Unexpected character")
+			return null
 		}
 	}
 }

@@ -21,11 +21,12 @@ struct Test {
 	},
 	
 	define void Test() {
-		return this->Common()
+		this->Common()
+		return
 	}
 	
 	static void New(i64 Abc) {
-		return 0
+		return
 	}
 	
 	static Test* New() {

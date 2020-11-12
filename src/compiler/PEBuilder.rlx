@@ -819,6 +819,8 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 			}
 		}
 	}
+	
+	return 0
 }
 
 define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName, i64 WriteAddressToOffset) {

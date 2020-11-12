@@ -150,7 +150,7 @@ define i8 ClampRegisterNumber(i8 RegisterNumber) {
 	
 	return RegisterNumber
 }
-define i8 PushRegisterInOpcode(CompilerState* Compiler, i16 Opcode, i8 Register) {
+define void PushRegisterInOpcode(CompilerState* Compiler, i16 Opcode, i8 Register) {
 	Register := ClampRegisterNumber(Register)
 	
 	PushByte(Compiler, Opcode + Register)

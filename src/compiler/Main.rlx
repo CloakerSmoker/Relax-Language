@@ -124,7 +124,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i8* InputFilePath := 0
 	i8* OutputFilePath := 0
-	i8 DumpFunctionBytes := true
+	i8 DumpFunctionBytes := false
 	
 	for (i32 Index := 0, Index < ArgC, Index += 1) {
 		i8* NextArg := ArgV[Index]
@@ -154,16 +154,12 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Index += 1
 			InputFilePath := ArgV[Index]
 			
-			/* AWrite("Input File: ")
-			AWriteLine(InputFilePath) */
 			Print("Input File: '%s'\n", InputFilePath)
 		}
 		else if (StringEquals(NextArg, "-o") && !OutputFilePath) {
 			Index += 1
 			OutputFilePath := ArgV[Index]
-		
-			/* AWrite("Output File: ")
-			AWriteLine(OutputFilePath) */
+			
 			Print("Output File: '%s'\n", OutputFilePath)
 		}
 	}
@@ -195,4 +191,6 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	ParserState* Parser := ParserStart(Config, Lexer)
 	
 	CompilerStart(Config, Parser, OutputFilePath)
+	
+	return 1
 }

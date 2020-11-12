@@ -233,6 +233,7 @@ struct StructAccessExpression {
 struct Block {
 	ASTNode** Statements,
 	i16 StatementCount
+	i8 HasUnconditionalReturn
 }
 
 struct IfGroup {
@@ -594,6 +595,9 @@ define i8 GetPrecedence(Token* ForOperator) {
 	else if (Operator >= PRECEDENCE_1) {
 		return 1
 	}
+	else {
+		return 0
+	}
 }
 
 define i8 GetPrefixPrecedence(Token* ForOperator) {
@@ -838,6 +842,8 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 	PrintType(AtNode->ValueType)
 	
 	ASTError(AtNode, null)
+	
+	return 0
 }
 
 define i32 GetGenericRating(Type ForType) {
@@ -906,6 +912,8 @@ define i8 CheckTypes(ParserState* Parser, Type Source, Type Target, ASTNode* Sou
 		
 		return 0
 	}
+	
+	return 0
 }
 
 define ASTNode* DowncastIntegerType(ParserState* Parser, ASTNode* Target) {
@@ -942,6 +950,11 @@ define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
 	PrettyError(BadNode~>Context, ErrorMessage, Red)
 	Exit(1)
 }
+define void ContextWarn(ErrorContext* Context, i8* WarnMessage) {
+	PrintNewLine()
+	PrettyError(Context, WarnMessage, Red | Green)
+}
+
 define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
 	PrintNewLine()
 	PrettyError(BadNode~>Context, WarnMessage, Red | Green)
@@ -1078,6 +1091,8 @@ define FunctionDefine* MatchFunction(ParserState* Parser, FunctionDefine* BaseFu
 	}
 	
 	Exit(1)
+	
+	return null
 }
 
 /*
@@ -1155,6 +1170,8 @@ define Type GetBinaryResultType(ParserState* Parser, Type LeftType, Type RightTy
 			}
 		}
 	}
+	
+	return LeftType
 }
 
 declare Token* ParserCurrentToken(ParserState*)
@@ -1680,6 +1697,7 @@ declare FunctionDefine* ParseFunction(ParserState*, HashMap*, i8, TypeInfo*)
 declare void ParseAndAddStruct(ParserState*)
 declare void ParseAndAddBits(ParserState*)
 declare ASTNode* ParseExpression(ParserState*, i8)
+declare void ConsumeAndIgnoreBlock(ParserState*)
 
 define void ParseProgram(ParserState* Parser) {
 	/* Parse a whole program */
@@ -1704,9 +1722,22 @@ define void ParseProgram(ParserState* Parser) {
 		else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
 			ParseAndAddBits(Parser)
 		}
-		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
-			break
-		}
+		;else if (TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS) || TokenMatches(NextToken, TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
+		;	i8 TargetFormat := OUTPUT_PE
+		;	
+		;	if (NextToken->Value = KEYWORD_LINUX) {
+		;		TargetFormat := OUTPUT_ELF
+		;	}
+		;	
+		;	if (Parser->Config->OutputFormat = TargetFormat) {
+		;		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+		;		ParseProgram(Parser)
+		;		Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected close brace.")
+		;	}
+		;	else {
+		;		ConsumeAndIgnoreBlock(Parser)
+		;	}
+		;}
 		else if (NextType = TOKEN_TYPE_IDENTIFIER) {
 			/* If the next token isn't an identifier, then it's definitely not a declaration */
 			
@@ -1747,6 +1778,9 @@ define void ParseProgram(ParserState* Parser) {
 					}
 				}
 			}
+		}
+		else if (TokenMatches(NextToken, TOKEN_TYPE_EOF, TOKEN_TYPE_EOF)) {
+			break
 		}
 		else {
 			TokenError(NextToken, "Unexpected token")
@@ -2074,6 +2108,7 @@ define Block* ParseBlock(ParserState* Parser) {
 	i16 StatementBufferSize := 8
 	ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
 	i16 StatementCount := 0
+	i8 HasHadUnconditionalReturn := false
 	
 	i32 Depth := 1
 	
@@ -2115,7 +2150,27 @@ define Block* ParseBlock(ParserState* Parser) {
 			}
 			else {
 				UnfreezeParser(Parser, Start)
-				Statements[StatementCount] := ParseStatement(Parser)
+				
+				ASTNode* NextStatement := ParseStatement(Parser)
+				
+				Statements[StatementCount] := NextStatement
+				
+				if (NextStatement->NodeType = NODE_TYPE_RETURN) {
+					HasHadUnconditionalReturn := true
+				}
+				else if (NextStatement->NodeType = NODE_TYPE_IF) {
+					IfGroup* NextIf := NextStatement->IfNode
+					i8 AllBranchesHaveReturn := true
+					
+					for (i32 BranchIndex := 0, BranchIndex < NextIf->BranchCount, BranchIndex += 1) {
+						AllBranchesHaveReturn &= NextIf->Bodies[BranchIndex]->HasUnconditionalReturn
+					}
+					
+					if (NextIf->ElseBranch && AllBranchesHaveReturn) {
+						HasHadUnconditionalReturn |= NextIf->ElseBranch->HasUnconditionalReturn
+					}
+				}
+				
 				StatementCount += 1
 			}
 			
@@ -2147,6 +2202,7 @@ define Block* ParseBlock(ParserState* Parser) {
 	Block* NewBlock := Alloc(#Block) As Block*
 	NewBlock->Statements := Statements
 	NewBlock->StatementCount := StatementCount
+	NewBlock->HasUnconditionalReturn := HasHadUnconditionalReturn
 	
 	return NewBlock
 }
@@ -2456,6 +2512,12 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 			}
 			
 			NewDefine->Body := ParseBlock(Parser)
+			
+			if (NewDefine->ReturnType != MakeType(Parser->void, 0)) {
+				if !(NewDefine->Body->HasUnconditionalReturn) {
+					ContextError(NewDefine~>Context, "Function has non-void return type, but no unconditional return statement")
+				}
+			}
 		}
 		
 		NewDefine->HasFullDefinition := true
@@ -2502,23 +2564,37 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 		else if (NextKeyword = KEYWORD_RETURN) {
 			/* A return is a NODE_TYPE_RETURN with a value which points to the expression to return */
 			
-			if (ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-				/* If there isn't an expression to return, just pretend it is `return 0` */
-				
+			/* Parse the expression to return */
+			ASTNode* ExpressionToReturn := null
+			
+			if (Parser->CurrentFunction->ReturnType = MakeType(Parser->void, 0)) {
 				Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(Parser->i8, 0))
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, Result, TYPE_NONE)
+				
+				i32 BeforeClosingBrace := FreezeParser(Parser)
+				
+				if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					ExpressionToReturn := ParseExpression(Parser, 0)
+					
+					ASTError(ExpressionToReturn, "Unexpected expression, 'void' functions should not return a value.")
+				}
+				
+				UnfreezeParser(Parser, BeforeClosingBrace)
 			}
 			else {
-				/* Parse the expression to return */
-				ASTNode* ExpressionToReturn := ParseExpression(Parser, 0)
-				
-				ExpressionToReturn := DowncastIntegerType(Parser, ExpressionToReturn)
+				ExpressionToReturn := DowncastIntegerType(Parser, ParseExpression(Parser, 0))
 				Type ExpectedReturnType := Parser->CurrentFunction->ReturnType
 				
 				CheckTypes(Parser, 0 As Type, ExpectedReturnType, ExpressionToReturn)
 				
 				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
 			}
+		}
+		else if (NextKeyword = KEYWORD_ASSEMBLY) {
+			Result := ParseAssembly(Parser, true)
+		}
+		else if (NextKeyword = KEYWORD_TRY) {
+			Result := ParseTry(Parser)
 		}
 		else if (NextKeyword = KEYWORD_IF) {
 			Result := ParseIf(Parser)
@@ -2536,12 +2612,6 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 		}
 		else if (NextKeyword = KEYWORD_WHILE) {
 			Result := ParseWhile(Parser)
-		}
-		else if (NextKeyword = KEYWORD_ASSEMBLY) {
-			Result := ParseAssembly(Parser, true)
-		}
-		else if (NextKeyword = KEYWORD_TRY) {
-			Result := ParseTry(Parser)
 		}
 	}
 	
@@ -3186,7 +3256,9 @@ define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 		if (CouldBeMethodCall && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			/* If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call */
 			
-			Type LeftType := Result->ValueType
+			ASTNode* LeftAccess := Result
+			
+			Type LeftType := LeftAccess->ValueType
 			TypeInfo* LeftBase := GetBaseType(LeftType)
 			i16 LeftDepth := GetPointerDepth(LeftType)
 			
@@ -3209,7 +3281,7 @@ define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 				Result->ValueType := IncrementPointerType(Parser, Result->ValueType)
 			}
 			
-			/* The first parameter is `this`, so we any actual parameters are offset by 1 */
+			/* The first parameter is `this`, so any actual parameters are offset by 1 */
 			i8 ParameterCount := 1
 			ASTNode** Parameters := ParseParameterList(Parser, &ParameterCount)
 			
@@ -3217,6 +3289,8 @@ define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 			Parameters[0] := Result
 			
 			Result := MakeCall(Parser, LeftBase~>Methods, Right, Parameters, ParameterCount)
+			
+			MergeContexts(LeftAccess~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
 		}
 		else {
 			Result := MakeBinary(Parser, Result, OperatorToken, Operand)

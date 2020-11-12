@@ -20,6 +20,9 @@ define SimpleHeap* SimpleHeapInit() {
 		
 		return Heap
 	}
+	windows {
+		return null
+	}
 }
 
 SimpleHeap* ProcessHeap := SimpleHeapInit()
@@ -43,6 +46,9 @@ define void* SimpleHeapAlloc(i64 Size) {
 		ProcessHeap->Next := ResultEnd
 		
 		return Result + 8
+	}
+	windows {
+		return null
 	}
 }
 
@@ -69,5 +75,8 @@ define void* SimpleHeapReAlloc(void* Memory, i64 NewSize) {
 		SimpleHeapCopyClear(Memory, NewMemory, OldSize)
 		
 		return NewMemory
+	}
+	windows {
+		return null
 	}
 }

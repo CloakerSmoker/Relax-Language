@@ -13,20 +13,13 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	i8* FilePath := ArgV[1]
 	i8* TextToWrite := ArgV[2]
 	
-	
 	i64 F := FileOpen(FilePath, FILE_WRITE | FILE_CREATE_NEW)
-	
 	FileWrite(F, TextToWrite, StringLength(TextToWrite))
-	
 	FileClose(F)
 	
-	
 	i64 F2 := FileOpen(FilePath, FILE_READ)
-	
 	Print(FileReadAll(F2) As i8*)
-	
 	FileClose(F2)
-	
 	
 	FileDelete(FilePath)
 	

@@ -79,10 +79,10 @@ define i32 FileGetSize(i64 File) {
 define void FileRead(i64 File, void* Buffer, i32 BytesToRead) {
 	windows {
 		i32 BytesRead := 0
-		return ReadFile(File, Buffer, BytesToRead, &BytesRead, 0)
+		ReadFile(File, Buffer, BytesToRead, &BytesRead, 0)
 	}
 	linux {
-		return syscall:(0, File, Buffer, BytesToRead)
+		syscall:(0, File, Buffer, BytesToRead)
 	}
 }
 define void* FileReadAll(i64 File) {
@@ -105,13 +105,13 @@ define i32 FileWrite(i64 File, void* Buffer, i32 BufferSize) {
 }
 define void FileClose(i64 File) {
 	windows {
-		return CloseHandle(File)
+		CloseHandle(File)
 	}
 	linux {
-		return syscall:(3, File)
+		syscall:(3, File)
 	}
 }
-define void FileGetError(i64 Result) {
+define i64 FileGetError(i64 Result) {
 	if (Result > 0) {
 		return 0
 	}
@@ -204,11 +204,10 @@ define i8 DirectoryWalk(i8* DirectoryPath, void* VisitFunction) {
 		}
 		
 		Free(FixedDirectoryPath)
-		FindClose(FindHandle)
-		
-		return 0
+		FindClose(FindHandle)	
 	}
 	
+	return 0
 }
 
 DllImport i32 GetFullPathName(i8*, i32, i8*, i8*) {Kernel32.dll, GetFullPathNameA}
@@ -221,8 +220,10 @@ define i8* GetAbsolutePath(i8* ForPath) {
 		
 		return Buffer
 	}
+	
+	return null
 }
 
 define i8* GetWorkingDirectory() {
-	GetAbsolutePath(".")
+	return GetAbsolutePath(".")
 }
