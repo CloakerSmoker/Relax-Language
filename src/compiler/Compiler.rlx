@@ -1937,11 +1937,17 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 				i32 Start := Compiler->Index
 				i32 Offset := GetVariableOffset(Compiler, TargetVariable, null)
 				
+				i8 BaseRegister := RBP
+				
+				if (TargetVariable->IsGlobal) {
+					BaseRegister := R15
+				}
+				
 				if (Operator = OPERATOR_PLUS_EQUAL) {
-					EmitAdd_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
+					EmitAdd_RIX_DISPX_RX(Compiler, BaseRegister, WorkRegister, Offset, ResultSize)
 				}
 				else if (Operator = OPERATOR_MINUS_EQUAL) {
-					EmitSub_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
+					EmitSub_RIX_DISPX_RX(Compiler, BaseRegister, WorkRegister, Offset, ResultSize)
 				}
 				
 				if (Compiler->Index != Start) {

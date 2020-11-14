@@ -200,8 +200,10 @@ define void EliminateGlobals(VariableHashMap* Globals) {
 				; If a global is only set once, and has a default value, and the default value has no
 				;  side-effects, then it can safely be optimized away.
 				
-				if (NextGlobal->SetCount = 1 && NextGlobal->LastValue != null) {
-					if !(NodeHasSideEffects(NextGlobal->LastValue)) {
+				ASTNode* LastValue := NextGlobal->LastValue
+				
+				if (NextGlobal->SetCount = 1 && LastValue != null) {
+					if !(NodeHasSideEffects(LastValue)) {
 						NextGlobal->IsGlobal := GLOBAL_IS_OPTIMIZED_AWAY
 					}
 				}
