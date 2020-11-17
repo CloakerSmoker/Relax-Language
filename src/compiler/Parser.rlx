@@ -1,138 +1,11 @@
 ; TODO: Add a divmod built-in, the `x / constant` with `x % constant` pattern is getting annoying.
 
-
-
-/*
-==========================================
-	Typing helper structs (Defined first since ASTNode has a Type field)
-==========================================
-*/
-
-struct TypeInfo {
-	SafeWideString* Name,
-	HashMap Fields,
-	HashMap Methods,
-	HashMap StaticMethods,
-	i16 Size,
-	i8 IsStructType,
-	i8 IsIncomplete,
-	i8 IsBits,
-	i8 IsBuiltin
-}
-
 bits Type As i64 {
 	[0:47] BaseType,
 	[48:52] PointerDepth,
 	[53:54] IsArray,
 	[54:63] ArraySize
 }
-
-define TypeInfo* GetBaseType(Type T) {
-	return T.BaseType As TypeInfo*
-}
-define i16 GetTypeSize(Type T) {
-	if (T.PointerDepth) {
-		return 8
-	}
-	else {
-		return GetBaseType(T)->Size
-	}
-}
-
-define i32 GetTypeStorageSize(Type T) {
-	i32 RegularSize := GetTypeSize(T)
-	
-	if (T.IsArray) {
-		RegularSize := GetBaseType(T)->Size
-	
-		return RegularSize * (T.ArraySize As i32)
-	}
-	
-	return RegularSize
-}
-define i32 GetPointerDepth(Type T) {
-	return T.PointerDepth As i32
-}
-define i8* GetTypeName(Type T) {
-	SafeWideString* BaseName := GetBaseType(T)->Name
-	i32 BaseNameLength := BaseName->Length
-	i32 PointerDepth := GetPointerDepth(T)
-	
-	i32 BufferSize := BaseNameLength + PointerDepth + 1
-	
-	i8* NameBuffer := Alloc(BufferSize)
-	i16* BaseNameBuffer := BaseName->Buffer
-	
-	for (i32 BaseNameIndex := 0, BaseNameIndex < BaseNameLength, BaseNameIndex += 1) {
-		NameBuffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
-	}
-	
-	for (i32 PointerDepthIndex := 0, PointerDepthIndex < PointerDepth, PointerDepthIndex += 1) {
-		NameBuffer[BaseNameLength + PointerDepthIndex] := '*'
-	}
-	
-	return NameBuffer
-}
-
-struct StructField {
-	SafeWideString* Name,
-	i16 Offset,
-	Type ValueType,
-	i8 BitStartIndex,
-	i8 BitEndIndex
-}
-
-/*
-==========================================
-	AST Node type constants
-==========================================
-*/
-
-i8 NODE_TYPE_NONE := 0
-i8 NODE_TYPE_TOKEN := 1
-
-i8 NODE_TYPE_UNARY := 2
-i8 NODE_TYPE_BINARY := 3
-i8 NODE_TYPE_CALL := 4
-
-i8 NODE_TYPE_DEFINE := 6
-i8 NODE_TYPE_DLLIMPORT := 7
-
-i8 NODE_TYPE_IF := 8
-
-i8 NODE_TYPE_FOR := 9
-i8 NODE_TYPE_WHILE := 10
-i8 NODE_TYPE_LOOP := 11
-i8 NODE_TYPE_CONTINUEBREAK := 12
-
-i8 NODE_TYPE_RETURN := 13
-i8 NODE_TYPE_EXPRESSION := 14
-
-i8 NODE_TYPE_VARIABLE := 15
-i8 NODE_TYPE_INTEGER := 16
-i8 NODE_TYPE_STRING := 17
-
-i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
-i8 NODE_TYPE_STRUCT_ACCESS := 19
-i8 NODE_TYPE_IDENTIFIER := 20
-
-i8 NODE_TYPE_ASSEMBLY := 21
-
-; Dedicated zero node type, to ensure that the actual ValueType of a zero (inside of a NODE_TYPE_INTEGER) 
-;  doesn't get optimized into `i8`, since that's the smallest type that could hold `0`.
-i8 NODE_TYPE_ZERO := 22
-
-i8 NODE_TYPE_TRY := 23
-
-; Since type sizes can change at parse-time inside of struct methods, the actually resolution
-;  of a type's size needs to be deferred until compile-time
-i8 NODE_TYPE_GET_TYPE_SIZE := 24
-
-/*
-==========================================
-	True AST node types
-==========================================
-*/
 
 i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
@@ -149,11 +22,8 @@ struct VariableInfo {
 	i8 IsThis
 }
 
-define VariableInfo* AllocateNewVariableInfo() {
-	return Alloc(#VariableInfo) As VariableInfo*
-}
-
 declare i32 RoundTo(i32, i32)
+declare i16 GetTypeStorageSize(Type)
 
 struct VariableHashMap {
 	HashMap BackingMap
@@ -183,7 +53,7 @@ struct VariableHashMap {
 		if (this->Get(NewVariable->Name)) {
 			/* If we already have this name in the hashmap, then it's a duplicate definition */
 			
-			TokenError(SourceToken, "Duplicate definition")
+			SourceToken->Error("Duplicate definition")
 		}
 		
 		this->Map->Set(NewVariable->Name, NewVariable)
@@ -205,120 +75,16 @@ struct VariableHashMap {
 	}
 }
 
-define VariableHashMap* NewVariableMap() {
-	VariableHashMap* Map := Alloc(#VariableHashMap)
-	
-	Map->Initialize()
-	
-	return Map
-}
+#Require "./src/compiler/AST.rlx"
+#Require "./src/compiler/Types.rlx"
 
-struct UnaryExpression {
-	Token* Operator,
-	ASTNode* Operand
-}
+i8 TYPE_REGULAR := 1
+i8 TYPE_STRUCT := 2
+i8 TYPE_INCOMPLETE := 4
+i8 TYPE_BITS := 8
+i8 TYPE_ARRAY := 16
 
-struct BinaryExpression {
-	ASTNode* Left,
-	Token* Operator,
-	ASTNode* Right
-}
-
-struct StructAccessExpression {
-	ASTNode* Left,
-	Token* Operator,
-	StructField* TargetField
-}
-
-struct Block {
-	ASTNode** Statements,
-	i16 StatementCount
-	i8 HasUnconditionalReturn
-}
-
-struct IfGroup {
-	ASTNode** Conditions,
-	Block** Bodies,
-	Block* ElseBranch,
-	i16 BranchCount
-}
-
-struct ForLoop {
-	ASTNode* Initializer,
-	ASTNode* Condition,
-	ASTNode* Step,
-	Block* Body
-}
-
-struct WhileLoop {
-	ASTNode* Condition,
-	Block* Body
-}
-
-struct TryCatch {
-	Block* Body,
-	Block* CatchBody,
-	VariableInfo* CatchCodeVariable
-}
-
-i8 FUNCTION_IS_METHOD := 1
-i8 FUNCTION_IS_STATIC_METHOD := 2
-
-struct FunctionDefine {
-	ErrorContext Context,
-	
-	FunctionDefine* Next,
-	SafeWideString* Name,
-	
-	i16 ParameterCount,
-	VariableInfo** Parameters,
-	
-	VariableHashMap Locals,
-	Type ReturnType,
-	
-	i8 IsImported,
-	
-	union {
-		Block* Body,
-		AssemblyBlock* AssemblyBody,
-		SafeWideString* ImportFileName
-	},
-	union {
-		i8* StringBuffer,
-		void* ConstantsBuffer,
-		SafeWideString* ImportFunctionName
-	},
-	
-	SafeWideString* MethodOfTypeName,
-	
-	i8 Attribute,
-	i8 HasFullDefinition,
-	i32 LabelNumber,
-	
-	union {
-		i32 StringBufferSize,
-		i32 ConstantBufferSize
-	}
-	
-	i32 CallCount,
-	i8 UsesGlobals,
-	i8 IsMethod,
-	
-	i32 CodeOffset,
-	
-	i8 TempValue
-}
-
-i8 BUILTIN_NONE := 0
-i8 BUILTIN_SYSCALL := 1
-i8 BUILTIN_BREAKPOINT := 2
-
-struct CallExpression {
-	FunctionDefine* TargetFunction,
-	ASTNode** Parameters,
-	i32 ParameterCount,
-	i8 BuiltinID
-}
+; Holds the entire state of the parser
 
 struct ParserState {
 	BuildConfig* Config,
@@ -351,6 +117,125 @@ struct ParserState {
 	i8 InLoop,
 	
 	i32 LabelCount
+	
+	define TypeInfo* AddType(SafeWideString* Name, i16 Size, i8 Flags) {
+		TypeInfo* NewType := Alloc(#TypeInfo)
+		
+		NewType->Name := Name
+		NewType->Size := Size
+	
+		if (Flags & TYPE_STRUCT) {
+			NewType->IsStructType := true
+		}
+		
+		if (Flags & TYPE_INCOMPLETE) {
+			NewType->IsIncomplete := true
+		}
+		
+		if (Flags & TYPE_BITS) {
+			NewType->IsBits := true
+		}
+		
+		if (Flags & TYPE_REGULAR) {
+			NewType->IsBuiltin := true
+		}
+		
+		this~>Types->Set(Name, NewType)
+		
+		return NewType
+	}
+	define TypeInfo* AddType(i8* Name, i16 Size, i8 Flags) {
+		return this->AddType(AToS(Name), Size, Flags)
+	}
+	define void CreateDefaultTypes() {
+		this->i8 := this->AddType("i8", 1, TYPE_REGULAR)
+		this->i16 := this->AddType("i16", 2, TYPE_REGULAR)
+		this->i32 := this->AddType("i32", 4, TYPE_REGULAR)
+		this->i64 := this->AddType("i64", 8, TYPE_REGULAR)
+		this->void := this->AddType("void", 8, TYPE_REGULAR)
+	}
+	
+	define i32 Freeze() {
+		return this->Lexer->TokenIndex
+	}
+	define void Unfreeze(i32 FrozenState) {
+		this->Lexer->TokenIndex := FrozenState
+	}
+	define Token* CurrentToken() {
+		this->Lexer->TokenIndex -= 1
+		
+		return this->Lexer->GetNextToken()
+	}
+	
+	define Type TryFindType(SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
+		HashMapElement* FoundTypeInfoElement := this~>Types->Get(TypeName)
+		TypeInfo* FoundTypeInfo := null
+		
+		if (FoundTypeInfoElement) {
+			FoundTypeInfo := FoundTypeInfoElement->Value As TypeInfo*
+		}
+		else {
+			if (PointerDepth = 0) {
+				*ErrorMessage := "Undefined type (Incomplete types can only be pointed-to)"
+				return TYPE_NONE
+			}
+			else {
+				FoundTypeInfo := this->AddType(TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+			}
+		}
+		
+		return FoundTypeInfo->AsPointer(PointerDepth)
+	}
+	define Type FindType(SafeWideString* TypeName, i16 PointerDepth) {
+		i8* ErrorMessage := null
+		
+		Type Result := this->TryFindType(TypeName, PointerDepth, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			this->CurrentToken()->Error(ErrorMessage)
+		}
+		
+		return Result
+	}
+	
+	define Type DereferencePointerType(Type TypeToDecrement, ErrorContext* BlameContext) {
+		i16 PointerDepth := GetPointerDepth(TypeToDecrement)
+		
+		if (PointerDepth = 0) {
+			BlameContext->Error("Pointer type expected")
+		}
+		
+		return GetBaseType(TypeToDecrement)->AsPointer(PointerDepth - 1 As i16)
+	}
+	define Type PointerToType(Type TypeToIncrement) {
+		return GetBaseType(TypeToIncrement)->AsPointer(GetPointerDepth(TypeToIncrement) + 1 As i16)
+	}
+	
+	define Type GetNumberType(i64 Number) {
+		if (Number & 0xFFFF_FFFF_8000_0000) {
+			return this->i64->AsNonPointer()
+		}
+		else {
+			return this->i32->AsNonPointer()
+		}
+	}
+	
+	define ASTNode* DowncastIntegerNode(ASTNode* Target) {
+		if (Target->NodeType != NODE_TYPE_INTEGER) {
+			return Target
+		}
+		
+		i8 Size := GetNumberSize(Target->IntegerValue)
+		TypeInfo* BaseType := this->i8
+		
+		if (Size = 2) {BaseType := this->i16}
+		else if (Size = 4) {BaseType := this->i32}
+		else if (Size = 8) {BaseType := this->i64}
+		
+		Target->ValueType := BaseType->AsNonPointer()
+		
+		return Target
+	}
 }
 
 define i32 ParserNextLabel(ParserState* Parser) {
@@ -360,195 +245,6 @@ define i32 ParserNextLabel(ParserState* Parser) {
 	
 	return Result
 }
-
-/*
-==========================================
-	AST Node definition + alloc/free helpers
-==========================================
-*/
-
-struct ASTNode {
-	/* First two fields are the same as Token, so they can be used interchangably in error handling functions */
-	
-	ErrorContext Context,
-	
-	union {
-		void* TrueNode,
-		
-		UnaryExpression* UnaryNode,
-		BinaryExpression* BinaryNode,
-		CallExpression* CallNode,
-		StructAccessExpression* AccessNode,
-		
-		IfGroup* IfNode,
-		ForLoop* ForNode,
-		WhileLoop* WhileNode,
-		Block* LoopBody,
-		i8 IsContinue,
-		
-		FunctionDefine* DefineNode,
-		
-		ASTNode* ReturnExpression,
-		
-		ASTNode* ExpressionStatement,
-		
-		SafeWideString* StringValue,
-		VariableInfo* VariableValue,
-		i64 IntegerValue,
-		Type TypeValue,
-		i32 StringOffsetValue,
-		
-		AssemblyBlock* AssemblyValue,
-		TryCatch* TryNode
-	},
-	
-	void* LastVisitor
-	Type ValueType
-	i8 NodeType
-	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
-}
-
-struct ASTVisitor {
-	void* VisitFunction
-	i64 State
-	i32 NodeTypeMask
-	
-	define i32 IsTypeAllowed(i8 NodeType) {
-		return !!(this->NodeTypeMask & (1 << NodeType))
-	}
-	define void AllowType(i8 NodeType) {
-		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
-	}
-	
-	define void SetState(i64 State) {
-		this->State := State
-	}
-	define i64 GetState() {
-		return this->State
-	}
-	
-	define void SetVisitFunction(void* Function) {
-		this->VisitFunction := Function
-	}
-	define void CallVisitor(ASTNode* Node, void* VisitFunction) asm {
-		jmp, rdx
-	}
-	
-	declare void VisitNodes(...),
-	declare void RawVisitNodes(i64, ASTNode**),
-	
-	define void RawVisitBlocks(i64 Count, Block** Blocks) {
-		for (i32 Index := 0, Index < Count, Index += 1) {
-			Block* Next := Blocks[Index]
-			
-			this->RawVisitNodes(Next->StatementCount, Next->Statements)
-		}
-	}
-	define void VisitBlocks(... Blocks) {
-		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
-	}
-	define void VisitChildren(ASTNode* Node) {
-		i8 NodeType := Node->NodeType
-		
-		if (NodeType = NODE_TYPE_UNARY) {
-			this->VisitNodes(Node->UnaryNode->Operand)
-		}
-		else if (NodeType = NODE_TYPE_BINARY) {
-			this->VisitNodes(Node->BinaryNode->Left, Node->BinaryNode->Right)
-		}
-		else if (NodeType = NODE_TYPE_CALL) {
-			this->RawVisitNodes(Node->CallNode->ParameterCount, Node->CallNode->Parameters)
-		}
-		else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			this->VisitNodes(Node->AccessNode->Left)
-		}
-		else if (NodeType = NODE_TYPE_IF) {
-			this->RawVisitNodes(Node->IfNode->BranchCount, Node->IfNode->Conditions)
-			this->RawVisitBlocks(Node->IfNode->BranchCount, Node->IfNode->Bodies)
-			
-			if (Node->IfNode->ElseBranch) {
-				this->VisitBlocks(Node->IfNode->ElseBranch)
-			}
-		}
-		else if (NodeType = NODE_TYPE_WHILE) {
-			this->VisitNodes(Node->WhileNode->Condition)
-			this->VisitBlocks(Node->WhileNode->Body)
-		}
-		else if (NodeType = NODE_TYPE_FOR) {
-			this->VisitNodes(Node->ForNode->Initializer, Node->ForNode->Condition, Node->ForNode->Step)
-			this->VisitBlocks(Node->ForNode->Body)
-		}
-		else if (NodeType = NODE_TYPE_LOOP) {
-			this->VisitBlocks(Node->LoopBody)
-		}
-		else if (NodeType = NODE_TYPE_RETURN) {
-			this->VisitNodes(Node->ReturnExpression)
-		}
-		else if (NodeType = NODE_TYPE_EXPRESSION) {
-			this->VisitNodes(Node->ExpressionStatement)
-		}
-		else if (NodeType = NODE_TYPE_TRY) {
-			this->VisitBlocks(Node->TryNode->Body)
-			
-			if (Node->TryNode->CatchBody) {
-				this->VisitBlocks(Node->TryNode->CatchBody)
-			}
-		}
-	}
-	
-	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
-		for (i32 Index := 0, Index < Count, Index += 1) {
-			ASTNode* Node := Nodes[Index]
-			
-			if (Node->LastVisitor = this) {
-				continue
-			}
-			
-			Node->LastVisitor := this
-			
-			if (this->IsTypeAllowed(Node->NodeType)) {
-				this->CallVisitor(Node, this->VisitFunction)
-			}
-			else {
-				this->VisitChildren(Node)
-			}
-		}
-	}
-	define void VisitNodes(... Nodes) {
-		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
-	}
-}
-
-define ASTNode* AllocateNewASTNode(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
-	ASTNode* NewNode := Alloc(#ASTNode) As ASTNode*
-	
-	UnaryExpression* UnaryNode := NewNodeTrueNode
-	BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
-	StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
-	
-	i8 IsDereference := NewNodeType = NODE_TYPE_UNARY && UnaryNode->Operator->Value = OPERATOR_STAR
-	i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
-	i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
-	
-	if (IsDereference || IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
-		NewNode->IsStorageValue := true
-	}
-	
-	NewNode->NodeType := NewNodeType
-	NewNode->TrueNode := NewNodeTrueNode
-	NewNode->ValueType := NewNodeValueType
-	
-	return NewNode
-}
-
-define ASTNode* AllocateNewASTNode(i8 NewNodeType, i64 NewNodeValue, Type NewNodeValueType) {
-	return AllocateNewASTNode(NewNodeType, NewNodeValue As void*, NewNodeValueType)
-}
-
-define void FreeASTNode(ASTNode* Node) {
-	Free(Node As void*)
-}
-
 
 /*
 ==========================================
@@ -652,316 +348,12 @@ define i8 GetAssociation(Token* ForOperator) {
 ==========================================
 */
 
-Type TYPE_NONE := 0
-
-i8 TYPE_REGULAR := 1
-i8 TYPE_STRUCT := 2
-i8 TYPE_INCOMPLETE := 4
-i8 TYPE_BITS := 8
-i8 TYPE_ARRAY := 16
-
-define TypeInfo* AddType(ParserState* Parser, SafeWideString* Name, i16 Size, i8 Flags) {
-	/* Adds a type to Parser with the given name, fields, size, structinfo, and completeness */
-	
-	/* Should only be called once per type name */
-	TypeInfo* NewType := Alloc(#TypeInfo) As TypeInfo*
-	
-	NewType->Name := Name
-	NewType->Size := Size
-
-	if (Flags & TYPE_STRUCT) {
-		NewType->IsStructType := true
-	}
-	
-	if (Flags & TYPE_INCOMPLETE) {
-		NewType->IsIncomplete := true
-	}
-	
-	if (Flags & TYPE_BITS) {
-		NewType->IsBits := true
-	}
-	
-	if (Flags & TYPE_REGULAR) {
-		NewType->IsBuiltin := true
-	}
-	
-	Parser~>Types->Set(Name, NewType)
-	
-	return NewType
-}
-
-define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
-	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
-	
-	Type NewType := 0
-	
-	NewType.BaseType := BackingType
-	NewType.PointerDepth := PointerDepth
-
-	return NewType
-}
-define Type MakeType(i64 BackingType, i16 PointerDepth) {
-	return MakeType(BackingType As TypeInfo*, PointerDepth)
-}
-
-define void CreateDefaultTypes(ParserState* Parser) {
-	/* Creates all the standard types, only called once */
-	
-	/* All standard types are not structs, and are not incomplete */
-	Parser->i8 := AddType(Parser, AToS("i8"), 1, TYPE_REGULAR)
-	Parser->i16 := AddType(Parser, AToS("i16"), 2, TYPE_REGULAR)
-	Parser->i32 := AddType(Parser, AToS("i32"), 4, TYPE_REGULAR)
-	Parser->i64 := AddType(Parser, AToS("i64"), 8, TYPE_REGULAR)
-	Parser->void := AddType(Parser, AToS("void"), 8, TYPE_REGULAR)
-}
-
-define Type TryGetType(ParserState* Parser, SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
-	/* Finds a TypeInfo with the given name, and builds a Type with that TypeInfo and PointerDepth */
-	
-	HashMapElement* FoundElement := Parser~>Types->Get(TypeName)
-	TypeInfo* FoundTypeInfo := 0
-
-	if (FoundElement) {
-		/* We found the type with the given name, so we can now set FoundTypeInfo */
-		FoundTypeInfo := (FoundElement->Value) As TypeInfo*
-	}
-	else {
-		/*
-			If we did not find a typeinfo, then this type has to be an undefined user type, which is defined somewhere else
-			So, we will call AddType and add it as incomplete
-		*/
-		
-		if (PointerDepth = 0) {
-			ErrorMessage[0] := "Incomplete types can only be used with pointers"
-			return 0 As Type
-		}
-		else {
-			/* We didn't find a type with the name, build an incomplete type for it */
-			FoundTypeInfo := AddType(Parser, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
-		}
-	}
-	
-	return MakeType(FoundTypeInfo, PointerDepth)
-}
-
 declare i32 FreezeParser(ParserState*)
 declare void UnfreezeParser(ParserState*, i32)
 declare Token* ParserNextToken(ParserState*)
 declare Token* ParserCurrentToken(ParserState*)
-
-define Type GetType(ParserState* Parser, SafeWideString* TypeName, i8 PointerDepth) {
-	i8* ErrorMessage := 0
-	
-	Type Result := TryGetType(Parser, TypeName, PointerDepth, &ErrorMessage)
-	
-	if (ErrorMessage) {
-		Token* BadToken := ParserCurrentToken(Parser)
-		
-		TokenError(BadToken, ErrorMessage)
-	}
-	
-	return Result
-}
-
 declare Token* ParserCurrentToken(ParserState*)
 
-define Type DecrementPointerType(ParserState* Parser, Type TypeToDecrement, ErrorContext* BlameContext) {
-	/* Returns the type you would get from dereferencing TypeToDecrement */
-	
-	if (TypeToDecrement.PointerDepth = 0) {
-		/* If you're dereferencing a non-pointer type, something's wrong */
-		ContextError(BlameContext, "Pointer type expected")
-	}
-	
-	return MakeType(TypeToDecrement.BaseType, (TypeToDecrement.PointerDepth) - 1 As i16)
-}
-define Type IncrementPointerType(ParserState* Parser, Type TypeToIncrement) {
-	/* Returns a type which is a pointer to the passed type */
-	
-	return MakeType(TypeToIncrement.BaseType, (TypeToIncrement.PointerDepth) + 1 As i16)
-}
-
-define void PrintType(Type TypeToPrint) {
-	/* Prints a type, including its pointer depth */
-	
-	PrintSafeString(GetBaseType(TypeToPrint)->Name)
-	
-	i16 Depth := GetPointerDepth(TypeToPrint)
-	
-	for (i32 Index := 0, Index < Depth, Index += 1) {
-		PrintCharacter('*')
-	}
-}
-
-define i8 GetNumberSize(i64 NumberToCheck) {
-	/* Returns the minimum number of bytes needed to store NumberToCheck */
-	
-	if (NumberToCheck & 0x7FFFFFFF80000000) {
-		return 8
-	}
-	else if (NumberToCheck & 0x7FFF8000) {
-		return 4
-	}
-	else if (NumberToCheck & 0x7F80) {
-		return 2
-	}
-	else {
-		return 1
-	}
-}
-
-define Type GetNumberType(ParserState* Parser, i64 NumberToCheck) {
-	/* Returns a type for the given number (smallest type that can store the number signed) */
-	
-	if (NumberToCheck & 0x7FFFFFFF80000000) {
-		/* If any of the upper 33 bits are set, then it's an i64 */
-		
-		return MakeType(Parser->i64, 0)
-	}
-	else {
-		/* Smallest type for a number is i32 for the sake of sanity (10 * 300 = 300, not 44) */
-		
-		return MakeType(Parser->i32, 0)
-	}
-}
-
-declare void ASTError(ASTNode*, i8*)
-
-define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
-	if !(AtNode) {
-		return 1
-	}
-	
-	ManualErrorMessagePrelude()
-	
-	Print("%s", Message)
-	
-	if ((Expected) As i64) != 0 {
-		Print(", expected ")
-		PrintType(Expected)
-	}
-	
-	Print(", got ")
-	PrintType(AtNode->ValueType)
-	
-	ASTError(AtNode, null)
-	
-	return 0
-}
-
-define i32 GetGenericRating(Type ForType) {
-	TypeInfo* BaseType := GetBaseType(ForType)
-	i16 PointerDepth := GetPointerDepth(ForType)
-	
-	i32 Result := -PointerDepth
-	
-	if !(BaseType->IsBuiltin) {
-		Result += 10
-	}
-	
-	return Result
-}
-
-define i8 CheckTypes(ParserState* Parser, Type Source, Type Target, ASTNode* SourceNode) {
-	if (SourceNode) {
-		Source := SourceNode->ValueType
-	}
-	
-	TypeInfo* SourceBase := GetBaseType(Source)
-	TypeInfo* TargetBase := GetBaseType(Target)
-	
-	i16 SourceDepth := GetPointerDepth(Source)
-	i16 TargetDepth := GetPointerDepth(Target)
-	
-	i16 SourceSize := GetTypeSize(Source)
-	i16 TargetSize := GetTypeSize(Target)
-	
-	i8 SourceIsVoid := SourceBase = Parser->void
-	i8 TargetIsVoid := TargetBase = Parser->void
-	
-	if (SourceDepth = TargetDepth) {
-		if (SourceBase = TargetBase) {
-			return 0
-		}
-		else if (TargetDepth = 1) {
-			if (SourceIsVoid || TargetIsVoid) {
-				return 0
-			}
-		}
-		
-		if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
-			if !(TargetDepth) {
-				if (SourceSize <= TargetSize) {
-					return 0
-				}
-			}
-		}
-		
-		return TypeError(SourceNode, Target, "Incompatible types")
-	}
-	else if (SourceDepth && TargetIsVoid && TargetDepth = 1) {
-		return 0
-	}
-	else if (SourceDepth || TargetDepth) {
-		return TypeError(SourceNode, Target, "Incompatible pointer depths")
-	}
-	else if (SourceBase->IsStructType || TargetBase->IsStructType) {
-		return TypeError(SourceNode, Target, "Incompatible struct type")
-	}
-	else if (TargetBase->IsBits || SourceBase->IsBits) {
-		if (SourceSize > TargetSize) {
-			return TypeError(SourceNode, Target, "Incompatible bits type size")
-		}
-		
-		return 0
-	}
-	
-	return 0
-}
-
-define ASTNode* DowncastIntegerType(ParserState* Parser, ASTNode* Target) {
-	if (Target->NodeType != NODE_TYPE_INTEGER) {
-		return Target
-	}
-	
-	i8 Size := GetNumberSize(Target->IntegerValue)
-	TypeInfo* BaseType := Parser->i8
-	
-	if (Size = 2) {BaseType := Parser->i16}
-	else if (Size = 4) {BaseType := Parser->i32}
-	else if (Size = 8) {BaseType := Parser->i64}
-	
-	Target->ValueType := MakeType(BaseType, 0)
-	
-	return Target
-}
-
-/*
-==========================================
-	Error message printing functions
-==========================================
-*/
-
-define void ASTError(ASTNode* BadNode, i8* ErrorMessage) {
-	if (ErrorMessage) {
-		/* When the error message is already printed, skip switching to stderr, since the error message was already printed to stderr */
-		SwapOutputStream()
-	}
-	
-	PrintNewLine()
-	
-	PrettyError(BadNode~>Context, ErrorMessage, Red)
-	Exit(1)
-}
-define void ContextWarn(ErrorContext* Context, i8* WarnMessage) {
-	PrintNewLine()
-	PrettyError(Context, WarnMessage, Red | Green)
-}
-
-define void ASTWarn(ASTNode* BadNode, i8* WarnMessage) {
-	PrintNewLine()
-	PrettyError(BadNode~>Context, WarnMessage, Red | Green)
-}
 
 /*
 ==========================================
@@ -1014,10 +406,10 @@ define FunctionDefine* MatchFunction(ParserState* Parser, FunctionDefine* BaseFu
 			for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
 				Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
 				
-				ASTNode* NextNode := DowncastIntegerType(Parser, Caller->Parameters[ParameterIndex])
+				ASTNode* NextNode := Parser->DowncastIntegerNode(Caller->Parameters[ParameterIndex])
 				Type ActualNext := NextNode->ValueType
 				
-				if (CheckTypes(Parser, ActualNext, ExpectedNext, null)) {
+				if (CheckTypes(Parser->void, ActualNext, ExpectedNext, null)) {
 					BrokeInner := true
 					
 					Next->TempValue := ParameterIndex
@@ -1107,7 +499,7 @@ define FunctionDefine* MatchFunction(ParserState* Parser, FunctionDefine* BaseFu
 define Type GetBinaryResultType(ParserState* Parser, Type LeftType, Type RightType, ErrorContext* BlameContext) {
 	/* Decides the result of a binary expression with the given operand types */
 	
-	i8 Compatible := !CheckTypes(Parser, RightType, LeftType, null)
+	i8 Compatible := !CheckTypes(Parser->void, RightType, LeftType, null)
 	Type BestFit := LeftType
 	
 	if (GetGenericRating(LeftType) < GetGenericRating(RightType)) {
@@ -1204,9 +596,9 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 		ResultType := RightType
 	}
 	else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
-		DowncastIntegerType(Parser, Right)
+		Parser->DowncastIntegerNode(Right)
 		
-		CheckTypes(Parser, Right->ValueType, MakeType(Parser->i8, 0), Right)
+		CheckTypes(Parser->void, Right->ValueType, MakeType(Parser->i8, 0), Right)
 		
 		if (LeftSize < 4) {
 			ResultType := MakeType(Parser->i32, 0)
@@ -1221,16 +613,14 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 		if !(LeftBaseType->IsStructType || (LeftBaseType->IsBits && Operator = OPERATOR_DOT)) {
 			/* Ensure the left type is a struct, otherwise something like 1.Abc is going on */
 			
-			TypeError(Left, 0 As Type, "Invalid left side operand type")
-			
-			ASTError(Left, "Left side operand of '.' and '->'/'~>' must be of a struct/struct pointer type")
+			TypeError(Left, TYPE_NONE, "Invalid left side operand type")
 		}
 		else if (LeftBaseType->IsIncomplete) {
 			/* Ensure the left type is not incomplete (otherwise we don't know what the result type would be) */
-			ASTError(Left, "Fields of incomplete structs cannot be accessed.")
+			Left->Error("Fields of incomplete structs cannot be accessed.")
 		}
 		else if (LeftDepth != 0 && Operator = OPERATOR_DOT) {
-			TokenError(OperatorToken, "Struct pointer fields can only be accessed with the '->'/'~>' operators.")
+			OperatorToken->Error("Struct pointer fields can only be accessed with the '->'/'~>' operators.")
 		}
 		else {
 			; Look up a field with a name given by the right side's string value
@@ -1252,12 +642,12 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 				ResultType := TargetField->ValueType
 				
 				if (Operator = OPERATOR_TILDE_GREATER && !ResultType.IsArray) {
-					ResultType := IncrementPointerType(Parser, ResultType)
+					ResultType := Parser->PointerToType(ResultType)
 				}
 				
 				/* Wrap it in a NODE_TYPE_STRUCT_ACCESS and return */
 				
-				ASTNode* StructNode := AllocateNewASTNode(NODE_TYPE_STRUCT_ACCESS, NewAccess As void*, ResultType)
+				ASTNode* StructNode := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, NewAccess, ResultType)
 				
 				MergeContexts(Left~>Context, Right~>Context, StructNode~>Context)
 				
@@ -1266,7 +656,7 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 			else {
 				/* If we didn't find a field with that name, then error out */
 				
-				ASTError(Right, "Unknown struct field")
+				Right->Error("Unknown struct field")
 			}
 		}
 	}
@@ -1274,7 +664,7 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 		/* If this is an assignment do some extra type checking */
 		
 		if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
-			ASTError(Left, "'this' can't be assigned")
+			Left->Error("'this' can't be assigned")
 		}
 		
 		if (LeftDepth != 0 && LeftBaseType->IsStructType && RightDepth && RightSize = 8) {
@@ -1287,10 +677,10 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 		else if (LeftDepth = 0 && LeftBaseType->IsStructType) {
 			/* Else if the left is a literal struct type, error out */
 			
-			ASTError(Left, "Local structs can't be assigned")
+			Left->Error("Local structs can't be assigned")
 		}
 		else if !(Left->IsStorageValue) {
-			ASTError(Left, "Left side of assignment operator must be a storage value")
+			Left->Error("Left side of assignment operator must be a storage value")
 		}
 		else if (Left->NodeType = NODE_TYPE_UNARY) {
 			; Only true for `*X := Y`, result type is whatever `*X` would be. And thanks to
@@ -1307,14 +697,14 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 		/* For an array access, make sure the index type isn't a pointer/struct */
 		
 		if (RightDepth != 0 || RightBaseType->IsStructType) {
-			ASTError(Right, "Right side operand of '[' must not be a pointer or struct type.")
+			Right->Error("Right side operand of '[' must not be a pointer or struct type.")
 		}
 		else {
 			/* DecrementPointerType will ensure that LeftType is a pointer type, so we don't need to */
 			
 			CopyContext(ParserCurrentToken(Parser)~>Context, Right~>Context)
 			
-			ResultType := DecrementPointerType(Parser, LeftType, Right~>Context)
+			ResultType := Parser->DereferencePointerType(LeftType, Right~>Context)
 		}
 	}
 	else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
@@ -1357,7 +747,7 @@ define ASTNode* MakeBinary(ParserState* Parser, ASTNode* Left, Token* OperatorTo
 	Result->Right := Right
 	
 	/* Wrap it, and return it */
-	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_BINARY, Result As void*, ResultType)
+	ASTNode* ResultNode := ASTNode:New(NODE_TYPE_BINARY, Result, ResultType)
 	MergeContexts(Left~>Context, Right~>Context, ResultNode~>Context)
 	
 	return ResultNode
@@ -1379,16 +769,16 @@ define ASTNode* MakeUnary(ParserState* Parser, Token* OperatorToken, ASTNode* Op
 	}
 	else if (Operator = OPERATOR_AND) {	
 		if !(Operand->IsStorageValue || Operand->NodeType = NODE_TYPE_DEFINE) {
-			TokenError(OperatorToken, "Operand of the '&' operator must be a storage value.")
+			OperatorToken->Error("Operand of the '&' operator must be a storage value.")
 		}
 		
-		ResultType := IncrementPointerType(Parser, ResultType)
+		ResultType := Parser->PointerToType(ResultType)
 	}
 	else if (Operator = OPERATOR_STAR) {
-		ResultType := DecrementPointerType(Parser, ResultType, Operand~>Context)
+		ResultType := Parser->DereferencePointerType(ResultType, Operand~>Context)
 	}
 	
-	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_UNARY, Result As void*, ResultType)
+	ASTNode* ResultNode := ASTNode:New(NODE_TYPE_UNARY, Result, ResultType)
 	MergeContexts(OperatorToken~>Context, Operand~>Context, ResultNode~>Context)
 	
 	return ResultNode
@@ -1407,7 +797,7 @@ define ASTNode* AllocateCall(ParserState* Parser, Token* NameToken, ASTNode** Pa
 	Result->ParameterCount := ParameterCount
 	
 	/* Wrap the CallExpression with a NODE_TYPE_CALL for any errors */
-	ASTNode* ResultNode := AllocateNewASTNode(NODE_TYPE_CALL, Result As void*, TYPE_NONE)
+	ASTNode* ResultNode := ASTNode:New(NODE_TYPE_CALL, Result, TYPE_NONE)
 	MergeContexts(NameToken~>Context, CloseParen~>Context, ResultNode~>Context)
 	
 	return ResultNode
@@ -1424,7 +814,7 @@ define ASTNode* MakeBuiltinCall(ParserState* Parser, Token* NameToken, ASTNode**
 		ResultNode->ValueType := MakeType(Parser->i64, 0)
 		
 		if (Parser->Config->OutputFormat = OUTPUT_PE) {
-			ASTWarn(ResultNode, "Windows syscall numbers change near-constantly, using the native API is a bad idea.")
+			ResultNode->Warn("Windows syscall numbers change near-constantly, using the native API is a bad idea.")
 		}
 	}
 	else if (SafeStringEqualsAString(Name, "breakpoint") && ParameterCount = 0) {
@@ -1432,7 +822,7 @@ define ASTNode* MakeBuiltinCall(ParserState* Parser, Token* NameToken, ASTNode**
 		ResultNode->ValueType := MakeType(Parser->i8, 0)
 	}
 	else {
-		TokenError(NameToken, "Builtin function not found.")
+		NameToken->Error("Builtin function not found.")
 	}
 
 	return ResultNode
@@ -1449,7 +839,7 @@ define ASTNode* MakeCall(ParserState* Parser, HashMap* NameSpace, Token* NameTok
 	if !(FoundFunction) {
 		/* And if the function was not found, then error out */
 		
-		TokenError(NameToken, "Function definition not found.")
+		NameToken->Error("Function definition not found.")
 	}
 	
 	/* Otherwise, convert the HashMapElement* into a FunctionDefine* */
@@ -1550,7 +940,7 @@ define Token* Consume(ParserState* Parser, i8 TokenType, i8 TokenValue, i8* Reas
 	Token* Result := TryConsume(Parser, TokenType, TokenValue, Reason, &ErrorMessage)
 	
 	if (ErrorMessage) {
-		TokenError(Result, Reason)
+		Result->Error(Reason)
 	}
 	
 	return Result
@@ -1583,7 +973,7 @@ define ParserState* ParserStart(BuildConfig* Config, LexerState* Lexer) {
 	
 	P->GlobalConstantsBuffer := Alloc(4)
 	
-	CreateDefaultTypes(P)
+	P->CreateDefaultTypes()
 	SetupAssembly(P)
 	
 	ParseProgram(P)
@@ -1616,7 +1006,7 @@ define VariableInfo* FindVariable(ParserState* Parser, Token* NameToken) {
 	if !(FoundVariable) {
 		/* If we still haven't found the variable, then it is undefined */
 		
-		TokenError(NameToken, "Undefined variable")
+		NameToken->Error("Undefined variable")
 	}
 	
 	/* Variable has to have been found at some point for this to be reached */
@@ -1662,10 +1052,10 @@ define Type TryParseTypeName(ParserState* Parser, i8 AllowArrayType, i8** ErrorM
 	}
 	
 	/* Get (and return) a type (which might be incomplete) using the parsed info */
-	Type Result := TryGetType(Parser, Name, PointerDepth, ErrorMessage)
+	Type Result := Parser->TryFindType(Name, PointerDepth, ErrorMessage)
 	
 	if (AllowArrayType && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-		Result := IncrementPointerType(Parser, Result)
+		Result := Parser->PointerToType(Result)
 		
 		Token* SizeToken := TryConsume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array type size", ErrorMessage)
 		
@@ -1691,7 +1081,7 @@ define Type ParseTypeName(ParserState* Parser) {
 		
 		Token* ErrorToken := ParserNextToken(Parser)
 		
-		TokenError(ErrorToken, ErrorMessage)
+		ErrorToken->Error(ErrorMessage)
 	}
 	
 	return Result
@@ -1763,7 +1153,7 @@ define void ParseProgram(ParserState* Parser) {
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
 					SafeWideString* NameString := PotentialName->StringValue
 					
-					VariableInfo* NewGlobal := AllocateNewVariableInfo()
+					VariableInfo* NewGlobal := Alloc(#VariableInfo)
 					
 					NewGlobal->Name := NameString
 					NewGlobal->Type := PotentialType
@@ -1788,7 +1178,7 @@ define void ParseProgram(ParserState* Parser) {
 			break
 		}
 		else {
-			TokenError(NextToken, "Unexpected token")
+			NextToken->Error("Unexpected token")
 		}
 	}
 }
@@ -1812,14 +1202,14 @@ define void ParseAndAddStruct(ParserState* Parser) {
 		if !(NewType->IsIncomplete) {
 			/* If the type we found isn't incomplete, then error out */
 			
-			TokenError(NameToken, "Duplicate struct definition")
+			NameToken->Error("Duplicate struct definition")
 		}
 		
 		NewType->IsIncomplete := false
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		NewType := AddType(Parser, Name, 0, TYPE_STRUCT)
+		NewType := Parser->AddType(Name, 0, TYPE_STRUCT)
 	}
 	
 	HashMap* Fields := NewType~>Fields
@@ -1892,7 +1282,7 @@ define void ParseAndAddStruct(ParserState* Parser) {
 		NextField->ValueType := TryParseTypeName(Parser, true, &ErrorMessage)
 		
 		if (ErrorMessage) {
-			TokenError(ParserCurrentToken(Parser), ErrorMessage)
+			ParserCurrentToken(Parser)->Error(ErrorMessage)
 		}
 		
 		/* Get the name of the field */
@@ -1901,7 +1291,7 @@ define void ParseAndAddStruct(ParserState* Parser) {
 		NextField->Name := FieldName
 		
 		if (Fields->Get(FieldName)) {
-			TokenError(FieldNameToken, "Duplicate definition")
+			FieldNameToken->Error("Duplicate definition")
 		}
 		
 		Fields->Set(FieldName, NextField)
@@ -1980,7 +1370,7 @@ define void ParseAndAddBits(ParserState* Parser) {
 		
 		MergeContexts(FirstTypeToken~>Context, LastTypeToken~>Context, FirstTypeToken~>Context)
 		
-		TokenError(FirstTypeToken, "Bits backing type must be a plain integer type.")
+		FirstTypeToken->Error("Bits backing type must be a plain integer type.")
 	}
 	
 	i8 BackingTypeSize := GetTypeSize(BackingType) As i8
@@ -1998,7 +1388,7 @@ define void ParseAndAddBits(ParserState* Parser) {
 		if !(NewType->IsIncomplete) {
 			/* If the type we found isn't incomplete, then error out */
 			
-			TokenError(NameToken, "Duplicate type definition")
+			NameToken->Error("Duplicate type definition")
 		}
 		
 		NewType->Size := BackingTypeSize
@@ -2008,7 +1398,7 @@ define void ParseAndAddBits(ParserState* Parser) {
 	}
 	else {
 		/* Otherwise, just add the new type as an entirely new type, which is a struct and not incomplete */
-		NewType := AddType(Parser, BitsName, BackingTypeSize, TYPE_BITS)
+		NewType := Parser->AddType(BitsName, BackingTypeSize, TYPE_BITS)
 	}
 	
 	/* Initialize a hashmap for the bit fields */
@@ -2042,7 +1432,7 @@ define void ParseAndAddBits(ParserState* Parser) {
 		MergeContexts(OpenBracket~>Context, CloseBracket~>Context, OpenBracket~>Context)
 		
 		if (FieldSize < 0 || FieldSize > BackingTypeSizeBits) {
-			TokenError(OpenBracket, "Field size can not be negative, or bigger than the backing type.")
+			OpenBracket->Error("Field size can not be negative, or bigger than the backing type.")
 		}
 		
 		SafeWideString* FieldName := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Expected bit field name.")->Value
@@ -2180,7 +1570,7 @@ define Block* ParseBlock(ParserState* Parser) {
 			}
 			
 			if (ParserNextMatches(Parser, TOKEN_TYPE_EOF, 0)) {
-				TokenError(OpenBrace, "Expected close brace for block")
+				OpenBrace->Error("Expected close brace for block")
 			}
 			
 			i8 BreakOuter := false
@@ -2219,7 +1609,7 @@ define VariableInfo* MakeMagicLocal(i8* Name, TypeInfo* BaseType, i8 IsParameter
 	
 	SafeWideString* LocalName := AToS(Name)
 	
-	VariableInfo* ThisMagic := AllocateNewVariableInfo()
+	VariableInfo* ThisMagic := Alloc(#VariableInfo)
 	ThisMagic->Name := LocalName
 	ThisMagic->Type := MakeType(BaseType, 1)	/* TypeOf(Magic) = PointerTo(MagicStructType) */
 	ThisMagic->IsParameter := IsParameter
@@ -2294,11 +1684,11 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 		
 		loop {
 			/* Allocate a VariableInfo struct for the next parameter */
-			VariableInfo* NextParameter := AllocateNewVariableInfo()
+			VariableInfo* NextParameter := Alloc(#VariableInfo)
 			
 			/* Max parameter count since I cba to expand the buffer. Todo: Fix this */
 			if (ParameterCount >= 16) {
-				TokenError(ParserNextToken(Parser), "Max parameter limit reached")
+				ParserNextToken(Parser)->Error("Max parameter limit reached")
 			}
 			
 			/* Insert the VariableInfo structure into the parameter list */
@@ -2313,7 +1703,7 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 				MergeContexts(Start~>Context, ParserCurrentToken(Parser)~>Context, Start~>Context)
 				
 				if (ParameterCount > 4) {
-					TokenError(Start, "Only 4 regular paremeters can be passed with a variable argument.")
+					Start->Error("Only 4 regular paremeters can be passed with a variable argument.")
 				}
 				
 				Attribute := OPERATOR_DOT
@@ -2361,7 +1751,7 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 		/* If the loop was broken by any token besides a ')', then there's something wrong */
 		
 		if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			TokenError(ParserNextToken(Parser), "Expected closing paren for parameter list")
+			ParserNextToken(Parser)->Error("Expected closing paren for parameter list")
 		}
 	}
 	
@@ -2397,7 +1787,7 @@ define FunctionDefine* ParseFunction(ParserState* Parser, HashMap* Namespace, i8
 		if (ActuallyFound && FoundFunction->HasFullDefinition) {
 			/* If we found a definition matching the type signature, and it already has a body, then this is a duplicate definition */
 			
-			TokenError(NameToken, "Duplicate function definition")
+			NameToken->Error("Duplicate function definition")
 		}
 	}
 	
@@ -2559,11 +1949,11 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 		i8 IsContinue := (NextKeyword = KEYWORD_CONTINUE)
 		
 		if (NextKeyword = KEYWORD_BREAK || IsContinue) {
-			Result := AllocateNewASTNode(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
+			Result := ASTNode:New(NODE_TYPE_CONTINUEBREAK, IsContinue, TYPE_NONE)
 			CopyContext(NextToken~>Context, Result~>Context)
 			
 			if !(Parser->InLoop) {
-				ASTError(Result, "Continue/Break must be inside loops")
+				Result->Error("Continue/Break must be inside loops")
 			}
 		}
 		else if (NextKeyword = KEYWORD_RETURN) {
@@ -2573,26 +1963,26 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 			ASTNode* ExpressionToReturn := null
 			
 			if (Parser->CurrentFunction->ReturnType = MakeType(Parser->void, 0)) {
-				Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(Parser->i8, 0))
-				Result := AllocateNewASTNode(NODE_TYPE_RETURN, Result, TYPE_NONE)
+				Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(Parser->i8, 0))
+				Result := ASTNode:New(NODE_TYPE_RETURN, Result, TYPE_NONE)
 				
 				i32 BeforeClosingBrace := FreezeParser(Parser)
 				
 				if !(ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 					ExpressionToReturn := ParseExpression(Parser, 0)
 					
-					ASTError(ExpressionToReturn, "Unexpected expression, 'void' functions should not return a value.")
+					ExpressionToReturn->Error("Unexpected expression, 'void' functions should not return a value.")
 				}
 				
 				UnfreezeParser(Parser, BeforeClosingBrace)
 			}
 			else {
-				ExpressionToReturn := DowncastIntegerType(Parser, ParseExpression(Parser, 0))
+				ExpressionToReturn := Parser->DowncastIntegerNode(ParseExpression(Parser, 0))
 				Type ExpectedReturnType := Parser->CurrentFunction->ReturnType
 				
-				CheckTypes(Parser, 0 As Type, ExpectedReturnType, ExpressionToReturn)
+				CheckTypes(Parser->void, 0 As Type, ExpectedReturnType, ExpressionToReturn)
 				
-				Result := AllocateNewASTNode(NODE_TYPE_RETURN, ExpressionToReturn As void*, TYPE_NONE)
+				Result := ASTNode:New(NODE_TYPE_RETURN, ExpressionToReturn, TYPE_NONE)
 			}
 		}
 		else if (NextKeyword = KEYWORD_ASSEMBLY) {
@@ -2611,7 +2001,7 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 			i8 OldInLoop := Parser->InLoop
 			Parser->InLoop := true
 			
-			Result := AllocateNewASTNode(NODE_TYPE_LOOP, ParseBlock(Parser) As void*, TYPE_NONE)
+			Result := ASTNode:New(NODE_TYPE_LOOP, ParseBlock(Parser), TYPE_NONE)
 			
 			Parser->InLoop := OldInLoop
 		}
@@ -2642,7 +2032,7 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 					
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
 					
-					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					VariableInfo* NewLocal := Alloc(#VariableInfo)
 					
 					NewLocal->Name := NameString
 					NewLocal->Type := PotentialType
@@ -2656,7 +2046,7 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 					}
 					else {
 						/* The next token is not a `:=`, so the following tokens are not a value for this variable */
-						return AllocateNewASTNode(NODE_TYPE_NONE, 0, TYPE_NONE)
+						return ASTNode:New(NODE_TYPE_NONE, 0, TYPE_NONE)
 					}
 				}
 				else {
@@ -2670,7 +2060,7 @@ define ASTNode* ParseStatement(ParserState* Parser) {
 		}
 		
 		/* This expression will either be at A) The start of the line or B) After a type name (for declarations) */
-		Result := AllocateNewASTNode(NODE_TYPE_EXPRESSION, ParseExpression(Parser, 0) As void*, TYPE_NONE)
+		Result := ASTNode:New(NODE_TYPE_EXPRESSION, ParseExpression(Parser, 0), TYPE_NONE)
 	}
 	
 	return Result
@@ -2710,7 +2100,7 @@ define ASTNode* ParseIf(ParserState* Parser) {
 	
 	NewIf->BranchCount := BranchIndex
 
-	return AllocateNewASTNode(NODE_TYPE_IF, NewIf, TYPE_NONE)
+	return ASTNode:New(NODE_TYPE_IF, NewIf, TYPE_NONE)
 }
 
 define ASTNode* ParseFor(ParserState* Parser) {
@@ -2732,7 +2122,7 @@ define ASTNode* ParseFor(ParserState* Parser) {
 				if (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
 					SafeWideString* NameString := (PotentialName->Value) As SafeWideString*
 					
-					VariableInfo* NewLocal := AllocateNewVariableInfo()
+					VariableInfo* NewLocal := Alloc(#VariableInfo)
 					
 					NewLocal->Name := NameString
 					NewLocal->Type := PotentialType
@@ -2766,7 +2156,7 @@ define ASTNode* ParseFor(ParserState* Parser) {
 	
 	Parser->InLoop := OldInLoop
 	
-	return AllocateNewASTNode(NODE_TYPE_FOR, NewLoop, TYPE_NONE)
+	return ASTNode:New(NODE_TYPE_FOR, NewLoop, TYPE_NONE)
 }
 
 define ASTNode* ParseWhile(ParserState* Parser) {
@@ -2781,7 +2171,7 @@ define ASTNode* ParseWhile(ParserState* Parser) {
 	
 	Parser->InLoop := OldInLoop
 	
-	return AllocateNewASTNode(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
+	return ASTNode:New(NODE_TYPE_WHILE, NewWhile As void*, TYPE_NONE)
 }
 
 define ASTNode* TranslateTokenToNode(ParserState* Parser, Token* TokenToTranslate) {
@@ -2792,14 +2182,14 @@ define ASTNode* TranslateTokenToNode(ParserState* Parser, Token* TokenToTranslat
 	if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 		/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
 		
-		Type ResultType := GetNumberType(Parser, TokenToTranslate->IntegerValue)
+		Type ResultType := Parser->GetNumberType(TokenToTranslate->IntegerValue)
 		
-		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
+		Result := ASTNode:New(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
 	}
 	else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFIER) {
 		/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
 		
-		Result := AllocateNewASTNode(NODE_TYPE_INTEGER, 0, MakeType(Parser->i32, 0))
+		Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(Parser->i32, 0))
 		
 		if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
 			Result->IntegerValue := 1
@@ -2833,7 +2223,7 @@ define ASTNode* TranslateTokenToNode(ParserState* Parser, Token* TokenToTranslat
 		CopyContext(TokenToTranslate As ErrorContext*, Result As ErrorContext*)
 	}
 	else {
-		TokenError(TokenToTranslate, "Unexpected token")
+		TokenToTranslate->Error("Unexpected token")
 	}
 	
 	CopyContext(TokenToTranslate~>Context, Result~>Context)
@@ -2901,7 +2291,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 				HashMapElement* FoundTypeElement := Parser~>Types->Get(StaticMethodType)
 				
 				if !(FoundTypeElement) {
-					TokenError(NextToken, "Unknown type")
+					NextToken->Error("Unknown type")
 				}
 				
 				TypeInfo* FoundType := FoundTypeElement->Value As TypeInfo*
@@ -2933,7 +2323,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 		}
 		else {
 			if (IsBuiltinOrStatic) {
-				TokenError(NextToken, "Unexpected ':' after identifier")
+				NextToken->Error("Unexpected ':' after identifier")
 			}
 			
 			/* Else, this isn't a function call, and is just a normal variable */
@@ -2980,7 +2370,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 			MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length * 2)
 		}
 		
-		Result := AllocateNewASTNode(NODE_TYPE_STRING, Offset, MakeType(BaseType, 1))
+		Result := ASTNode:New(NODE_TYPE_STRING, Offset, MakeType(BaseType, 1))
 		CopyContext(NextToken~>Context, Result~>Context)
 	}
 	else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
@@ -3002,7 +2392,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 				Consume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
 			}
 			
-			Result := AllocateNewASTNode(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, MakeType(Parser->i32, 0))
+			Result := ASTNode:New(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, MakeType(Parser->i32, 0))
 			
 			MergeContexts(NextToken~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
 		}
@@ -3024,7 +2414,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 						HashMapElement* StaticMethodTypeElement := Parser~>Types->Get(StaticMethodTypeName->StringValue)
 						
 						if !(StaticMethodTypeElement) {
-							TokenError(StaticMethodTypeName, "Undefined type")
+							StaticMethodTypeName->Error("Undefined type")
 						}
 						
 						TypeInfo* TargetType := StaticMethodTypeElement->Value As TypeInfo*
@@ -3032,7 +2422,7 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 						HashMapElement* FoundFunctionElement := TargetType~>StaticMethods->Get(StaticMethodName->StringValue)
 						
 						if !(FoundFunctionElement) {
-							TokenError(StaticMethodName, "Undefined static method")
+							StaticMethodName->Error("Undefined static method")
 						}
 						
 						FoundDefine := FoundFunctionElement->Value As FunctionDefine*
@@ -3048,11 +2438,11 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 					}
 					
 					if (FoundDefine) {
-						Result := AllocateNewASTNode(NODE_TYPE_DEFINE, FoundDefine, MakeType(Parser->void, 1))
+						Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, MakeType(Parser->void, 1))
 						MergeContexts(MaybeFunction~>Context, TailToken~>Context, Result~>Context)
 						
 						if (FoundDefine->Next != null) {
-							ASTError(Result, "Getting the address of an overloaded function is not possible")
+							Result->Error("Getting the address of an overloaded function is not possible")
 						}
 					}
 					else {
@@ -3175,14 +2565,14 @@ define ASTNode* ParseExpressionOperand(ParserState* Parser) {
 			Parser->GlobalConstantsBuffer := ConstantsBuffer
 		}
 		
-		Result := AllocateNewASTNode(NODE_TYPE_STRING, ConstantOffset, IncrementPointerType(Parser, ElementType))
+		Result := ASTNode:New(NODE_TYPE_STRING, ConstantOffset, Parser->PointerToType(ElementType))
 		
 		MergeContexts(NextToken~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
 	}
 	else {
 		/* Else, this token isn't something we expected here, so error out */
 		
-		TokenError(NextToken, "Unexpected token in expression")
+		NextToken->Error("Unexpected token in expression")
 	}
 	
 	return Result
@@ -3232,13 +2622,13 @@ define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 			ErrorContext* TypeEnd := ParserNextToken(Parser)~>Context
 			UnfreezeParser(Parser, AfterType)
 			
-			Operand := AllocateNewASTNode(NODE_TYPE_TYPE, CastToType As void*, CastToType)
+			Operand := ASTNode:New(NODE_TYPE_TYPE, CastToType As void*, CastToType)
 			MergeContexts(TypeStart, TypeEnd, Operand~>Context)
 		}
 		else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
 			Token* Right := Consume(Parser, TOKEN_TYPE_IDENTIFIER, 0, "Struct field name expected")
 			
-			Operand := AllocateNewASTNode(NODE_TYPE_IDENTIFIER, (Right->Value) As void*, MakeType(Parser->i64, 0))
+			Operand := ASTNode:New(NODE_TYPE_IDENTIFIER, Right->Value, MakeType(Parser->i64, 0))
 			CopyContext(Right~>Context, Operand~>Context)
 		}
 		else {
@@ -3294,19 +2684,19 @@ define ASTNode* ParseExpression(ParserState* Parser, i8 Precedence) {
 				Or If a pointed-to structure is accessed via `.`, it is an error .
 			*/
 			if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
-				TokenError(OperatorToken, "Wrong operator for left side pointer depth")
+				OperatorToken->Error("Wrong operator for left side pointer depth")
 			}
 			else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
 				/* Or, if the accessed type is not a struct, or is incomplete, it is an error */
 				
-				TokenError(OperatorToken, "Can't call method on non-struct or incomplete types")
+				OperatorToken->Error("Can't call method on non-struct or incomplete types")
 			}
 			
 			if (LeftDepth = 0) {
 				; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
 				;  and the compiler will make sure to pass the address of `this` instead of the value.
 				
-				Result->ValueType := IncrementPointerType(Parser, Result->ValueType)
+				Result->ValueType := Parser->PointerToType(Result->ValueType)
 			}
 			
 			/* The first parameter is `this`, so any actual parameters are offset by 1 */
@@ -3357,7 +2747,7 @@ define ASTNode* ParseTry(ParserState* Parser) {
 					/* This can be wrong if you had `A * B` alone on a line, but what kind of dumbass would do that? */
 					SafeWideString* NameString := PotentialName->StringValue
 					
-					VariableInfo* CatchCodeVariable := AllocateNewVariableInfo()
+					VariableInfo* CatchCodeVariable := Alloc(#VariableInfo)
 					
 					CatchCodeVariable->Name := NameString
 					CatchCodeVariable->Type := PotentialType
@@ -3371,7 +2761,7 @@ define ASTNode* ParseTry(ParserState* Parser) {
 				ASTNode* CatchCodeNode := TranslateTokenToNode(Parser, ParserNextToken(Parser))
 				
 				if (CatchCodeNode->NodeType != NODE_TYPE_VARIABLE) {
-					ASTError(CatchCodeNode, "Expected variable name")
+					CatchCodeNode->Error("Expected variable name")
 				}
 				
 				CatchCodeVariable := CatchCodeNode->VariableValue
@@ -3385,7 +2775,7 @@ define ASTNode* ParseTry(ParserState* Parser) {
 		Result->CatchBody := ParseBlock(Parser)
 	}
 	
-	return AllocateNewASTNode(NODE_TYPE_TRY, Result, TYPE_NONE)
+	return ASTNode:New(NODE_TYPE_TRY, Result, TYPE_NONE)
 }
 
 #Include ./src/compiler/AssemblyParse.rlx

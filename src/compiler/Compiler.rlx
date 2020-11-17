@@ -1293,10 +1293,10 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		return 0
 	}
 	else if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
-		ASTError(Node, "Calls to DllImported functions are not allowed when the target output format is not PE.")
+		Node->Error("Calls to DllImported functions are not allowed when the target output format is not PE.")
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
-		ASTError(Node, "Called function is only declared, and never defined")
+		Node->Error("Called function is only declared, and never defined")
 	}
 	
 	i32 ParameterCount := CallNode->ParameterCount

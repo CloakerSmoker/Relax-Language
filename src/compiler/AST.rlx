@@ -1,0 +1,363 @@
+i8 NODE_TYPE_NONE := 0
+i8 NODE_TYPE_TOKEN := 1
+
+i8 NODE_TYPE_UNARY := 2
+i8 NODE_TYPE_BINARY := 3
+i8 NODE_TYPE_CALL := 4
+
+i8 NODE_TYPE_DEFINE := 6
+i8 NODE_TYPE_DLLIMPORT := 7
+
+i8 NODE_TYPE_IF := 8
+
+i8 NODE_TYPE_FOR := 9
+i8 NODE_TYPE_WHILE := 10
+i8 NODE_TYPE_LOOP := 11
+i8 NODE_TYPE_CONTINUEBREAK := 12
+
+i8 NODE_TYPE_RETURN := 13
+i8 NODE_TYPE_EXPRESSION := 14
+
+i8 NODE_TYPE_VARIABLE := 15
+i8 NODE_TYPE_INTEGER := 16
+i8 NODE_TYPE_STRING := 17
+
+i8 NODE_TYPE_TYPE := 18 /* For when an expression has an operand which is a literal type (like with 'as') */
+i8 NODE_TYPE_STRUCT_ACCESS := 19
+i8 NODE_TYPE_IDENTIFIER := 20
+
+i8 NODE_TYPE_ASSEMBLY := 21
+
+; Dedicated zero node type, to ensure that the actual ValueType of a zero (inside of a NODE_TYPE_INTEGER) 
+;  doesn't get optimized into `i8`, since that's the smallest type that could hold `0`.
+i8 NODE_TYPE_ZERO := 22
+
+i8 NODE_TYPE_TRY := 23
+
+; Since type sizes can change at parse-time inside of struct methods, the actually resolution
+;  of a type's size needs to be deferred until compile-time
+i8 NODE_TYPE_GET_TYPE_SIZE := 24
+
+
+; Unary
+
+struct UnaryExpression {
+	Token* Operator,
+	ASTNode* Operand
+}
+
+; Binary
+
+struct BinaryExpression {
+	ASTNode* Left,
+	Token* Operator,
+	ASTNode* Right
+}
+
+; Struct Access
+
+struct StructField {
+	SafeWideString* Name,
+	i16 Offset,
+	Type ValueType,
+	i8 BitStartIndex,
+	i8 BitEndIndex
+}
+
+struct StructAccessExpression {
+	ASTNode* Left,
+	Token* Operator,
+	StructField* TargetField
+}
+
+; Function Call
+
+i8 BUILTIN_NONE := 0
+i8 BUILTIN_SYSCALL := 1
+i8 BUILTIN_BREAKPOINT := 2
+
+struct CallExpression {
+	FunctionDefine* TargetFunction,
+	ASTNode** Parameters,
+	i32 ParameterCount,
+	i8 BuiltinID
+}
+
+; Blocks
+
+struct Block {
+	ASTNode** Statements,
+	i16 StatementCount
+	i8 HasUnconditionalReturn
+}
+
+; Misc Control Flow Statements
+
+struct IfGroup {
+	ASTNode** Conditions,
+	Block** Bodies,
+	Block* ElseBranch,
+	i16 BranchCount
+}
+
+struct ForLoop {
+	ASTNode* Initializer,
+	ASTNode* Condition,
+	ASTNode* Step,
+	Block* Body
+}
+
+struct WhileLoop {
+	ASTNode* Condition,
+	Block* Body
+}
+
+struct TryCatch {
+	Block* Body,
+	Block* CatchBody,
+	VariableInfo* CatchCodeVariable
+}
+
+; Function Definition
+
+i8 FUNCTION_IS_METHOD := 1
+i8 FUNCTION_IS_STATIC_METHOD := 2
+
+struct FunctionDefine {
+	ErrorContext Context,
+	
+	FunctionDefine* Next,
+	SafeWideString* Name,
+	
+	i16 ParameterCount,
+	VariableInfo** Parameters,
+	
+	VariableHashMap Locals,
+	Type ReturnType,
+	
+	i8 IsImported,
+	
+	union {
+		Block* Body,
+		AssemblyBlock* AssemblyBody,
+		SafeWideString* ImportFileName
+	},
+	union {
+		i8* StringBuffer,
+		void* ConstantsBuffer,
+		SafeWideString* ImportFunctionName
+	},
+	
+	SafeWideString* MethodOfTypeName,
+	
+	i8 Attribute,
+	i8 HasFullDefinition,
+	i32 LabelNumber,
+	
+	union {
+		i32 StringBufferSize,
+		i32 ConstantBufferSize
+	}
+	
+	i32 CallCount,
+	i8 UsesGlobals,
+	i8 IsMethod,
+	
+	i32 CodeOffset,
+	
+	i8 TempValue
+}
+
+/*
+==========================================
+	AST Node definition + alloc/free helpers
+==========================================
+*/
+
+struct ASTNode {
+	/* First two fields are the same as Token, so they can be used interchangably in error handling functions */
+	
+	ErrorContext Context,
+	
+	union {
+		void* TrueNode,
+		
+		UnaryExpression* UnaryNode,
+		BinaryExpression* BinaryNode,
+		CallExpression* CallNode,
+		StructAccessExpression* AccessNode,
+		
+		IfGroup* IfNode,
+		ForLoop* ForNode,
+		WhileLoop* WhileNode,
+		Block* LoopBody,
+		i8 IsContinue,
+		
+		FunctionDefine* DefineNode,
+		
+		ASTNode* ReturnExpression,
+		
+		ASTNode* ExpressionStatement,
+		
+		SafeWideString* StringValue,
+		VariableInfo* VariableValue,
+		i64 IntegerValue,
+		Type TypeValue,
+		i32 StringOffsetValue,
+		
+		AssemblyBlock* AssemblyValue,
+		TryCatch* TryNode
+	},
+	
+	void* LastVisitor
+	Type ValueType
+	i8 NodeType
+	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
+	
+	static ASTNode* New(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
+		ASTNode* this := Alloc(#ASTNode) As ASTNode*
+		
+		UnaryExpression* UnaryNode := NewNodeTrueNode
+		BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
+		StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
+		
+		i8 IsDereference := NewNodeType = NODE_TYPE_UNARY && UnaryNode->Operator->Value = OPERATOR_STAR
+		i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
+		i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
+		
+		if (IsDereference || IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
+			this->IsStorageValue := true
+		}
+		
+		this->NodeType := NewNodeType
+		this->TrueNode := NewNodeTrueNode
+		this->ValueType := NewNodeValueType
+		
+		return this
+	}
+	static ASTNode* New(i8 NewNodeType, i64 NewNodeTrueNode, Type NewNodeValueType) {
+		return ASTNode:New(NewNodeType, NewNodeTrueNode As void*, NewNodeValueType)
+	}
+	
+	define void Error(i8* Message) {
+		this~>Context->Error(Message)
+	}
+	define void Warn(i8* Message) {
+		this~>Context->Warn(Message)
+	}
+	
+	define void Free() {
+		Free(this)
+	}
+}
+
+struct ASTVisitor {
+	void* VisitFunction
+	i64 State
+	i32 NodeTypeMask
+	
+	define i32 IsTypeAllowed(i8 NodeType) {
+		return !!(this->NodeTypeMask & (1 << NodeType))
+	}
+	define void AllowType(i8 NodeType) {
+		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
+	}
+	
+	define void SetState(i64 State) {
+		this->State := State
+	}
+	define i64 GetState() {
+		return this->State
+	}
+	
+	define void SetVisitFunction(void* Function) {
+		this->VisitFunction := Function
+	}
+	define void CallVisitor(ASTNode* Node, void* VisitFunction) asm {
+		jmp, rdx
+	}
+	
+	declare void VisitNodes(...),
+	declare void RawVisitNodes(i64, ASTNode**),
+	
+	define void RawVisitBlocks(i64 Count, Block** Blocks) {
+		for (i32 Index := 0, Index < Count, Index += 1) {
+			Block* Next := Blocks[Index]
+			
+			this->RawVisitNodes(Next->StatementCount, Next->Statements)
+		}
+	}
+	define void VisitBlocks(... Blocks) {
+		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
+	}
+	define void VisitChildren(ASTNode* Node) {
+		i8 NodeType := Node->NodeType
+		
+		if (NodeType = NODE_TYPE_UNARY) {
+			this->VisitNodes(Node->UnaryNode->Operand)
+		}
+		else if (NodeType = NODE_TYPE_BINARY) {
+			this->VisitNodes(Node->BinaryNode->Left, Node->BinaryNode->Right)
+		}
+		else if (NodeType = NODE_TYPE_CALL) {
+			this->RawVisitNodes(Node->CallNode->ParameterCount, Node->CallNode->Parameters)
+		}
+		else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			this->VisitNodes(Node->AccessNode->Left)
+		}
+		else if (NodeType = NODE_TYPE_IF) {
+			this->RawVisitNodes(Node->IfNode->BranchCount, Node->IfNode->Conditions)
+			this->RawVisitBlocks(Node->IfNode->BranchCount, Node->IfNode->Bodies)
+			
+			if (Node->IfNode->ElseBranch) {
+				this->VisitBlocks(Node->IfNode->ElseBranch)
+			}
+		}
+		else if (NodeType = NODE_TYPE_WHILE) {
+			this->VisitNodes(Node->WhileNode->Condition)
+			this->VisitBlocks(Node->WhileNode->Body)
+		}
+		else if (NodeType = NODE_TYPE_FOR) {
+			this->VisitNodes(Node->ForNode->Initializer, Node->ForNode->Condition, Node->ForNode->Step)
+			this->VisitBlocks(Node->ForNode->Body)
+		}
+		else if (NodeType = NODE_TYPE_LOOP) {
+			this->VisitBlocks(Node->LoopBody)
+		}
+		else if (NodeType = NODE_TYPE_RETURN) {
+			this->VisitNodes(Node->ReturnExpression)
+		}
+		else if (NodeType = NODE_TYPE_EXPRESSION) {
+			this->VisitNodes(Node->ExpressionStatement)
+		}
+		else if (NodeType = NODE_TYPE_TRY) {
+			this->VisitBlocks(Node->TryNode->Body)
+			
+			if (Node->TryNode->CatchBody) {
+				this->VisitBlocks(Node->TryNode->CatchBody)
+			}
+		}
+	}
+	
+	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
+		for (i32 Index := 0, Index < Count, Index += 1) {
+			ASTNode* Node := Nodes[Index]
+			
+			if (Node->LastVisitor = this) {
+				continue
+			}
+			
+			Node->LastVisitor := this
+			
+			if (this->IsTypeAllowed(Node->NodeType)) {
+				this->CallVisitor(Node, this->VisitFunction)
+			}
+			else {
+				this->VisitChildren(Node)
+			}
+		}
+	}
+	define void VisitNodes(... Nodes) {
+		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
+	}
+}

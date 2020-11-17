@@ -704,5 +704,5 @@ define ASTNode* ParseAssembly(ParserState* Parser, i8 InFunction) {
 	ThisBlock->Instructions := Instructions
 	ThisBlock->InstructionCount := InstructionCount
 	
-	return AllocateNewASTNode(NODE_TYPE_ASSEMBLY, ThisBlock As void*, TYPE_NONE)
+	return ASTNode:New(NODE_TYPE_ASSEMBLY, ThisBlock, TYPE_NONE)
 }

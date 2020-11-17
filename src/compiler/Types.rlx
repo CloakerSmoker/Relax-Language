@@ -1,0 +1,185 @@
+Type TYPE_NONE := 0
+
+define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
+	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
+	
+	Type NewType := 0
+	
+	NewType.BaseType := BackingType
+	NewType.PointerDepth := PointerDepth
+
+	return NewType
+}
+define Type MakeType(i64 BackingType, i16 PointerDepth) {
+	return MakeType(BackingType As TypeInfo*, PointerDepth)
+}
+
+struct TypeInfo {
+	SafeWideString* Name,
+	HashMap Fields,
+	HashMap Methods,
+	HashMap StaticMethods,
+	i16 Size,
+	i8 IsStructType,
+	i8 IsIncomplete,
+	i8 IsBits,
+	i8 IsBuiltin
+	
+	define Type AsNonPointer() {
+		return MakeType(this, 0)
+	}
+	define Type AsPointer(i16 Depth) {
+		return MakeType(this, Depth)
+	}
+}
+
+define TypeInfo* GetBaseType(Type T) {
+	return T.BaseType As TypeInfo*
+}
+define i16 GetTypeSize(Type T) {
+	if (T.PointerDepth) {
+		return 8
+	}
+	else {
+		return GetBaseType(T)->Size
+	}
+}
+
+define i32 GetTypeStorageSize(Type T) {
+	i32 RegularSize := GetTypeSize(T)
+	
+	if (T.IsArray) {
+		RegularSize := GetBaseType(T)->Size
+	
+		return RegularSize * (T.ArraySize As i32)
+	}
+	
+	return RegularSize
+}
+define i32 GetPointerDepth(Type T) {
+	return T.PointerDepth As i32
+}
+define i8* GetTypeName(Type T) {
+	SafeWideString* BaseName := GetBaseType(T)->Name
+	i32 BaseNameLength := BaseName->Length
+	i32 PointerDepth := GetPointerDepth(T)
+	
+	i32 BufferSize := BaseNameLength + PointerDepth + 1
+	
+	i8* NameBuffer := Alloc(BufferSize)
+	i16* BaseNameBuffer := BaseName->Buffer
+	
+	for (i32 BaseNameIndex := 0, BaseNameIndex < BaseNameLength, BaseNameIndex += 1) {
+		NameBuffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
+	}
+	
+	for (i32 PointerDepthIndex := 0, PointerDepthIndex < PointerDepth, PointerDepthIndex += 1) {
+		NameBuffer[BaseNameLength + PointerDepthIndex] := '*'
+	}
+	
+	return NameBuffer
+}
+
+define void PrintType(Type TypeToPrint) {
+	/* Prints a type, including its pointer depth */
+	
+	PrintSafeString(GetBaseType(TypeToPrint)->Name)
+	
+	i16 Depth := GetPointerDepth(TypeToPrint)
+	
+	for (i32 Index := 0, Index < Depth, Index += 1) {
+		PrintCharacter('*')
+	}
+}
+
+define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
+	if !(AtNode) {
+		return 1
+	}
+	
+	ManualErrorMessagePrelude()
+	
+	Print("%s", Message)
+	
+	if (Expected As i64) != 0 {
+		Print(", expected ")
+		PrintType(Expected)
+	}
+	
+	Print(", got ")
+	PrintType(AtNode->ValueType)
+	
+	AtNode->Error(null)
+	
+	return 0
+}
+
+define i32 GetGenericRating(Type ForType) {
+	TypeInfo* BaseType := GetBaseType(ForType)
+	i16 PointerDepth := GetPointerDepth(ForType)
+	
+	i32 Result := -PointerDepth
+	
+	if !(BaseType->IsBuiltin) {
+		Result += 10
+	}
+	
+	return Result
+}
+
+define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* SourceNode) {
+	if (SourceNode) {
+		Source := SourceNode->ValueType
+	}
+	
+	TypeInfo* SourceBase := GetBaseType(Source)
+	TypeInfo* TargetBase := GetBaseType(Target)
+	
+	i16 SourceDepth := GetPointerDepth(Source)
+	i16 TargetDepth := GetPointerDepth(Target)
+	
+	i16 SourceSize := GetTypeSize(Source)
+	i16 TargetSize := GetTypeSize(Target)
+	
+	i8 SourceIsVoid := SourceBase = VoidType
+	i8 TargetIsVoid := TargetBase = VoidType
+	
+	if (SourceDepth = TargetDepth) {
+		if (SourceBase = TargetBase) {
+			return 0
+		}
+		else if (TargetDepth = 1) {
+			if (SourceIsVoid || TargetIsVoid) {
+				return 0
+			}
+		}
+		
+		if (SourceBase->IsBuiltin && TargetBase->IsBuiltin) {
+			if !(TargetDepth) {
+				if (SourceSize <= TargetSize) {
+					return 0
+				}
+			}
+		}
+		
+		return TypeError(SourceNode, Target, "Incompatible types")
+	}
+	else if (SourceDepth && TargetIsVoid && TargetDepth = 1) {
+		return 0
+	}
+	else if (SourceDepth || TargetDepth) {
+		return TypeError(SourceNode, Target, "Incompatible pointer depths")
+	}
+	else if (SourceBase->IsStructType || TargetBase->IsStructType) {
+		return TypeError(SourceNode, Target, "Incompatible struct type")
+	}
+	else if (TargetBase->IsBits || SourceBase->IsBits) {
+		if (SourceSize > TargetSize) {
+			return TypeError(SourceNode, Target, "Incompatible bits type size")
+		}
+		
+		return 0
+	}
+	
+	return 0
+}

@@ -1,9 +1,23 @@
+declare void PrettyError(ErrorContext*, i8*, i8)
+
 struct ErrorContext {
 	SafeWideString* SourceFilePath,
 	i32 LineNumber,
 	i16* Source,
 	i32 PositionInSource,
 	i16 LengthInSource
+	
+	define void Error(i8* Message) {
+		if (Message) {
+			SwapOutputStream()
+		}
+		
+		PrettyError(this, Message, Red | Bright)
+		Exit(1)
+	}
+	define void Warn(i8* Message) {
+		PrettyError(this, Message, Red | Green)
+	}
 }
 
 define void CopyContext(ErrorContext* From, ErrorContext* To) {
@@ -146,4 +160,21 @@ define void ContextError(ErrorContext* At, i8* Message) {
 	
 	PrettyError(At, Message, Red | Bright)
 	Exit(1)
+}
+
+define i8 GetNumberSize(i64 NumberToCheck) {
+	/* Returns the minimum number of bytes needed to store NumberToCheck */
+	
+	if (NumberToCheck & 0x7FFFFFFF80000000) {
+		return 8
+	}
+	else if (NumberToCheck & 0x7FFF8000) {
+		return 4
+	}
+	else if (NumberToCheck & 0x7F80) {
+		return 2
+	}
+	else {
+		return 1
+	}
 }
