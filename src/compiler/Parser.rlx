@@ -7,6 +7,8 @@ bits Type As i64 {
 	[54:63] ArraySize
 }
 
+Type TYPE_NONE := 0
+
 i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
 struct VariableInfo {
@@ -84,6 +86,9 @@ i8 TYPE_INCOMPLETE := 4
 i8 TYPE_BITS := 8
 i8 TYPE_ARRAY := 16
 
+declare void ParseProgram(ParserState*)
+declare void SetupAssembly(ParserState*)
+
 ; Holds the entire state of the parser
 
 struct ParserState {
@@ -118,6 +123,30 @@ struct ParserState {
 	
 	i32 LabelCount
 	
+	declare TypeInfo* AddType(i8*, i16, i8)
+	
+	static ParserState* New(BuildConfig* Config, LexerState* Lexer) {
+		ParserState* this := Alloc(#ParserState)
+		
+		this->Config := Config
+		this->Lexer := Lexer
+		
+		this~>Globals->Initialize()
+		this~>Functions->Initialize()
+		this~>Types->Initialize()
+		
+		this->GlobalDefaults := AllocArray(8, 8)
+		this->GlobalConstantsBuffer := Alloc(4)
+		
+		this->i8 := this->AddType("i8", 1, TYPE_REGULAR)
+		this->i16 := this->AddType("i16", 2, TYPE_REGULAR)
+		this->i32 := this->AddType("i32", 4, TYPE_REGULAR)
+		this->i64 := this->AddType("i64", 8, TYPE_REGULAR)
+		this->void := this->AddType("void", 8, TYPE_REGULAR)
+		
+		return this
+	}
+	
 	define TypeInfo* AddType(SafeWideString* Name, i16 Size, i8 Flags) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
@@ -147,25 +176,8 @@ struct ParserState {
 	define TypeInfo* AddType(i8* Name, i16 Size, i8 Flags) {
 		return this->AddType(AToS(Name), Size, Flags)
 	}
-	define void CreateDefaultTypes() {
-		this->i8 := this->AddType("i8", 1, TYPE_REGULAR)
-		this->i16 := this->AddType("i16", 2, TYPE_REGULAR)
-		this->i32 := this->AddType("i32", 4, TYPE_REGULAR)
-		this->i64 := this->AddType("i64", 8, TYPE_REGULAR)
-		this->void := this->AddType("void", 8, TYPE_REGULAR)
-	}
 	
-	define i32 Freeze() {
-		return this->Lexer->TokenIndex
-	}
-	define void Unfreeze(i32 FrozenState) {
-		this->Lexer->TokenIndex := FrozenState
-	}
-	define Token* CurrentToken() {
-		this->Lexer->TokenIndex -= 1
-		
-		return this->Lexer->GetNextToken()
-	}
+	declare Token* GetCurrentToken()
 	
 	define Type TryFindType(SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
 		HashMapElement* FoundTypeInfoElement := this~>Types->Get(TypeName)
@@ -192,7 +204,7 @@ struct ParserState {
 		Type Result := this->TryFindType(TypeName, PointerDepth, &ErrorMessage)
 		
 		if (ErrorMessage) {
-			this->CurrentToken()->Error(ErrorMessage)
+			this->GetCurrentToken()->Error(ErrorMessage)
 		}
 		
 		return Result
@@ -235,6 +247,871 @@ struct ParserState {
 		Target->ValueType := BaseType->AsNonPointer()
 		
 		return Target
+	}
+	
+	define VariableInfo* FindVariable(Token* NameToken) {
+		; Finds a variable, prioritizing locals over globals
+		
+		SafeWideString* VariableName := NameToken->StringValue
+		
+		FunctionDefine* CurrentFunction := this->CurrentFunction
+		VariableInfo* FoundVariable := 0
+		
+		if (CurrentFunction) {
+			; If we are in a function, try to find the variable in the locals
+			FoundVariable := CurrentFunction~>Locals->Get(VariableName)
+		}
+		
+		if !(FoundVariable) {
+			; If we didn't find the variable in the locals, then check the globals
+			FoundVariable := this~>Globals->Get(VariableName)
+			
+			if (CurrentFunction) {
+				CurrentFunction->UsesGlobals := true
+			}
+		}
+		
+		if !(FoundVariable) {
+			; If we still haven't found the variable, then it is undefined
+			
+			NameToken->Error("Undefined variable")
+		}
+		
+		; Variable has to have been found at some point for this to be reached
+		
+		return FoundVariable
+	}
+	define void AddGlobal(VariableInfo* NewGlobal, Token* BlameToken) {
+		this~>Globals->Add(NewGlobal, BlameToken)
+	}
+	define void AddLocal(VariableInfo* NewLocal, Token* BlameToken) {
+		this->CurrentFunction~>Locals->Add(NewLocal, BlameToken)
+	}
+	define void AddVariable(VariableInfo* NewVariable, Token* BlameToken) {
+		if (NewVariable->IsGlobal) {
+			this->AddGlobal(NewVariable, BlameToken)
+		}
+		else {
+			this->AddLocal(NewVariable, BlameToken)
+		}
+	}
+	
+	define i32 Freeze() {
+		return this->Lexer->TokenIndex
+	}
+	define void Unfreeze(i32 FrozenState) {
+		this->Lexer->TokenIndex := FrozenState
+	}
+	define Token* GetCurrentToken() {
+		this->Lexer->TokenIndex -= 1
+		
+		return this->Lexer->GetNextToken()
+	}
+	define Token* GetNextToken() {
+		return this->Lexer->GetNextToken()
+	}
+	define Token* PeekNextToken() {
+		i32 Before := this->Freeze()
+		
+		Token* Result := this->Lexer->GetNextToken()
+		
+		this->Unfreeze(Before)
+		
+		return Result
+	}
+	define i8 NextTokenMatches(i8 TokenType, i64 TokenValue) {
+		if (this->PeekNextToken()->Is(TokenType, TokenValue)) {
+			this->GetNextToken()
+			
+			return true
+		}
+		
+		return false
+	}
+	define i8 NextTokenMatches(i8 TokenType) {
+		return this->NextTokenMatches(TokenType, 0)
+	}
+	define Token* TryConsume(i8 TokenType, i64 TokenValue, i8* Reason, i8** ErrorMessage) {
+		Token* NextToken := this->GetNextToken()
+		
+		if (NextToken->Is(TOKEN_TYPE_EOF, 0)) {
+			*ErrorMessage := "Unexpected end of file"
+		}
+		else if !(NextToken->Is(TokenType, TokenValue)) {
+			*ErrorMessage := Reason
+		}
+		
+		return NextToken
+	}
+	define Token* TryConsume(i8 TokenType, i8* Reason, i8** ErrorMessage) {
+		return this->TryConsume(TokenType, 0, Reason, ErrorMessage)
+	}
+	define Token* Consume(i8 TokenType, i64 TokenValue, i8* Reason) {
+		i8* ErrorMessage := null
+		
+		Token* Result := this->TryConsume(TokenType, TokenValue, Reason, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			Result->Error(ErrorMessage)
+		}
+		
+		return Result
+	}
+	define Token* Consume(i8 TokenType, i8* Reason) {
+		return this->Consume(TokenType, 0, Reason)
+	}
+	
+	define Type TryParseType(i8 AllowArrayType, i8** ErrorMessage) {
+		Token* NameToken := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Type names must be identifiers", ErrorMessage)
+		
+		if *(ErrorMessage) {
+			return TYPE_NONE
+		}
+		
+		i8 PointerDepth := 0
+		
+		while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+			PointerDepth += 1
+		}
+		
+		Type Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
+		
+		if (AllowArrayType && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			Result := this->PointerToType(Result)
+			
+			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
+			
+			if (*ErrorMessage != null) {
+				Result.ArraySize := SizeToken->IntegerValue As i16
+				Result.IsArray := true
+				
+				this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
+			}
+		}
+		
+		return Result
+	}
+	define Type ParseType() {
+		i8* ErrorMessage := null
+		Token* BlameToken := this->PeekNextToken()
+		
+		Type Result := this->TryParseType(false, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			BlameToken->Error(ErrorMessage)
+		}
+		
+		return Result
+	}
+	define ASTNode* ParseTypeNode() {
+		Token* FirstToken := this->PeekNextToken()
+		Type Result := this->ParseType()
+		Token* LastToken := this->GetCurrentToken()
+		
+		ASTNode* ResultNode := ASTNode:New(NODE_TYPE_TYPE, Result As i64)
+		MergeContexts(FirstToken~>Context, LastToken~>Context, ResultNode~>Context)
+		
+		return ResultNode
+	}
+	
+	declare ASTNode* ParseExpression(i8)
+	
+	define ASTNode** ParseParameterList(ParserState* Parser, i8* OutParameterCount) {
+		i8 ParameterIndex := *OutParameterCount
+		ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
+		
+		/* If the next token is not a ), then parse a parameter list (if it is a ')' then there are 0 parameters) */
+		
+		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			i8 IsFirstParameter := true
+			
+			while (IsFirstParameter || this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				Parameters[ParameterIndex] := this->ParseExpression(0)
+				ParameterIndex += 1
+				
+				IsFirstParameter := false
+			}
+			
+			/* When we run into a token that isn't a ',' then the next token must be ')' to close the parameter group */
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
+		}
+		
+		OutParameterCount[0] := ParameterIndex
+		return Parameters
+	}
+	
+	define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
+		/* Translates a token into an AST node with the same value/type as the token */
+		
+		ASTNode* Result := 0
+		
+		if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
+			/* If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is correctly size for the given integer */
+			
+			Type ResultType := this->GetNumberType(TokenToTranslate->IntegerValue)
+			
+			Result := ASTNode:New(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
+		}
+		else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFIER) {
+			/* If the token is an identifier, find the variable the identifier represents, and put it into a NODE_TYPE_VARIABLE node */
+			
+			Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(this->i32, 0))
+			
+			if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
+				Result->IntegerValue := 1
+			}
+			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "false")) {
+				Result->IntegerValue := 0
+			}
+			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "windows")) {
+				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_PE
+			}
+			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
+				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_ELF
+			}
+			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "debug")) {
+				Result->IntegerValue := this->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
+			}
+			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
+				Result->ValueType := MakeType(this->void, 1)
+				Result->NodeType := NODE_TYPE_ZERO
+			}
+			else {
+				VariableInfo* FoundVariable := this->FindVariable(TokenToTranslate)
+				/* Using the found variable's type as the node type */
+				
+				Result->NodeType := NODE_TYPE_VARIABLE
+				Result->IsStorageValue := true
+				Result->VariableValue := FoundVariable
+				Result->ValueType := FoundVariable->Type
+			}
+			
+			CopyContext(TokenToTranslate As ErrorContext*, Result As ErrorContext*)
+		}
+		else {
+			TokenToTranslate->Error("Unexpected token")
+		}
+		
+		CopyContext(TokenToTranslate~>Context, Result~>Context)
+		
+		return Result
+	}
+	
+	define ASTNode* ParseExpressionOperand() {
+		; Parses and returns a single operand of an expression
+		
+		Token* NextToken := this->GetNextToken()
+		ASTNode* Result := 0
+		
+		FunctionDefine* CurrentFunction := this->CurrentFunction
+		
+		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			; If the next token is an `(`, then parse a sub-expression and consume a closing `)`
+			
+			Result := this->ParseExpression(0)
+			
+			Token* CloseParen := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren")
+			
+			MergeContexts(NextToken~>Context, CloseParen~>Context, Result~>Context)
+		}
+		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
+			; Else if the next token is an identifier, check for built-in function calls, static method
+			;  calls, with a regular variable access as the default case
+			
+			i8 IsBuiltinOrStatic := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)
+			
+			i8 ParameterCount := 0
+			ASTNode** Parameters := null
+			
+			if (IsBuiltinOrStatic) {
+				; This identifier is actually part of a built-in/static call
+				
+				MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, NextToken~>Context)
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
+					; If the identifier is followed by `:name` then, the original identifier is a struct type
+					;  name, and `name` is the name of a static method of said type
+					
+					HashMapElement* FoundTypeElement := this~>Types->Get(NextToken->StringValue)
+					
+					if !(FoundTypeElement) {
+						NextToken->Error("Unknown type")
+					}
+					
+					TypeInfo* FoundType := FoundTypeElement->Value As TypeInfo*
+					
+					Token* StaticMethodNameToken := this->GetCurrentToken()
+					MergeContexts(StaticMethodNameToken~>Context, NextToken~>Context, StaticMethodNameToken~>Context)
+					
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for static method call")
+					
+					Parameters := this->ParseParameterList(&ParameterCount)
+					
+					; UPDATE
+					return MakeCall(Parser, FoundType~>StaticMethods, StaticMethodNameToken, Parameters, ParameterCount)
+				}
+			}
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				; If the next-next token is an `(`, then this is a function call (IsBuiltinOrStatic tells us
+				;  if it is calling a built-in function)
+				
+				Parameters := this->ParseParameterList(&ParameterCount)
+				
+				; UPDATE
+				if (IsBuiltinOrStatic) {
+					return MakeBuiltinCall(Parser, NextToken, Parameters, ParameterCount)
+				}
+				else {
+					return MakeCall(Parser, Parser~>Functions, NextToken, Parameters, ParameterCount)
+				}
+			}
+			else {
+				; There is no `(` following either `name` or `name:` 
+				
+				if (IsBuiltinOrStatic) {
+					; In the case of `name:`, this is invalid.
+					
+					NextToken->Error("Unexpected ':' after identifier")
+				}
+				
+				; Just a regular old variable access, call TranslateTokenToNode so any special variables
+				;  get correctly translated into nodes
+				return this->TranslateTokenToNode(NextToken)
+			}
+		}
+		else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
+			; The next token is some flavor of string. We either need to stick it into the current function's
+			;  constant data buffer, of the global constant data buffer
+			
+			i8* Buffer := this->GlobalConstantsBuffer
+			i32 Offset := this->GlobalConstantBufferSize
+			
+			if (CurrentFunction) {
+				Offset := CurrentFunction->StringBufferSize
+				Buffer := CurrentFunction->StringBuffer
+			}
+			
+			; Since `TOKEN_TYPE_WIDE_STRING = TOKEN_TYPE_STRING + 1` we can subtract by TOKEN_TYPE_STRING
+			;  and add one to get the character size for each flavor of string. 
+			;   Aka 1 for TOKEN_TYPE_STRING and 2 for TOKEN_TYPE_WIDE_STRING
+			
+			i8 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
+			SafeWideString* StringText := NextToken->StringValue
+			
+			if (Offset % CharacterSize) {
+				Offset += 1
+			}
+			
+			i32 NewSize := Offset + (StringText->Length + 1) * CharacterSize
+			Buffer := ReAlloc(Buffer, NewSize)
+			
+			if (CurrentFunction) {
+				CurrentFunction->StringBufferSize := NewSize
+				CurrentFunction->StringBuffer := Buffer
+			}
+			else {
+				this->GlobalConstantBufferSize := NewSize
+				this->GlobalConstantsBuffer := Buffer
+			}
+			
+			TypeInfo* BaseType := this->i8
+			
+			if (CharacterSize = 1) {
+				for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
+					Buffer[Offset + Index] := StringText->Buffer[Index]
+				}
+			}
+			else {
+				BaseType := this->i16
+				MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length * 2)
+			}
+			
+			Result := ASTNode:New(NODE_TYPE_STRING, Offset, BaseType->AsPointer(1))
+			CopyContext(NextToken~>Context, Result~>Context)
+		}
+		else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
+			; A literal integer, just directly translate it directly into an ASTNode
+			
+			Result := this->TranslateTokenToNode(NextToken)
+		}
+		else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
+			; A prefix/unary operator, with a single operand.
+			
+			if (NextToken->Value = OPERATOR_POUND) {
+				; Special case for `#`, as it needs to parse a type name
+				
+				; Allow for `#(TypeName)` to force `#` to behave independent of precedence
+				i8 ConsumeClosingParan := this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
+				
+				Type GetSizeOfType := this->ParseTypeName()
+				
+				if (ConsumeClosingParan) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
+				}
+				
+				; Since type sizes can change at parse-time (ex: inside of a class method which is followed
+				;  by more field declarations) we need to defer the actual evaluation of the type's size
+				;   until compile-time. Which is done through the NODE_TYPE_GET_TYPE_SIZE AST node type.
+				
+				Result := ASTNode:New(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, this->i32->AsNonPointer()))
+				
+				MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, Result~>Context)
+			}
+			else {
+				if (NextToken->Value = OPERATOR_AND) {
+					; Another special case, for `&` this time, since it expects a storage value for a operand,
+					;  and maybe even a function name
+					
+					i8* ErrorMessage := null
+					
+					i32 Frozen := this->Freeze()
+					Token* MaybeFunction := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Dummy", &ErrorMessage)
+					
+					if (MaybeFunction && ErrorMessage = null) {
+						; In this case, we've got `&Name`, so it can only be getting the address of a
+						;  variable, function, or static function (Depending on if `Name` is followed by a `:`, or
+						;   if `Name` is the name of a function)
+						
+						FunctionDefine* FoundDefine := null
+						Token* TailToken := MaybeFunction
+						
+						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+							; We have `&Name:OtherName`, which means we need to lookup a static method for our result
+							
+							Token* StaticMethodTypeName := MaybeFunction
+							Token* StaticMethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
+							
+							HashMapElement* StaticMethodTypeElement := this~>Types->Get(StaticMethodTypeName->StringValue)
+							
+							if !(StaticMethodTypeElement) {
+								StaticMethodTypeName->Error("Undefined type")
+							}
+							
+							TypeInfo* TargetType := StaticMethodTypeElement->Value As TypeInfo*
+							
+							HashMapElement* FoundFunctionElement := TargetType~>StaticMethods->Get(StaticMethodName->StringValue)
+							
+							if !(FoundFunctionElement) {
+								StaticMethodName->Error("Undefined static method")
+							}
+							
+							FoundDefine := FoundFunctionElement->Value As FunctionDefine*
+							
+							TailToken := StaticMethodName
+						}
+						else {
+							; Else, we've just got `&Name`, so we check for `Name` as a function
+							
+							HashMapElement* FoundFunction := this~>Functions->Get(MaybeFunction->StringValue)
+							
+							if (FoundFunction) {
+								FoundDefine := FoundFunction->Value As FunctionDefine*
+							}
+						}
+						
+						if (FoundDefine) {
+							; If (in the case of `&Name`) `Name` was defined as a function, or (in the case of 
+							;  `&Name:OtherName`) `Name` was defined as a struct type, and `OtherName` was defined
+							;   as a static method of that type, we return a NODE_TYPE_DEFINE containing the resolved
+							;    FunctionDefine struct, which the compiler will then load the address of.
+							
+							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsPointer(1))
+							MergeContexts(MaybeFunction~>Context, TailToken~>Context, Result~>Context)
+							
+							if (FoundDefine->Next != null) {
+								Result->Error("Getting the address of an overloaded function is not possible")
+							}
+						}
+						else {
+							; With `&Name`, `Name` was not defined as a function. `&Name:OtherName`, any path where
+							;  `Name` or `OtherName` are not correctly defined will have error'd out by now.
+							
+							; Unfreeze to before `Name`, so it can be parsed as a regular expression
+							;  and checked for being a storage value.
+							
+							this->Unfreeze(Frozen)
+						}
+					}
+				}
+				
+				if !(Result) {
+					; If we don't have an operand for this unary operator from any of the special cases yet then
+					;  parse an expression as the operand
+					
+					Result := this->ParseExpression(GetPrefixPrecedence(NextToken))
+				}
+				
+				; UPDATE
+				Result := MakeUnary(Parser, NextToken, Result)
+			}
+		}
+		else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			; The next token is some flavor of constant data, either written directly in the source, or
+			;  contained in an external file.
+			
+			i32 BeforeElementType := this->Freeze()
+			Type ElementType := this->ParseTypeName()
+			
+			; Like with the TOKEN_TYPE_STRING flavors, we need to grab the correct constant buffer for
+			;  the current context of the parser. Aka either inside of a function, or outside of a function.
+			
+			i32 ConstantOffset := this->GlobalConstantBufferSize
+			i8* ConstantsBuffer := this->GlobalConstantsBuffer
+			
+			if (CurrentFunction) {
+				ConstantOffset := CurrentFunction->ConstantBufferSize
+				ConstantsBuffer := CurrentFunction->ConstantsBuffer
+			}
+			
+			i32 NewConstantBufferSize := ConstantOffset
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
+				; For constant data contained in an external file, the syntax is `{Type file: "path"}`
+				;  which is distinct since constant data inside the source expects the `:` to be directly
+				;   after the `Type`. Meaning that the only valid value of the next token is `"file"`, and
+				;    the next token being an identifier at all is a good enough sign that this should be 
+				;     interpreted as such.
+				
+				Token* ShouldBeFile := this->GetCurrentToken()
+				
+				if !(ShouldBeFile->StringValue->Equals("file")) {
+					ShouldBeFile->Error("Unexpected token")
+				}
+				
+				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after 'file'")
+				Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
+				
+				; Read the specified file, write its data into the constant buffer, and remember the offset
+				;  of the data, and increment the size of the constant buffer
+				i8* RawFilePath := FilePathToken->StringValue->ToString()
+				
+				i64 File := FileOpen(RawFilePath, FILE_READ)
+				
+				if (File < 0) {
+					ManualErrorMessagePrelude()
+					Print("\nCouldn't open file, error code %x\n", FileGetError(File))
+					FilePathToken->Error(null)
+				}
+				
+				i32 FileSize := FileGetSize(File)
+				
+				NewConstantBufferSize += FileSize + 1
+				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+				
+				void* FileBuffer := ConstantsBuffer + ConstantOffset
+				
+				FileRead(File, FileBuffer, FileSize)
+				
+				FileClose(File)
+				Free(RawFilePath)
+			}
+			else {
+				; Else, this fits the `{Type`
+				
+				if (GetBaseType(ElementType)->IsBuiltin = false || GetPointerDepth(ElementType) != 0) {
+					; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
+					;  easily write into the constant buffer
+					
+					this->Unfreeze(BeforeElementType)
+					this->GetNextToken()->Error("Element type must be a built in, non-pointer type")
+				}
+				
+				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after array element type")
+				
+				i32 ElementSize := GetTypeSize(ElementType)
+				i32 BeforeElements := this->Freeze()
+				i32 ElementCount := 0
+				
+				; In order to figure out how much buffer the constant buffer needs to be, first we go through
+				;  and count each element in the data
+				
+				loop {
+					this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+					
+					ElementCount += 1
+					
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+						; Commas between each element are optional.
+						
+						continue
+					}
+					else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						; A `}` will terminate this block of data
+						
+						break
+					}
+				}
+				
+				; Now, we extend the constant buffer so it can hold the additional constant data
+				
+				NewConstantBufferSize += 8 + ElementCount * ElementSize
+				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+				
+				void* ElementBuffer := ConstantsBuffer + ConstantOffset
+				i32 ElementIndex := 0
+				
+				this->Unfreeze(BeforeElements)
+				
+				; And finally, we process the entire block of constant data elements again, but actually write
+				;  each element into the (extended) constant data buffer this time
+				
+				loop {
+					Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+					
+					; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
+					;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
+					;   overlap zone, but those 8 bytes aren't written to the output file, and are overlapped by
+					;    any constant data following this data.
+					*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
+					ElementIndex += 1
+					
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+						continue
+					}
+					else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						break
+					}
+				}
+			}
+			
+			; Update the correct constant buffer/constant buffer size, and return a NODE_TYPE_STRING
+			;  (which really should be renamed) containing the offset of the newly appended constant data.
+			
+			if (CurrentFunction) {
+				CurrentFunction->ConstantBufferSize := NewConstantBufferSize
+				CurrentFunction->ConstantsBuffer := ConstantsBuffer
+			}
+			else {
+				this->GlobalConstantBufferSize := NewConstantBufferSize
+				this->GlobalConstantsBuffer := ConstantsBuffer
+			}
+			
+			Result := ASTNode:New(NODE_TYPE_STRING, ConstantOffset, this->PointerToType(ElementType))
+			
+			MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, Result~>Context)
+		}
+		else {
+			; Else, this token isn't something we expected here, so error out
+			
+			NextToken->Error("Unexpected token in expression")
+		}
+		
+		return Result
+	}
+	
+	define ASTNode* ParseExpression(i8 Precedence) {
+		; Parses and returns and expression only containing operators with higher precedence than Precedence
+		
+		ASTNode* Result := this->ParseExpressionOperand()
+		
+		i32 FrozenState := this->Freeze()
+		Token* OperatorToken := this->GetNextToken()
+		
+		while (OperatorToken->Is(TOKEN_TYPE_OPERATOR) && GetPrecedence(OperatorToken) >= Precedence) {
+			i8 NewPrecedence := GetPrecedence(OperatorToken)
+			
+			if (GetAssociation(OperatorToken) = LEFT_ASSOCIATIVE) {
+				NewPrecedence += 1
+			}
+			
+			ASTNode* Operand := null
+			i8 Operator := (OperatorToken->Value) As i8
+			
+			i8 CouldBeMethodCall := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER
+			
+			if (Operator = OPERATOR_OPEN_BRACKET) {
+				; If the next operator is `[`, then parse the index expression (for the right operand) and consume the closing `]`
+				
+				Operand := this->ParseExpression(0)
+				
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
+			}
+			else if (Operator = OPERATOR_AS) {
+				; Else if the next operator is `as` then parse a type name as the right operand
+				
+				Operand := this->ParseTypeNode()
+			}
+			else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
+				; Else if this is one of the access operators, consume a field name
+				
+				Token* Right := this->Consume(TOKEN_TYPE_IDENTIFIER, "Struct field name expected")
+				
+				Operand := ASTNode:New(NODE_TYPE_IDENTIFIER, Right->Value, this->i64->AsNonPointer())
+				CopyContext(Right~>Context, Operand~>Context)
+			}
+			else {
+				; Else, no special case, just parse and expression at the expected precedence level as the right operand
+				
+				Operand := this->ParseExpression(NewPrecedence)
+			}
+			
+			if (Operator = OPERATOR_STAR) {
+				; If we have `(a) * (b) := (c)`, we can safely assume that it was intended as `(a); *(b) := (c)`, 
+				;  since the original version is totally nonsensical 
+				;   (as a multiplication can never result in a storage value)
+				
+				Token* MaybeAssignmentOperatorToken := this->PeekNextToken()
+				
+				if (MaybeAssignmentOperatorToken->Is(TOKEN_TYPE_OPERATOR)) {
+					i32 MaybeAssignmentOperator := MaybeAssignmentOperatorToken->IntegerValue As i32
+					
+					if (OPERATOR_FIRST_ASSIGNMENT <= MaybeAssignmentOperator && MaybeAssignmentOperator <= OPERATOR_LAST_ASSIGNMENT) {
+						; We can force the correct interpretation by backtracking to right before the last operator 
+						; (which happens to be the `*`). Then, if we just return `(a)` we leave `*(b) := (c)` 
+						;  to be parsed by the next call to `ParseExpression`, resulting in two 
+						;   seperate expressions which are both semantically and logically correct.
+						
+						; Even better is that the "unfreeze and return" is default behavior for the end of an
+						;  expression so we can just break out of the expression parsing loop
+						
+						break
+					}
+				}
+				
+				; The token after the right side of the `*` was not an assignment operator, continue like normal
+			}
+			
+			; Fold the left/operator/right into just the left
+			
+			if (CouldBeMethodCall && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call
+				
+				ASTNode* LeftAccess := Result
+				
+				Type LeftType := LeftAccess->ValueType
+				TypeInfo* LeftBase := GetBaseType(LeftType)
+				i16 LeftDepth := GetPointerDepth(LeftType)
+				
+				; If a local struct is accessed using `->`, it is an error. 
+				; Or If a pointed-to structure is accessed via `.`, it is an error
+				
+				if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
+					OperatorToken->Error("Wrong operator for left side pointer depth")
+				}
+				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
+					; Or, if the accessed type is not a struct, or is incomplete, it is an error
+					
+					OperatorToken->Error("Can't call method on non-struct or incomplete types")
+				}
+				
+				if (LeftDepth = 0) {
+					; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
+					;  and the compiler will make sure to pass the address of `this` instead of the value.
+					
+					Result->ValueType := this->PointerToType(Result->ValueType)
+				}
+				
+				; The first parameter is `this`, so any actual parameters are offset by 1
+				i8 ParameterCount := 1
+				ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+				
+				/* Result = the left side of the struct access, which is passed as the `this` parameter */
+				Parameters[0] := Result
+				
+				; UPDATE
+				Result := MakeCall(Parser, LeftBase~>Methods, Right, Parameters, ParameterCount)
+				
+				MergeContexts(LeftAccess~>Context, ParserCurrentToken(Parser)~>Context, Result~>Context)
+			}
+			else {
+				Result := MakeBinary(Parser, Result, OperatorToken, Operand)
+			}
+			
+			/* Update where to restore the parser to once the expression ends */
+			FrozenState := this->Freeze()
+			
+			/* Update the next operator */
+			OperatorToken := this->GetNextToken()
+		}
+		
+		this->Unfreeze(FrozenState)
+		
+		return Result
+	}
+	
+	
+	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
+		Type PotentialType := this->TryParseType(true, ErrorMessage)
+		
+		if (PotentialType != TYPE_NONE && *ErrorMessage = null) {
+			i32 BeforeDefaultValue := this->Freeze()
+			
+			Token* PotentialNameToken := this->GetNextToken()
+			
+			if (PotentialNameToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+				VariableInfo* NewVariable := Alloc(#VariableInfo)
+				
+				NewVariable->Name := PotentialNameToken->StringValue
+				NewVariable->Type := PotentialType
+				NewVariable->IsGlobal := ForGlobalVariable
+				NewVariable->IsParameter := ForParameter
+				
+				this->AddVariable(NewVariable, PotentialNameToken)
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+					this->Unfreeze(BeforeDefaultValue)
+					
+					return this->ParseExpression()
+				}
+			}
+			else {
+				*ErrorMessage := "Variable names must be identifiers"
+			}
+		}
+		
+		return null
+	}
+	
+	define void ParseProgram() {
+		loop {
+			i32 Before := this->Freeze()
+			
+			Token* NextToken := this->GetNextToken()
+			i8 NextTokenType := NextToken->Type
+			i8 NextTokenValue := NextToken->Value As i8
+			
+			if (NextTokenType = TOKEN_TYPE_KEYWORD) {
+				if (NextTokenValue <= KEYWORD_DLLIMPORT) {
+					this->ParseFunctionDefinition(this~>Functions, NextTokenValue)
+				}
+				else if (NextTokenValue = KEYWORD_STRUCT) {
+					this->ParseStructDefinition()
+				}
+				else if (NextTokenValue = KEYWORD_BITS) {
+					this->ParseBitsDefinition()
+				}
+				else {
+					NextToken->Error("Unexpected token")
+				}
+			}
+			else if (NextTokenType = TOKEN_TYPE_IDENTIFIER) {
+				Token* BlameToken := this->PeekNextToken()
+				
+				i8* ErrorMessage := null
+				ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
+				
+				if (ErrorMessage) {
+					MergeContexts(BlameToken~>Context, this->GetCurrentToken()~>Context, BlameToken~>Context)
+					BlameToken->Error(ErrorMessage)
+				}
+				
+				if (DefaultValueExpression != null) {
+					i32 Index := GetArrayLength(this->GlobalDefaults)
+					this->GlobalDefaults := ReAllocArray(this->GlobalDefaults, 1)
+					
+					this->GlobalDefaults[Index] := DefaultValueExpression
+				}
+			}
+			else if (NextTokenType = TOKEN_TYPE_EOF) {
+				break
+			}
+			else {
+				NextToken->Error("Unexpected token")
+			}
+		}
 	}
 }
 
@@ -860,231 +1737,22 @@ define ASTNode* MakeCall(ParserState* Parser, HashMap* NameSpace, Token* NameTok
 ==========================================
 */
 
-define i32 FreezeParser(ParserState* Parser) {
-	/* Gets the tokenizer state in order to backtrack to said state */
-	
-	return Parser->Lexer->TokenIndex
-}
-define void UnfreezeParser(ParserState* Parser, i32 Index) {
-	/* Restores the tokenizer to a given state in order to backtrack */
-	
-	Parser->Lexer->TokenIndex := Index
-}
-
-define Token* ParserNextToken(ParserState* Parser) {
-	/* Gets the next token */
-	
-	return Parser->Lexer->GetNextToken()
-}
-
-define Token* ParserCurrentToken(ParserState* Parser) {
-	Parser->Lexer->TokenIndex -= 1
-	
-	return Parser->Lexer->GetNextToken()
-}
-
-define i8 TokenMatches(Token* TokenToTest, i8 TokenType, i8 TokenValue) {
-	/* Compares two tokens using type/value */
-	
-	if (TokenType = TOKEN_TYPE_IDENTIFIER || TokenType = TOKEN_TYPE_STRING || TokenType = TOKEN_TYPE_INTEGER) {
-		/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
-		
-		if (TokenToTest->Type = TokenType) {
-			return true
-		}
-	}
-	
-	if (TokenToTest->Type = TokenType && TokenToTest->Value = TokenValue) {
-		return true
-	}
-	
-	return false
-}
-
-define i8 ParserNextMatches(ParserState* Parser, i8 TokenType, i8 TokenValue) {
-	/* Looks ahead at the next token and advances the parser (and returns true) if it matches the passed Type/Value */
-	i32 FrozenState := FreezeParser(Parser)
-	
-	Token* NextToken := ParserNextToken(Parser)
-	i8 Matches := TokenMatches(NextToken, TokenType, TokenValue)
-	
-	if !(Matches) {
-		/* Backtrack if the next token didn't match */
-		UnfreezeParser(Parser, FrozenState)
-		
-		return false
-	}
-	
-	return true
-}
-
-define Token* TryConsume(ParserState* Parser, i8 TokenType, i8 TokenValue, i8* Reason, i8** ErrorMessage) {
-	/* Gets the next token and ensures it is a TokenText:TokenValue token (with Reason being an error message for when the next token doesn't match) */
-	
-	Token* NextToken := ParserNextToken(Parser)
-	
-	if (NextToken->Type = TOKEN_TYPE_EOF) {
-		/* If we've consumed an EOF, it was clearly unexpected, and gets its own error message */
-		ErrorMessage[0] := "Unexpected EOF"
-	}
-	
-	if !(TokenMatches(NextToken, TokenType, TokenValue)) {
-		ErrorMessage[0] := Reason
-	}
-	
-	return NextToken
-}
-define Token* Consume(ParserState* Parser, i8 TokenType, i8 TokenValue, i8* Reason) {
-	i8* ErrorMessage := 0
-	
-	Token* Result := TryConsume(Parser, TokenType, TokenValue, Reason, &ErrorMessage)
-	
-	if (ErrorMessage) {
-		Result->Error(Reason)
-	}
-	
-	return Result
-}
-
 /*
 ==========================================
 	Actual parser + some helpers
 ==========================================
 */
 
-declare void ParseProgram(ParserState*)
-declare void SetupAssembly(ParserState*)
-
 define ParserState* ParserStart(BuildConfig* Config, LexerState* Lexer) {
 	/* Initializes Parser and uses Lexer to parse a program */
 	
-	ParserState* P := Alloc(#ParserState) As ParserState*
+	ParserState* Parser := ParserState:New(Config, Lexer)
 	
-	P->Config := Config
-	P->Lexer := Lexer
+	SetupAssembly(Parser)
 	
-	P~>Globals->Initialize()
+	ParseProgram(Parser)
 	
-	P->GlobalDefaults := AllocArray(8, 0)
-	
-	P~>Functions->Initialize()
-	
-	P~>Types->Initialize()
-	
-	P->GlobalConstantsBuffer := Alloc(4)
-	
-	P->CreateDefaultTypes()
-	SetupAssembly(P)
-	
-	ParseProgram(P)
-	
-	return P
-}
-
-define VariableInfo* FindVariable(ParserState* Parser, Token* NameToken) {
-	/* Finds a variable, prioritizing locals over globals */
-	
-	SafeWideString* VariableName := NameToken->StringValue
-	
-	FunctionDefine* CurrentFunction := Parser->CurrentFunction
-	VariableInfo* FoundVariable := 0
-	
-	if (CurrentFunction) {
-		/* If we are in a function, try to find the variable in the locals */
-		FoundVariable := CurrentFunction~>Locals->Get(VariableName)
-	}
-	
-	if !(FoundVariable) {
-		/* If we didn't find the variable in the locals, then check the globals */
-		FoundVariable := Parser~>Globals->Get(VariableName)
-		
-		if (CurrentFunction) {
-			CurrentFunction->UsesGlobals := true
-		}
-	}
-	
-	if !(FoundVariable) {
-		/* If we still haven't found the variable, then it is undefined */
-		
-		NameToken->Error("Undefined variable")
-	}
-	
-	/* Variable has to have been found at some point for this to be reached */
-	
-	return FoundVariable
-}
-
-define void ParserAddGlobal(ParserState* Parser, VariableInfo* NewGlobal, Token* SourceToken) {
-	/* Adds a global variable to the current program */
-	
-	Parser~>Globals->Add(NewGlobal, SourceToken)
-}
-
-define void ParserAddLocal(ParserState* Parser, VariableInfo* NewLocal, Token* SourceToken) {
-	/* Adds a local variable to the current function */
-	
-	Parser->CurrentFunction~>Locals->Add(NewLocal, SourceToken)
-}
-
-/*
-==========================================
-	Actual parsing functions
-==========================================
-*/
-
-define Type TryParseTypeName(ParserState* Parser, i8 AllowArrayType, i8** ErrorMessage) {
-	/* Parses a type name, and returns a Type struct representing that type */
-	
-	/* Find the base type name */
-	Token* NameToken := TryConsume(Parser, TOKEN_TYPE_IDENTIFIER, TOKEN_TYPE_NONE, "Type names must be identifiers", ErrorMessage)
-	
-	if *(ErrorMessage) {
-		return 0 As Type
-	}
-	
-	SafeWideString* Name := NameToken->StringValue
-	
-	i8 PointerDepth := 0
-	
-	/* And the pointer depth of the type */
-	while (ParserNextMatches(Parser, TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
-		PointerDepth += 1
-	}
-	
-	/* Get (and return) a type (which might be incomplete) using the parsed info */
-	Type Result := Parser->TryFindType(Name, PointerDepth, ErrorMessage)
-	
-	if (AllowArrayType && ParserNextMatches(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-		Result := Parser->PointerToType(Result)
-		
-		Token* SizeToken := TryConsume(Parser, TOKEN_TYPE_INTEGER, 0, "Expected array type size", ErrorMessage)
-		
-		if !(*(ErrorMessage)) {
-			Result.ArraySize := (SizeToken->IntegerValue) As i16
-			Result.IsArray := true
-		}
-		
-		TryConsume(Parser, TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
-	}
-	
-	return Result
-}
-
-define Type ParseTypeName(ParserState* Parser) {
-	i8* ErrorMessage := 0
-	i32 Frozen := FreezeParser(Parser)
-	
-	Type Result := TryParseTypeName(Parser, false, &ErrorMessage)
-	
-	if (ErrorMessage) {
-		UnfreezeParser(Parser, Frozen)
-		
-		Token* ErrorToken := ParserNextToken(Parser)
-		
-		ErrorToken->Error(ErrorMessage)
-	}
-	
-	return Result
+	return Parser
 }
 
 declare FunctionDefine* ParseFunction(ParserState*, HashMap*, i8)

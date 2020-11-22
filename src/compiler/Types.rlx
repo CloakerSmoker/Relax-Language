@@ -1,5 +1,3 @@
-Type TYPE_NONE := 0
-
 define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
 	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
 	

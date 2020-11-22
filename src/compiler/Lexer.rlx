@@ -98,6 +98,8 @@ i8 PUNCTUATION_AT := 6
 i8 KEYWORD_DECLARE := 0
 i8 KEYWORD_DEFINE := 1
 i8 KEYWORD_DLLIMPORT := 2
+; declare/define/dllimport must be 0-2, as the parser uses `TokenValue <= KEYWORD_DLLIMPORT` to check for
+;  the various flavors of function definition
 
 i8 KEYWORD_IF := 3
 i8 KEYWORD_ELSE := 4
@@ -157,6 +159,9 @@ struct Token {
 		} 
 		
 		return this->Value = Value
+	}
+	define i8 Is(i8 Type) {
+		return this->Type = Type
 	}
 }
 

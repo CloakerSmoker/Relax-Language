@@ -238,6 +238,12 @@ struct ASTNode {
 	static ASTNode* New(i8 NewNodeType, i64 NewNodeTrueNode, Type NewNodeValueType) {
 		return ASTNode:New(NewNodeType, NewNodeTrueNode As void*, NewNodeValueType)
 	}
+	static ASTNode* New(i8 NewNodeType, void* NewNodeTrueNode) {
+		return ASTNode:New(NewNodeType, NewNodeTrueNode, TYPE_NONE)
+	}
+	static ASTNode* New(i8 NewNodeType, i64 NewNodeTrueNode) {
+		return ASTNode:New(NewNodeType, NewNodeTrueNode As void*, TYPE_NONE)
+	}
 	
 	define void Error(i8* Message) {
 		this~>Context->Error(Message)
