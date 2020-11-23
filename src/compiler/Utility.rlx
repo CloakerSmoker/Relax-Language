@@ -7,6 +7,39 @@ struct ErrorContext {
 	i32 PositionInSource,
 	i16 LengthInSource
 	
+	
+	define ErrorContext* Clone(ErrorContext* Other) {
+		MoveMemory(this, Other, #ErrorContext)
+		
+		return this
+	}
+	define ErrorContext* Merge(ErrorContext* Other) {
+		if (this->PositionInSource > Other->PositionInSource) {
+			this->PositionInSource := Other->PositionInSource
+		}
+		
+		i32 ThisEnd := this->PositionInSource + this->LengthInSource
+		i32 OtherEnd := Other->PositionInSource + Other->LengthInSource
+		
+		if (ThisEnd < OtherEnd) {
+			this->LengthInSource := OtherEnd - this->PositionInSource
+		}
+		else {
+			this->LengthInSource := ThisEnd - this->PositionInSource
+		}
+		
+		return this
+	}
+	define ErrorContext* Merge(... Others) {
+		i32 Count := Others[0] As i32
+		
+		for (i32 Index := 1, Index <= Count, Index += 1) {
+			this->Merge(Others[Index] As ErrorContext*)
+		}
+		
+		return this
+	}
+	
 	define void Error(i8* Message) {
 		if (Message) {
 			SwapOutputStream()

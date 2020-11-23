@@ -245,6 +245,20 @@ struct ASTNode {
 		return ASTNode:New(NewNodeType, NewNodeTrueNode As void*, TYPE_NONE)
 	}
 	
+	static ASTNode* NewCallNode(ASTNode** Parameters, i32 ParameterCount, CallExpression** OutResult, ErrorContext* StartContext, ErrorContext* EndContext) {
+		CallExpression* Result := Alloc(#CallExpression) As CallExpression*
+		Result->Parameters := Parameters
+		Result->ParameterCount := ParameterCount
+		
+		*OutResult := Result
+		
+		ASTNode* ResultNode := ASTNode:New(NODE_TYPE_CALL, Result, TYPE_NONE)
+		
+		ResultNode~>Context->Clone(StartContext)->Merge(EndContext)
+		
+		return ResultNode
+	}
+	
 	define void Error(i8* Message) {
 		this~>Context->Error(Message)
 	}
