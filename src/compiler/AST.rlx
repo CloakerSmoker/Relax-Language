@@ -212,22 +212,9 @@ struct ASTNode {
 	void* LastVisitor
 	Type ValueType
 	i8 NodeType
-	i8 IsStorageValue /* Signals that this node is a value that references a storage location, and can be assigned */
 	
 	static ASTNode* New(i8 NewNodeType, void* NewNodeTrueNode, Type NewNodeValueType) {
-		ASTNode* this := Alloc(#ASTNode) As ASTNode*
-		
-		UnaryExpression* UnaryNode := NewNodeTrueNode
-		BinaryExpression* BinaryNode := NewNodeTrueNode As BinaryExpression*
-		StructAccessExpression* StructNode := NewNodeTrueNode As StructAccessExpression*
-		
-		i8 IsDereference := NewNodeType = NODE_TYPE_UNARY && UnaryNode->Operator->Value = OPERATOR_STAR
-		i8 IsArrayAccess := NewNodeType = NODE_TYPE_BINARY && BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
-		i8 IsStructAccss := NewNodeType = NODE_TYPE_STRUCT_ACCESS && StructNode->Operator->Value != OPERATOR_TILDE_GREATER
-		
-		if (IsDereference || IsArrayAccess || IsStructAccss || NewNodeType = NODE_TYPE_VARIABLE) {
-			this->IsStorageValue := true
-		}
+		ASTNode* this := Alloc(#ASTNode)
 		
 		this->NodeType := NewNodeType
 		this->TrueNode := NewNodeTrueNode
@@ -257,6 +244,14 @@ struct ASTNode {
 		ResultNode~>Context->Clone(StartContext)->Merge(EndContext)
 		
 		return ResultNode
+	}
+	
+	define i8 IsStorageValue() {
+		i8 IsDereference := this->NodeType = NODE_TYPE_UNARY && this->UnaryNode->Operator->Value = OPERATOR_STAR
+		i8 IsArrayAccess := this->NodeType = NODE_TYPE_BINARY && this->BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
+		i8 IsStructAccss := this->NodeType = NODE_TYPE_STRUCT_ACCESS && this->AccessNode->Operator->Value != OPERATOR_TILDE_GREATER
+		
+		return this->NodeType = NODE_TYPE_VARIABLE || IsDereference || IsArrayAccess || IsStructAccss
 	}
 	
 	define void Error(i8* Message) {

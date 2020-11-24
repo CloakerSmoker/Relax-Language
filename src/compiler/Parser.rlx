@@ -602,7 +602,6 @@ struct ParserState {
 				VariableInfo* FoundVariable := this->FindVariable(TokenToTranslate)
 				
 				Result->NodeType := NODE_TYPE_VARIABLE
-				Result->IsStorageValue := true
 				Result->VariableValue := FoundVariable
 				Result->ValueType := FoundVariable->Type
 			}
@@ -1041,7 +1040,7 @@ struct ParserState {
 					ResultType := this->i8->AsNonPointer()
 				}
 				else if (Operator = OPERATOR_AND) {
-					if !(Operand->IsStorageValue || Operand->NodeType = NODE_TYPE_DEFINE) {
+					if !(Operand->IsStorageValue() || Operand->NodeType = NODE_TYPE_DEFINE) {
 						Operand->Error("Operand of the '&' operator must be a storage value.")
 					}
 					
@@ -1232,7 +1231,7 @@ struct ParserState {
 			ASTNode* Operand := null
 			i8 Operator := (OperatorToken->Value) As i8
 			
-			i8 CouldBeMethodCall := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER
+			i8 IsStructAccess := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER
 			
 			if (Operator = OPERATOR_OPEN_BRACKET) {
 				; If the next operator is `[`, then parse the index expression (for the right operand) and consume the closing `]`
@@ -1246,13 +1245,13 @@ struct ParserState {
 				
 				Operand := this->ParseTypeNode()
 			}
-			else if (CouldBeMethodCall || Operator = OPERATOR_TILDE_GREATER) {
+			else if (IsStructAccess) {
 				; Else if this is one of the access operators, consume a field name
 				
 				Token* Right := this->Consume(TOKEN_TYPE_IDENTIFIER, "Struct field name expected")
 				
-				Operand := ASTNode:New(NODE_TYPE_IDENTIFIER, Right->Value, this->i64->AsNonPointer())
-				CopyContext(Right~>Context, Operand~>Context)
+				;Operand := ASTNode:New(NODE_TYPE_IDENTIFIER, Right->Value, this->i64->AsNonPointer())
+				;CopyContext(Right~>Context, Operand~>Context)
 			}
 			else {
 				; Else, no special case, just parse and expression at the expected precedence level as the right operand
@@ -1288,15 +1287,13 @@ struct ParserState {
 			
 			; Fold the left/operator/right into just the left
 			
-			if (CouldBeMethodCall && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-				; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call
-				
-				ASTNode* LeftOperand := Result
-				
-				Type LeftType := LeftOperand->ValueType
-				TypeInfo* LeftBase := GetBaseType(LeftType)
-				i16 LeftDepth := GetPointerDepth(LeftType)
-				
+			ASTNode* Left := Result
+			
+			Type LeftType := Left->ValueType
+			TypeInfo* LeftBase := GetBaseType(LeftType)
+			i16 LeftDepth := GetPointerDepth(LeftType)
+			
+			if (IsStructAccess) {
 				; If a local struct is accessed using `->`, it is an error. 
 				; Or If a pointed-to structure is accessed via `.`, it is an error
 				
@@ -1306,27 +1303,149 @@ struct ParserState {
 				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
-					OperatorToken->Error("Can't call method on non-struct or incomplete types")
+					OperatorToken->Error("Can't access field of non-struct or incomplete types")
 				}
 				
-				if (LeftDepth = 0) {
-					; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
-					;  and the compiler will make sure to pass the address of `this` instead of the value.
+				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call
 					
-					LeftOperand->ValueType := this->PointerToType(LeftOperand->ValueType)
+					if (LeftDepth = 0) {
+						; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
+						;  and the compiler will make sure to pass the address of `this` instead of the value.
+						
+						Left->ValueType := this->PointerToType(Left->ValueType)
+					}
+					
+					i8* ErrorMessage := null
+					Result := this->TryParseFunctionCall(Right, LeftBase~>Methods, 1, &ErrorMessage)
+					
+					if (ErrorMessage) {
+						this->GetCurrentToken()->Error(ErrorMessage)
+					}
+					
+					Result->CallNode->Parameters[0] := Left
 				}
-				
-				i8* ErrorMessage := null
-				Result := this->TryParseFunctionCall(Right, LeftBase~>Methods, 1, &ErrorMessage)
-				
-				if (ErrorMessage) {
-					this->GetCurrentToken()->Error(ErrorMessage)
+				else {
+					HashMapElement* FieldElement := LeftBase~>Fields->Get(Right->StringValue)
+					
+					if (FieldElement = null) {
+						Right->Error("Unknown struct field")
+					}
+					
+					StructField* Field := FieldElement->Value
+					
+					StructAccessExpression* Access := Alloc(#StructAccessExpression)
+					
+					Access->Left := Left
+					Access->Operator := OperatorToken
+					Access->TargetField := Field
+					
+					Type FieldType := Field->ValueType
+					
+					if (Operator = OPERATOR_TILDE_GREATER && !FieldType.IsArray) {
+						FieldType := this->PointerToType(FieldType)
+					}
+					else if (Operator != OPERATOR_TILDE_GREATER && FieldType.IsArray) {
+						OperatorToken->Error("Array fields can only be accessed with the `~>` operator")
+					}
+					
+					Result := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, FieldType)
+					
+					Result~>Context->Clone(Left~>Context)->Merge(Right~>Context)
 				}
-				
-				Result->CallNode->Parameters[0] := LeftOperand
 			}
 			else {
-				Result := MakeBinary(Parser, Result, OperatorToken, Operand)
+				Type ResultType := Result->ValueType
+				
+				if (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT) {
+					; If this is an assignment, do some extra verification
+					
+					if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
+						Left->Error("`this` can't be assigned to")
+					}
+					else if (LeftDepth = 0 && LeftBase->IsStructType) {
+						Left->Error("Structures can't be directly assigned")
+					}
+					else if !(Left->IsStorageValue()) {
+						Left->Error("The left side operand of assignment operators must be a storage value")
+					}
+				}
+				else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
+					ResultType := this->i8->AsNonPointer()
+				}
+				else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
+					; Reduce our operand to the smallest type which can contain it (if it is an integer)
+					
+					this->DowncastIntegerNode(Operand)
+					
+					; Ensure that our shift count is an i8, as anything bigger is definitely invalid
+					
+					CheckTypes(this->void, Operand->ValueType, this->i8->AsNonPointer(), Operand)
+					
+					if (GetTypeSize(LeftType) < 4) {
+						ResultType := this->i32->AsNonPointer()
+					}
+					else {
+						ResultType := Result->ValueType
+					}
+				}
+				else if (Operator = OPERATOR_AS) {
+					ResultType := Operand->ValueType
+				}
+				else if (Operator = OPERATOR_OPEN_BRACKET) {
+					if !(GetBaseType(Operand->ValueType)->IsBuiltin) {
+						Operand->Error("Invalid `[Index]` type.")
+					}
+					
+					ResultType := this->DereferencePointerType(LeftType, Left~>Context)
+				}
+				else {
+					; This is only reached for regular old operators, like + or -
+					; Which also happens to be the set of operators which are hard to decide a result type for
+					
+					; This is "solved" by checking if `Right As Left` could be made as an implicit cast,
+					;  and checking the same for `Left As Right`. 
+					; If `Right As Left` (aka RightIsCompatibleWithLeft) is fine, then we use the left type
+					;  as the result type, and the other way around. If neither cast is fine, then we have
+					;   an operation with invalid types.
+					
+					i8 LeftIsCompatibleWithRight := !CheckTypes(this->void, LeftType, Operand->ValueType, null)
+					i8 RightIsCompatibleWithLeft := !CheckTypes(this->void, Operand->ValueType, LeftType, null)
+					
+					if (RightIsCompatibleWithLeft) {
+						ResultType := LeftType
+					}
+					else if (LeftIsCompatibleWithRight) {
+						ResultType := Operand->ValueType
+					}
+					else {
+						Left~>Context->Merge(this->GetCurrentTokenContext())->Error("Incomplete operand types")
+					}
+					
+					if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+						; For `&&` and `||`, `CheckTypes` is only called for the error messages, and the 
+						;  actual result type is just a regular old i8
+						ResultType := this->i8->AsNonPointer()
+					}
+					
+					; If the left or right operands are integers, elevate them to the ResultType to ensure that
+					;  the compiler will cast them (instead of a runtime cast)
+					
+					if (Left->NodeType = NODE_TYPE_INTEGER) {
+						Left->ValueType := ResultType
+					}
+					if (Operand->NodeType = NODE_TYPE_INTEGER) {
+						Operand->ValueType := ResultType
+					}
+				}
+				
+				Result := ASTNode:New(NODE_TYPE_BINARY, Alloc(#BinaryExpression), ResultType)
+				
+				Result->BinaryNode->Left := Left
+				Result->BinaryNode->Operator := Operator
+				Result->BinaryNode->Right := Operand
+				
+				Result~>Context->Clone(Left~>Context)->Merge(this->GetCurrentTokenContext())
 			}
 			
 			; Update where to restore the parser to once the expression ends
@@ -1339,6 +1458,9 @@ struct ParserState {
 		this->Unfreeze(BeforeOperator)
 		
 		return Result
+	}
+	define ASTNode* ParseExpression() {
+		return this->ParseExpression(0)
 	}
 	
 	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
