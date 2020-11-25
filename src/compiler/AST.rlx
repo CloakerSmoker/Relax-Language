@@ -123,6 +123,9 @@ struct TryCatch {
 i8 FUNCTION_IS_METHOD := 1
 i8 FUNCTION_IS_STATIC_METHOD := 2
 
+declare i32 GetTypeStringLength(Type)
+declare void StringifyType(void*, Type)
+
 struct FunctionDefine {
 	ErrorContext Context,
 	
@@ -166,6 +169,72 @@ struct FunctionDefine {
 	i32 CodeOffset,
 	
 	i8 TempValue
+	
+	
+	define i32 GetStringLength() {
+		i32 Length := this->Name->Length + 2
+		
+		if (this->MethodOfTypeName) {
+			Length += this->MethodOfTypeName->Length + 1
+		}
+		
+		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
+			Length += GetTypeStringLength(this->Parameters[Index]->Type)
+		}
+		
+		return Length
+	}
+	define void StringifyInto(void* IntoRawBuffer) {
+		i8* Buffer := IntoRawBuffer
+		i32 Offset := 0
+		
+		if (this->MethodOfTypeName) {
+			i32 MethodOfTypeNameLength := this->MethodOfTypeName->Length
+			
+			for (i32 MethodTypeNameIndex := 0, MethodTypeNameIndex < MethodOfTypeNameLength, MethodTypeNameIndex += 1) {
+				Buffer[MethodTypeNameIndex] := this->MethodOfTypeName->ASCIICharacterAt(MethodTypeNameIndex)
+			}
+			
+			Offset += MethodOfTypeNameLength
+		}
+		
+		if (this->IsMethod) {
+			if (this->IsMethod = FUNCTION_IS_STATIC_METHOD) {
+				Buffer[Offset] := ':'
+			}
+			else {
+				Buffer[Offset] := '.'
+			}
+			
+			Offset += 1
+		}
+		
+		i32 NameLength := this->Name->Length
+		
+		for (i32 NameIndex := 0, NameIndex < NameLength, NameIndex += 1) {
+			Buffer[Offset + NameIndex] := this->Name->ASCIICharacterAt(NameIndex)
+		}
+		
+		Offset += NameLength
+		
+		Buffer[Offset] := '('
+		Offset += 1
+		
+		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
+			Type ParameterType := this->Parameters[ParameterIndex]->Type
+			
+			StringifyType(&Buffer[Offset], ParameterType)
+			Offset += GetTypeStringLength(ParameterType)
+			
+			if (ParameterIndex + 1 < this->ParameterCount) {
+				Buffer[Offset] := ','
+				Buffer[Offset + 1] := ' '
+				Offset += 2
+			}
+		}
+		
+		Buffer[Offset] := ')'
+	}
 }
 
 /*

@@ -188,7 +188,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
 	Config->Lexer := Lexer
 	
-	ParserState* Parser := ParserStart(Config, Lexer)
+	ParserState* Parser := ParserState:New(Config, Lexer)
+	Parser->ParseProgram()
 	
 	CompilerStart(Config, Parser, OutputFilePath)
 	

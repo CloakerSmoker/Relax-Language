@@ -78,16 +78,33 @@ define i8* GetTypeName(Type T) {
 	return NameBuffer
 }
 
-define void PrintType(Type TypeToPrint) {
-	/* Prints a type, including its pointer depth */
+define i32 GetTypeStringLength(Type T) {
+	return GetBaseType(T)->Name->Length + GetPointerDepth(T)
+}
+define void StringifyType(void* RawBuffer, Type T) {
+	i8* Buffer := RawBuffer
 	
-	PrintSafeString(GetBaseType(TypeToPrint)->Name)
+	SafeWideString* Name := GetBaseType(T)->Name
 	
-	i16 Depth := GetPointerDepth(TypeToPrint)
-	
-	for (i32 Index := 0, Index < Depth, Index += 1) {
-		PrintCharacter('*')
+	for (i32 Index := 0, Index < Name->Length, Index += 1) {
+		Buffer[Index] := Name->ASCIICharacterAt(Index)
 	}
+	
+	for (i32 Depth := 0, Depth < GetPointerDepth(T), Index += 1) {
+		Buffer[Index + Depth] := '*'
+	}
+	
+	Buffer[Index + Depth + 1] := 0
+}
+
+i8{100} PrintTypeBuffer
+
+define void PrintType(Type TypeToPrint) {
+	; Prints a type, including its pointer depth
+	
+	StringifyType(PrintTypeBuffer, TypeToPrint)
+	
+	Print("%s", PrintTypeBuffer)
 }
 
 define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
@@ -180,4 +197,17 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 	}
 	
 	return 0
+}
+
+define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** AgainstParameters) {
+	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
+		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
+		Type ActualNext := AgainstParameters[ParameterIndex]->Type
+		
+		if (ActualNext != ExpectedNext) {
+			return false
+		}
+	}
+	
+	return true
 }

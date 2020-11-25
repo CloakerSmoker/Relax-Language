@@ -176,9 +176,6 @@ define i8 GetOperatorAssociation(Token* ForOperator) {
 	}
 }
 
-declare void ParseProgram(ParserState*)
-declare void SetupAssembly(ParserState*)
-
 ; Holds the entire state of the parser
 
 struct ParserState {
@@ -279,6 +276,7 @@ struct ParserState {
 		else {
 			if (PointerDepth = 0) {
 				*ErrorMessage := "Undefined type (Incomplete types can only be pointed-to)"
+				
 				return TYPE_NONE
 			}
 			else {
@@ -422,7 +420,13 @@ struct ParserState {
 		return false
 	}
 	define i8 NextTokenMatches(i8 TokenType) {
-		return this->NextTokenMatches(TokenType, 0)
+		if (this->PeekNextToken()->Is(TokenType)) {
+			this->GetNextToken()
+			
+			return true
+		}
+		
+		return false
 	}
 	define Token* TryConsume(i8 TokenType, i64 TokenValue, i8* Reason, i8** ErrorMessage) {
 		Token* NextToken := this->GetNextToken()
@@ -1463,6 +1467,131 @@ struct ParserState {
 		return this->ParseExpression(0)
 	}
 	
+	declare ASTNode* ParseStatement()
+	
+	define void IgnoreBlock() {
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+		
+		i32 Depth := 1
+		
+		loop {
+			Token* Next := this->GetNextToken()
+			
+			if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				Depth -= 1
+			}
+			else if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+				Depth += 1
+			}
+			
+			if (Depth = 0) {
+				break
+			}
+		}
+	}
+	define Block* ParseBlock() {
+		; Parses an array of statements, and builds a Block structure containing them
+		
+		Token* OpenBrace := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
+		
+		; Set up a buffer for the statements
+		i16 StatementBufferSize := 8
+		ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
+		i16 StatementCount := 0
+		i8 HasHadUnconditionalReturn := false
+		
+		i32 Depth := 1
+		
+		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {	
+			loop {
+				; Loop until we hit a `}`
+				
+				if (StatementCount * 8 <= StatementBufferSize) {
+					; If the buffer needs to be expanded, expand it
+					
+					Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
+					StatementBufferSize += (10 * 8)
+				}
+				
+				; Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the 
+				;  block following them depending on which platform we're targetting
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
+					if (this->Config->OutputFormat = OUTPUT_ELF) {
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+						Depth += 1
+					}
+					else {
+						this->IgnoreBlock()
+					}
+				}
+				else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
+					if (this->Config->OutputFormat = OUTPUT_PE) {
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+						Depth += 1
+					}
+					else {
+						this->IgnoreBlock()
+					}
+				}
+				else {
+					ASTNode* NextStatement := this->ParseStatement()
+					
+					if (NextStatement->NodeType = NODE_TYPE_RETURN) {
+						HasHadUnconditionalReturn := true
+					}
+					else if (NextStatement->NodeType = NODE_TYPE_IF) {
+						IfGroup* NextIf := NextStatement->IfNode
+						i8 AllBranchesHaveReturn := true
+						
+						for (i32 BranchIndex := 0, BranchIndex < NextIf->BranchCount, BranchIndex += 1) {
+							AllBranchesHaveReturn &= NextIf->Bodies[BranchIndex]->HasUnconditionalReturn
+						}
+						
+						if (NextIf->ElseBranch && AllBranchesHaveReturn) {
+							HasHadUnconditionalReturn |= NextIf->ElseBranch->HasUnconditionalReturn
+						}
+					}
+					
+					Statements[StatementCount] := NextStatement
+					StatementCount += 1
+				}
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_EOF)) {
+					OpenBrace->Error("Expected close brace for block")
+				}
+				
+				i8 BreakOuter := false
+				
+				while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					; Only break the outer loop once all opened `{` (by linux/windows statements) for this block
+					; have been matched with a closing `}`
+					
+					Depth -= 1
+					
+					BreakOuter := Depth = 0
+					
+					if (BreakOuter) {
+						break
+					}
+				}
+				
+				if (BreakOuter) {
+					break
+				}
+			}
+		}
+		
+		; Allocate a block structure and populate it with the statement list/count
+		Block* NewBlock := Alloc(#Block) As Block*
+		
+		NewBlock->Statements := Statements
+		NewBlock->StatementCount := StatementCount
+		NewBlock->HasUnconditionalReturn := HasHadUnconditionalReturn
+		
+		return NewBlock
+	}
+	
 	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
 		;  and returns an expression which will set that variable to an optional default value (if allowed)
@@ -1473,20 +1602,20 @@ struct ParserState {
 			; If we could parse a full type name, then we *might* be dealing with a variable declaration.
 			;  But we're not sure yet.
 			
-			Token* PotentialNameToken := this->PeekNextToken()
-			
-			if (PotentialNameToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
+				Token* NameToken := this->GetCurrentToken()
+				
 				; Alright, we've got `Type Name`, which is definitely a variable declaration.
 				; So we build up a VariableInfo struct for it, and add it to the correct scope.
 				
 				VariableInfo* NewVariable := Alloc(#VariableInfo)
 				
-				NewVariable->Name := PotentialNameToken->StringValue
+				NewVariable->Name := NameToken->StringValue
 				NewVariable->Type := PotentialType
 				NewVariable->IsGlobal := ForGlobalVariable
 				NewVariable->IsParameter := ForParameter
 				
-				this->AddVariable(NewVariable, PotentialNameToken)
+				this->AddVariable(NewVariable, NameToken)
 				
 				; If we're declaring a local/global (but not a parameter) allow for an optional default value
 				;  expression after, marked by `Type Name` being followed by the `:=` operator.
@@ -1512,33 +1641,341 @@ struct ParserState {
 		return null
 	}
 	
+	define ASTNode* ParseStatement() {
+		ASTNode* Result := null
+		
+		this->PeekNextToken()~>Context->Warn("Marker")
+		
+		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
+			Token* NextToken := this->GetCurrentToken()
+			i8 NextKeyword := NextToken->Value As i8
+			
+			if (NextKeyword = KEYWORD_CONTINUE || NextKeyword = KEYWORD_BREAK) {
+				Result := ASTNode:New(NODE_TYPE_CONTINUEBREAK, NextKeyword = KEYWORD_CONTINUE)
+				Result~>Context->Clone(NextToken~>Context)
+				
+				if !(this->InLoop) {
+					Result->Error("Continue/Break must be inside loops")
+				}
+			}
+			else if (NextKeyword = KEYWORD_RETURN) {
+				if (this->CurrentFunction->ReturnType = this->void->AsNonPointer()) {
+					Result := ASTNode:New(NODE_TYPE_INTEGER, 0, this->i8->AsNonPointer())
+					Result := ASTNode:New(NODE_TYPE_RETURN, Result, TYPE_NONE)
+					
+					if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
+					}
+				}
+				else {
+					ASTNode* ExpressionToReturn := this->DowncastIntegerNode(this->ParseExpression())
+					Type ExpectedReturnType := this->CurrentFunction->ReturnType
+					
+					CheckTypes(this->void, TYPE_NONE, ExpectedReturnType, ExpressionToReturn)
+					
+					Result := ASTNode:New(NODE_TYPE_RETURN, ExpressionToReturn, TYPE_NONE)
+				}
+			}
+		}
+		else {
+			i8* ErrorMessage := null
+			Result := this->TryParseVariableDeclaration(false, false, &ErrorMessage)
+			
+			if (ErrorMessage) {
+				Result := this->ParseExpression()
+			}
+			
+			Result := ASTNode:New(NODE_TYPE_EXPRESSION, Result, TYPE_NONE)
+		}
+		
+		return Result
+	}
+	
+	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken, TypeInfo* ThisType) {
+		i8 Mode := FirstToken->Value As i8
+		
+		i8 ForStatic := Mode = KEYWORD_STATIC
+		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
+		i8 ForImport := Mode = KEYWORD_DLLIMPORT
+		
+		Type ReturnType := this->ParseType()		
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for function parameter list")
+		
+		if (ForDefine) {
+			; For define statements, any parameters are added as locals, meaning that this->CurrentFunction 
+			;  needs to be set to prevent `this->AddLocal` inside of the parameter list parsing from crashing
+			
+			; `Locals` is copied onto the actual `FunctionDefine*` for this function after the parameters have 
+			; been parsed, and the matching overload has been found (if it exists)
+			
+			FunctionDefine TempDefine
+			
+			TempDefine~>Locals->Initialize()
+			
+			this->CurrentFunction := &TempDefine
+		}
+		
+		i8 ParameterCount := 0
+		VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
+		
+		if (ThisType != 0) {
+			; If we are defining a method, then we need to build the `this` parameter, and insert it into the 
+			;  parameter list
+	
+			VariableInfo* ThisParameter := Alloc(#VariableInfo)
+			ThisParameter->Name := AToS("this")
+			ThisParameter->Type := ThisType->AsPointer(1)
+			ThisParameter->IsParameter := true
+			ThisParameter->IsThis := true
+			
+			if (ForDefine) {
+				; Only actually add `this` as a local when we are defining a full function, and 
+				;  have this->CurrentFunction set
+				
+				this->AddLocal(ThisParameter, null)
+			}
+			
+			ParameterList[0] := ThisParameter
+			ParameterCount += 1
+		}
+		
+		i8 Attribute := 0
+		
+		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+			; Only bother parsing parameters if we actually have any
+			
+			loop {
+				VariableInfo* NextParameter := Alloc(#VariableInfo)
+				
+				; Max parameter count since I cba to expand the buffer. Todo: Fix this
+				if (ParameterCount >= 16) {
+					this->GetNextToken()->Error("Max parameter limit reached")
+				}
+				
+				ParameterList[ParameterCount] := NextParameter
+				
+				i8 ShouldBreak := false
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+					ShouldBreak := true
+					
+					ErrorContext* Start := this->GetCurrentTokenContext()
+					
+					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
+					
+					if (ParameterCount > 4) {
+						Start->Merge(this->GetCurrentTokenContext())
+						Start->Error("Only >4 regular paremeters can be passed with a variable argument.")
+					}
+					
+					Attribute := OPERATOR_DOT
+					
+					NextParameter->Type := this->void->AsPointer(1)
+					NextParameter->IsParameter := true
+				}
+				else {
+					NextParameter->Type := this->ParseType()
+				}
+				
+				if (ForDefine) {
+					Token* NextParameterNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Parameter names must be identifiers")
+					NextParameter->Name := NextParameterNameToken->StringValue
+					this->AddLocal(NextParameter, NextParameterNameToken)
+				}
+				
+				NextParameter->IsGlobal := false
+				NextParameter->IsParameter := true
+				NextParameter->StackOffset := (ParameterCount * 8)
+				
+				ParameterCount += 1
+				
+				if (ShouldBreak) {
+					break
+				}
+				else if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					; If the next token isn't a comma, then break the loop, otherwise consume the command and continue
+					break
+				}
+			}
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for parameter list")
+		}
+		
+		HashMapElement* FoundFunctionElement := Namespace->Get(NameToken->StringValue)
+		
+		FunctionDefine* NewDefine := null
+		FunctionDefine* TailFunction := null
+		
+		if (FoundFunctionElement != null) {
+			; This is a function overload, find the tail of the overload linked list, and check that
+			;  our parameters aren't the same as any other definition's parameters
+			
+			FunctionDefine* NextFunction := FoundFunctionElement->Value As FunctionDefine*
+			
+			loop {
+				; For each definition of this name
+				
+				if (NextFunction->ParameterCount = ParameterCount) {
+					if (CheckTypeSignature(NextFunction, ParameterList)) {
+						; Allow redefining a declared overload
+						
+						if (NextFunction->HasFullDefinition) {
+							NameToken->Error("Duplicate function definition")
+						}
+						
+						NewDefine := NextFunction
+						
+						break
+					}
+				}
+				
+				if !(NextFunction->Next) {
+					break
+				}
+				
+				NextFunction := NextFunction->Next
+			}
+			
+			TailFunction := NextFunction
+		}
+		
+		if (NewDefine = null) {
+			; If we didn't find `declare`d version of this function with the same parameter type set, then
+			;  allocate a new node instead of reusing the (non-existent) `declare`d one.
+			
+			NewDefine := Alloc(#FunctionDefine)
+			
+			if (TailFunction) {
+				TailFunction->Next := NewDefine
+			}
+			else {
+				Namespace->Set(NameToken->StringValue, NewDefine)
+			}
+			
+			NewDefine->LabelNumber := this->LabelCount
+			this->LabelCount += 1
+		}
+		
+		; By here, NewDefine 100% holds a FunctionDefine struct for this function, which is added to whichever 
+		;  scope it needs to be.
+		
+		NewDefine->Name := NameToken->StringValue
+		NewDefine->ReturnType := ReturnType
+		NewDefine->Attribute := Attribute
+		NewDefine->Parameters := ParameterList
+		NewDefine->ParameterCount := ParameterCount
+		
+		if (ForDefine) {
+			; Only copy the variable map containing the parameter locals if it... exists.
+			
+			MoveMemory(NewDefine~>Locals, TempDefine~>Locals, #VariableHashMap)
+		}
+		
+		NewDefine~>Context->Clone(FirstToken~>Context)->Merge(this->GetCurrentTokenContext())
+		
+		; We are done parsing the function's name, return type, and parameters. Now to just handle all of
+		;  the different function body types.
+		
+		if (ForImport) {
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+			
+			SafeWideString* FileName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file name expected")->StringValue
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+				this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file extension expected")
+			}
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
+			
+			SafeWideString* FunctionName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source function name expected")->StringValue
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+			
+			NewDefine->IsImported := true
+			NewDefine->ImportFileName := FileName
+			NewDefine->ImportFunctionName := FunctionName
+		}
+		else if (ForDefine) {
+			this->CurrentFunction := NewDefine
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
+				NewDefine->Attribute := KEYWORD_ASSEMBLY
+				
+				;NewDefine->AssemblyBody := this->ParseAssembly(false)->AssemblyBody
+			}
+			else {
+				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
+					NewDefine->Attribute := KEYWORD_X64
+				}
+				
+				i32 Length := 4
+				i8* Buffer := Alloc(Length)
+				
+				if (this->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
+					Length := NewDefine->GetStringLength()
+					Buffer := ReAlloc(Buffer, Length)
+					
+					NewDefine->StringifyInto(Buffer)
+					
+					NewDefine->StringBufferSize := Length
+				}
+				
+				NewDefine->StringBuffer := Buffer
+				
+				NewDefine->Body := this->ParseBlock()
+				
+				if (NewDefine->ReturnType != this->void->AsNonPointer()) {
+					if !(NewDefine->Body->HasUnconditionalReturn) {
+						Print("Body has %i statements\n", NewDefine->Body->StatementCount)
+						Print("Statements[0] is a %i\n", NewDefine->Body->Statements[0]->NodeType)
+						Print("Statements[1] is a %i\n", NewDefine->Body->Statements[1]->NodeType)
+						NewDefine~>Context->Error("Function has non-void return type, but no unconditional return statement")
+					}
+				}
+			}
+			
+			NewDefine->HasFullDefinition := true
+			this->CurrentFunction := null
+		
+			if (ThisType = null && NameToken->StringValue->Equals("Main")) {
+				this->MainFunction := NewDefine
+			}
+		}
+		
+		return NewDefine
+	}
+	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken) {
+		return this->ParseFunctionDefinition(Namespace, FirstToken, null)
+	}
+	
 	define void ParseProgram() {
 		; Parse an entire program, aka a list of `dllimport`/`declare`/`define`, `struct`/`bits`, and global
 		;  variable declarations.
 		
 		loop {
-			i32 Before := this->Freeze()
-			
-			Token* NextToken := this->GetNextToken()
-			i8 NextTokenType := NextToken->Type
+			Token* NextToken := this->PeekNextToken()
 			i8 NextTokenValue := NextToken->Value As i8
 			
-			if (NextTokenType = TOKEN_TYPE_KEYWORD) {
+			if (NextToken->Is(TOKEN_TYPE_KEYWORD)) {
+				this->GetNextToken()
+				
 				if (NextTokenValue <= KEYWORD_DLLIMPORT) {
 					; Handles `dllimport`/`declare`/`define`
-					this->ParseFunctionDefinition(this~>Functions, NextTokenValue)
+					this->ParseFunctionDefinition(this~>Functions, NextToken)
 				}
 				else if (NextTokenValue = KEYWORD_STRUCT) {
-					this->ParseStructDefinition()
+					;this->ParseStructDefinition()
 				}
 				else if (NextTokenValue = KEYWORD_BITS) {
-					this->ParseBitsDefinition()
+					;this->ParseBitsDefinition()
 				}
 				else {
 					NextToken->Error("Unexpected token")
 				}
 			}
-			else if (NextTokenType = TOKEN_TYPE_IDENTIFIER) {
+			else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
 				; Handles global variable declarations
 				
 				Token* BlameToken := this->PeekNextToken()
@@ -1547,7 +1984,7 @@ struct ParserState {
 				ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
 				
 				if (ErrorMessage) {
-					MergeContexts(BlameToken~>Context, this->GetCurrentToken()~>Context, BlameToken~>Context)
+					BlameToken~>Context->Merge(this->GetCurrentTokenContext())
 					BlameToken->Error(ErrorMessage)
 				}
 				
@@ -1560,7 +1997,7 @@ struct ParserState {
 					this->GlobalDefaults[Index] := DefaultValueExpression
 				}
 			}
-			else if (NextTokenType = TOKEN_TYPE_EOF) {
+			else if (NextToken->Is(TOKEN_TYPE_EOF)) {
 				break
 			}
 			else {
@@ -1579,133 +2016,6 @@ define i32 ParserNextLabel(ParserState* Parser) {
 }
 
 /*
-==========================================
-	Expression parser constant lookup functions
-==========================================
-*/
-
-i8 NONE_ASSOCIATIVE := 0
-i8 LEFT_ASSOCIATIVE := 1
-i8 RIGHT_ASSOCIATIVE := 2
-
-define i8 GetPrecedence(Token* ForOperator) {
-	/* Gets the precedence for a given operator */
-	
-	i8 Operator := (ForOperator->Value) As i8
-	
-	if (Operator >= PRECEDENCE_13) {
-		return 13
-	}
-	else if (Operator >= PRECEDENCE_12) {
-		return 12
-	}
-	else if (Operator >= PRECEDENCE_10) {
-		return 10
-	}
-	else if (Operator >= PRECEDENCE_9) {
-		return 9
-	}
-	else if (Operator >= PRECEDENCE_8) {
-		return 8
-	}
-	else if (Operator >= PRECEDENCE_7) {
-		return 7
-	}
-	else if (Operator >= PRECEDENCE_6) {
-		return 6
-	}
-	else if (Operator >= PRECEDENCE_4) {
-		return 4
-	}
-	else if (Operator >= PRECEDENCE_3) {
-		return 3
-	}
-	else if (Operator >= PRECEDENCE_2) {
-		return 2
-	}
-	else if (Operator >= PRECEDENCE_1) {
-		return 1
-	}
-	else {
-		return 0
-	}
-}
-
-define i8 GetPrefixPrecedence(Token* ForOperator) {
-	/* Returns the precedence of an operator when it is used as a prefix operator */
-	
-	i8 Operator := (ForOperator->Value) As i8
-	
-	if (Operator = OPERATOR_STAR) {
-		return 5
-	}
-	else if (Operator = OPERATOR_AND) {
-		return 5
-	}
-	else if (Operator = OPERATOR_BANG) {
-		return 11
-	}
-	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
-		return 11
-	}
-	else if (Operator = OPERATOR_POUND) {
-		return 13
-	}
-	
-	return 0 /* Returns 0 when the operator is not a prefix operator */
-}
-
-define i8 IsPrefixOperator(Token* ForOperator) {
-	/* Used to determine if an operator can be a prefix operator in the parser */
-	
-	return GetPrefixPrecedence(ForOperator) != 0
-}
-
-define i8 GetAssociation(Token* ForOperator) {
-	/* Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE depending on the operator passed */
-	
-	i8 Precedence := GetPrecedence(ForOperator)
-	
-	if (Precedence = 1 || Precedence = 3) {
-		return RIGHT_ASSOCIATIVE
-	}
-	else {
-		return LEFT_ASSOCIATIVE
-	}
-}
-
-/*
-==========================================
-	Typing functions
-==========================================
-*/
-
-declare i32 FreezeParser(ParserState*)
-declare void UnfreezeParser(ParserState*, i32)
-declare Token* ParserNextToken(ParserState*)
-declare Token* ParserCurrentToken(ParserState*)
-declare Token* ParserCurrentToken(ParserState*)
-
-
-/*
-==========================================
-	Function overloading helpers
-==========================================
-*/
-
-define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** AgainstParameters) {
-	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
-		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
-		Type ActualNext := AgainstParameters[ParameterIndex]->Type
-		
-		if (ActualNext != ExpectedNext) {
-			return false
-		}
-	}
-	
-	return true
-}
-
 define FunctionDefine* MatchFunction(ParserState* Parser, FunctionDefine* BaseFunction, ASTNode* CallerNode) {
 	CallExpression* Caller := CallerNode->CallNode
 	i32 CallerParameterCount := Caller->ParameterCount
@@ -3902,3 +4212,6 @@ define ASTNode* ParseTry(ParserState* Parser) {
 }
 
 #Include ./src/compiler/AssemblyParse.rlx
+
+
+*/

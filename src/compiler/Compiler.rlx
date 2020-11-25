@@ -655,7 +655,7 @@ define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionT
 }
 
 declare void CompileBlock(CompilerState*, Block*)
-declare void CompileAssembly(CompilerState*, AssemblyBlock*)
+;declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
@@ -685,7 +685,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
-		CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
+		;CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
 		return FunctionOffset
 	}
 	
@@ -954,7 +954,7 @@ define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 		CompileExpression(Compiler, RAX, NodeToCompile->ExpressionStatement)
 	}
 	else if (NodeType = NODE_TYPE_ASSEMBLY) {
-		CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
+		;CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
 	}
 }
 
@@ -2133,7 +2133,8 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 			i8 IsComparison := IsComparison(ExpressionToCompile->Operator)
 			
 			if (IsComparison) {
-				Type TrueResultType := GetBinaryResultType(Compiler->Parser, Left->ValueType, Right->ValueType, null)
+				; TODO: UPDATE
+				Type TrueResultType := Left->ValueType
 				
 				ResultSize := GetTypeSize(TrueResultType)
 			}
@@ -2293,4 +2294,4 @@ define void CompileTry(CompilerState* Compiler, TryCatch* TryToCompile) {
 	; }
 }
 
-#Include ./src/compiler/AssemblyCompile.rlx
+;#Include ./src/compiler/AssemblyCompile.rlx
