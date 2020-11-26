@@ -88,6 +88,8 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 BuildConfig* CurrentConfig := null
 
 define void CompilerUnhandledExceptionHandler(i64 Code) {
+	UnhandledExceptionHandler(Code)
+	
 	Print("Lexer State: \n")
 	
 	LexerState* Lexer := CurrentConfig->Lexer
@@ -104,8 +106,6 @@ define void CompilerUnhandledExceptionHandler(i64 Code) {
 		
 		Child := Child->Child
 	}
-	
-	UnhandledExceptionHandler(Code)
 }
 
 define i32 Main(i64 ArgC, i8** ArgV) {	

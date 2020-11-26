@@ -144,7 +144,10 @@ struct Token {
 	}
 	
 	define void Error(i8* Message) {
-		ContextError(this~>Context, Message)
+		this~>Context->Error(Message)
+	}
+	define void Warn(i8* Message) {
+		this~>Context->Warn(Message)
 	}
 	
 	define i8 Is(i8 Type, i64 Value) {

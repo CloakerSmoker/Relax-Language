@@ -125,6 +125,7 @@ i8 FUNCTION_IS_STATIC_METHOD := 2
 
 declare i32 GetTypeStringLength(Type)
 declare void StringifyType(void*, Type)
+declare void PrintType(Type)
 
 struct FunctionDefine {
 	ErrorContext Context,
@@ -179,10 +180,10 @@ struct FunctionDefine {
 		}
 		
 		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
-			Length += GetTypeStringLength(this->Parameters[Index]->Type)
+			Length += GetTypeStringLength(this->Parameters[Index]->Type) + 2
 		}
 		
-		return Length
+		return Length - 2
 	}
 	define void StringifyInto(void* IntoRawBuffer) {
 		i8* Buffer := IntoRawBuffer
@@ -221,6 +222,8 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
+			;Print("%s\n", Buffer)
+			
 			Type ParameterType := this->Parameters[ParameterIndex]->Type
 			
 			StringifyType(&Buffer[Offset], ParameterType)
@@ -234,6 +237,8 @@ struct FunctionDefine {
 		}
 		
 		Buffer[Offset] := ')'
+		
+		Print("%s\n", Buffer)
 	}
 }
 

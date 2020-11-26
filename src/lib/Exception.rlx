@@ -85,8 +85,12 @@ define void CallUnhandledExceptionFilter(i64 Code, void* Handler) asm {
 DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
 DllImport void TerminateProcess(i64, i64) {Kernel32.dll, TerminateProcess}
 
+i8 EXCEPTION_WAS_LAST_CHANCE := false
+
 define void CallUnhandledExceptionHandler(i64 Code) {
-	if (UnhandledExceptionHandler != null) {
+	if (UnhandledExceptionHandler != null && !EXCEPTION_WAS_LAST_CHANCE) {
+		EXCEPTION_WAS_LAST_CHANCE := true
+		
 		CallUnhandledExceptionFilter(Code, UnhandledExceptionHandler)
 	}
 	

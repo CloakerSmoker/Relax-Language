@@ -1596,6 +1596,7 @@ struct ParserState {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
 		;  and returns an expression which will set that variable to an optional default value (if allowed)
 		
+		i32 Before := this->Freeze()
 		Type PotentialType := this->TryParseType(true, ErrorMessage)
 		
 		if (PotentialType != TYPE_NONE && *ErrorMessage = null) {
@@ -1637,6 +1638,8 @@ struct ParserState {
 				*ErrorMessage := "Variable names must be identifiers"
 			}
 		}
+		
+		this->Unfreeze(Before)
 		
 		return null
 	}
@@ -1681,7 +1684,7 @@ struct ParserState {
 			i8* ErrorMessage := null
 			Result := this->TryParseVariableDeclaration(false, false, &ErrorMessage)
 			
-			if (ErrorMessage) {
+			if (ErrorMessage != null) {
 				Result := this->ParseExpression()
 			}
 			
@@ -1950,6 +1953,169 @@ struct ParserState {
 		return this->ParseFunctionDefinition(Namespace, FirstToken, null)
 	}
 	
+	define void ParseStructDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
+		SafeWideString* Name := NameToken->StringValue
+		
+		TypeInfo* NewType := null
+		HashMapElement* FoundTypeElement := this~>Types->Get(Name)
+		
+		if (FoundTypeElement) {
+			; Check for a type with this name already existing
+			
+			NewType := FoundTypeElement->Value As TypeInfo*
+			
+			if !(NewType->IsIncomplete) {
+				; If the type we found isn't incomplete, then error out
+				
+				NameToken->Error("Duplicate struct definition")
+			}
+			
+			NewType->IsIncomplete := false
+		}
+		else {
+			; We didn't find a type by this name, so we can add it like normal
+			
+			NewType := this->AddType(Name, 0, TYPE_STRUCT)
+		}
+		
+		; All of the "namespaces" a TypeInfo structure contains need to be initialized
+		
+		HashMap* Fields := NewType~>Fields
+		HashMap* Methods := NewType~>Methods
+		HashMap* StaticMethods := NewType~>StaticMethods
+		
+		Fields->Initialize()
+		Methods->Initialize()
+		StaticMethods->Initialize()
+		
+		i8 IsUnaligned := this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
+		
+		i16 NextFieldOffset := 0
+		i16 TotalSize := 0
+		i8 InUnion := false
+		i16 MaxUnionSize := 0
+		
+		loop {
+			StructField* NextField := Alloc(#StructField) As StructField*
+			
+			if !(InUnion) {
+				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
+					
+					InUnion := true
+				}
+				else {
+					i8 IsMethod := false
+					i8 IsStaticMethod := false
+					Token* MethodKeyword := this->PeekNextToken()
+					
+					if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
+						i8 KeywordValue := MethodKeyword->Value As i8
+						
+						IsStaticMethod := KeywordValue = KEYWORD_STATIC
+						IsMethod := IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
+					}
+					
+					if (IsMethod) {
+						HashMap* MethodNamespace := Methods
+						TypeInfo* ThisType := NewType
+						
+						if (IsStaticMethod) {
+							; Static methods take no `this` parameter, so we need to mark that `ThisType`
+							;  isn't present to prevent `ParseFunction` from automatically adding
+							;   the `this` parameter
+							
+							MethodNamespace := StaticMethods
+							ThisType := null
+						}
+						
+						FunctionDefine* Method := this->ParseFunctionDefinition(MethodNamespace, MethodKeyword, ThisType)
+						
+						; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
+						;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
+						Method->IsMethod := true + IsStaticMethod
+						Method->MethodOfTypeName := Name
+						
+						; Ignore commas after methods, they aren't actually needed for parsing
+						this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+						
+						if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+							break
+						}
+						
+						continue
+					}
+				}
+			}
+			
+			NextField->ValueType := this->ParseType()
+			
+			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
+			SafeWideString* FieldName := FieldNameToken->StringValue
+			NextField->Name := FieldName
+			
+			if (Fields->Get(FieldName)) {
+				FieldNameToken->Error("Duplicate definition")
+			}
+			
+			Fields->Set(FieldName, NextField)
+			
+			i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
+			
+			; Only align the field if it isn't a struct, array, union, and if this structure isn't unaligned 
+			
+			if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->IsStructType) {
+				; Dummy branch
+			}
+			else if (InUnion || IsUnaligned) {
+				; Dummy branch
+			}
+			else if (NextField->ValueType.IsArray) {
+				; Dummy branch
+			}
+			else if (NextFieldOffset % FieldSize) {
+				; Pad the field's offset to a multiple of its size
+				
+				NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
+			}
+			
+			; If we're in a union, don't change the NextFieldOffset so all union fields get overlapping offsets
+			
+			NextField->Offset := NextFieldOffset
+			
+			if (InUnion) {
+				if (FieldSize > MaxUnionSize) {
+					MaxUnionSize := FieldSize
+				}
+			}
+			else {
+				NextFieldOffset += FieldSize
+			}
+			
+			TotalSize := NextFieldOffset
+			
+			if (InUnion && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				InUnion := false
+				NextFieldOffset += MaxUnionSize
+				TotalSize := NextFieldOffset
+			}
+			
+			; Ignore commas after fields, since they aren't needed for parsing
+			this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				break
+			}
+		}
+		
+		NewType->Size := TotalSize
+		NewType->IsStructType := true
+		NewType->IsIncomplete := false
+	}
+	
 	define void ParseProgram() {
 		; Parse an entire program, aka a list of `dllimport`/`declare`/`define`, `struct`/`bits`, and global
 		;  variable declarations.
@@ -1966,7 +2132,7 @@ struct ParserState {
 					this->ParseFunctionDefinition(this~>Functions, NextToken)
 				}
 				else if (NextTokenValue = KEYWORD_STRUCT) {
-					;this->ParseStructDefinition()
+					this->ParseStructDefinition()
 				}
 				else if (NextTokenValue = KEYWORD_BITS) {
 					;this->ParseBitsDefinition()

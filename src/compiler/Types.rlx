@@ -90,11 +90,11 @@ define void StringifyType(void* RawBuffer, Type T) {
 		Buffer[Index] := Name->ASCIICharacterAt(Index)
 	}
 	
-	for (i32 Depth := 0, Depth < GetPointerDepth(T), Index += 1) {
+	for (i32 Depth := 0, Depth < GetPointerDepth(T), Depth += 1) {
 		Buffer[Index + Depth] := '*'
 	}
 	
-	Buffer[Index + Depth + 1] := 0
+	Buffer[Index + Depth] := 0
 }
 
 i8{100} PrintTypeBuffer
