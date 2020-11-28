@@ -1,0 +1,565 @@
+	define void SetupAssembly() {
+		HashMap* Instructions := this~>Instructions
+		
+		Instructions->Initialize()
+		Instructions->IgnoreCase := true
+		
+		Instruction* PackedInstruction := {Instruction file: "./build/Instructions.bin"}
+		
+		loop {
+			InstructionListEntry* NewListHead := Alloc(#InstructionListEntry)
+			MoveMemory(NewListHead~>Instruction, PackedInstruction, #Instruction)
+			
+			HashMapElement* OldListHeadElement := Instructions->Get(PackedInstruction~>Name)
+			
+			if (OldListHeadElement) {
+				InstructionListEntry* OldListHead := OldListHeadElement->Value
+				
+				NewListHead->Next := OldListHead
+			}
+			
+			Instructions->Set(PackedInstruction~>Name, NewListHead)
+			
+			PackedInstruction := PackedInstruction->Next()
+			
+			if (PackedInstruction->PackedOpcode = 0) {
+				break
+			}
+		}
+	}
+	
+	define Instruction* LookupInstruction(SafeWideString* Name, i32 EncodedOperands) {
+		HashMapElement* ListHeadElement := this~>Instructions->Get(Name)
+		
+		if !(ListHeadElement) {
+			return 0 As Instruction*
+		}
+		
+		InstructionListEntry* ListHead := ListHeadElement->Value As InstructionListEntry*
+		
+		while (ListHead) {
+			Instruction* Instruction := ListHead~>Instruction
+			
+			if (EncodedOperands = 0) {
+				if (Instruction->OperandMask = 0) {
+					return Instruction
+				}
+			}
+			else if (Instruction->OperandMask & EncodedOperands = EncodedOperands) {
+				return Instruction
+			}
+			
+			ListHead := ListHead->Next
+		}
+		
+		return 0 As Instruction*
+	}
+	
+	define i32 TryParseRegisterName(Token* NameToken, i8 RequiredSize, i8** ErrorMessage) {
+		i32 RegisterSize := 0
+		i32 RegisterNumber := 0
+		
+		SafeWideString* NameString := NameToken->StringValue
+		
+		; Any one register name is maximum four characters long
+		
+		if (NameString->Length > 4) {
+			*ErrorMessage := "Invalid register name"
+			return 0
+		}
+		
+		i8 FirstCharacter := NameString->ASCIICharacterAt(0, ' ')
+		i8 SecondCharacter := NameString->ASCIICharacterAt(1, ' ')
+		
+		i32 Offset := 0
+		
+		i8 SecondIsNumber := IsNumber(SecondCharacter)
+		
+		if (FirstCharacter = 'r') {
+			; All `R__` registers must start with an `r`
+			
+			if (SecondIsNumber) {
+				; If the character after the 'R' is number, then we are dealing with R8-R15
+				
+				if (SecondCharacter = '8' || SecondCharacter = '9') {
+					; If it is R8 or R9 we're done, since there is no `R8_` or `R9_` 
+					
+					Offset += 1
+					RegisterNumber := SecondCharacter - '0'
+				}
+				else if (SecondCharacter = '1') {
+					; Else we skip past the '1' before 0-5, since `R10-R15` all share the 1
+					
+					Offset += 2
+				}
+			}
+			else {
+				; If this is not an `RNN` (number) register, then the `r` prefix just means it is 64 bit 
+				
+				Offset += 1
+				RegisterSize := 8
+			}
+		}
+		else if (FirstCharacter = 'e' && !SecondIsNumber) {
+			; If the first character is a `e`, then it means the following register is 32 bit 
+			;  (except for `R8-R15`, which don't use an `e` prefix)
+			
+			Offset += 1
+			RegisterSize := 4
+		}
+		
+		FirstCharacter := NameString->ASCIICharacterAt(Offset, ' ')
+		SecondCharacter := NameString->ASCIICharacterAt(Offset + 1, ' ')
+		
+		if (IsNumber(FirstCharacter)) {
+			; For `R10-R15`, the check above will have us past the `R1` portion, so we just need to check
+			;  what FirstCharacter is (should be 0-5) to get our actual register number
+			
+			if !(RegisterNumber) {
+				; Only bother converting FirstCharacter to a register number if we don't know the register
+				;  number yet
+				
+				RegisterNumber := (FirstCharacter - '0') + 10
+			}
+			
+			; Advance past the register number+suffix
+			
+			Offset += 2
+			
+			; `RNN` register sizes are denoted by the `b`/`w`/`d` suffix, with no suffix needed for 64 bit
+			
+			if (SecondCharacter = 'b') {
+				RegisterSize := 1
+			}
+			else if (SecondCharacter = 'w') {
+				RegisterSize := 2
+			}
+			else if (SecondCharacter = 'd') {
+				RegisterSize := 4
+			}
+			else {
+				; No suffix, backtrack since SecondCharacter has consumed something as a suffix
+				
+				Offset -= 1
+				RegisterSize := 8
+			}
+		}
+		else if ((FirstCharacter = 's' || FirstCharacter = 'b') && SecondCharacter = 'p') {
+			; `sp`/`bp` = 8 bit, `spx`/`bpx` = 16 bit, `esp`/`ebp` = 32 bit, `rsp`/`rbp` = 64 bit
+			
+			Offset += 2
+			RegisterNumber := 4 + (FirstCharacter = 'b') ; Registers 4 and 5. 4 for `SP`, 5 for `BP`
+			
+			SecondCharacter := NameString->ASCIICharacterAt(Offset, ' ')
+			
+			if !(RegisterSize) {
+				; Custom 'x' suffix for the 16 bit version of each
+				
+				if (SecondCharacter = 'x') {
+					Offset += 1
+					RegisterSize := 2
+				}
+				else {					
+					RegisterSize := 1
+				}
+			}
+		}
+		else if ((FirstCharacter = 's' || FirstCharacter = 'd') && SecondCharacter = 'i') {
+			; `si`/`di` = 8 bit, `six`/`dix` = 16 bit, `esi`/`edi` = 32 bit, `rsi`/`rdi` = 64 bit
+			
+			Offset += 2
+			RegisterNumber := 6 + (FirstCharacter = 'd') ; Registers 6 and 7. 6 for `SI`, 7 for `DI`
+			
+			SecondCharacter := NameString->ASCIICharacterAt(Offset, ' ')
+			
+			if !(RegisterSize) {
+				; Just like `sp`/`bp`, use the `x` suffix for 16 bit versions
+				
+				if (SecondCharacter = 'x') {
+					Offset += 1
+					RegisterSize := 2
+				}
+				else {
+					
+					RegisterSize := 1
+				}
+			}
+		}
+		else if (FirstCharacter >= 'a' && FirstCharacter <= 'd') {
+			; `EAX`-`EDX`/`RAX`-`RDX`
+			
+			Offset += 1
+			
+			if (SecondCharacter = 'x') {
+				; `E_X` or `R_X` or `_X`, in all cases but `_X` we have the register size set, so we need
+				;  to mark that this is a 16 bit register
+				
+				if !(RegisterSize) {
+					RegisterSize := 2
+				}
+				
+				Offset += 1
+			}
+			else if !(RegisterSize) {
+				; This register has no `R`/`E` prefix, and no `X` suffix
+				
+				RegisterSize := 1
+			}
+			
+			if (FirstCharacter = 'a') {
+				RegisterNumber := 0
+			}
+			else if (FirstCharacter = 'b') {
+				RegisterNumber := 3
+			}
+			else if (FirstCharacter = 'c') {
+				RegisterNumber := 1
+			}
+			else if (FirstCharacter = 'd') {
+				RegisterNumber := 2
+			}
+		}
+		else {
+			*ErrorMessage := "Invalid register name."
+		}
+		
+		if (RegisterSize = 0) {
+			*ErrorMessage := "Invalid register name."
+		}
+		else if (Offset != NameString->Length) {
+			*ErrorMessage := "Malformed register name."
+		}
+		else if (RequiredSize && (RegisterSize != RequiredSize)) {
+			*ErrorMessage := "Incorrect register size."
+		}
+		
+		return RegisterNumber | (RegisterSize << 8)
+	}
+	define i32 ParseRegisterName(Token* NameToken, i8 RequiredSize) {
+		i8* ErrorMessage := null
+		i32 Result := this->TryParseRegisterName(NameToken, RequiredSize, &ErrorMessage)
+		
+		if (ErrorMessage != null) {
+			NameToken->Error(ErrorMessage)
+		}
+		
+		return Result
+	}
+	
+	define InstructionOperand* ParseAssemblyOperand(AssemblyBlock* ThisBlock) {
+		InstructionOperand* Next := Alloc(#InstructionOperand)
+		
+		Token* NextToken := this->GetNextToken()
+		
+		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			; A memory reference, through a register or SIB (plus displacements)
+			
+			Token* BaseRegisterName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected register name")
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+				/* `Register[` = SIB, so parse the SIB */
+				
+				Next->HasSIB := true
+				Next->SIBValue.BaseRegister := this->ParseRegisterName(BaseRegisterName, 8)
+				
+				Token* IndexRegisterName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected index register name")
+				
+				Next->SIBValue.IndexRegister := this->ParseRegisterName(IndexRegisterName, 8)
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+					Token* Scale := this->Consume(TOKEN_TYPE_INTEGER, "Expected scale value.")
+					i64 ScaleValue := Scale->IntegerValue
+					
+					if (ScaleValue = 8 || ScaleValue = 4 || ScaleValue = 2 || ScaleValue = 1) {
+						Next->SIBValue.Scale := ScaleValue As i8
+					}
+					else {
+						Scale->Error("Invalid scale value")
+					}
+				}
+				
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for SIB")
+			}
+			else {
+				; No `[` following the register, this is just a regular register reference
+				
+				Next->RegisterNumber := this->ParseRegisterName(BaseRegisterName, 8)
+			}
+			
+			i8 IsPlus := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
+			i8 IsMinus := false
+			
+			if !(IsPlus) {
+				IsMinus := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_MINUS)
+			}
+			
+			; If the next token is `+` or `-`, then parse a displacement
+			
+			if (IsPlus || IsMinus) {
+				Token* DispToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected displacement value")
+				i8 DispSize := GetNumberSize(DispToken->IntegerValue)
+				
+				if (DispSize > 4) {
+					/* 64 bit displacements are invalid */
+					DispToken->Error("Displacement too big, must be 1-4 bytes")
+				}
+				else if (DispSize = 2) {
+					/* 16 bit displacements are just 32 bit displacements with some padding */
+					DispSize := 4
+				}
+				
+				Next->DispSize := DispSize
+				Next->DispValue := DispToken->IntegerValue As i32
+				
+				if (IsMinus) {
+					Next->DispValue := 0 - (Next->DispValue)
+				}
+			}
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing brace for operand")
+			this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before memory operand type")
+			
+			Token* TypeNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected memory operand type name")
+			Token* PointerStar := this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_STAR, "Expected '*' after operand type name")
+			
+			Next~>Context->Clone(NextToken~>Context)->Merge(PointerStar~>Context)
+			
+			SafeWideString* TypeName := TypeNameToken->StringValue
+			
+			if (TypeName->Equals("i8")) {
+				Next->Type := OP_M8
+			}
+			else if (TypeName->Equals("i16")) {
+				Next->Type := OP_M16
+			}
+			else if (TypeName->Equals("i32")) {
+				Next->Type := OP_M32
+			}
+			else if (TypeName->Equals("i64")) {
+				Next->Type := OP_M64
+			}
+			else {
+				TypeNameToken->Error("Unknown memory operand type name")
+			}
+			
+			Next->Size := Next->Type << OP_M_OFFSET
+		}
+		else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+			i8* ErrorMessage := null
+			
+			i32 Register := this->TryParseRegisterName(NextToken, 0, &ErrorMessage)
+			
+			if (ErrorMessage != null) {
+				Next->Type := O_L
+				
+				SafeWideString* LabelName := NextToken->StringValue
+				
+				HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
+				InstructionNode* FoundLabel := 0
+				
+				if (FoundLabelElement) {
+					FoundLabel := FoundLabelElement->Value As InstructionNode*
+				}
+				else {
+					FoundLabel := Alloc(#InstructionNode)
+					
+					FoundLabel->Type := INSTRUCTION_LABEL_INCOMPLETE
+					FoundLabel->LabelName := LabelName
+					FoundLabel->LabelNumber := this->LabelCount
+					this->LabelCount += 1
+					
+					ThisBlock~>Labels->Set(LabelName, FoundLabel)
+				}
+				
+				Next->LabelNumber := FoundLabel->LabelNumber
+			}
+			else {
+				Next->Size := ((Register >> 8) & 0x0F)
+				Next->Type := Next->Size << OP_R_OFFSET
+				
+				Next->RegisterNumber := Register & 0x0F
+			}
+			
+			Next~>Context->Clone(NextToken~>Context)
+		}
+		else if (NextToken->Is(TOKEN_TYPE_INTEGER)) {
+			; Integer types are OP_I8 through OP_I64, and are defined as 1,2,4,8 bit shifted left by OP_I_OFFSET
+			
+			Next->Size := GetNumberSize(NextToken->IntegerValue)
+			Next->Type := Next->Size << OP_I_OFFSET
+			
+			Next->IntegerValue := NextToken->IntegerValue
+			Next~>Context->Clone(NextToken~>Context)
+		}
+		else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_AT)) {
+			Next->Type := O_L
+			Next->ReferencesFunction := true
+			
+			Token* FunctionNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
+			SafeWideString* FunctionName := FunctionNameToken->StringValue
+			
+			HashMapElement* FoundFunction := this~>Functions->Get(FunctionName)
+			
+			if !(FoundFunction) {
+				FunctionNameToken->Error("Function definition/declaration not found")
+			}
+			
+			FunctionDefine* FoundDefine := FoundFunction->Value As FunctionDefine*
+			
+			Next->FunctionReference := FoundDefine
+			
+			Next~>Context->Clone(NextToken~>Context)->Merge(FunctionNameToken~>Context)
+		}
+		else {
+			NextToken->Error("Unexpected token")
+		}
+		
+		return Next
+	}
+	
+	define InstructionNode* ParseInstruction(AssemblyBlock* ThisBlock) {
+		Token* InstructionToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected instruction name.")
+		SafeWideString* InstructionName := InstructionToken->StringValue
+		
+		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+			HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(InstructionName)
+			InstructionNode* FoundLabel := 0
+			
+			if (FoundLabelElement) {
+				FoundLabel := FoundLabelElement->Value As InstructionNode*
+				
+				if (FoundLabel->Type != INSTRUCTION_LABEL_INCOMPLETE) {
+					TokenError(InstructionToken, "Duplicate label definition")
+				}
+			}
+			else {
+				FoundLabel := Alloc(#InstructionNode)
+				FoundLabel->LabelNumber := this->LabelCount
+				this->LabelCount += 1
+				
+				ThisBlock~>Labels->Set(InstructionName, FoundLabel)
+			}
+			
+			FoundLabel->Type := INSTRUCTION_LABEL
+			FoundLabel->LabelName := InstructionName
+			
+			return FoundLabel
+		}
+		else {
+			InstructionNode* Result := Alloc(#InstructionNode)
+			
+			i32 OperandTypes := 0
+			i32 OperandSize := 0
+			InstructionOperand** Operands := Alloc(2 * #InstructionOperand)
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
+					InstructionOperand* Next := this->ParseAssemblyOperand(ThisBlock)
+					i32 NextType := Next->Type
+					
+					if !(OperandSize) {
+						OperandSize := Next->Size
+					}
+					else if (Next->Size != OperandSize) {
+						if (NextType & O_I) {
+							Next->Type := OperandSize << OP_I_OFFSET
+						}
+						else {
+							ManualErrorMessagePrelude()
+							
+							Print("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
+							
+							Next->Error(null)
+						}
+					}
+					
+					Operands[OperandIndex] := Next
+					
+					OperandTypes := OperandTypes | (Next->Type << (16 * OperandIndex As i8))
+					
+					if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+						break
+					}
+				}
+				
+				Result~>Context->Clone(InstructionToken~>Context)->Merge(Next~>Context)
+			}
+			else {
+				Result~>Context->Clone(InstructionToken~>Context)
+			}
+			
+			Instruction* Found := this->LookupInstruction(InstructionName, OperandTypes)
+			
+			if !(Found) {
+				ManualErrorMessagePrelude()
+				
+				Print("No encoding for operand type(s)\n")
+				
+				Result->Error(null)
+			}
+			
+			i32 LowType := OperandTypes & 0xFFFF
+			i32 HighType := (OperandTypes >> 16) & 0xFFFF
+			
+			if ((LowType & OP_R) && (HighType & OP_R)) {
+				if !(Found->Flags & E_DIF_SIZES) {
+					if (LowType != HighType) {
+						Result~>Context->Error("Incompatible operand types")
+					}
+				}
+			}
+			
+			Result->Base := Found
+			Result->Operands := Operands
+			
+			return Result
+		}
+	}
+	
+	define ASTNode* ParseAssembly(i8 InFunction) {
+		AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
+		
+		ThisBlock~>Labels->Initialize()
+		
+		if (InFunction && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			loop {
+				Token* RegisterNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected register name")
+				i32 TargetRegister := this->ParseRegisterName(RegisterNameToken, 0) & 0x0F
+				
+				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected register value assignment")
+				
+				ThisBlock~>RegisterValues[TargetRegister] := this->ParseExpression()
+				
+				if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					break
+				}
+			}
+			
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for register value list")
+		}
+		
+		InstructionNode** Instructions := Alloc(16 * #InstructionNode)
+		i32 InstructionCapacity := 16
+		i32 InstructionCount := 0
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for assembly block")
+		
+		loop {
+			if (InstructionCount >= InstructionCapacity) {
+				InstructionCapacity += 16
+				Instructions := ReAlloc(Instructions, InstructionCapacity * #InstructionNode)
+			}
+			
+			Instructions[InstructionCount] := this->ParseInstruction(ThisBlock)
+			InstructionCount += 1
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				break
+			}
+		}
+		
+		ThisBlock->Instructions := Instructions
+		ThisBlock->InstructionCount := InstructionCount
+		
+		return ASTNode:New(NODE_TYPE_ASSEMBLY, ThisBlock, TYPE_NONE)
+	}

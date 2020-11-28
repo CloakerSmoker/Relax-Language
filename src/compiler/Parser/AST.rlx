@@ -1,3 +1,5 @@
+; AST node type values region
+
 i8 NODE_TYPE_NONE := 0
 i8 NODE_TYPE_TOKEN := 1
 
@@ -38,6 +40,9 @@ i8 NODE_TYPE_TRY := 23
 ;  of a type's size needs to be deferred until compile-time
 i8 NODE_TYPE_GET_TYPE_SIZE := 24
 
+; EndRegion
+
+; AST node structs region
 
 ; Unary
 
@@ -118,7 +123,155 @@ struct TryCatch {
 	VariableInfo* CatchCodeVariable
 }
 
-; Function Definition
+; EndRegion
+
+; Assembly Region
+
+; Operand type flags, R = register, M = register indirect or SIB (with a disp on either)
+
+i8 OP_M_OFFSET := 0
+i32 OP_M8 := 0x1
+i32 OP_M16 := 0x2
+i32 OP_M32 := 0x4
+i32 OP_M64 := 0x8
+
+i8 OP_R_OFFSET := 4
+i32 OP_R8 := 0x10
+i32 OP_R16 := 0x20
+i32 OP_R32 := 0x40
+i32 OP_R64 := 0x80
+
+i8 OP_I_OFFSET := 8
+i32 OP_I8 := 0x100
+i32 OP_I16 := 0x200
+i32 OP_I32 := 0x400
+i32 OP_I64 := 0x800
+i32 OP_LABEL := 0x1000
+
+i32 OP_M := OP_M8 | OP_M16 | OP_M32 | OP_M64
+i32 OP_R := OP_R8 | OP_R16 | OP_R32 | OP_R64
+i32 OP_HR := OP_R16 | OP_R32 | OP_R64
+
+; Prepacked operand types
+
+i32 O_M := OP_R | OP_M 				; Register or memory reference
+i32 O_RM := OP_R | (O_M << 16)		; RM encoding
+i32 O_MR := O_M | (OP_R << 16)		; MR encoding
+i32 O_I := OP_I8 | OP_I16 | OP_I32 	; Imm8,Imm16,Imm32 encoding
+i32 O_MI := O_M | (O_I << 16) 		; MI encoding
+i32 O_L := OP_LABEL					; rel32 encoding, references a label
+
+i32 E_NO_RM := 0x1				; The instruction does not use the ModRM byte
+i32 E_RM_IS_OP1 := 0x2			; The RM field of the ModRM byte encodes the first operand
+i32 E_RM_IS_OP2 := 0x4			; The RM field of the ModRM byte encodes the second operand 
+i32 E_OP_EXT := 0x8				; The Reg field of the ModRM byte is an opcode extension contained in Instruction.Extra
+i32 E_IMM8 := 0x10				; Encode a 8 bit immediate value
+i32 E_IMM32 := 0x20				; Encode a 32 bit immediate value
+i32 E_IMM64 := 0x40				; Encode a 64 bit immediate value
+i32 E_REG_IN_OPCODE := 0x80		; Encode the register operand in the opcode
+i32 E_DIF_SIZES := 0x100 		; Allow two different register sizes to be used
+i32 E_BYTE_OPCODE_N1 := 0x200 	; The byte opcode for this instruction is not the regular opcode minus 1
+i32 E_IMM_X := 0x400			; The immediate operand is the size of the operand
+i32 E_LABEL := 0x800			; The operand is a label
+i32 E_2_BYTE_OPCODE := 0x1000 	; The instruction has a two byte opcode
+i32 E_REX_W := 0x2000			; The instruction needs REX.W
+i32 E_NEEDS_66 := 0x4000		; The instruction needs the 0x66 prefix
+
+struct Instruction {
+	i8{6} Name
+	
+	union {
+		i8{2} Opcode
+		i16 PackedOpcode
+	}
+	
+	i32 OperandMask
+	
+	i16 Flags
+	i16 Extra
+	
+	define Instruction* Next() {
+		return this + #Instruction
+	}
+}
+
+struct InstructionListEntry {
+	Instruction Instruction
+	Instruction* Next
+}
+
+struct SIBInfo {
+	i8 BaseRegister,
+	i8 IndexRegister,
+	i8 Scale
+}
+
+struct InstructionOperand {
+	ErrorContext Context,
+	
+	i32 Type,
+	i32 Size,
+	i8 HasSIB,
+	i8 ReferencesFunction,
+	i8 DispSize,
+	
+	union {
+		i8 RegisterNumber,
+		SIBInfo SIBValue
+	},
+	
+	union {
+		i32 DispValue,
+		i64 IntegerValue,
+		i32 LabelNumber,
+		FunctionDefine* FunctionReference
+	}
+	
+	define void Error(i8* Message) {
+		this~>Context->Error(Message)
+	}
+	define void Warn(i8* Message) {
+		this~>Context->Warn(Message)
+	}
+}
+
+struct AssemblyBlock {
+	i32 InstructionCount,
+	InstructionNode** Instructions,
+	HashMap Labels
+	
+	ASTNode*{16} RegisterValues
+}
+
+i8 INSTRUCTION_REGULAR := 0
+i8 INSTRUCTION_LABEL := 1
+i8 INSTRUCTION_LABEL_INCOMPLETE := 2
+
+struct InstructionNode {
+	ErrorContext Context,
+	i8 Type,
+	
+	union {
+		Instruction* Base,
+		SafeWideString* LabelName
+	},
+	
+	union {
+		InstructionOperand** Operands,
+		i32 LabelNumber
+	}
+	
+	define void Error(i8* Message) {
+		this~>Context->Error(Message)
+	}
+	define void Warn(i8* Message) {
+		this~>Context->Warn(Message)
+	}
+}
+
+; EndRegion
+
+; Function Definition Region
 
 i8 FUNCTION_IS_METHOD := 1
 i8 FUNCTION_IS_STATIC_METHOD := 2
@@ -173,17 +326,21 @@ struct FunctionDefine {
 	
 	
 	define i32 GetStringLength() {
-		i32 Length := this->Name->Length + 2
+		i32 Length := this->Name->Length + 2 + 1
 		
 		if (this->MethodOfTypeName) {
 			Length += this->MethodOfTypeName->Length + 1
 		}
 		
 		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
-			Length += GetTypeStringLength(this->Parameters[Index]->Type) + 2
+			Length += GetTypeStringLength(this->Parameters[Index]->Type)
+			
+			if (Index + 1 != this->ParameterCount) {
+				Length += 2
+			}
 		}
 		
-		return Length - 2
+		return Length
 	}
 	define void StringifyInto(void* IntoRawBuffer) {
 		i8* Buffer := IntoRawBuffer
@@ -222,8 +379,6 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
-			;Print("%s\n", Buffer)
-			
 			Type ParameterType := this->Parameters[ParameterIndex]->Type
 			
 			StringifyType(&Buffer[Offset], ParameterType)
@@ -237,20 +392,22 @@ struct FunctionDefine {
 		}
 		
 		Buffer[Offset] := ')'
+		Offset += 1
 		
 		Print("%s\n", Buffer)
+		
+		if (Offset != this->GetStringLength() - 1) {
+			Print("SOMETHING'S FUCKY, %i %i\n", Offset, this->GetStringLength())
+			Exit(1)
+		}
 	}
 }
 
-/*
-==========================================
-	AST Node definition + alloc/free helpers
-==========================================
-*/
+; EndRegion
 
-struct ASTNode {
-	/* First two fields are the same as Token, so they can be used interchangably in error handling functions */
-	
+; Actual ASTNode struct region
+
+struct ASTNode {	
 	ErrorContext Context,
 	
 	union {
@@ -321,11 +478,20 @@ struct ASTNode {
 	}
 	
 	define i8 IsStorageValue() {
-		i8 IsDereference := this->NodeType = NODE_TYPE_UNARY && this->UnaryNode->Operator->Value = OPERATOR_STAR
-		i8 IsArrayAccess := this->NodeType = NODE_TYPE_BINARY && this->BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
-		i8 IsStructAccss := this->NodeType = NODE_TYPE_STRUCT_ACCESS && this->AccessNode->Operator->Value != OPERATOR_TILDE_GREATER
+		this~>Context->Warn("ISV")
 		
-		return this->NodeType = NODE_TYPE_VARIABLE || IsDereference || IsArrayAccess || IsStructAccss
+		if (this->NodeType = NODE_TYPE_UNARY) {
+			return this->UnaryNode->Operator->Value = OPERATOR_STAR
+		}
+		else if (this->NodeType = NODE_TYPE_BINARY) {
+			return this->BinaryNode->Operator->Value = OPERATOR_OPEN_BRACKET
+		}
+		else if (this->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			return this->AccessNode->Operator->Value != OPERATOR_TILDE_GREATER
+		}
+		else {
+			return this->NodeType = NODE_TYPE_VARIABLE
+		}
 	}
 	
 	define void Error(i8* Message) {
@@ -339,6 +505,10 @@ struct ASTNode {
 		Free(this)
 	}
 }
+
+; EndRegion
+
+; ASTVisitor region
 
 struct ASTVisitor {
 	void* VisitFunction
@@ -432,6 +602,12 @@ struct ASTVisitor {
 		for (i32 Index := 0, Index < Count, Index += 1) {
 			ASTNode* Node := Nodes[Index]
 			
+			Print("ASTVisitor visit type %i\n", Node->NodeType)
+		
+			if (Node~>Context->SourceFilePath) {
+				Node->Warn(null)
+			}
+			
 			if (Node->LastVisitor = this) {
 				continue
 			}
@@ -450,3 +626,5 @@ struct ASTVisitor {
 		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
 	}
 }
+
+; EndRegion

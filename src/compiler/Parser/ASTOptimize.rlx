@@ -2,19 +2,19 @@
 declare void CountReferencesVisitFunction(ASTVisitor*, FunctionDefine*)
 
 define void CountReferencesVisitAssembly(ASTVisitor* Visitor, AssemblyBlock* Target) {
-	;for (i32 InstructionIndex := 0, InstructionIndex < Target->InstructionCount, InstructionIndex += 1) {
-	;	InstructionNode* NextInstruction := Target->Instructions[InstructionIndex]
-	;	
-	;	if (NextInstruction->Type = INSTRUCTION_REGULAR) {
-	;		for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
-	;			InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
-	;			
-	;			if (NextOperand != null && NextOperand->ReferencesFunction) {
-	;				CountReferencesVisitFunction(Visitor, NextOperand->FunctionReference)
-	;			}
-	;		}
-	;	}
-	;}
+	for (i32 InstructionIndex := 0, InstructionIndex < Target->InstructionCount, InstructionIndex += 1) {
+		InstructionNode* NextInstruction := Target->Instructions[InstructionIndex]
+		
+		if (NextInstruction->Type = INSTRUCTION_REGULAR) {
+			for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
+				InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
+				
+				if (NextOperand != null && NextOperand->ReferencesFunction) {
+					CountReferencesVisitFunction(Visitor, NextOperand->FunctionReference)
+				}
+			}
+		}
+	}
 }
 
 define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Target) {

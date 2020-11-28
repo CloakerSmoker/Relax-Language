@@ -1,0 +1,296 @@
+	declare ASTNode* ParseStatement()
+	
+	define void IgnoreBlock() {
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
+		
+		i32 Depth := 1
+		
+		loop {
+			Token* Next := this->GetNextToken()
+			
+			if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				Depth -= 1
+			}
+			else if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+				Depth += 1
+			}
+			
+			if (Depth = 0) {
+				break
+			}
+		}
+	}
+	define Block* ParseBlock() {
+		; Parses an array of statements, and builds a Block structure containing them
+		
+		Token* OpenBrace := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
+		
+		; Set up a buffer for the statements
+		
+		i16 StatementCapacity := 20
+		ASTNode** Statements := Alloc(StatementCapacity * #ASTNode*) As ASTNode**
+		
+		i16 StatementCount := 0
+		i8 HasHadUnconditionalReturn := false
+		i32 Depth := 1
+		
+		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {	
+			loop {
+				; Loop until we hit a `}`
+				
+				if (StatementCount <= StatementCapacity) {
+					; If the buffer needs to be expanded, expand it
+					
+					StatementCapacity += 20
+					Statements := ReAlloc(Statements, StatementCapacity * #ASTNode*)
+				}
+				
+				; Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the 
+				;  block following them depending on which platform we're targetting
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
+					if (this->Config->OutputFormat = OUTPUT_ELF) {
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+						Depth += 1
+					}
+					else {
+						this->IgnoreBlock()
+					}
+				}
+				else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
+					if (this->Config->OutputFormat = OUTPUT_PE) {
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
+						Depth += 1
+					}
+					else {
+						this->IgnoreBlock()
+					}
+				}
+				else {
+					ASTNode* NextStatement := this->ParseStatement()
+					
+					if (NextStatement->NodeType = NODE_TYPE_RETURN) {
+						HasHadUnconditionalReturn := true
+					}
+					else if (NextStatement->NodeType = NODE_TYPE_IF) {
+						IfGroup* NextIf := NextStatement->IfNode
+						i8 AllBranchesHaveReturn := true
+						
+						for (i32 BranchIndex := 0, BranchIndex < NextIf->BranchCount, BranchIndex += 1) {
+							AllBranchesHaveReturn &= NextIf->Bodies[BranchIndex]->HasUnconditionalReturn
+						}
+						
+						if (NextIf->ElseBranch && AllBranchesHaveReturn) {
+							HasHadUnconditionalReturn |= NextIf->ElseBranch->HasUnconditionalReturn
+						}
+					}
+					
+					Statements[StatementCount] := NextStatement
+					StatementCount += 1
+				}
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_EOF)) {
+					OpenBrace->Error("Expected close brace for block")
+				}
+				
+				i8 BreakOuter := false
+				
+				while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					; Only break the outer loop once all opened `{` (by linux/windows statements) for this block
+					; have been matched with a closing `}`
+					
+					Depth -= 1
+					
+					BreakOuter := Depth = 0
+					
+					if (BreakOuter) {
+						break
+					}
+				}
+				
+				if (BreakOuter) {
+					break
+				}
+			}
+		}
+		
+		; Allocate a block structure and populate it with the statement list/count
+		
+		Block* NewBlock := Alloc(#Block) As Block*
+		
+		NewBlock->Statements := Statements
+		NewBlock->StatementCount := StatementCount
+		NewBlock->HasUnconditionalReturn := HasHadUnconditionalReturn
+		
+		return NewBlock
+	}
+	
+	define ASTNode* ParseIf() {
+		ASTNode** Conditions := Alloc(10 * #ASTNode*) As ASTNode**
+		Block** Bodies := Alloc(10 * #Block*) As Block**
+		Block* ElseBranch := null
+		
+		i32 BranchCapacity := 10
+		i32 BranchIndex := 0
+		
+		loop {
+			if (BranchIndex = 0 || this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {
+				if (BranchCapacity <= BranchIndex) {
+					BranchCapacity += 10
+				
+					Conditions := ReAlloc(Conditions, BranchCapacity * 8)
+					Bodies := ReAlloc(Bodies, BranchCapacity * 8)
+				}
+				
+				Conditions[BranchIndex] := this->ParseExpression()
+				Bodies[BranchIndex] := this->ParseBlock()
+			
+				BranchIndex += 1
+	
+				if !(this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ELSE)) {
+					break
+				}
+			}
+			else {
+				ElseBranch := this->ParseBlock()
+				
+				break
+			}
+		}
+		
+		IfGroup* Result := Alloc(#IfGroup)
+		
+		Result->Conditions := Conditions
+		Result->Bodies := Bodies
+		Result->ElseBranch := ElseBranch
+		Result->BranchCount := BranchIndex
+	
+		return ASTNode:New(NODE_TYPE_IF, Result, TYPE_NONE)
+	}
+	
+	define ASTNode* ParseFor() {
+		ForLoop* Result := Alloc(#ForLoop) As ForLoop*
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for for loop.")
+		
+		i8* ErrorMessage := null
+		Result->Initializer := this->TryParseVariableDeclaration(false, false, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			Result->Initializer := this->ParseExpression()
+		}
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop initializer.")
+		Result->Condition := this->ParseExpression()
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Expected comma after for loop condition.")
+		Result->Step := this->ParseExpression()
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' in for loop.")
+		
+		i8 OldInLoop := this->InLoop
+		this->InLoop := true
+		
+		Result->Body := this->ParseBlock()
+		
+		this->InLoop := OldInLoop
+		
+		return ASTNode:New(NODE_TYPE_FOR, Result, TYPE_NONE)
+	}
+	
+	define ASTNode* ParseWhile() {
+		WhileLoop* Result := Alloc(#WhileLoop) As WhileLoop*
+		
+		Result->Condition := this->ParseExpression()
+		
+		i8 OldInLoop := this->InLoop
+		this->InLoop := true
+		
+		Result->Body := this->ParseBlock()
+		
+		this->InLoop := OldInLoop
+		
+		return ASTNode:New(NODE_TYPE_WHILE, Result, TYPE_NONE)
+	}
+	
+	define ASTNode* ParseStatement() {
+		ASTNode* Result := null
+		
+		this->PeekNextToken()~>Context->Warn("Marker")
+		
+		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
+			Token* NextToken := this->GetCurrentToken()
+			i8 NextKeyword := NextToken->Value As i8
+			
+			if (NextKeyword = KEYWORD_CONTINUE || NextKeyword = KEYWORD_BREAK) {
+				Result := ASTNode:New(NODE_TYPE_CONTINUEBREAK, NextKeyword = KEYWORD_CONTINUE)
+				Result~>Context->Clone(NextToken~>Context)
+				
+				if !(this->InLoop) {
+					Result->Error("Continue/Break must be inside loops")
+				}
+			}
+			else if (NextKeyword = KEYWORD_RETURN) {
+				if (this->CurrentFunction->ReturnType = this->void->AsNonPointer()) {
+					Result := ASTNode:New(NODE_TYPE_INTEGER, 0, this->i8->AsNonPointer())
+					Result := ASTNode:New(NODE_TYPE_RETURN, Result)
+					
+					if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
+					}
+				}
+				else {
+					ASTNode* ExpressionToReturn := this->DowncastIntegerNode(this->ParseExpression())
+					Type ExpectedReturnType := this->CurrentFunction->ReturnType
+					
+					CheckTypes(this->void, TYPE_NONE, ExpectedReturnType, ExpressionToReturn)
+					
+					Result := ASTNode:New(NODE_TYPE_RETURN, ExpressionToReturn)
+				}
+			}
+			else if (NextKeyword = KEYWORD_ASSEMBLY) {
+				Result := this->ParseAssembly(true)
+			}
+			else if (NextKeyword = KEYWORD_IF) {
+				Result := this->ParseIf()
+			}
+			else if (NextKeyword = KEYWORD_FOR) {
+				Result := this->ParseFor()
+			}
+			else if (NextKeyword = KEYWORD_WHILE) {
+				Result := this->ParseWhile()
+			}
+			else if (NextKeyword = KEYWORD_LOOP) {
+				i8 OldInLoop := this->InLoop
+				this->InLoop := true
+				
+				Result := ASTNode:New(NODE_TYPE_LOOP, this->ParseBlock())
+				
+				this->InLoop := OldInLoop
+			}
+		}
+		else {
+			i8* ErrorMessage := null
+			Result := this->TryParseVariableDeclaration(false, false, &ErrorMessage)
+			
+			if (ErrorMessage = null) {
+				; If we managed to parse+add a variable
+				
+				if (Result = null) {
+					; But that variable didn't have a default value. Then set `Result` to a NODE_TYPE_NONE just
+					;  to prevent returning a node containing a null pointer.
+					
+					Result := ASTNode:New(NODE_TYPE_NONE, null)
+				}
+			}
+			else {
+				Result := this->ParseExpression()
+			}
+			
+			Result := ASTNode:New(NODE_TYPE_EXPRESSION, Result)
+		}
+		
+		this->PeekNextToken()~>Context->Warn("Tail")
+		
+		return Result
+	}

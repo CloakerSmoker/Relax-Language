@@ -77,8 +77,8 @@ struct VariableHashMap {
 	}
 }
 
-#Require "./src/compiler/AST.rlx"
-#Require "./src/compiler/Types.rlx"
+#Require "./src/compiler/Parser/AST.rlx"
+#Require "./src/compiler/Parser/Types.rlx"
 
 i8 TYPE_REGULAR := 1
 i8 TYPE_STRUCT := 2
@@ -211,6 +211,7 @@ struct ParserState {
 	i32 LabelCount
 	
 	declare TypeInfo* AddType(i8*, i16, i8)
+	declare void SetupAssembly()
 	
 	static ParserState* New(BuildConfig* Config, LexerState* Lexer) {
 		ParserState* this := Alloc(#ParserState)
@@ -222,7 +223,7 @@ struct ParserState {
 		this~>Functions->Initialize()
 		this~>Types->Initialize()
 		
-		this->GlobalDefaults := AllocArray(8, 8)
+		this->GlobalDefaults := AllocArray(8, 0)
 		this->GlobalConstantsBuffer := Alloc(4)
 		
 		this->i8 := this->AddType("i8", 1, TYPE_REGULAR)
@@ -230,6 +231,8 @@ struct ParserState {
 		this->i32 := this->AddType("i32", 4, TYPE_REGULAR)
 		this->i64 := this->AddType("i64", 8, TYPE_REGULAR)
 		this->void := this->AddType("void", 8, TYPE_REGULAR)
+		
+		this->SetupAssembly()
 		
 		return this
 	}
@@ -478,7 +481,7 @@ struct ParserState {
 			
 			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
 			
-			if (*ErrorMessage != null) {
+			if (*ErrorMessage = null) {
 				Result.ArraySize := SizeToken->IntegerValue As i16
 				Result.IsArray := true
 				
@@ -488,11 +491,11 @@ struct ParserState {
 		
 		return Result
 	}
-	define Type ParseType() {
+	define Type ParseType(i8 AllowArrayType) {
 		i8* ErrorMessage := null
 		Token* BlameToken := this->PeekNextToken()
 		
-		Type Result := this->TryParseType(false, &ErrorMessage)
+		Type Result := this->TryParseType(AllowArrayType, &ErrorMessage)
 		
 		if (ErrorMessage) {
 			BlameToken->Error(ErrorMessage)
@@ -500,13 +503,16 @@ struct ParserState {
 		
 		return Result
 	}
+	define Type ParseType() {
+		return this->ParseType(false)
+	}
 	define ASTNode* ParseTypeNode() {
 		Token* FirstToken := this->PeekNextToken()
 		Type Result := this->ParseType()
-		Token* LastToken := this->GetCurrentToken()
 		
-		ASTNode* ResultNode := ASTNode:New(NODE_TYPE_TYPE, Result As i64)
-		MergeContexts(FirstToken~>Context, LastToken~>Context, ResultNode~>Context)
+		ASTNode* ResultNode := ASTNode:New(NODE_TYPE_TYPE, Result As i64, Result)
+		
+		ResultNode~>Context->Clone(FirstToken~>Context)->Merge(this->GetCurrentTokenContext())
 		
 		return ResultNode
 	}
@@ -529,1068 +535,7 @@ struct ParserState {
 		return FoundFunctionElement->Value As FunctionDefine*
 	}
 	
-	declare ASTNode* ParseExpression(i8)
-	
-	define ASTNode** ParseParameterList(i8* OutParameterCount) {
-		; Note: The value of OutParameterCount is used to decide the index of the first parameter
-		;  meaning that by passing a non-zero OutParameterCount you can reserve space in the paramter list
-		;   for magic parameters like `this`
-		
-		i8 ParameterIndex := *OutParameterCount
-		ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
-		
-		; If the next token is not a `)`, then parse a parameter list (if it is a `)` then there are 0 parameters)
-		
-		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-			i8 IsFirstParameter := true
-			
-			while (IsFirstParameter || this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-				Parameters[ParameterIndex] := this->ParseExpression(0)
-				ParameterIndex += 1
-				
-				IsFirstParameter := false
-			}
-			
-			; When the token after a parameter is not a `,` then the next token must be ')' to close the 
-			;  parameter list.
-			
-			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren for function call")
-		}
-		
-		OutParameterCount[0] := ParameterIndex
-		return Parameters
-	}
-	
-	define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
-		; Translates a token into an AST node with the same value/type as the token
-		
-		ASTNode* Result := 0
-		
-		if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
-			; If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is the correct 
-			;  size for the given integer
-			
-			Type ResultType := this->GetNumberType(TokenToTranslate->IntegerValue)
-			
-			Result := ASTNode:New(NODE_TYPE_INTEGER, TokenToTranslate->Value, ResultType)
-		}
-		else if (TokenToTranslate->Type = TOKEN_TYPE_IDENTIFIER) {
-			; If the token is an identifier, find the variable the identifier represents, and put it into 
-			;  a NODE_TYPE_VARIABLE node (Or, if the identifier represents a built-in variable, stick its
-			;   actual value into a NODE_TYPE_INTEGER)
-			
-			Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(this->i32, 0))
-			
-			if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
-				Result->IntegerValue := 1
-			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "false")) {
-				Result->IntegerValue := 0
-			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "windows")) {
-				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_PE
-			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
-				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_ELF
-			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "debug")) {
-				Result->IntegerValue := this->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
-			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
-				Result->ValueType := MakeType(this->void, 1)
-				Result->NodeType := NODE_TYPE_ZERO
-			}
-			else {
-				; This isn't a built-in variable, resolve it and populate our result node with the found variable
-				
-				VariableInfo* FoundVariable := this->FindVariable(TokenToTranslate)
-				
-				Result->NodeType := NODE_TYPE_VARIABLE
-				Result->VariableValue := FoundVariable
-				Result->ValueType := FoundVariable->Type
-			}
-			
-			Result~>Context->Clone(TokenToTranslate~>Context)
-		}
-		else {
-			TokenToTranslate->Error("Unexpected token")
-		}
-		
-		CopyContext(TokenToTranslate~>Context, Result~>Context)
-		
-		return Result
-	}
-	
-	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, i32 ParameterOffset, i8** ErrorMessage) {
-		Token* StaticMethodNameToken := null
-		i8 HasFollowingColon := false
-		
-		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-			; `Name` followed by a `:`, either a `builtin:()` call, or a `static:method()` call.
-			
-			HasFollowingColon := true
-			
-			if (this->PeekNextToken()->Is(TOKEN_TYPE_IDENTIFIER)) {
-				; Remember the name of the static method for later
-				
-				StaticMethodNameToken := this->GetNextToken()
-			}
-		}
-		
-		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-			*ErrorMessage := "Expected opening `(` for function call."
-			return null
-		}
-		
-		i8 ParameterCount := ParameterOffset
-		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
-		
-		CallExpression* Result := null
-		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, NameToken~>Context, this->GetCurrentTokenContext())
-		
-		SafeWideString* Name := NameToken->StringValue
-		
-		if (HasFollowingColon && StaticMethodNameToken = null) {
-			; If we've matched the `name:` format, but not `name:other`, then we need to convert `name`
-			;  into a specific built-in function identifier, and just return the result node.
-			
-			if (Name->Equals("syscall")) {
-				Result->BuiltinID := BUILTIN_SYSCALL
-				ResultNode->ValueType := this->i64->AsNonPointer()
-				
-				if (this->Config->OutputFormat = OUTPUT_PE) {
-					ResultNode->Warn("Windows syscall numbers change near-constantly, using the native API is a bad idea.")
-				}
-			}
-			else if (Name->Equals("breakpoint") && ParameterCount = 0) {
-				Result->BuiltinID := BUILTIN_BREAKPOINT
-				ResultNode->ValueType := this->i8->AsNonPointer()
-			}
-			else {
-				NameToken->Error("No built-in function by this name found.")
-			}
-			
-			return ResultNode
-		}
-		
-		FunctionDefine* FoundDefine := null
-		
-		if (StaticMethodNameToken != null) {
-			; If we matched the `name:other` format, we can just directly look up the static method,
-			;  using the same function as `&name:other`
-			
-			FoundDefine := this->LookupStaticMethod(NameToken, StaticMethodNameToken)
-		}
-		else {
-			HashMapElement* FoundDefineElement := FunctionNamespace->Get(Name)
-			
-			if !(FoundDefineElement) {
-				; If there are no functions by this name in the target namespace, error out
-				
-				NameToken->Error("Function definition not found.")
-			}
-			
-			; Otherwise, convert the HashMapElement* into a FunctionDefine*
-			
-			FoundDefine := FoundDefineElement->Value As FunctionDefine*
-		}
-		
-		; Now, we've found a function which has the correct name for this function call. However, since a
-		;  name can be defined multiple times as long as it takes a different number or set of parameter types
-		;   we need to go through and find which actual function to call.
-		
-		; This is done by keeping a running "best" function, which is given a rating 0-200000 which describes
-		;  how "compatible" the best-fit function is to our parameters. Lower is better.
-		
-		i32 BestFitRating := 200000
-		FunctionDefine* BestFit := 0
-		
-		FunctionDefine* Next := FoundDefine
-		
-		loop {
-			; To actually enumerate all of the overloads for a name, we walk the linked list built out
-			;  of the `Next` field of the FunctionDefine structure.
-			
-			i32 NextParameterCount := Next->ParameterCount
-			
-			i32 ThisFunctionRating := 0
-			
-			i8 IS_VARIADIC := false
-			
-			if (Next->Attribute = OPERATOR_DOT) {
-				; Variadic functions automatically get rated much worse than regular functions, as
-				;  they are the most general version of a function.
-				
-				IS_VARIADIC := true
-				ThisFunctionRating := 100000
-				
-				NextParameterCount -= 1
-			}
-			
-			if (NextParameterCount = ParameterCount || IS_VARIADIC) {
-				; Only when the function we're checking against takes the correct number of parameters (or is
-				;  variadic) we actually calculate how compatible all of the parameters are.
-				
-				i8 BrokeInner := false
-				
-				for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
-					; For each parameter this definition has (which might be less than ParameterCount in the
-					;  case of variadic functions)
-					
-					Type ExpectedNext := Next->Parameters[ParameterIndex]->Type
-					
-					ASTNode* NextNode := this->DowncastIntegerNode(Parameters[ParameterIndex])
-					Type ActualNext := NextNode->ValueType
-					
-					if (CheckTypes(this->void, ActualNext, ExpectedNext, null)) {
-						; Check that the two parameter types are baseline compatible, aka they share a pointer
-						;  depth, or are compatible integer types.
-						
-						; If the parameters aren't compatible, break the loop, but record that this parameter
-						;  was the reason that our CallExpression didn't match this FunctionDefine inside
-						;   of the FunctionDefine for printing a pretty error message later
-						
-						BrokeInner := true
-						
-						Next->TempValue := ParameterIndex
-						break
-					}
-					
-					; The types are baseline compatible, compare them based on how generic each is, and add
-					;  the rating to this function's overall rating
-					i32 ExpectedRating := GetGenericRating(ExpectedNext)
-					i32 ActualRating := GetGenericRating(ActualNext)
-					
-					if (ExpectedRating != ActualRating) {
-						if (ActualRating > ExpectedRating) {
-							ThisFunctionRating += ActualRating
-						}
-						else {
-							ThisFunctionRating += ExpectedRating
-						}
-					}
-				}
-				
-				if !(BrokeInner) {
-					; If we didn't break out of the inner loop due to a totally incompatible paramter
-					;  then check if this function is the new best-fit function, and update the trackers
-					;   if it is.
-					
-					if (ThisFunctionRating < BestFitRating) {
-						BestFitRating := ThisFunctionRating
-						BestFit := Next
-					}
-				}
-			}
-			
-			; Grab the next definition of this function out of the linked list, and break if we've reached
-			;  the end of the list.
-			
-			Next := Next->Next
-			
-			if !(Next) {
-				break
-			}
-		}
-		
-		if (BestFit = null || BestFitRating >= 200000) {
-			; If we didn't find any functions which fit our parameters, then we need to print out a nice
-			;  error message showing each definition, and why it didn't make the cut.
-			
-			ManualErrorMessagePrelude()
-			
-			Print("No matching overload found for:\n")
-			PrettyError(ResultNode~>Context, Red | Bright)
-			
-			Next := FoundDefine
-			
-			while (Next) {
-				if (ParameterCount < Next->ParameterCount) {
-					Print("^C0Is missing required parameters for overload^F0")
-				}
-				else if (ParameterCount > Next->ParameterCount) {
-					Print("^C0Has too many paramters for overload^F0")
-				}
-				else {
-					; FunctionDefine.TempValue is set in the loop above to be the index of the parameter which 
-					; caused FunctionDefine itself not fit our parameters.
-					
-					i32 LastNonMatchingParameter := Next->TempValue
-					
-					Print("^C0Parameter %i should be an ", LastNonMatchingParameter + 1)
-					
-					PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
-					
-					Print(" for overload, not ")
-					
-					if (LastNonMatchingParameter < ParameterCount) {
-						PrintType(Parameters[LastNonMatchingParameter]->ValueType)
-					}
-					else {
-						Print("<none>")
-					}
-					
-					Print("^F0")
-				}
-				
-				PrintNewLine()
-				PrettyError(Next~>Context, Red | Bright)
-				
-				Next := Next->Next
-			}
-			
-			Exit(1)
-			
-			return null
-		}
-		
-		; This is only reached when we did match against a function, which will be stored inside of BestFit.
-		
-		Result->TargetFunction := BestFit
-		ResultNode->ValueType := BestFit->ReturnType
-		
-		return ResultNode
-	}
-	define ASTNode* TryParseFunctionCall(Token* NameToken, i8** ErrorMessage) {
-		return this->TryParseFunctionCall(NameToken, this~>Functions, 0, ErrorMessage)
-	}
-	
-	define ASTNode* ParseExpressionOperand() {
-		; Parses and returns a single operand of an expression
-		
-		Token* NextToken := this->GetNextToken()
-		ASTNode* Result := 0
-		i8* ErrorMessage := null
-		
-		FunctionDefine* CurrentFunction := this->CurrentFunction
-		
-		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-			; If the next token is an `(`, then parse a sub-expression and consume a closing `)`
-			
-			Result := this->ParseExpression(0)
-			
-			Token* CloseParen := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren")
-			
-			MergeContexts(NextToken~>Context, CloseParen~>Context, Result~>Context)
-		}
-		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
-			; Else if the next token is an identifier.
-			;  `TryParseFunctionCall` check for built-in function calls, static method calls, and regular
-			;   function calls, returning an ASTNode* for each, and null when it couldn't parse any flavor of
-			;    function call, aka this identifier is just a variable access.
-			
-			Result := this->TryParseFunctionCall(NextToken, &ErrorMessage)
-			
-			if (Result && ErrorMessage = null) {
-				return Result
-			}
-			else {
-				; Just a regular old variable access, call TranslateTokenToNode so any special variables
-				;  get correctly translated into nodes
-				return this->TranslateTokenToNode(NextToken)
-			}
-		}
-		else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
-			; The next token is some flavor of string. We either need to stick it into the current function's
-			;  constant data buffer, of the global constant data buffer
-			
-			i8* Buffer := this->GlobalConstantsBuffer
-			i32 Offset := this->GlobalConstantBufferSize
-			
-			if (CurrentFunction) {
-				Offset := CurrentFunction->StringBufferSize
-				Buffer := CurrentFunction->StringBuffer
-			}
-			
-			; Since `TOKEN_TYPE_WIDE_STRING = TOKEN_TYPE_STRING + 1` we can subtract by TOKEN_TYPE_STRING
-			;  and add one to get the character size for each flavor of string. 
-			;   Aka 1 for TOKEN_TYPE_STRING and 2 for TOKEN_TYPE_WIDE_STRING
-			
-			i8 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
-			SafeWideString* StringText := NextToken->StringValue
-			
-			if (Offset % CharacterSize) {
-				Offset += 1
-			}
-			
-			i32 NewSize := Offset + (StringText->Length + 1) * CharacterSize
-			Buffer := ReAlloc(Buffer, NewSize)
-			
-			if (CurrentFunction) {
-				CurrentFunction->StringBufferSize := NewSize
-				CurrentFunction->StringBuffer := Buffer
-			}
-			else {
-				this->GlobalConstantBufferSize := NewSize
-				this->GlobalConstantsBuffer := Buffer
-			}
-			
-			TypeInfo* BaseType := this->i8
-			
-			if (CharacterSize = 1) {
-				for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-					Buffer[Offset + Index] := StringText->Buffer[Index]
-				}
-			}
-			else {
-				BaseType := this->i16
-				MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length * 2)
-			}
-			
-			Result := ASTNode:New(NODE_TYPE_STRING, Offset, BaseType->AsPointer(1))
-			CopyContext(NextToken~>Context, Result~>Context)
-		}
-		else if (NextToken->Type = TOKEN_TYPE_INTEGER) {
-			; A literal integer, just directly translate it directly into an ASTNode
-			
-			Result := this->TranslateTokenToNode(NextToken)
-		}
-		else if (NextToken->Type = TOKEN_TYPE_OPERATOR && IsPrefixOperator(NextToken)) {
-			; A prefix/unary operator, with a single operand.
-			
-			if (NextToken->Value = OPERATOR_POUND) {
-				; Special case for `#`, as it needs to parse a type name
-				
-				; Allow for `#(TypeName)` to force `#` to behave independent of precedence
-				i8 ConsumeClosingParan := this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
-				
-				Type GetSizeOfType := this->ParseType()
-				
-				if (ConsumeClosingParan) {
-					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
-				}
-				
-				; Since type sizes can change at parse-time (ex: inside of a class method which is followed
-				;  by more field declarations) we need to defer the actual evaluation of the type's size
-				;   until compile-time. Which is done through the NODE_TYPE_GET_TYPE_SIZE AST node type.
-				
-				Result := ASTNode:New(NODE_TYPE_GET_TYPE_SIZE, GetSizeOfType As void, this->i32->AsNonPointer())
-				
-				Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
-			}
-			else {
-				if (NextToken->Value = OPERATOR_AND) {
-					; Another special case, for `&` this time, since it expects a storage value for a operand,
-					;  and maybe even a function name
-					
-					i32 Frozen := this->Freeze()
-					Token* MaybeFunctionName := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Dummy", &ErrorMessage)
-					
-					if (MaybeFunctionName && ErrorMessage = null) {
-						; In this case, we've got `&Name`, so it can only be getting the address of a
-						;  variable, function, or static function (Depending on if `Name` is followed by a `:`, or
-						;   if `Name` is the name of a function)
-						
-						FunctionDefine* FoundDefine := null
-						
-						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-							; We have `&Name:OtherName`, which means we need to lookup a static method for our result
-							
-							Token* StaticMethodTypeName := MaybeFunctionName
-							Token* StaticMethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
-							
-							FoundDefine := this->LookupStaticMethod(StaticMethodTypeName, StaticMethodName)
-						}
-						else {
-							; Else, we've just got `&Name`, so we check for `Name` as a function
-							
-							HashMapElement* FoundFunction := this~>Functions->Get(MaybeFunctionName->StringValue)
-							
-							if (FoundFunction) {
-								FoundDefine := FoundFunction->Value As FunctionDefine*
-							}
-						}
-						
-						if (FoundDefine) {
-							; If (in the case of `&Name`) `Name` was defined as a function, or (in the case of 
-							;  `&Name:OtherName`) `Name` was defined as a struct type, and `OtherName` was defined
-							;   as a static method of that type, we return a NODE_TYPE_DEFINE containing the resolved
-							;    FunctionDefine struct, which the compiler will then load the address of.
-							
-							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsPointer(1))
-							
-							Result~>Context->Clone(MaybeFunctionName~>Context)->Merge(this->GetCurrentTokenContext())
-							
-							if (FoundDefine->Next != null) {
-								Result->Error("Getting the address of an overloaded function is not possible")
-							}
-						}
-						else {
-							; With `&Name`, `Name` was not defined as a function. `&Name:OtherName`, any path where
-							;  `Name` or `OtherName` are not correctly defined will have error'd out by now.
-							
-							; Unfreeze to before `Name`, so it can be parsed as a regular expression
-							;  and checked for being a storage value.
-							
-							this->Unfreeze(Frozen)
-						}
-					}
-				}
-				
-				if !(Result) {
-					; If we don't have an operand for this unary operator from any of the special cases yet then
-					;  parse an expression as the operand
-					
-					Result := this->ParseExpression(GetUnaryOperatorPrecedence(NextToken))
-				}
-				
-				ASTNode* Operand := Result
-				UnaryExpression* UnaryResult := Alloc(#UnaryExpression)
-				
-				Type ResultType := Operand->ValueType
-				i8 Operator := NextToken->Value As i8
-				
-				if (Operator = OPERATOR_BANG) {
-					ResultType := this->i8->AsNonPointer()
-				}
-				else if (Operator = OPERATOR_AND) {
-					if !(Operand->IsStorageValue() || Operand->NodeType = NODE_TYPE_DEFINE) {
-						Operand->Error("Operand of the '&' operator must be a storage value.")
-					}
-					
-					ResultType := this->PointerToType(ResultType)
-				}
-				else if (Operand = OPERATOR_STAR) {
-					ResultType := this->DereferencePointerType(ResultType, Operand~>Context)
-				}
-				
-				Result := ASTNode:New(NODE_TYPE_UNARY, Alloc(#UnaryExpression), ResultType)
-				
-				Result->UnaryNode->Operand := Operand
-				Result->UnaryNode->Operator := NextToken
-				
-				Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
-			}
-		}
-		else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-			; The next token is some flavor of constant data, either written directly in the source, or
-			;  contained in an external file.
-			
-			i32 BeforeElementType := this->Freeze()
-			Type ElementType := this->ParseType()
-			
-			; Like with the TOKEN_TYPE_STRING flavors, we need to grab the correct constant buffer for
-			;  the current context of the parser. Aka either inside of a function, or outside of a function.
-			
-			i32 ConstantOffset := this->GlobalConstantBufferSize
-			i8* ConstantsBuffer := this->GlobalConstantsBuffer
-			
-			if (CurrentFunction) {
-				ConstantOffset := CurrentFunction->ConstantBufferSize
-				ConstantsBuffer := CurrentFunction->ConstantsBuffer
-			}
-			
-			i32 NewConstantBufferSize := ConstantOffset
-			
-			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
-				; For constant data contained in an external file, the syntax is `{Type file: "path"}`
-				;  which is distinct since constant data inside the source expects the `:` to be directly
-				;   after the `Type`. Meaning that the only valid value of the next token is `"file"`, and
-				;    the next token being an identifier at all is a good enough sign that this should be 
-				;     interpreted as such.
-				
-				Token* ShouldBeFile := this->GetCurrentToken()
-				
-				if !(ShouldBeFile->StringValue->Equals("file")) {
-					ShouldBeFile->Error("Unexpected token")
-				}
-				
-				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after 'file'")
-				Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
-				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
-				
-				; Read the specified file, write its data into the constant buffer, and remember the offset
-				;  of the data, and increment the size of the constant buffer
-				i8* RawFilePath := FilePathToken->StringValue->ToString()
-				
-				i64 File := FileOpen(RawFilePath, FILE_READ)
-				
-				if (File < 0) {
-					ManualErrorMessagePrelude()
-					Print("\nCouldn't open file, error code %x\n", FileGetError(File))
-					FilePathToken->Error(null)
-				}
-				
-				i32 FileSize := FileGetSize(File)
-				
-				NewConstantBufferSize += FileSize + 1
-				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
-				
-				void* FileBuffer := ConstantsBuffer + ConstantOffset
-				
-				FileRead(File, FileBuffer, FileSize)
-				
-				FileClose(File)
-				Free(RawFilePath)
-			}
-			else {
-				; Else, this fits the `{Type`
-				
-				if (GetBaseType(ElementType)->IsBuiltin = false || GetPointerDepth(ElementType) != 0) {
-					; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
-					;  easily write into the constant buffer
-					
-					this->Unfreeze(BeforeElementType)
-					this->GetNextToken()->Error("Element type must be a built in, non-pointer type")
-				}
-				
-				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after array element type")
-				
-				i32 ElementSize := GetTypeSize(ElementType)
-				i32 BeforeElements := this->Freeze()
-				i32 ElementCount := 0
-				
-				; In order to figure out how much buffer the constant buffer needs to be, first we go through
-				;  and count each element in the data
-				
-				loop {
-					this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
-					
-					ElementCount += 1
-					
-					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-						; Commas between each element are optional.
-						
-						continue
-					}
-					else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-						; A `}` will terminate this block of data
-						
-						break
-					}
-				}
-				
-				; Now, we extend the constant buffer so it can hold the additional constant data
-				
-				NewConstantBufferSize += 8 + ElementCount * ElementSize
-				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
-				
-				void* ElementBuffer := ConstantsBuffer + ConstantOffset
-				i32 ElementIndex := 0
-				
-				this->Unfreeze(BeforeElements)
-				
-				; And finally, we process the entire block of constant data elements again, but actually write
-				;  each element into the (extended) constant data buffer this time
-				
-				loop {
-					Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
-					
-					; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
-					;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
-					;   overlap zone, but those 8 bytes aren't written to the output file, and are overlapped by
-					;    any constant data following this data.
-					*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
-					ElementIndex += 1
-					
-					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-						continue
-					}
-					else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-						break
-					}
-				}
-			}
-			
-			; Update the correct constant buffer/constant buffer size, and return a NODE_TYPE_STRING
-			;  (which really should be renamed) containing the offset of the newly appended constant data.
-			
-			if (CurrentFunction) {
-				CurrentFunction->ConstantBufferSize := NewConstantBufferSize
-				CurrentFunction->ConstantsBuffer := ConstantsBuffer
-			}
-			else {
-				this->GlobalConstantBufferSize := NewConstantBufferSize
-				this->GlobalConstantsBuffer := ConstantsBuffer
-			}
-			
-			Result := ASTNode:New(NODE_TYPE_STRING, ConstantOffset, this->PointerToType(ElementType))
-			
-			MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, Result~>Context)
-		}
-		else {
-			; Else, this token isn't something we expected here, so error out
-			
-			NextToken->Error("Unexpected token in expression")
-		}
-		
-		return Result
-	}
-	
-	define ASTNode* ParseExpression(i8 Precedence) {
-		; Parses and returns and expression only containing operators with higher precedence than Precedence
-		
-		ASTNode* Result := this->ParseExpressionOperand()
-		
-		i32 BeforeOperator := this->Freeze()
-		Token* OperatorToken := this->GetNextToken()
-		
-		while (OperatorToken->Is(TOKEN_TYPE_OPERATOR) && GetOperatorPrecedence(OperatorToken) >= Precedence) {
-			i8 NewPrecedence := GetOperatorPrecedence(OperatorToken)
-			
-			if (GetOperatorAssociation(OperatorToken) = LEFT_ASSOCIATIVE) {
-				NewPrecedence += 1
-			}
-			
-			ASTNode* Operand := null
-			i8 Operator := (OperatorToken->Value) As i8
-			
-			i8 IsStructAccess := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER
-			
-			if (Operator = OPERATOR_OPEN_BRACKET) {
-				; If the next operator is `[`, then parse the index expression (for the right operand) and consume the closing `]`
-				
-				Operand := this->ParseExpression(0)
-				
-				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing bracket for array access")
-			}
-			else if (Operator = OPERATOR_AS) {
-				; Else if the next operator is `as` then parse a type name as the right operand
-				
-				Operand := this->ParseTypeNode()
-			}
-			else if (IsStructAccess) {
-				; Else if this is one of the access operators, consume a field name
-				
-				Token* Right := this->Consume(TOKEN_TYPE_IDENTIFIER, "Struct field name expected")
-				
-				;Operand := ASTNode:New(NODE_TYPE_IDENTIFIER, Right->Value, this->i64->AsNonPointer())
-				;CopyContext(Right~>Context, Operand~>Context)
-			}
-			else {
-				; Else, no special case, just parse and expression at the expected precedence level as the right operand
-				
-				Operand := this->ParseExpression(NewPrecedence)
-			}
-			
-			if (Operator = OPERATOR_STAR) {
-				; If we have `(a) * (b) := (c)`, we can safely assume that it was intended as `(a); *(b) := (c)`, 
-				;  since the original version is totally nonsensical 
-				;   (as a multiplication can never result in a storage value)
-				
-				Token* MaybeAssignmentOperatorToken := this->PeekNextToken()
-				
-				if (MaybeAssignmentOperatorToken->Is(TOKEN_TYPE_OPERATOR)) {
-					i32 MaybeAssignmentOperator := MaybeAssignmentOperatorToken->IntegerValue As i32
-					
-					if (OPERATOR_FIRST_ASSIGNMENT <= MaybeAssignmentOperator && MaybeAssignmentOperator <= OPERATOR_LAST_ASSIGNMENT) {
-						; We can force the correct interpretation by backtracking to right before the last operator 
-						; (which happens to be the `*`). Then, if we just return `(a)` we leave `*(b) := (c)` 
-						;  to be parsed by the next call to `ParseExpression`, resulting in two 
-						;   seperate expressions which are both semantically and logically correct.
-						
-						; Even better is that the "unfreeze and return" is default behavior for the end of an
-						;  expression so we can just break out of the expression parsing loop
-						
-						break
-					}
-				}
-				
-				; The token after the right side of the `*` was not an assignment operator, continue like normal
-			}
-			
-			; Fold the left/operator/right into just the left
-			
-			ASTNode* Left := Result
-			
-			Type LeftType := Left->ValueType
-			TypeInfo* LeftBase := GetBaseType(LeftType)
-			i16 LeftDepth := GetPointerDepth(LeftType)
-			
-			if (IsStructAccess) {
-				; If a local struct is accessed using `->`, it is an error. 
-				; Or If a pointed-to structure is accessed via `.`, it is an error
-				
-				if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
-					OperatorToken->Error("Wrong operator for left side pointer depth")
-				}
-				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
-					; Or, if the accessed type is not a struct, or is incomplete, it is an error
-					
-					OperatorToken->Error("Can't access field of non-struct or incomplete types")
-				}
-				
-				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a method call
-					
-					if (LeftDepth = 0) {
-						; If `this` is a local struct, we change it to a `ThisType*` so the parameter type matches
-						;  and the compiler will make sure to pass the address of `this` instead of the value.
-						
-						Left->ValueType := this->PointerToType(Left->ValueType)
-					}
-					
-					i8* ErrorMessage := null
-					Result := this->TryParseFunctionCall(Right, LeftBase~>Methods, 1, &ErrorMessage)
-					
-					if (ErrorMessage) {
-						this->GetCurrentToken()->Error(ErrorMessage)
-					}
-					
-					Result->CallNode->Parameters[0] := Left
-				}
-				else {
-					HashMapElement* FieldElement := LeftBase~>Fields->Get(Right->StringValue)
-					
-					if (FieldElement = null) {
-						Right->Error("Unknown struct field")
-					}
-					
-					StructField* Field := FieldElement->Value
-					
-					StructAccessExpression* Access := Alloc(#StructAccessExpression)
-					
-					Access->Left := Left
-					Access->Operator := OperatorToken
-					Access->TargetField := Field
-					
-					Type FieldType := Field->ValueType
-					
-					if (Operator = OPERATOR_TILDE_GREATER && !FieldType.IsArray) {
-						FieldType := this->PointerToType(FieldType)
-					}
-					else if (Operator != OPERATOR_TILDE_GREATER && FieldType.IsArray) {
-						OperatorToken->Error("Array fields can only be accessed with the `~>` operator")
-					}
-					
-					Result := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, FieldType)
-					
-					Result~>Context->Clone(Left~>Context)->Merge(Right~>Context)
-				}
-			}
-			else {
-				Type ResultType := Result->ValueType
-				
-				if (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT) {
-					; If this is an assignment, do some extra verification
-					
-					if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
-						Left->Error("`this` can't be assigned to")
-					}
-					else if (LeftDepth = 0 && LeftBase->IsStructType) {
-						Left->Error("Structures can't be directly assigned")
-					}
-					else if !(Left->IsStorageValue()) {
-						Left->Error("The left side operand of assignment operators must be a storage value")
-					}
-				}
-				else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
-					ResultType := this->i8->AsNonPointer()
-				}
-				else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
-					; Reduce our operand to the smallest type which can contain it (if it is an integer)
-					
-					this->DowncastIntegerNode(Operand)
-					
-					; Ensure that our shift count is an i8, as anything bigger is definitely invalid
-					
-					CheckTypes(this->void, Operand->ValueType, this->i8->AsNonPointer(), Operand)
-					
-					if (GetTypeSize(LeftType) < 4) {
-						ResultType := this->i32->AsNonPointer()
-					}
-					else {
-						ResultType := Result->ValueType
-					}
-				}
-				else if (Operator = OPERATOR_AS) {
-					ResultType := Operand->ValueType
-				}
-				else if (Operator = OPERATOR_OPEN_BRACKET) {
-					if !(GetBaseType(Operand->ValueType)->IsBuiltin) {
-						Operand->Error("Invalid `[Index]` type.")
-					}
-					
-					ResultType := this->DereferencePointerType(LeftType, Left~>Context)
-				}
-				else {
-					; This is only reached for regular old operators, like + or -
-					; Which also happens to be the set of operators which are hard to decide a result type for
-					
-					; This is "solved" by checking if `Right As Left` could be made as an implicit cast,
-					;  and checking the same for `Left As Right`. 
-					; If `Right As Left` (aka RightIsCompatibleWithLeft) is fine, then we use the left type
-					;  as the result type, and the other way around. If neither cast is fine, then we have
-					;   an operation with invalid types.
-					
-					i8 LeftIsCompatibleWithRight := !CheckTypes(this->void, LeftType, Operand->ValueType, null)
-					i8 RightIsCompatibleWithLeft := !CheckTypes(this->void, Operand->ValueType, LeftType, null)
-					
-					if (RightIsCompatibleWithLeft) {
-						ResultType := LeftType
-					}
-					else if (LeftIsCompatibleWithRight) {
-						ResultType := Operand->ValueType
-					}
-					else {
-						Left~>Context->Merge(this->GetCurrentTokenContext())->Error("Incomplete operand types")
-					}
-					
-					if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
-						; For `&&` and `||`, `CheckTypes` is only called for the error messages, and the 
-						;  actual result type is just a regular old i8
-						ResultType := this->i8->AsNonPointer()
-					}
-					
-					; If the left or right operands are integers, elevate them to the ResultType to ensure that
-					;  the compiler will cast them (instead of a runtime cast)
-					
-					if (Left->NodeType = NODE_TYPE_INTEGER) {
-						Left->ValueType := ResultType
-					}
-					if (Operand->NodeType = NODE_TYPE_INTEGER) {
-						Operand->ValueType := ResultType
-					}
-				}
-				
-				Result := ASTNode:New(NODE_TYPE_BINARY, Alloc(#BinaryExpression), ResultType)
-				
-				Result->BinaryNode->Left := Left
-				Result->BinaryNode->Operator := Operator
-				Result->BinaryNode->Right := Operand
-				
-				Result~>Context->Clone(Left~>Context)->Merge(this->GetCurrentTokenContext())
-			}
-			
-			; Update where to restore the parser to once the expression ends
-			BeforeOperator := this->Freeze()
-			
-			; Update the next operator
-			OperatorToken := this->GetNextToken()
-		}
-		
-		this->Unfreeze(BeforeOperator)
-		
-		return Result
-	}
-	define ASTNode* ParseExpression() {
-		return this->ParseExpression(0)
-	}
-	
-	declare ASTNode* ParseStatement()
-	
-	define void IgnoreBlock() {
-		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open '{' for block.")
-		
-		i32 Depth := 1
-		
-		loop {
-			Token* Next := this->GetNextToken()
-			
-			if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-				Depth -= 1
-			}
-			else if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-				Depth += 1
-			}
-			
-			if (Depth = 0) {
-				break
-			}
-		}
-	}
-	define Block* ParseBlock() {
-		; Parses an array of statements, and builds a Block structure containing them
-		
-		Token* OpenBrace := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
-		
-		; Set up a buffer for the statements
-		i16 StatementBufferSize := 8
-		ASTNode** Statements := Alloc(StatementBufferSize * 8) As ASTNode**
-		i16 StatementCount := 0
-		i8 HasHadUnconditionalReturn := false
-		
-		i32 Depth := 1
-		
-		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {	
-			loop {
-				; Loop until we hit a `}`
-				
-				if (StatementCount * 8 <= StatementBufferSize) {
-					; If the buffer needs to be expanded, expand it
-					
-					Statements := ReAlloc(Statements As void*, (StatementCount + 10) * 8) As ASTNode**
-					StatementBufferSize += (10 * 8)
-				}
-				
-				; Handle `linux {` and `windows {` by ignoring both keywords, and conditionally ignoring the 
-				;  block following them depending on which platform we're targetting
-				
-				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_LINUX)) {
-					if (this->Config->OutputFormat = OUTPUT_ELF) {
-						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
-						Depth += 1
-					}
-					else {
-						this->IgnoreBlock()
-					}
-				}
-				else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_WINDOWS)) {
-					if (this->Config->OutputFormat = OUTPUT_PE) {
-						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace.")
-						Depth += 1
-					}
-					else {
-						this->IgnoreBlock()
-					}
-				}
-				else {
-					ASTNode* NextStatement := this->ParseStatement()
-					
-					if (NextStatement->NodeType = NODE_TYPE_RETURN) {
-						HasHadUnconditionalReturn := true
-					}
-					else if (NextStatement->NodeType = NODE_TYPE_IF) {
-						IfGroup* NextIf := NextStatement->IfNode
-						i8 AllBranchesHaveReturn := true
-						
-						for (i32 BranchIndex := 0, BranchIndex < NextIf->BranchCount, BranchIndex += 1) {
-							AllBranchesHaveReturn &= NextIf->Bodies[BranchIndex]->HasUnconditionalReturn
-						}
-						
-						if (NextIf->ElseBranch && AllBranchesHaveReturn) {
-							HasHadUnconditionalReturn |= NextIf->ElseBranch->HasUnconditionalReturn
-						}
-					}
-					
-					Statements[StatementCount] := NextStatement
-					StatementCount += 1
-				}
-				
-				if (this->NextTokenMatches(TOKEN_TYPE_EOF)) {
-					OpenBrace->Error("Expected close brace for block")
-				}
-				
-				i8 BreakOuter := false
-				
-				while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-					; Only break the outer loop once all opened `{` (by linux/windows statements) for this block
-					; have been matched with a closing `}`
-					
-					Depth -= 1
-					
-					BreakOuter := Depth = 0
-					
-					if (BreakOuter) {
-						break
-					}
-				}
-				
-				if (BreakOuter) {
-					break
-				}
-			}
-		}
-		
-		; Allocate a block structure and populate it with the statement list/count
-		Block* NewBlock := Alloc(#Block) As Block*
-		
-		NewBlock->Statements := Statements
-		NewBlock->StatementCount := StatementCount
-		NewBlock->HasUnconditionalReturn := HasHadUnconditionalReturn
-		
-		return NewBlock
-	}
+	#Require "./src/compiler/Parser/Expression.rlx"
 	
 	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
@@ -1602,6 +547,8 @@ struct ParserState {
 		if (PotentialType != TYPE_NONE && *ErrorMessage = null) {
 			; If we could parse a full type name, then we *might* be dealing with a variable declaration.
 			;  But we're not sure yet.
+			
+			i32 DefaultValueExpressionStart := this->Freeze()
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
 				Token* NameToken := this->GetCurrentToken()
@@ -1621,17 +568,16 @@ struct ParserState {
 				; If we're declaring a local/global (but not a parameter) allow for an optional default value
 				;  expression after, marked by `Type Name` being followed by the `:=` operator.
 				
-				; Note: the parser is still after `Type`, since we got `Name` by calling `this->PeekNextToken()`
-				;  which means that `this->ParseExpression()` will be (correctly) grabbing `Name := Default`.
+				; Note: the parser needs to backtrack to before `Name :=` and parse the entire `Name := Value` 
+				;  expression if it is present
 				
 				if (ForParameter = false && this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+					this->Unfreeze(DefaultValueExpressionStart)
+					
 					return this->ParseExpression()
 				}
 				else {
-					; But, if we aren't parsing a default value, then we need to manually consume `Name`
-					;  otherwise it will get caught as an error by the caller
-					
-					this->GetNextToken()
+					return null
 				}
 			}
 			else {
@@ -1644,55 +590,8 @@ struct ParserState {
 		return null
 	}
 	
-	define ASTNode* ParseStatement() {
-		ASTNode* Result := null
-		
-		this->PeekNextToken()~>Context->Warn("Marker")
-		
-		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
-			Token* NextToken := this->GetCurrentToken()
-			i8 NextKeyword := NextToken->Value As i8
-			
-			if (NextKeyword = KEYWORD_CONTINUE || NextKeyword = KEYWORD_BREAK) {
-				Result := ASTNode:New(NODE_TYPE_CONTINUEBREAK, NextKeyword = KEYWORD_CONTINUE)
-				Result~>Context->Clone(NextToken~>Context)
-				
-				if !(this->InLoop) {
-					Result->Error("Continue/Break must be inside loops")
-				}
-			}
-			else if (NextKeyword = KEYWORD_RETURN) {
-				if (this->CurrentFunction->ReturnType = this->void->AsNonPointer()) {
-					Result := ASTNode:New(NODE_TYPE_INTEGER, 0, this->i8->AsNonPointer())
-					Result := ASTNode:New(NODE_TYPE_RETURN, Result, TYPE_NONE)
-					
-					if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-						this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
-					}
-				}
-				else {
-					ASTNode* ExpressionToReturn := this->DowncastIntegerNode(this->ParseExpression())
-					Type ExpectedReturnType := this->CurrentFunction->ReturnType
-					
-					CheckTypes(this->void, TYPE_NONE, ExpectedReturnType, ExpressionToReturn)
-					
-					Result := ASTNode:New(NODE_TYPE_RETURN, ExpressionToReturn, TYPE_NONE)
-				}
-			}
-		}
-		else {
-			i8* ErrorMessage := null
-			Result := this->TryParseVariableDeclaration(false, false, &ErrorMessage)
-			
-			if (ErrorMessage != null) {
-				Result := this->ParseExpression()
-			}
-			
-			Result := ASTNode:New(NODE_TYPE_EXPRESSION, Result, TYPE_NONE)
-		}
-		
-		return Result
-	}
+	#Require "./src/compiler/Parser/Assembly.rlx"
+	#Require "./src/compiler/Parser/Statement.rlx"
 	
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken, TypeInfo* ThisType) {
 		i8 Mode := FirstToken->Value As i8
@@ -1798,7 +697,9 @@ struct ParserState {
 					break
 				}
 				else if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-					; If the next token isn't a comma, then break the loop, otherwise consume the command and continue
+					; If the next token isn't a comma, then break the loop, otherwise consume the command and 
+					;  continue
+					
 					break
 				}
 			}
@@ -1882,7 +783,7 @@ struct ParserState {
 		;  the different function body types.
 		
 		if (ForImport) {
-			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'.")
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'")
 			
 			SafeWideString* FileName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file name expected")->StringValue
 			
@@ -1894,7 +795,7 @@ struct ParserState {
 			
 			SafeWideString* FunctionName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source function name expected")->StringValue
 			
-			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'.")
+			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
 			
 			NewDefine->IsImported := true
 			NewDefine->ImportFileName := FileName
@@ -1906,7 +807,7 @@ struct ParserState {
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
 				NewDefine->Attribute := KEYWORD_ASSEMBLY
 				
-				;NewDefine->AssemblyBody := this->ParseAssembly(false)->AssemblyBody
+				NewDefine->AssemblyBody := this->ParseAssembly(false)->AssemblyValue
 			}
 			else {
 				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
@@ -1931,9 +832,6 @@ struct ParserState {
 				
 				if (NewDefine->ReturnType != this->void->AsNonPointer()) {
 					if !(NewDefine->Body->HasUnconditionalReturn) {
-						Print("Body has %i statements\n", NewDefine->Body->StatementCount)
-						Print("Statements[0] is a %i\n", NewDefine->Body->Statements[0]->NodeType)
-						Print("Statements[1] is a %i\n", NewDefine->Body->Statements[1]->NodeType)
 						NewDefine~>Context->Error("Function has non-void return type, but no unconditional return statement")
 					}
 				}
@@ -2051,7 +949,7 @@ struct ParserState {
 				}
 			}
 			
-			NextField->ValueType := this->ParseType()
+			NextField->ValueType := this->ParseType(true)
 			
 			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
 			SafeWideString* FieldName := FieldNameToken->StringValue

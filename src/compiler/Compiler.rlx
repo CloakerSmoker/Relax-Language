@@ -114,7 +114,7 @@ struct CompilerState {
 ==========================================
 */
 
-#Require "./src/compiler/ASTOptimize.rlx"
+#Require "./src/compiler/Parser/ASTOptimize.rlx"
 #Require "./src/compiler/CodeGen.rlx"
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
@@ -825,11 +825,17 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		ASTNode** GlobalDefaults := Compiler->Parser->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
 		
+		Print("GlobalDefaults = %x, Length = %i\n", GlobalDefaults, Length)
+		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
+			Print("	GlobalDefault %i\n", GlobalDefaultIndex)
+			
 			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
 			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 			
 			if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+				NextGlobalDefault->Warn("Global default")
+				
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
@@ -1883,6 +1889,7 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 	
 	i8 LeftSize := GetTypeSize(Left->ValueType) As i8
 	i8 RightSize := GetTypeSize(Right->ValueType) As i8
+	ExpressionToCompile->Left->Warn("Poo")
 	i8 ResultSize := GetTypeSize(ResultType) As i8
 	
 	i8 LeftRegister := ResultRegister
