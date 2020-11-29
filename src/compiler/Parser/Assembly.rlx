@@ -374,10 +374,10 @@
 				Next->LabelNumber := FoundLabel->LabelNumber
 			}
 			else {
-				Next->Size := ((Register >> 8) & 0x0F)
+				Next->Size := ((Register >> 8) & 0xFF)
 				Next->Type := Next->Size << OP_R_OFFSET
 				
-				Next->RegisterNumber := Register & 0x0F
+				Next->RegisterNumber := Register & 0xFF
 			}
 			
 			Next~>Context->Clone(NextToken~>Context)
@@ -418,7 +418,7 @@
 	}
 	
 	define InstructionNode* ParseInstruction(AssemblyBlock* ThisBlock) {
-		Token* InstructionToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected instruction name.")
+		Token* InstructionToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected instruction name")
 		SafeWideString* InstructionName := InstructionToken->StringValue
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
@@ -429,7 +429,7 @@
 				FoundLabel := FoundLabelElement->Value As InstructionNode*
 				
 				if (FoundLabel->Type != INSTRUCTION_LABEL_INCOMPLETE) {
-					TokenError(InstructionToken, "Duplicate label definition")
+					InstructionToken->Error("Duplicate label definition")
 				}
 			}
 			else {
@@ -475,7 +475,7 @@
 					
 					Operands[OperandIndex] := Next
 					
-					OperandTypes := OperandTypes | (Next->Type << (16 * OperandIndex As i8))
+					OperandTypes |= Next->Type << (16 * OperandIndex As i8)
 					
 					if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 						break
@@ -517,14 +517,14 @@
 	}
 	
 	define ASTNode* ParseAssembly(i8 InFunction) {
-		AssemblyBlock* ThisBlock := Alloc(#AssemblyBlock)
+		AssemblyBlock* ThisBlock := Alloc(SHIM_SIZEOF_ASSEMBLYBLOCK)
 		
 		ThisBlock~>Labels->Initialize()
 		
 		if (InFunction && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			loop {
 				Token* RegisterNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected register name")
-				i32 TargetRegister := this->ParseRegisterName(RegisterNameToken, 0) & 0x0F
+				i32 TargetRegister := this->ParseRegisterName(RegisterNameToken, 8) & 0xFF
 				
 				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected register value assignment")
 				
@@ -561,5 +561,5 @@
 		ThisBlock->Instructions := Instructions
 		ThisBlock->InstructionCount := InstructionCount
 		
-		return ASTNode:New(NODE_TYPE_ASSEMBLY, ThisBlock, TYPE_NONE)
+		return ASTNode:New(NODE_TYPE_ASSEMBLY, ThisBlock)
 	}

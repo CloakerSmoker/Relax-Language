@@ -88,7 +88,7 @@
 		return Result
 	}
 	
-	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, i32 ParameterOffset, i8** ErrorMessage) {
+	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, ASTNode* ThisParameter, i8** ErrorMessage) {
 		Token* StaticMethodNameToken := null
 		i8 HasFollowingColon := false
 		
@@ -109,14 +109,20 @@
 			return null
 		}
 		
-		i8 ParameterCount := ParameterOffset
+		i8 ParameterCount := 0
+		
+		if (ThisParameter != null) {
+			ParameterCount += 1
+		}
+		
 		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+		
+		if (ThisParameter != null) {
+			Parameters[0] := ThisParameter
+		}
 		
 		CallExpression* Result := null
 		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, NameToken~>Context, this->GetCurrentTokenContext())
-		
-		Print("Call node, type = %i ", ResultNode->NodeType)
-		ResultNode->Warn("")
 		
 		SafeWideString* Name := NameToken->StringValue
 		
@@ -322,7 +328,7 @@
 		return ResultNode
 	}
 	define ASTNode* TryParseFunctionCall(Token* NameToken, i8** ErrorMessage) {
-		return this->TryParseFunctionCall(NameToken, this~>Functions, 0, ErrorMessage)
+		return this->TryParseFunctionCall(NameToken, this~>Functions, null, ErrorMessage)
 	}
 	
 	define ASTNode* ParseExpressionOperand() {
@@ -771,16 +777,16 @@
 				; If a local struct is accessed using `->`, it is an error. 
 				; Or If a pointed-to structure is accessed via `.`, it is an error
 				
-				if (LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER) {
+				if ((LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER)) {
 					OperatorToken->Error("Wrong operator for left side pointer depth")
 				}
-				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete) {
+				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")
 				}
 				
-				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				if (this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a 
 					;  method call
 					
@@ -793,13 +799,11 @@
 					}
 					
 					i8* ErrorMessage := null
-					Result := this->TryParseFunctionCall(RightToken, LeftBase~>Methods, 1, &ErrorMessage)
+					Result := this->TryParseFunctionCall(RightToken, LeftBase~>Methods, Left, &ErrorMessage)
 					
 					if (ErrorMessage) {
 						this->GetCurrentToken()->Error(ErrorMessage)
 					}
-					
-					Result->CallNode->Parameters[0] := Left
 				}
 				else {
 					HashMapElement* FieldElement := LeftBase~>Fields->Get(RightToken->StringValue)
@@ -881,6 +885,9 @@
 					
 					ResultType := this->DereferencePointerType(LeftType, Left~>Context)
 				}
+				else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
+					ResultType := this->i8->AsNonPointer()
+				}
 				else {
 					; This is only reached for regular old operators, like + or -
 					; Which also happens to be the set of operators which are hard to decide a result type for
@@ -903,12 +910,6 @@
 					}
 					else {
 						Left~>Context->Merge(this->GetCurrentTokenContext())->Error("Incompatible operand types")
-					}
-					
-					if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
-						; For `&&` and `||`, `CheckTypes` is only called for the error messages, and the 
-						;  actual result type is just a regular old i8
-						ResultType := this->i8->AsNonPointer()
 					}
 					
 					; If the left or right operands are integers, elevate them to the ResultType to ensure that

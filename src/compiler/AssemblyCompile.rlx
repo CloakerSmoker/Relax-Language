@@ -114,7 +114,7 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 	}
 	
 	if (OperationSize = 1 && !(I->Flags & E_BYTE_OPCODE_N1)) {
-		PushByte(Compiler, (I->Opcode - 1) As i16)
+		PushByte(Compiler, I~>Opcode[0] - 1 As i16)
 	}
 	else {
 		PushOpcode(Compiler, I)
@@ -230,7 +230,8 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 
 define void CompileAssembly(CompilerState* Compiler, AssemblyBlock* ToCompile) {
 	; Since there's 16 different registers you could assign, we just reserve 16 ASTNode* inside of the
-	;  AssemblyBlock struct, which is fine since only like 10 will ever be allocated
+	;  AssemblyBlock struct
+	
 	for (i8 RegisterValueIndex := 0, RegisterValueIndex < 16, RegisterValueIndex += 1) {
 		ASTNode* ThisRegisterValue := ToCompile~>RegisterValues[RegisterValueIndex]
 		
@@ -240,6 +241,7 @@ define void CompileAssembly(CompilerState* Compiler, AssemblyBlock* ToCompile) {
 			;  compiled a value for, the safest bet is to just push the value on the stack
 			;   and pop them into the actual registers after we know the registers can't get
 			;    clobbered anymore.
+			
 			CompileExpression(Compiler, RAX, ThisRegisterValue)
 			EmitPush_R64(Compiler, RAX)
 		}

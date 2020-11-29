@@ -240,8 +240,13 @@ struct AssemblyBlock {
 	InstructionNode** Instructions,
 	HashMap Labels
 	
-	ASTNode*{16} RegisterValues
+	union {
+		ASTNode*{16} RegisterValues
+		i8 Shim
+	}
 }
+
+i32 SHIM_SIZEOF_ASSEMBLYBLOCK := 8 + 8 + #HashMap + 16 * 8
 
 i8 INSTRUCTION_REGULAR := 0
 i8 INSTRUCTION_LABEL := 1
@@ -333,7 +338,20 @@ struct FunctionDefine {
 		}
 		
 		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
-			Length += GetTypeStringLength(this->Parameters[Index]->Type)
+			if (Index = 0 && this->IsMethod) {
+				; Skip the `this` parameter
+				
+				continue
+			}
+			
+			VariableInfo* NextParameter := this->Parameters[Index]
+			
+			if (NextParameter->IsVariadic) {
+				Length += 3
+			}
+			else {
+				Length += GetTypeStringLength(NextParameter->Type)
+			}
 			
 			if (Index + 1 != this->ParameterCount) {
 				Length += 2
@@ -379,10 +397,24 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
-			Type ParameterType := this->Parameters[ParameterIndex]->Type
+			if (ParameterIndex = 0 && this->IsMethod) {
+				; Skip the `this` parameter
+				
+				continue
+			}
 			
-			StringifyType(&Buffer[Offset], ParameterType)
-			Offset += GetTypeStringLength(ParameterType)
+			VariableInfo* NextParameter := this->Parameters[ParameterIndex]
+			
+			if (NextParameter->IsVariadic) {
+				MoveMemory(&Buffer[Offset], "...", 3)
+				Offset += 3
+			}
+			else {
+				Type ParameterType := NextParameter->Type
+			
+				StringifyType(&Buffer[Offset], ParameterType)
+				Offset += GetTypeStringLength(ParameterType)
+			}
 			
 			if (ParameterIndex + 1 < this->ParameterCount) {
 				Buffer[Offset] := ','
@@ -394,12 +426,7 @@ struct FunctionDefine {
 		Buffer[Offset] := ')'
 		Offset += 1
 		
-		Print("%s\n", Buffer)
-		
-		if (Offset != this->GetStringLength() - 1) {
-			Print("SOMETHING'S FUCKY, %i %i\n", Offset, this->GetStringLength())
-			Exit(1)
-		}
+		;Print("%s\n", Buffer)
 	}
 }
 
@@ -478,7 +505,7 @@ struct ASTNode {
 	}
 	
 	define i8 IsStorageValue() {
-		this~>Context->Warn("ISV")
+		;this~>Context->Warn("ISV")
 		
 		if (this->NodeType = NODE_TYPE_UNARY) {
 			return this->UnaryNode->Operator->Value = OPERATOR_STAR
@@ -602,11 +629,11 @@ struct ASTVisitor {
 		for (i32 Index := 0, Index < Count, Index += 1) {
 			ASTNode* Node := Nodes[Index]
 			
-			Print("ASTVisitor visit type %i\n", Node->NodeType)
-		
-			if (Node~>Context->SourceFilePath) {
-				Node->Warn(null)
-			}
+			;Print("ASTVisitor visit type %i\n", Node->NodeType)
+			;
+			;if (Node~>Context->SourceFilePath) {
+			;	Node->Warn(null)
+			;}
 			
 			if (Node->LastVisitor = this) {
 				continue

@@ -213,10 +213,43 @@
 		return ASTNode:New(NODE_TYPE_WHILE, Result, TYPE_NONE)
 	}
 	
+	define ASTNode* ParseTry() {
+		TryCatch* Result := Alloc(#TryCatch)
+		
+		Result->Body := this->ParseBlock()
+		
+		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_CATCH)) {
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				i8* ErrorMessage := null
+				VariableInfo* CatchCodeVariable := null
+				
+				this->TryParseVariableDeclaration(false, true, &ErrorMessage, &CatchCodeVariable)
+				
+				if (ErrorMessage != null) {
+					ASTNode* CatchCodeNode := this->TranslateTokenToNode(this->GetNextToken())
+					
+					if (CatchCodeNode->NodeType != NODE_TYPE_VARIABLE) {
+						CatchCodeNode->Error("Expected variable name")
+					}
+					
+					CatchCodeVariable := CatchCodeNode->VariableValue
+				}
+				
+				Result->CatchCodeVariable := CatchCodeVariable
+				
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' for 'catch ('")
+			}
+			
+			Result->CatchBody := this->ParseBlock()
+		}
+		
+		return ASTNode:New(NODE_TYPE_TRY, Result)
+	}
+	
 	define ASTNode* ParseStatement() {
 		ASTNode* Result := null
 		
-		this->PeekNextToken()~>Context->Warn("Marker")
+		;this->PeekNextToken()~>Context->Warn("Marker")
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
 			Token* NextToken := this->GetCurrentToken()
@@ -260,6 +293,9 @@
 			else if (NextKeyword = KEYWORD_WHILE) {
 				Result := this->ParseWhile()
 			}
+			else if (NextKeyword = KEYWORD_TRY) {
+				Result := this->ParseTry()
+			}
 			else if (NextKeyword = KEYWORD_LOOP) {
 				i8 OldInLoop := this->InLoop
 				this->InLoop := true
@@ -290,7 +326,7 @@
 			Result := ASTNode:New(NODE_TYPE_EXPRESSION, Result)
 		}
 		
-		this->PeekNextToken()~>Context->Warn("Tail")
+		;this->PeekNextToken()~>Context->Warn("Tail")
 		
 		return Result
 	}

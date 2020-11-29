@@ -177,41 +177,14 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 		Print("%x	 - %i	(%i)	", Compiler->CodeBase + TargetFunction->CodeOffset, Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
 	}
 	
-	if (TargetFunction->IsMethod) {
-		PrintSafeString(TargetFunction->MethodOfTypeName)
-		
-		if (TargetFunction->IsMethod = FUNCTION_IS_STATIC_METHOD) {
-			PrintCharacter(':')
-		}
-		else {
-			PrintCharacter('.')
-		}
-	}
+	i32 NameBufferSize := TargetFunction->GetStringLength()
+	i8* NameBuffer := Alloc(NameBufferSize)
 	
-	PrintSafeString(TargetFunction->Name)
+	TargetFunction->StringifyInto(NameBuffer)
 	
-	if (IsOverload) {
-		PrintCharacter('(')
-		
-		for (i32 ParameterIndex := 0, ParameterIndex < TargetFunction->ParameterCount, ParameterIndex += 1) {
-			VariableInfo* NextParameter := TargetFunction->Parameters[ParameterIndex]
-			
-			if (NextParameter->IsVariadic) {
-				PrintLiteral('...')
-			}
-			else {
-				PrintType(NextParameter->Type)
-			}
-			
-			if (ParameterIndex + 1 != TargetFunction->ParameterCount) {
-				PrintLiteral(', ')
-			}
-		}
-		
-		PrintCharacter(')')
-	}
+	Print("%s^F0\n", NameBuffer)
 	
-	Print("^F0\n")
+	Free(NameBuffer)
 }
 
 define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunction, i8 IsOverload) {
@@ -231,7 +204,7 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 		ContextError(BaseFunction~>Context, "Function is declared, but never defined.")
 	}
 	else {
-		i8 IsMain := SafeStringEqualsAString(BaseFunction->Name, "Main")
+		i8 IsMain := BaseFunction->Name->Equals("Main")
 		
 		if (BaseFunction->CallCount != 0) {
 			Compiler->FunctionCount += 1
@@ -655,7 +628,7 @@ define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionT
 }
 
 declare void CompileBlock(CompilerState*, Block*)
-;declare void CompileAssembly(CompilerState*, AssemblyBlock*)
+declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
@@ -685,7 +658,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
-		;CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
+		CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
 		return FunctionOffset
 	}
 	
@@ -825,17 +798,11 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		ASTNode** GlobalDefaults := Compiler->Parser->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
 		
-		Print("GlobalDefaults = %x, Length = %i\n", GlobalDefaults, Length)
-		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
-			Print("	GlobalDefault %i\n", GlobalDefaultIndex)
-			
 			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
 			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 			
 			if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
-				NextGlobalDefault->Warn("Global default")
-				
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
@@ -960,7 +927,7 @@ define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 		CompileExpression(Compiler, RAX, NodeToCompile->ExpressionStatement)
 	}
 	else if (NodeType = NODE_TYPE_ASSEMBLY) {
-		;CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
+		CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
 	}
 }
 
@@ -1889,7 +1856,6 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 	
 	i8 LeftSize := GetTypeSize(Left->ValueType) As i8
 	i8 RightSize := GetTypeSize(Right->ValueType) As i8
-	ExpressionToCompile->Left->Warn("Poo")
 	i8 ResultSize := GetTypeSize(ResultType) As i8
 	
 	i8 LeftRegister := ResultRegister
@@ -2301,4 +2267,4 @@ define void CompileTry(CompilerState* Compiler, TryCatch* TryToCompile) {
 	; }
 }
 
-;#Include ./src/compiler/AssemblyCompile.rlx
+#Require "./src/compiler/AssemblyCompile.rlx"

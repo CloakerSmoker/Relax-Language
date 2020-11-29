@@ -537,7 +537,7 @@ struct ParserState {
 	
 	#Require "./src/compiler/Parser/Expression.rlx"
 	
-	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
+	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage, VariableInfo** OutNewVariable) {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
 		;  and returns an expression which will set that variable to an optional default value (if allowed)
 		
@@ -562,6 +562,10 @@ struct ParserState {
 				NewVariable->Type := PotentialType
 				NewVariable->IsGlobal := ForGlobalVariable
 				NewVariable->IsParameter := ForParameter
+				
+				if (OutNewVariable != 0) {
+					*OutNewVariable := NewVariable
+				}
 				
 				this->AddVariable(NewVariable, NameToken)
 				
@@ -588,6 +592,9 @@ struct ParserState {
 		this->Unfreeze(Before)
 		
 		return null
+	}
+	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage) {
+		return this->TryParseVariableDeclaration(ForGlobalVariable, ForParameter, ErrorMessage, null As VariableInfo**)
 	}
 	
 	#Require "./src/compiler/Parser/Assembly.rlx"
@@ -851,8 +858,7 @@ struct ParserState {
 		return this->ParseFunctionDefinition(Namespace, FirstToken, null)
 	}
 	
-	define void ParseStructDefinition() {
-		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
+	define TypeInfo* ParseCustomTypeName(Token* NameToken, i8 Flags) {
 		SafeWideString* Name := NameToken->StringValue
 		
 		TypeInfo* NewType := null
@@ -874,8 +880,16 @@ struct ParserState {
 		else {
 			; We didn't find a type by this name, so we can add it like normal
 			
-			NewType := this->AddType(Name, 0, TYPE_STRUCT)
+			NewType := this->AddType(Name, 0, Flags)
 		}
+		
+		return NewType
+	}
+	
+	define void ParseStructDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
+		
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_STRUCT)
 		
 		; All of the "namespaces" a TypeInfo structure contains need to be initialized
 		
@@ -935,7 +949,7 @@ struct ParserState {
 						; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
 						;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
 						Method->IsMethod := true + IsStaticMethod
-						Method->MethodOfTypeName := Name
+						Method->MethodOfTypeName := NameToken->StringValue
 						
 						; Ignore commas after methods, they aren't actually needed for parsing
 						this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
@@ -1014,6 +1028,88 @@ struct ParserState {
 		NewType->IsIncomplete := false
 	}
 	
+	define void ParseBitsDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
+		
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_BITS)
+		
+		HashMap* Fields := NewType~>Fields
+		
+		Fields->Initialize()
+		
+		this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
+		
+		ASTNode* BackingTypeNode := this->ParseTypeNode()
+		Type BackingType := BackingTypeNode->ValueType
+		
+		TypeInfo* BackingBase := GetBaseType(BackingType)
+		i32 BackingDepth := GetPointerDepth(BackingType)
+		
+		if (BackingBase->IsStructType || BackingDepth) {
+			; Invalid types for bits backing types
+			
+			BackingTypeNode->Error("Bits backing type must be a plain integer type.")
+		}
+		
+		i8 BackingTypeSize := GetTypeSize(BackingType) As i8
+		i8 BackingTypeSizeBits := BackingTypeSize * 8
+		
+		NewType->Size := BackingTypeSize
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
+		
+		loop {
+			StructField* NextField := Alloc(#StructField) As StructField*
+			
+			Token* OpenBracket := this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
+			
+			i8 StartIndex := this->Consume(TOKEN_TYPE_INTEGER, "Expected integer for bit field start index.")->Value As i8
+			i8 EndIndex := StartIndex
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+				EndIndex := this->Consume(TOKEN_TYPE_INTEGER, "Expected integer for bit field end index.")->Value As i8
+			}
+			
+			i8 FieldSize := EndIndex - StartIndex
+			
+			Token* CloseBracket := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected close bracket for bit field range.")
+			
+			OpenBracket~>Context->Merge(CloseBracket~>Context)
+			
+			if (FieldSize < 0 || FieldSize > BackingTypeSizeBits) {
+				OpenBracket->Error("Field size can not be negative, or bigger than the backing type.")
+			}
+			
+			SafeWideString* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected bit field name.")->StringValue
+			
+			NextField->Name := FieldName
+			NextField->Offset := BackingTypeSize
+			NextField->BitStartIndex := StartIndex
+			NextField->BitEndIndex := EndIndex
+			
+			if (FieldSize <= 8) {
+				NextField->ValueType := this->i8->AsNonPointer()
+			}
+			else if (FieldSize <= 16) {
+				NextField->ValueType := this->i16->AsNonPointer()
+			}
+			else if (FieldSize <= 32) {
+				NextField->ValueType := this->i32->AsNonPointer()
+			}
+			else {
+				NextField->ValueType := this->i64->AsNonPointer()
+			}
+			
+			Fields->Set(FieldName, NextField)
+			
+			this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				break
+			}
+		}
+	}
+	
 	define void ParseProgram() {
 		; Parse an entire program, aka a list of `dllimport`/`declare`/`define`, `struct`/`bits`, and global
 		;  variable declarations.
@@ -1033,7 +1129,7 @@ struct ParserState {
 					this->ParseStructDefinition()
 				}
 				else if (NextTokenValue = KEYWORD_BITS) {
-					;this->ParseBitsDefinition()
+					this->ParseBitsDefinition()
 				}
 				else {
 					NextToken->Error("Unexpected token")
