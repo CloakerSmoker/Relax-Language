@@ -193,5 +193,12 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	CompilerStart(Config, Parser, OutputFilePath)
 	
-	return 1
+	; Todo: Make the exit code consistent
+	
+	windows {
+		return 1
+	}
+	linux {
+		return 0
+	}
 }
