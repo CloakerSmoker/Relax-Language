@@ -7,52 +7,64 @@
 * Checks for the `--elf` and `--pe` flags to control the format of the output binary.
 * Checks for the `--function-bytes` flag to decide if function offset/size info should be dumped.
 * Ensures that both an input, and output file are specified.
-* Reads the input file, creates a `TokenizerState` for the source, and calls `ParserStart` to parse the input file.
+* Reads the input file, creates a `LexerState` with the input file's text, and then creates a `ParserState` which will use the `LexerState`.
+* Calls `ParserState.ParseProgram()` to parse an entire program.
 * Passes the parser output to `CompilerStart`, which compiles the code, and builds the output file.
 
-Additionally, `Main.rlx` provides the `OpenAndRead` function, which will try to open and read a source file, with potential errors handled.
+Additionally, `Main.rlx` provides the `OpenAndRead` function, which will try to open and read a source file, with potential errors handled (which is mainly used by the lexer to open included files).
 
 ## Lexer.rlx
 
-[Lexer](./Lexer.rlx) contains the Tokenizer (I just realized how dumb that sounds, but I am too lazy to rename the file), along with the `Token` and `TokenizerState` structs.
+[Lexer](./Lexer.rlx) contains the tokenizer/lexer, which backed up by the `Token` and `LexerState` structs.
 
 Additionally, `Lexer` defines the `TOKEN_TYPE_*`, `OPERATOR_*`, `PUNCTUATION_*`, `KEYWORD_*` globals, which are used by the parser to handle any specific token without having to do text comparisons.
 
 ---
 
-The actual tokenizing happens in the `GetNextToken` function, which will translate the next character(s) into a token type/value pair, then call `MakeToken` to build a new `Token*` for the pair.
+The actual tokenizing happens in the `LexerState.GetNextToken` function, which will translate the next character(s) into a token type/value pair, then call `LexerState.AppendToken` to build a new `Token*` for the pair.
 
-`MakeToken` will also stores some context inside of the new `Token*` (such as line number and source file path), which is used to display error messages.
+`LexerState.AppendToken` will also stores context info inside of the new `Token*` (such as line number and source file path), which is used to display error messages.
 
-In order to support backtracking, the `TokenizerState` struct contains an array of all tokens, which is indexed separately from the source file. This allows for the `TokenIndex` to be decremented without the tokenizer having to re-tokenize any given code.
+In order to support backtracking, the `LexerState` struct contains an array of all tokens extracted from their source text (and any included files), which is indexed separately from the source file. This allows for the `TokenIndex` to be decremented without the lexer having to re-tokenize any given code.
 
----
+To support include files, a single `LexerState` forms the root of a tree of `LexerState` objects, one for each included file. For example 
 
-`Lexer` also contains the `Error` function, which takes a `Token*` which is to blame for the `i8*` error message. This function is used throughout the compiler to as the most basic error reporting.
+A.rlx:
+```
+#Require "B.rlx"
+```
+B.rlx:
+```
+#Require "C.rlx"
+```
+C.rlx:
+```
+define i32 Main(return 20)
+```
 
-Other functions such as `ASTError` (from the parser) are used whenever possible, as `Error` shows no context around the error.
+Would create 3 `LexerState` structs, one for each included file. Where calling `RootLexer->GetNextToken()` will actually return the next token of any child lexer first, discarding the child if it has no more tokens to offer.
+
+Likewise, `ChildLexer->AppendToken()` will actually call `RootLexer->AppendToken()`, to create a single array of all tokens created by any lexer inside of the tree.
 
 ## Parser.rlx
 
-[The parser](./Parser.rlx) uses the [tokenizer](#Lexer.rlx) to extract tokens from the source code, which it then parses via recursive descent.
+[The parser](./Parser.rlx) uses the [lexer](#Lexer.rlx) to extract tokens from the source code, which it then parses via recursive descent.
 
-The parser stores state in the `ParserState` struct, which contains a map of defined functions and globals, along with the default types.
+The parser stores state in the `ParserState` struct, which contains a map of defined functions and globals, along with the default types, and many other 'support' fields.
 
 ---
 
 Inside of the parser, code is represented via the `ASTNode` struct, which consists of a `Type:Value` pair much like the `Token` struct.
 
-The AST node types are defined as `NODE_TYPE_*`, and each have an accompanying field inside of the backing `ASTNode` struct.
+The AST node types are defined as `NODE_TYPE_*` (inside of the `src/compiler/AST.rlx` source file), and each have an accompanying field inside of the backing `ASTNode` struct.
 
 For example, the `NODE_TYPE_BINARY` type means that `SomeNode->BinaryNode` is set to a pointer to a `BinaryExpression` struct.
 
 And the `BinaryExpression` struct contains two `ASTNode*` fields for the left and right operands, which can then themselves be more `BinaryExpression` nodes.
 
-This nesting of `ASTNode*` structs is capable of representing any program, and is the only type of intermediate representation the compiler uses.
-
 ---
 
-Type checking is also done inside of the parser, as an `ASTNode` is built, operand types are checked for compatibility and used to determine the type of the new node.
+Type checking is also done inside of the parser. As an `ASTNode` is built, operand types are checked for compatibility and used to determine the type of the new node.
 
 Then, the next node being built would use the result type of the child node for its own type checking.
 
@@ -64,7 +76,7 @@ Some operators are also interpreted inside of the parser, such as `#Type` or `A 
 
 The compiler walks the `ASTNode`s generated by the parser for each function, and emits code which is functionally equivalent to the `ASTNode` that is being walked. 
 
-Jumps/calls are linked together via a basic label system, with each function getting a separate label that it should be called by. 
+Jumps/calls are linked together via a basic label system, with each function getting a separate label that it should be called through. 
 Additionally, `if`/`loop`/`while`/`for` statements all use temporary label along with conditional jumps to generate flow control.
 
 Instructions are actually emitted by:

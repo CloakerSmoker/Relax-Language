@@ -1,10 +1,10 @@
-# Relax, a basic compiled programming language.
+# A basic compiled programming language.
 
 ![Linux Tests](https://github.com/CloakerSmoker/Relax-Language/workflows/Linux%20Tests/badge.svg)
 
 ![Windows Tests](https://github.com/CloakerSmoker/Relax-Language/workflows/Windows%20Tests/badge.svg)
 
-Note: The compiler is now implemented in Relax itself, it used to be implemented in AutoHotkey. Yes, I regret that.
+Note: The compiler is now bootstrapped, it used to be implemented in AutoHotkey. Yes, I regret that.
 
 For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
 
@@ -57,3 +57,5 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	return 0 /* Returns from `Main()` like normal on Windows, calls `sys_exit(0)` on Linux */
 }
 ```
+
+(For more examples, check out the tests inside of `tests/`, or the compiler source itself in `src/compiler/`)
