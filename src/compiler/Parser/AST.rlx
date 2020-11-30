@@ -1,3 +1,97 @@
+; Precedence/expression parsing helpers region
+
+i8 NONE_ASSOCIATIVE := 0
+i8 LEFT_ASSOCIATIVE := 1
+i8 RIGHT_ASSOCIATIVE := 2
+
+define i8 GetOperatorPrecedence(Token* ForOperator) {
+	; Gets the precedence of a given operator
+	
+	i8 Operator := (ForOperator->Value) As i8
+	
+	if (Operator >= PRECEDENCE_12) {
+		return 12
+	}
+	else if (Operator >= PRECEDENCE_11) {
+		return 11
+	}
+	else if (Operator >= PRECEDENCE_9) {
+		return 9
+	}
+	else if (Operator >= PRECEDENCE_8) {
+		return 8
+	}
+	else if (Operator >= PRECEDENCE_7) {
+		return 7
+	}
+	else if (Operator >= PRECEDENCE_6) {
+		return 6
+	}
+	else if (Operator >= PRECEDENCE_5) {
+		return 5
+	}
+	else if (Operator >= PRECEDENCE_4) {
+		return 4
+	}
+	else if (Operator >= PRECEDENCE_3) {
+		return 3
+	}
+	else if (Operator >= PRECEDENCE_2) {
+		return 2
+	}
+	else if (Operator >= PRECEDENCE_1) {
+		return 1
+	}
+	else {
+		return 0
+	}
+}
+
+define i8 GetUnaryOperatorPrecedence(Token* ForOperator) {
+	; Returns the precedence of an operator when it is used as a prefix/unary operator
+	
+	i8 Operator := (ForOperator->Value) As i8
+	
+	if (Operator = OPERATOR_STAR) {
+		return 10
+	}
+	else if (Operator = OPERATOR_AND) {
+		return 10
+	}
+	else if (Operator = OPERATOR_BANG) {
+		return 10
+	}
+	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
+		return 10
+	}
+	else if (Operator = OPERATOR_POUND) {
+		return 12
+	}
+	
+	return 0 ; Returns 0 when the operator is not a unary operator
+}
+
+define i8 IsPrefixOperator(Token* ForOperator) {
+	; Used to determine if an operator is a unary operator
+	
+	return GetUnaryOperatorPrecedence(ForOperator) != 0
+}
+
+define i8 GetOperatorAssociation(Token* ForOperator) {
+	; Returns RIGHT_ASSOCIATIVE/LEFT_ASSOCIATIVE for the operator passed
+	
+	i8 Precedence := GetOperatorPrecedence(ForOperator)
+	
+	if (Precedence = 1 || Precedence = 3) {
+		return RIGHT_ASSOCIATIVE
+	}
+	else {
+		return LEFT_ASSOCIATIVE
+	}
+}
+
+; EndRegion
+
 ; AST node type values region
 
 i8 NODE_TYPE_NONE := 0

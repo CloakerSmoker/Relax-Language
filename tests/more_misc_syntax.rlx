@@ -14,5 +14,14 @@ define i32 Main() {
 	
 	PrintCharacters(ThisFile As i8*, 8)
 	
+	i64 N := 3
+	i64* pN := &N
+	i64 M := 0xF
+	
+	if (*pN & M = 3) {
+		Print(" 1")
+	}
+	
+	
 	return 0
 }
