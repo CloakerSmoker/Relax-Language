@@ -1,3 +1,5 @@
+#Require "./src/compiler/Utility.rlx"
+
 ; Constants end around line 130
 
 i8 TOKEN_TYPE_EOF := 0
@@ -869,6 +871,78 @@ struct LexerState {
 			this->AppendToken(0, null, StartingIndex, 1)->Error("Unexpected character")
 			return null
 		}
+	}
+	
+	
+	define i32 Freeze() {
+		return this->TokenIndex
+	}
+	define void Unfreeze(i32 FrozenState) {
+		this->TokenIndex := FrozenState
+	}
+	define Token* GetCurrentToken() {
+		this->TokenIndex -= 1
+		
+		return this->GetNextToken()
+	}
+	define ErrorContext* GetCurrentTokenContext() {
+		return this->GetCurrentToken()~>Context
+	}
+	define Token* PeekNextToken() {
+		i32 Before := this->Freeze()
+		
+		Token* Result := this->GetNextToken()
+		
+		this->Unfreeze(Before)
+		
+		return Result
+	}
+	define i8 NextTokenMatches(i8 TokenType, i64 TokenValue) {
+		if (this->PeekNextToken()->Is(TokenType, TokenValue)) {
+			this->GetNextToken()
+			
+			return true
+		}
+		
+		return false
+	}
+	define i8 NextTokenMatches(i8 TokenType) {
+		if (this->PeekNextToken()->Is(TokenType)) {
+			this->GetNextToken()
+			
+			return true
+		}
+		
+		return false
+	}
+	define Token* TryConsume(i8 TokenType, i64 TokenValue, i8* Reason, i8** ErrorMessage) {
+		Token* NextToken := this->GetNextToken()
+		
+		if (NextToken->Is(TOKEN_TYPE_EOF, 0)) {
+			*ErrorMessage := "Unexpected end of file"
+		}
+		else if !(NextToken->Is(TokenType, TokenValue)) {
+			*ErrorMessage := Reason
+		}
+		
+		return NextToken
+	}
+	define Token* TryConsume(i8 TokenType, i8* Reason, i8** ErrorMessage) {
+		return this->TryConsume(TokenType, 0, Reason, ErrorMessage)
+	}
+	define Token* Consume(i8 TokenType, i64 TokenValue, i8* Reason) {
+		i8* ErrorMessage := null
+		
+		Token* Result := this->TryConsume(TokenType, TokenValue, Reason, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			Result->Error(ErrorMessage)
+		}
+		
+		return Result
+	}
+	define Token* Consume(i8 TokenType, i8* Reason) {
+		return this->Consume(TokenType, 0, Reason)
 	}
 }
 

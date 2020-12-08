@@ -1,38 +1,3 @@
-DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
-DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
-
-define void Exit(i32 ExitCode) {
-	windows {
-		TerminateProcess(GetCurrentProcess(), ExitCode)
-	}
-	linux {
-		syscall:(60, ExitCode)
-	}
-}
-
-i8 OUTPUT_PE := 0
-i8 OUTPUT_ELF := 1
-i8 OUTPUT_BIN := 2
-
-i8 ABI_X64 := 1
-i8 ABI_SYSTEMV := 2
-
-i8 DUMP_FUNCTIONS := 1
-i8 DUMP_GLOBALS := 2
-
-i8 DEBUG_NONE := 0
-i8 DEBUG_EMIT_FUNCTION_NAMES := 1
-
-struct BuildConfig {
-	LexerState* Lexer,
-	
-	i64 ImageBase,
-	i8 OutputFormat,
-	i8 TargetABI,
-	i8 DumpInfo,
-	i8 DebugMode
-}
-
 #Require "./src/lib/Memory.rlx"
 #Require "./src/lib/File.rlx"
 
@@ -50,40 +15,6 @@ declare i16* OpenAndRead(i8*, i32*)
 #Require "./src/compiler/PEBuilder.rlx"
 #Require "./src/compiler/ELFBuilder.rlx"
 #Require "./src/compiler/Compiler.rlx"
-
-define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
-	i64 FileHandle := FileOpen(FilePath, FILE_READ)
-	
-	if (FileHandle < 0) {
-		SwapOutputStream()
-		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
-		Exit(1)
-	}
-	
-	i32 FileSize := FileGetSize(FileHandle)
-	
-	if (OutFileSize != 0) {
-		OutFileSize[0] := FileSize
-	}
-	
-	void* FileBuffer := Alloc(FileSize)
-	
-	i64 ReadResult := FileRead(FileHandle, FileBuffer, FileSize)
-	
-	if (ReadResult < 0) {
-		SwapOutputStream()
-		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
-		
-		Exit(1)
-	}
-	
-	i16* Source := AToW(FileBuffer As i8*, FileSize)
-	
-	Free(FileBuffer)
-	FileClose(FileHandle)
-	
-	return Source
-}
 
 BuildConfig* CurrentConfig := null
 
