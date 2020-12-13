@@ -107,7 +107,13 @@ define void CountReferences(ParserState* Parser) {
 	
 	Visitor->SetVisitFunction(&CountReferencesVisit)
 	
-	Visitor->VisitBlocks(Parser->MainFunction->Body)
+	if (Parser->MainFunction->Attribute = KEYWORD_ASSEMBLY) {
+		CountReferencesVisitAssembly(Visitor, Parser->MainFunction->AssemblyBody)
+	}
+	else {
+		Visitor->VisitBlocks(Parser->MainFunction->Body)
+	}
+	
 	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
 	
 	Parser->MainFunction->CallCount += 1

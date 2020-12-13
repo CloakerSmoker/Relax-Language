@@ -106,6 +106,40 @@ struct CompilerState {
 		Free(this->CodeRelocations)
 		Free(this->Labels)
 	}
+	
+	SafeWideString* CurrentSourceFile
+	i32 LineNumberHighWaterMark
+	
+	define void BeforeCompileFunction(FunctionDefine* Function) {
+		if (this->Config->DumpInfo & DUMP_LINES) {
+			Print("[ ^80")
+			Function~>Context->SourceFilePath->Print()
+			Print("^F0: ")
+			
+			i8* Buffer := Alloc(Function->GetStringLength())
+			Function->StringifyInto(Buffer)
+			
+			Print("%s ]\n", Buffer)
+			
+			Free(Buffer)
+			
+			this->CurrentSourceFile := Function~>Context->SourceFilePath
+			this->LineNumberHighWaterMark := Function~>Context->LineNumber
+		}
+	}
+	
+	define void MarkLineNumber(ErrorContext* Context) {
+		if (this->Config->DumpInfo & DUMP_LINES) {
+			SafeWideString* SourceFilePath := Context->SourceFilePath
+			
+			if (SourceFilePath != null && SourceFilePath = this->CurrentSourceFile) {
+				if (Context->LineNumber > this->LineNumberHighWaterMark) {
+					Print("\t%i:	%x\n", Context->LineNumber, this->CodeBase + this->Index)
+					this->LineNumberHighWaterMark := Context->LineNumber
+				}				
+			}
+		}
+	}
 }
 
 /*
@@ -655,6 +689,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
 	
+	Compiler->BeforeCompileFunction(FunctionToCompile)
+	
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
@@ -892,6 +928,8 @@ declare void CompileUnwindTry(CompilerState*, i8)
 
 define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
+	
+	Compiler->MarkLineNumber(NodeToCompile~>Context)
 	
 	i8 NodeType := NodeToCompile->NodeType
 	
@@ -1185,6 +1223,8 @@ define void CompileGetStorageValuePointer(CompilerState* Compiler, ASTNode* Valu
 
 define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
+	
+	Compiler->MarkLineNumber(ExpressionToCompile~>Context)
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
 	Type ResultType := ExpressionToCompile->ValueType

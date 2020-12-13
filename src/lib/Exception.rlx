@@ -229,7 +229,7 @@ define void* SetupExceptionTranslation() {
 		SetErrorMode(1)
 		
 		SetUnhandledExceptionFilter(&WindowsExceptionFilter)
-		AddVectoredExceptionHandler(1, &WindowsExceptionFilter)		
+		AddVectoredExceptionHandler(1, &WindowsExceptionFilter)
 	}
 	
 	return null

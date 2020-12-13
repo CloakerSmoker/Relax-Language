@@ -44,7 +44,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	BuildConfig* Config := Alloc(#BuildConfig)
 	
-	Config->DumpInfo := DUMP_FUNCTIONS
+	Config->DumpInfo := 0
 	
 	windows {
 		Config->OutputFormat := OUTPUT_PE
@@ -74,6 +74,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 		else if (StringEquals(NextArg, "--globals")) {
 			Config->DumpInfo |= DUMP_GLOBALS
+		}
+		else if (StringEquals(NextArg, "--lines")) {
+			Config->DumpInfo |= DUMP_LINES
 		}
 		else if (StringEquals(NextArg, "--debug")) {
 			Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES

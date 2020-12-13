@@ -108,6 +108,25 @@ struct SafeWideString {
 	define i8* ToString() {
 		return WToA(this->Buffer, this->Length)
 	}
+	
+	define i8* PackToString() {
+		i8* Buffer := this->Buffer As i8*
+		
+		for (i32 Index := 0, Index < this->Length, Index += 1) {
+			Buffer[Index] := this->Buffer[Index] As i8
+		}
+		
+		Buffer[Index] := 0
+		
+		return Buffer
+	}
+	define void UnpackFromString() {
+		i8* Buffer := this->Buffer As i8*
+		
+		for (i32 Index := this->Length - 1, Index >= 0, Index -= 1) {
+			this->Buffer[Index] := Buffer[Index] As i16
+		}
+	}
 }
 
 define SafeWideString* AllocateNewSafeString() {

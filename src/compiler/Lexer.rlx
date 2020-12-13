@@ -659,7 +659,7 @@ struct LexerState {
 				}
 			}
 			
-			if (this->AtEnd()) {
+			if (this->AtEnd() && NextCharacter != '"') {
 				; If we're at EOF, then this string is missing a close quote
 				
 				this->AppendToken(0, null, StartingIndex, 1)->Error("Expected close quote before EOF")
@@ -748,7 +748,7 @@ struct LexerState {
 				NextCharacter := this->GetNextCharacter()
 			}
 			
-			if !(this->AtEnd()) {
+			if !(IsAlphaNumeric(NextCharacter)) {
 				this->Backtrack()
 			}
 			
