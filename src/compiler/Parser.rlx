@@ -2,9 +2,8 @@
 
 bits Type As i64 {
 	[0:47] BaseType,
-	[48:52] PointerDepth,
-	[53:54] IsArray,
-	[54:63] ArraySize
+	[48:49] IsArray,
+	[50:63] PointerDepth
 }
 
 Type TYPE_NONE := 0
@@ -387,12 +386,16 @@ struct ParserState {
 		Type Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
 		
 		if (AllowArrayType && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-			Result := this->PointerToType(Result)
-			
 			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
 			
 			if (*ErrorMessage = null) {
-				Result.ArraySize := SizeToken->IntegerValue As i16
+				TypeInfo* ResultBase := GetBaseType(Result)
+				
+				if (ResultBase->IsIncomplete && PointerDepth = 0) {
+					NameToken->Error("Array types must not be incomplete")
+				}
+				
+				Result := ResultBase->CloneAsArrayType(SizeToken->IntegerValue As i16)->AsPointer(PointerDepth + 1 As i16)
 				Result.IsArray := true
 				
 				this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)

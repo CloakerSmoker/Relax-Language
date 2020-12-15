@@ -50,23 +50,25 @@
 			
 			Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(this->i32, 0))
 			
-			if (SafeStringEqualsAString(TokenToTranslate->StringValue, "true")) {
+			SafeWideString* StringValue := TokenToTranslate->StringValue
+			
+			if (StringValue->Equals("true")) {
 				Result->IntegerValue := 1
 			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "false")) {
+			else if (StringValue->Equals("false")) {
 				Result->IntegerValue := 0
 			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "windows")) {
+			else if (StringValue->Equals("windows")) {
 				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_PE
 			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "linux")) {
+			else if (StringValue->Equals("linux")) {
 				Result->IntegerValue := this->Config->OutputFormat = OUTPUT_ELF
 			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "debug")) {
+			else if (StringValue->Equals("debug")) {
 				Result->IntegerValue := this->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES
 			}
-			else if (SafeStringEqualsAString(TokenToTranslate->StringValue, "null")) {
-				Result->ValueType := MakeType(this->void, 1)
+			else if (StringValue->Equals("null")) {
+				Result->ValueType := this->void->AsPointer(1)
 				Result->NodeType := NODE_TYPE_ZERO
 			}
 			else {

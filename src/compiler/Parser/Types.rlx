@@ -17,6 +17,7 @@ struct TypeInfo {
 	HashMap Fields,
 	HashMap Methods,
 	HashMap StaticMethods,
+	i16 ArrayLength,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
@@ -28,6 +29,16 @@ struct TypeInfo {
 	}
 	define Type AsPointer(i16 Depth) {
 		return MakeType(this, Depth)
+	}
+	define i8 Is(TypeInfo* Other) {
+		return this->Name = Other->Name
+	}
+	define TypeInfo* CloneAsArrayType(i16 ArrayLength) {
+		TypeInfo* Result := CloneMemory(this, #TypeInfo)
+		
+		Result->ArrayLength := ArrayLength
+		
+		return Result
 	}
 }
 
@@ -47,9 +58,9 @@ define i32 GetTypeStorageSize(Type T) {
 	i32 RegularSize := GetTypeSize(T)
 	
 	if (T.IsArray) {
-		RegularSize := GetBaseType(T)->Size
-	
-		return RegularSize * (T.ArraySize As i32)
+		TypeInfo* BaseType := GetBaseType(T)
+		
+		return BaseType->Size * BaseType->ArrayLength
 	}
 	
 	return RegularSize
@@ -156,11 +167,11 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 	i16 SourceSize := GetTypeSize(Source)
 	i16 TargetSize := GetTypeSize(Target)
 	
-	i8 SourceIsVoid := SourceBase = VoidType
-	i8 TargetIsVoid := TargetBase = VoidType
+	i8 SourceIsVoid := SourceBase->Is(VoidType)
+	i8 TargetIsVoid := TargetBase->Is(VoidType)
 	
 	if (SourceDepth = TargetDepth) {
-		if (SourceBase = TargetBase) {
+		if (SourceBase->Is(TargetBase)) {
 			return 0
 		}
 		else if (TargetDepth = 1) {
