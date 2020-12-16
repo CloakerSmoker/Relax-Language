@@ -17,7 +17,6 @@ struct TypeInfo {
 	HashMap Fields,
 	HashMap Methods,
 	HashMap StaticMethods,
-	i16 ArrayLength,
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
@@ -33,16 +32,41 @@ struct TypeInfo {
 	define i8 Is(TypeInfo* Other) {
 		return this->Name = Other->Name
 	}
-	define TypeInfo* CloneAsArrayType(i16 ArrayLength) {
-		TypeInfo* Result := CloneMemory(this, #TypeInfo)
+}
+struct ArrayTypeInfo {
+	TypeInfo* BaseType
+	i16 Length
+	
+	static ArrayTypeInfo* New(TypeInfo* Base, i16 Length) {
+		ArrayTypeInfo* this := Alloc(#ArrayTypeInfo)
 		
-		Result->ArrayLength := ArrayLength
+		this->BaseType := Base
+		this->Length := Length
 		
-		return Result
+		return this
 	}
 }
 
+declare TypeInfo* GetBaseType(Type)
+
+define Type MakeArrayType(Type ElementType, i16 ArrayLength) {
+	Type Result := 0
+	
+	Result.IsArray := true
+	Result.BaseType := ArrayTypeInfo:New(GetBaseType(ElementType), ArrayLength)
+	Result.PointerDepth := ElementType.PointerDepth + 1
+	
+	return Result
+}
+
+define ArrayTypeInfo* GetArrayType(Type T) {
+	return T.BaseType As ArrayTypeInfo*
+}
 define TypeInfo* GetBaseType(Type T) {
+	if (T.IsArray) {
+		return GetArrayType(T)->BaseType
+	}
+	
 	return T.BaseType As TypeInfo*
 }
 define i16 GetTypeSize(Type T) {
@@ -53,40 +77,21 @@ define i16 GetTypeSize(Type T) {
 		return GetBaseType(T)->Size
 	}
 }
-
 define i32 GetTypeStorageSize(Type T) {
 	i32 RegularSize := GetTypeSize(T)
 	
 	if (T.IsArray) {
-		TypeInfo* BaseType := GetBaseType(T)
+		Type B := T
 		
-		return BaseType->Size * BaseType->ArrayLength
+		B.PointerDepth -= 1
+		
+		return GetTypeSize(B) * GetArrayType(T)->Length
 	}
 	
 	return RegularSize
 }
 define i32 GetPointerDepth(Type T) {
 	return T.PointerDepth As i32
-}
-define i8* GetTypeName(Type T) {
-	SafeWideString* BaseName := GetBaseType(T)->Name
-	i32 BaseNameLength := BaseName->Length
-	i32 PointerDepth := GetPointerDepth(T)
-	
-	i32 BufferSize := BaseNameLength + PointerDepth + 1
-	
-	i8* NameBuffer := Alloc(BufferSize)
-	i16* BaseNameBuffer := BaseName->Buffer
-	
-	for (i32 BaseNameIndex := 0, BaseNameIndex < BaseNameLength, BaseNameIndex += 1) {
-		NameBuffer[BaseNameIndex] := BaseNameBuffer[BaseNameIndex] As i8
-	}
-	
-	for (i32 PointerDepthIndex := 0, PointerDepthIndex < PointerDepth, PointerDepthIndex += 1) {
-		NameBuffer[BaseNameLength + PointerDepthIndex] := '*'
-	}
-	
-	return NameBuffer
 }
 
 define i32 GetTypeStringLength(Type T) {

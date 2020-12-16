@@ -395,7 +395,7 @@ struct ParserState {
 					NameToken->Error("Array types must not be incomplete")
 				}
 				
-				Result := ResultBase->CloneAsArrayType(SizeToken->IntegerValue As i16)->AsPointer(PointerDepth + 1 As i16)
+				Result := MakeArrayType(Result, SizeToken->IntegerValue As i16)
 				Result.IsArray := true
 				
 				this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
