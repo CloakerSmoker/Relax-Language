@@ -33,7 +33,7 @@
 	define ASTNode* TranslateTokenToNode(Token* TokenToTranslate) {
 		; Translates a token into an AST node with the same value/type as the token
 		
-		ASTNode* Result := 0
+		ASTNode* Result := null
 		
 		if (TokenToTranslate->Type = TOKEN_TYPE_INTEGER) {
 			; If the token is an integer, return a NODE_TYPE_INTEGER node with a type which is the correct 
@@ -181,7 +181,7 @@
 		;  how "compatible" the best-fit function is to our parameters. Lower is better.
 		
 		i32 BestFitRating := 200000
-		FunctionDefine* BestFit := 0
+		FunctionDefine* BestFit := null
 		
 		FunctionDefine* Next := FoundDefine
 		
@@ -858,7 +858,7 @@
 					
 					i8 SkipTypeCheck := false
 					
-					if (LeftDepth != 0 && RightDepth = 0 && RightBase->IsBuiltin && RightBase->Size >= 4) {
+					if (Operator != OPERATOR_COLON_EQUAL && LeftDepth != 0 && RightDepth = 0 && RightBase->IsBuiltin && RightBase->Size >= 4) {
 						SkipTypeCheck := true
 					}
 					else if (LeftDepth != 0 && RightDepth = 1 && RightBase = this->void) {

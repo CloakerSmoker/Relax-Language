@@ -190,8 +190,6 @@ i32 DEFAULT_COMMIT := 0x8000
 define void WritePEHeader(void* IntoBuffer) {
 	/* Writes all the standard MZ/COFF/PE header values into the given buffer */
 	
-	Print("WPEH %x\n", IntoBuffer)
-	
 	MZHeader* NewHeader := IntoBuffer As MZHeader*
 	/* Write the DOS MZ header first */
 	
@@ -449,17 +447,7 @@ define PEBuilder* BuildBuilder() {
 	
 	PEBuilder* NewBuilder := Alloc(#PEBuilder) As PEBuilder*
 	
-	i32 _Size := SECTION_HEADER_SIZE * 4
-	i32 Size := _Size + MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE
-	
-	Print("SZ %x\n", _Size)
-	Print("SZ %x\n", MZ_HEADER_SIZE)
-	Print("SZ %x\n", MZ_PADDING_SIZE)
-	Print("SZ %x\n", PE_MAGIC_SIZE)
-	Print("SZ %x\n", COFF_HEADER_SIZE)
-	Print("SZ %x\n", PE_HEADER_SIZE)
-	
-	NewBuilder->Buffer := Alloc(Size)
+	NewBuilder->Buffer := Alloc(SECTION_HEADER_SIZE * 4 + MZ_HEADER_SIZE + MZ_PADDING_SIZE + PE_MAGIC_SIZE + COFF_HEADER_SIZE + PE_HEADER_SIZE)
 	
 	/* Now we've got enough memory for the headers, so we can start writing them */
 	

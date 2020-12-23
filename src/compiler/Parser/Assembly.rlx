@@ -355,7 +355,7 @@
 				SafeWideString* LabelName := NextToken->StringValue
 				
 				HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
-				InstructionNode* FoundLabel := 0
+				InstructionNode* FoundLabel := null
 				
 				if (FoundLabelElement) {
 					FoundLabel := FoundLabelElement->Value As InstructionNode*
@@ -423,7 +423,7 @@
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 			HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(InstructionName)
-			InstructionNode* FoundLabel := 0
+			InstructionNode* FoundLabel := null
 			
 			if (FoundLabelElement) {
 				FoundLabel := FoundLabelElement->Value As InstructionNode*

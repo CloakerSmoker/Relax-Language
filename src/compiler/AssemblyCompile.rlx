@@ -170,8 +170,8 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 		ResolveOperandFunctionReference(OperandOne)
 		ResolveOperandFunctionReference(OperandTwo)
 		
-		InstructionOperand* MemoryOperand := 0
-		InstructionOperand* OtherOperand := 0
+		InstructionOperand* MemoryOperand := null
+		InstructionOperand* OtherOperand := null
 		
 		Instruction* Base := ToCompile->Base
 		

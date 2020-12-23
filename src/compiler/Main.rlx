@@ -53,8 +53,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		Config->OutputFormat := OUTPUT_ELF
 	}
 	
-	i8* InputFilePath := 0
-	i8* OutputFilePath := 0
+	i8* InputFilePath := null
+	i8* OutputFilePath := null
 	i8 DumpFunctionBytes := false
 	
 	for (i32 Index := 0, Index < ArgC, Index += 1) {

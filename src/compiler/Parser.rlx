@@ -255,7 +255,7 @@ struct ParserState {
 		SafeWideString* VariableName := NameToken->StringValue
 		
 		FunctionDefine* CurrentFunction := this->CurrentFunction
-		VariableInfo* FoundVariable := 0
+		VariableInfo* FoundVariable := null
 		
 		if (CurrentFunction) {
 			; If we are in a function, try to find the variable in the locals

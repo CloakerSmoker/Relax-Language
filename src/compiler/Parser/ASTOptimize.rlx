@@ -174,7 +174,7 @@ define i8 NodeHasSideEffects(ASTNode* Node) {
 	return Result
 }
 
-define void EliminateGlobals(VariableHashMap* Globals) {
+define void EliminateGlobals(ParserState* Parser) {
 	; This will go through each global variable, and check if it is actually a global variable, or just
 	;  a fake `#define` consant. It will also re-pack any real globals, and determine how much space
 	;   is actually needed for globals, after any constants have been eliminated.
@@ -186,6 +186,8 @@ define void EliminateGlobals(VariableHashMap* Globals) {
 	
 	; TODO: Move the actual value inlining into this file, so consant folding (when implemented) works
 	;  for inlined constant globals
+	
+	VariableHashMap* Globals := Parser~>Globals
 	
 	HashMap* RawGlobals := Globals->Map
 	

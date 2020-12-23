@@ -85,7 +85,7 @@ define i32 Main() {
 	
 	Print(",%i", #ExtraText)
 	
-	Test* BestFit := 5754784
+	Test* BestFit := 5754784 As Test*
 	i32 BestFitRating := 2000011101
 	
 	;breakpoint:()

@@ -291,10 +291,9 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 
 define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
 	CountReferences(Parser)
-	EliminateGlobals(Parser~>Globals)
+	EliminateGlobals(Parser)
 	
-	CompilerState C
-	CompilerState* Compiler := &C
+	CompilerState* Compiler := Alloc(#CompilerState)
 	
 	Compiler->Initialize(Config, Parser)
 	
@@ -579,7 +578,7 @@ define i32 CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, V
 		
 		i16 LastValueSize := GetTypeSize(LastValue->ValueType)
 		
-		if (LastValueSize <= 4) {
+		if (LastValueSize < 4) {
 			Cast(Compiler, ResultRegister, LastValueSize As i8)
 		}
 		
@@ -859,7 +858,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	Block* Body := FunctionToCompile->Body
 	i32 BodyCount := Body->StatementCount
-	ASTNode* ReturnExpression := 0
+	ASTNode* ReturnExpression := null
 	
 	if (BodyCount >= 1) {
 		/* If the last statement of the function body is a return, then don't emit a Leave;Ret combo for it 
