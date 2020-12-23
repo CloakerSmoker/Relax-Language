@@ -24,7 +24,7 @@ define void PrintStackDump(i32 IgnoreFrames) {
 				IgnoreFrames -= 1
 			}
 			else {
-				i64* MaybeMagic := Last - 0x8
+				i64* MaybeMagic := (Last - 0x8) As i64*
 				i8** MaybeName := (Last - 0x10) As i8**
 				
 				if (Debug && *MaybeMagic = 0x12345678) {

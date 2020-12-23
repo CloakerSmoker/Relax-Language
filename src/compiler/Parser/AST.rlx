@@ -291,7 +291,7 @@ struct Instruction {
 
 struct InstructionListEntry {
 	Instruction Instruction
-	Instruction* Next
+	InstructionListEntry* Next
 }
 
 struct SIBInfo {

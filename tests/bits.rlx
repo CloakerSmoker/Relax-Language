@@ -16,7 +16,7 @@ bits Example3 As i64 {
 }
 
 define i32 Main() {
-	Example E := 0
+	Example E := 0 As Example
 	
 	E.test := 90
 	E.test2 := 20
@@ -25,16 +25,16 @@ define i32 Main() {
 	Print(E As i64)
 	PrintCharacter(',')
 	
-	Example2 E2 := 0x4000000090009000
+	Example2 E2 := 0x4000000090009000 As Example2
 	
 	PrintHex(E2.low_32 & 0xFFFFFFFF)
 	PrintCharacter(',')
 	PrintHex(E2.high_32)
 	
-	Example3 E3 := 0
+	Example3 E3 := 0 As Example3
 	i64 Test := 52893
 	
-	E3.a_pointer := &Test
+	E3.a_pointer := &Test As i64
 	E3.a_tag := 30
 	
 	PrintCharacter(',')

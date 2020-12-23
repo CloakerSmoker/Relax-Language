@@ -1,12 +1,12 @@
-i32 FILE_READ := 1
-i32 FILE_WRITE := 2
-i32 FILE_READ_WRITE := 3
+i8 FILE_READ := 1
+i8 FILE_WRITE := 2
+i8 FILE_READ_WRITE := 3
 
-i32 FILE_CREATE_NEW := 0x40
+i8 FILE_CREATE_NEW := 0x40
 
 DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
 DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
-DllImport i64 CreateFile(i8*, i32, i32, void, i32, i32, i64) {Kernel32.dll, CreateFileA}
+DllImport i64 CreateFile(i8*, i64, i32, void, i32, i32, i64) {Kernel32.dll, CreateFileA}
 
 DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
 DllImport i32 SetFilePointer(i64, i32, void, i32) {Kernel32.dll, SetFilePointer}
@@ -18,7 +18,7 @@ DllImport i8 DeleteFile(i8*) {Kernel32.dll, DeleteFileA}
 
 #Require "./src/lib/Memory.rlx"
 
-define i64 FileOpen(i8* FilePath, i32 Mode) {
+define i64 FileOpen(i8* FilePath, i8 Mode) {
 	windows {
 		i8 FILE_SHARE_READ := 1
 		i8 FILE_SHARE_WRITE := 2
@@ -28,7 +28,7 @@ define i64 FileOpen(i8* FilePath, i32 Mode) {
 		
 		i16 FILE_ATTRIBUTE_NORMAL := 128
 		
-		i32 AccessMask := 0
+		i64 AccessMask := 0
 		i8 OpenMode := Mode & 0x03
 		
 		if (OpenMode = FILE_READ) {AccessMask := 0x80000000}

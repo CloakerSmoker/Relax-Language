@@ -130,8 +130,8 @@
 		Block** Bodies := Alloc(10 * #Block*) As Block**
 		Block* ElseBranch := null
 		
-		i32 BranchCapacity := 10
-		i32 BranchIndex := 0
+		i16 BranchCapacity := 10
+		i16 BranchIndex := 0
 		
 		loop {
 			if (BranchIndex = 0 || this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_IF)) {

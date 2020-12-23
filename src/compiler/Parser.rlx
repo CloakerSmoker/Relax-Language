@@ -6,7 +6,7 @@ bits Type As i64 {
 	[50:63] PointerDepth
 }
 
-Type TYPE_NONE := 0
+Type TYPE_NONE := 0 As Type
 
 i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
@@ -861,7 +861,7 @@ struct ParserState {
 						
 						; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
 						;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
-						Method->IsMethod := true + IsStaticMethod
+						Method->IsMethod := (true + IsStaticMethod) As i8
 						Method->MethodOfTypeName := NameToken->StringValue
 						
 						; Ignore commas after methods, they aren't actually needed for parsing
@@ -965,7 +965,7 @@ struct ParserState {
 		}
 		
 		i8 BackingTypeSize := GetTypeSize(BackingType) As i8
-		i8 BackingTypeSizeBits := BackingTypeSize * 8
+		i8 BackingTypeSizeBits := (BackingTypeSize * 8) As i8
 		
 		NewType->Size := BackingTypeSize
 		

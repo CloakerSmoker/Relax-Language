@@ -60,10 +60,10 @@ struct MD5Hasher {
 			6 10 15 21
 		}
 		
-		i32 PartialHashA := 0x67452301
-		i32 PartialHashB := 0xefcdab89
-		i32 PartialHashC := 0x98badcfe
-		i32 PartialHashD := 0x10325476
+		i32 PartialHashA := 0x67452301 As i32
+		i32 PartialHashB := 0xefcdab89 As i32
+		i32 PartialHashC := 0x98badcfe As i32
+		i32 PartialHashD := 0x10325476 As i32
 		
 		for (i32 NewLength := Length + 1, NewLength % (512 / 8) != 448 / 8, NewLength += 1) {}
 		
@@ -73,7 +73,7 @@ struct MD5Hasher {
 		if (NewLength + 8 < MD5_TEMP_SIZE) {
 			WorkBuffer := this->TempBuffer
 			
-			i64* ClearBuffer := WorkBuffer
+			i64* ClearBuffer := WorkBuffer As i64*
 			
 			for (i32 ClearIndex := 0, ClearIndex < 512, ClearIndex += 1) {
 				ClearBuffer[ClearIndex] := 0
@@ -97,8 +97,8 @@ struct MD5Hasher {
 			}
 		}
 		
-		WorkBuffer[Length] := 0x80
-		*(WorkBuffer + NewLength As i32*) := Length * 8
+		WorkBuffer[Length] := 0x80 As i8
+		(WorkBuffer + NewLength As i32*)[0] := Length * 8
 		
 		;Print("Length = %x, NewLength = %x, Overall size = %x\n", Length, NewLength, NewLength + 8)
 		

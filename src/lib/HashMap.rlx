@@ -4,7 +4,7 @@
 
 struct HashMapElement {
 	i64 Hash,
-	void Value,
+	void* Value,
 	HashMapElement* NextElement
 }
 

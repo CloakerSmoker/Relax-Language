@@ -32,7 +32,7 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 			REX := REX | REX_B
 		}
 		
-		OperationSize := (ForOperand->Type) >> OP_R_OFFSET
+		OperationSize := ((ForOperand->Type) >> OP_R_OFFSET) As i8
 	}
 	else {
 		/* OP_MX map directly to 1/2/4/8, so the OperationSize is directly dependent on the type of the memory operand */
@@ -72,12 +72,12 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 			}
 			
 			DispSize := ForOperand->DispSize
-			DispValue := ForOperand->DispValue
+			DispValue := (ForOperand->DispValue) As i8
 		}
 	}
 	
 	if (I->Flags & E_OP_EXT) {
-		Reg := I->Extra
+		Reg := I->Extra As i8
 	}
 	else if (Other->Type & OP_R) {
 		Reg := ClampRegisterNumber(Other->RegisterNumber)
@@ -87,7 +87,7 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 		}
 		
 		if !(OperationSize) {
-			OperationSize := (Other->Type) >> OP_R_OFFSET
+			OperationSize := ((Other->Type) >> OP_R_OFFSET) As i8
 		}
 	}
 	

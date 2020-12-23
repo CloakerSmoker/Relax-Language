@@ -92,10 +92,10 @@ struct ErrorContext {
 		i32 OtherEnd := Other->PositionInSource + Other->LengthInSource
 		
 		if (ThisEnd < OtherEnd) {
-			this->LengthInSource := OtherEnd - this->PositionInSource
+			this->LengthInSource := (OtherEnd - this->PositionInSource) As i16
 		}
 		else {
-			this->LengthInSource := ThisEnd - this->PositionInSource
+			this->LengthInSource := (ThisEnd - this->PositionInSource) As i16
 		}
 		
 		return this
@@ -142,10 +142,10 @@ define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext*
 	i32 RightEnd := Right->PositionInSource + Right->LengthInSource
 	
 	if (LeftEnd < RightEnd) {
-		To->LengthInSource := RightEnd - To->PositionInSource
+		To->LengthInSource := (RightEnd - To->PositionInSource) As i16
 	}
 	else {
-		To->LengthInSource := LeftEnd - To->PositionInSource
+		To->LengthInSource := (LeftEnd - To->PositionInSource) As i16
 	}
 }
 

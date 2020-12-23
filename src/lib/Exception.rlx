@@ -210,8 +210,8 @@ define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
 		Context->RIP := &CallUnhandledExceptionHandler
 	}
 	else {
-		Context->RBP := Handler
-		Context->RSP := Handler->LastFrame - 1
+		Context->RBP := Handler As i64*
+		Context->RSP := (Handler->LastFrame - 1) As i64*
 		Context->RIP := Handler->ReturnAddress
 	}
 	

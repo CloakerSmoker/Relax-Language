@@ -150,11 +150,8 @@ i8 Black := 0x00
 define i8 TranslateWindowsColor(i8 Color) {
 	/* Translates a windows color to an ANSI escape color */
 	
-	i8 NewRed := ((Color & Red) != 0)
-	i8 NewGreen := ((Color & Green) != 0) * 2
-	i8 NewBlue := ((Color & Blue) != 0) * 4
-	
-	i8 NewColor := NewRed | NewGreen | NewBlue
+	i8* ANSIColors := {i8: 0b000 0b100 0b010 0b110 0b001 0b101 0b011 0b111}
+	i8 NewColor := ANSIColors[Color & 0b111]
 	
 	if (Color & Bright) {
 		return (NewColor + 90) As i8
@@ -186,7 +183,7 @@ define void SetColor(i8 Foreground, i8 Background) {
 			PrintANSIEscape(Foreground, Background)
 		}
 		windows {
-			Background := Background << 4
+			Background := (Background << 4) As i8
 			
 			SetConsoleTextAttribute(STDOUT, Foreground | Background)
 		}

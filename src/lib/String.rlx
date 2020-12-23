@@ -30,23 +30,23 @@ define i16* AToW(i8* AString, i32 Length) {
 	
 	return NewBuffer
 }
-define i8* WToA(i16* WString, i32 Length) {
+define i8* WToA(i16* String, i32 Length) {
 	i8* Buffer := Alloc(Length + 1)
 	
 	for (i32 Index := 0, Index < Length, Index += 1) {
-		Buffer[Index] := WString[Index]
+		Buffer[Index] := String[Index] As i8
 	}
 	
 	Buffer[Index + 1] := 0
 	
 	return Buffer
 }
-define i8* WToA(i16* WString) {
-	return WToA(WString, WLen(WString))
+define i8* WToA(i16* String) {
+	return WToA(String, StringLength(String))
 }
 
-define i16 Lower(i16 Character) {
-	/* Gets a character as lowercase */
+define i8 Lower(i8 Character) {
+	; Converts A-Z to a-z
 	
 	if ('A' <= Character && Character <= 'Z') {
 		Character += 32
@@ -54,26 +54,21 @@ define i16 Lower(i16 Character) {
 	
 	return Character
 }
-
-define i8 CharacterEqualsNoCase(i16 CharacterOne, i16 CharacterTwo) {
-	/* Checks if two characters are equal, ignoring case */
-	return Lower(CharacterOne) = Lower(CharacterTwo)
+define i16 Lower(i16 Character) {
+	return Lower(Character As i8) As i16
 }
 
 define i8 IsAlpha(i16 Character) {
-	/* Checks if a character is alpha */
-	
 	if ('a' <= Character && Character <= 'z') {
-		return 1
+		return true
 	}
 	else if ('A' <= Character && Character <= 'Z') {
-		return 1
+		return true
 	}
 
-	return 0
+	return false
 }
 define i8 IsNumeric(i16 Character) {
-	/* Checks if a character is a number of not */
 	return (Character >= '0') && (Character <= '9')
 }
 define i8 IsNumber(i16 Character) {
@@ -81,11 +76,10 @@ define i8 IsNumber(i16 Character) {
 }
 
 define i8 IsAlphaNumeric(i16 Character) {
-	/* Checks if a character is alphanumeric(/can be part of an identifier) */
 	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
 }
 
-define i8 IsPath(i16 Character, i8 AllowExtra) {
+define i8 IsPath(i16 Character, i16 AllowExtra) {
 	if (IsAlphaNumeric(Character)) {
 		return true
 	}
@@ -105,8 +99,6 @@ define i8 IsPath(i16 Character, i8 AllowExtra) {
 }
 
 define i8 _IsHex(i16 Character) {
-	/* Checks if a character is a hex character (a-fA-F) */
-	
 	if ((Character >= 'a') && (Character <= 'f')) {
 		return true
 	}
@@ -117,17 +109,18 @@ define i8 _IsHex(i16 Character) {
 	return false
 }
 define i8 IsHex(i16 Character) {
-	/* Checks if a character is numeric or hex */
 	return IsNumeric(Character) || _IsHex(Character)
 }
 
 define i8 IsWhiteSpace(i16 Character) {
 	if (Character = ' ' || Character = '	') {
-		/* space+tab */
+		; Space and tab
+		
 		return true
 	}
 	else if (Character = 10 || Character = 13) {
-		/* linefeeds */
+		; Line endings
+		
 		return true
 	}
 

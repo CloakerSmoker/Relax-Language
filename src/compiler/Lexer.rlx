@@ -259,7 +259,7 @@ struct LexerState {
 	}
 	
 	define i8 PeekNextCharacter() {
-		return Lower(this->Source[this->SourceIndex]) As i8
+		return Lower(this->Source[this->SourceIndex] As i8)
 	}
 	define i8 GetNextCharacter() {
 		i8 Result := this->PeekNextCharacter()
@@ -273,7 +273,7 @@ struct LexerState {
 		return Result
 	}
 	define i8 GetNextCharacterRaw() {
-		i8 Result := this->Source[this->SourceIndex]
+		i8 Result := this->Source[this->SourceIndex] As i8
 		
 		this->GetNextCharacter()
 		
@@ -310,7 +310,7 @@ struct LexerState {
 		return this->Tokens[TokenIndex]
 	}
 	
-	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i32 Length, i16* SourceText, SafeWideString* SourceFilePath) {
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i16 Length, i16* SourceText, SafeWideString* SourceFilePath) {
 		if (this->Parent != null) {
 			return this->Parent->AppendToken(TokenType, TokenValue, LineNumber, Position, Length, SourceText, SourceFilePath)
 		}
@@ -337,11 +337,11 @@ struct LexerState {
 		}
 	}
 	
-	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position, i32 Length) {
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position, i16 Length) {
 		return this->AppendToken(TokenType, TokenValue, this->CurrentLineNumber, Position, Length, this->SourceText, this->SourceFilePath)
 	}
 	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position) {
-		return this->AppendToken(TokenType, TokenValue, Position, this->SourceIndex - Position)
+		return this->AppendToken(TokenType, TokenValue, Position, (this->SourceIndex - Position) As i16)
 	}
 	define Token* AppendToken(i8 TokenType, void* TokenValue) {
 		return this->AppendToken(TokenType, TokenValue, this->CurrentTokenStart)

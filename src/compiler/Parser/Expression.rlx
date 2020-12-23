@@ -211,7 +211,7 @@
 				
 				i8 BrokeInner := false
 				
-				for (i32 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
+				for (i8 ParameterIndex := 0, ParameterIndex < NextParameterCount, ParameterIndex += 1) {
 					; For each parameter this definition has (which might be less than ParameterCount in the
 					;  case of variadic functions)
 					
@@ -385,7 +385,7 @@
 			;  and add one to get the character size for each flavor of string. 
 			;   Aka 1 for TOKEN_TYPE_STRING and 2 for TOKEN_TYPE_WIDE_STRING
 			
-			i8 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
+			i32 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
 			SafeWideString* StringText := NextToken->StringValue
 			
 			if (Offset % CharacterSize) {
@@ -408,7 +408,7 @@
 			
 			if (CharacterSize = 1) {
 				for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-					Buffer[Offset + Index] := StringText->Buffer[Index]
+					Buffer[Offset + Index] := StringText->Buffer[Index] As i8
 				}
 			}
 			else {
@@ -529,7 +529,7 @@
 					
 					ResultType := this->PointerToType(ResultType)
 				}
-				else if (Operand = OPERATOR_STAR) {
+				else if (Operator = OPERATOR_STAR) {
 					ResultType := this->DereferencePointerType(ResultType, Operand~>Context)
 				}
 				
@@ -856,6 +856,22 @@
 						Left->Error("The left side operand of assignment operators must be a storage value")
 					}
 					
+					i8 SkipTypeCheck := false
+					
+					if (LeftDepth != 0 && RightDepth = 0 && RightBase->IsBuiltin && RightBase->Size >= 4) {
+						SkipTypeCheck := true
+					}
+					else if (LeftDepth != 0 && RightDepth = 1 && RightBase = this->void) {
+						SkipTypeCheck := true
+					}
+					else if (Right->NodeType = NODE_TYPE_INTEGER) {
+						Right := this->DowncastIntegerNode(Right)
+					}
+					
+					if !(SkipTypeCheck) {
+						CheckTypes(this->void, RightType, LeftType, Right)
+					}
+					
 					ResultType := LeftType
 				}
 				else if (OPERATOR_FIRST_COMPARISON <= Operator && Operator <= OPERATOR_LAST_COMPARISON) {
@@ -891,6 +907,16 @@
 					ResultType := this->i8->AsNonPointer()
 				}
 				else {
+					if (Operator = OPERATOR_AND || Operator = OPERATOR_OR || Operator = OPERATOR_XOR) {
+						; If the operator is bitwise, allow integers on the right without upgrading the result type
+						;  to an i32
+						
+						if (Right->NodeType = NODE_TYPE_INTEGER) {
+							Right := this->DowncastIntegerNode(Right)
+							RightType := Right->ValueType
+						}
+					}
+					
 					; This is only reached for regular old operators, like + or -
 					; Which also happens to be the set of operators which are hard to decide a result type for
 					

@@ -228,8 +228,8 @@ define void EmitREX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRe
 }
 
 define i8 MakeModRM(i8 Mode, i8 DestinationRegister, i8 SourceRegister) {
-	Mode := Mode << 6
-	i8 Reg := ClampRegisterNumber(DestinationRegister) << 3
+	Mode := (Mode << 6) As i8
+	i8 Reg := (ClampRegisterNumber(DestinationRegister) << 3) As i8
 	i8 RM := ClampRegisterNumber(SourceRegister)
 	
 	return Mode | Reg | RM
@@ -490,11 +490,11 @@ define void EmitMove_RIX_DISPX_RX(CompilerState* Compiler, i8 DestinationRegiste
 }
 
 define void EmitMove_RX_SIB(CompilerState* Compiler, i8 DestinationRegister, i8 Scale, i8 IndexRegister, i8 BaseRegister) {
-	i8 Opcode := 0x8B
+	i8 Opcode := 0x8B As i8
 	i8 REX := 0
 	
 	if (Scale = 1) {
-		Opcode := 0x8A 
+		Opcode := 0x8A As i8
 		REX := REX_BASE
 	}
 	else if (Scale = 2) {
@@ -619,7 +619,7 @@ define void EmitIMul_RX_RX(CompilerState* Compiler, i8 DestinationRegister, i8 S
 	
 	I.HasTwoByteOpcode := true
 	I.OpcodeOne := 0x0F
-	I.OpcodeTwo := 0xAF
+	I.OpcodeTwo := 0xAF As i8
 	I.Mode := MODE_RTOR
 	
 	if (Size = 1) {

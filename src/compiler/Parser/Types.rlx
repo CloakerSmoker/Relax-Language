@@ -1,9 +1,9 @@
 define Type MakeType(TypeInfo* BackingType, i16 PointerDepth) {
 	/* Functions as GetType except with a TypeInfo passed directly instead of being found by name */
 	
-	Type NewType := 0
+	Type NewType := TYPE_NONE
 	
-	NewType.BaseType := BackingType
+	NewType.BaseType := BackingType As i64
 	NewType.PointerDepth := PointerDepth
 
 	return NewType
@@ -50,11 +50,11 @@ struct ArrayTypeInfo {
 declare TypeInfo* GetBaseType(Type)
 
 define Type MakeArrayType(Type ElementType, i16 ArrayLength) {
-	Type Result := 0
+	Type Result := TYPE_NONE
 	
 	Result.IsArray := true
-	Result.BaseType := ArrayTypeInfo:New(GetBaseType(ElementType), ArrayLength)
-	Result.PointerDepth := ElementType.PointerDepth + 1
+	Result.BaseType := ArrayTypeInfo:New(GetBaseType(ElementType), ArrayLength) As i64
+	Result.PointerDepth := ElementType.PointerDepth + 1 As i16
 	
 	return Result
 }
@@ -77,21 +77,21 @@ define i16 GetTypeSize(Type T) {
 		return GetBaseType(T)->Size
 	}
 }
-define i32 GetTypeStorageSize(Type T) {
-	i32 RegularSize := GetTypeSize(T)
+define i16 GetTypeStorageSize(Type T) {
+	i16 RegularSize := GetTypeSize(T)
 	
 	if (T.IsArray) {
 		Type B := T
 		
 		B.PointerDepth -= 1
 		
-		return GetTypeSize(B) * GetArrayType(T)->Length
+		return (GetTypeSize(B) * GetArrayType(T)->Length) As i16
 	}
 	
 	return RegularSize
 }
-define i32 GetPointerDepth(Type T) {
-	return T.PointerDepth As i32
+define i16 GetPointerDepth(Type T) {
+	return T.PointerDepth
 }
 
 define i32 GetTypeStringLength(Type T) {

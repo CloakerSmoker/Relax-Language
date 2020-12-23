@@ -141,7 +141,7 @@ define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 		ASTNode* Left := Node->BinaryNode->Left
 		ASTNode* Right := Node->BinaryNode->Right
 		
-		i8 Operator := Node->BinaryNode->Operator->Value
+		i8 Operator := Node->BinaryNode->Operator->IntegerValue As i8
 		
 		if (Operator = OPERATOR_OPEN_BRACKET) {
 			Visitor->SetState(true)
@@ -190,7 +190,7 @@ define void EliminateGlobals(VariableHashMap* Globals) {
 	HashMap* RawGlobals := Globals->Map
 	
 	void* Elements := RawGlobals->Elements
-	i32 MaxIndex := RawGlobals->BufferMaxCount
+	i32 MaxIndex := RawGlobals->BufferMaxCount As i32
 	
 	i32 NewNextOffset := 0
 	

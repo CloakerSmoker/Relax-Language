@@ -260,11 +260,11 @@
 				/* `Register[` = SIB, so parse the SIB */
 				
 				Next->HasSIB := true
-				Next->SIBValue.BaseRegister := this->ParseRegisterName(BaseRegisterName, 8)
+				Next->SIBValue.BaseRegister := this->ParseRegisterName(BaseRegisterName, 8) As i8
 				
 				Token* IndexRegisterName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected index register name")
 				
-				Next->SIBValue.IndexRegister := this->ParseRegisterName(IndexRegisterName, 8)
+				Next->SIBValue.IndexRegister := this->ParseRegisterName(IndexRegisterName, 8) As i8
 				
 				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 					Token* Scale := this->Consume(TOKEN_TYPE_INTEGER, "Expected scale value.")
@@ -283,7 +283,7 @@
 			else {
 				; No `[` following the register, this is just a regular register reference
 				
-				Next->RegisterNumber := this->ParseRegisterName(BaseRegisterName, 8)
+				Next->RegisterNumber := this->ParseRegisterName(BaseRegisterName, 8) As i8
 			}
 			
 			i8 IsPlus := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_PLUS)
@@ -377,7 +377,7 @@
 				Next->Size := ((Register >> 8) & 0xFF)
 				Next->Type := Next->Size << OP_R_OFFSET
 				
-				Next->RegisterNumber := Register & 0xFF
+				Next->RegisterNumber := (Register & 0xFF) As i8
 			}
 			
 			Next~>Context->Clone(NextToken~>Context)

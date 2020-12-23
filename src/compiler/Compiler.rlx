@@ -78,10 +78,10 @@ struct CompilerState {
 		this->Parser := Parser
 		
 		this->CodeBufferSize := 0x10000
-		this->CodeBuffer := Alloc(0x10000) As i8*
+		this->CodeBuffer := Alloc(0x10000)
 		this->Index := 0
 		
-		this->CodeRelocations := Alloc(8) As i64*
+		this->CodeRelocations := Alloc(8)
 		this->CodeRelocationCount := 0
 		
 		this->Labels := Alloc(80) As Label**
@@ -152,7 +152,7 @@ struct CompilerState {
 #Require "./src/compiler/CodeGen.rlx"
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)
-declare void CompileFunction(CompilerState*, FunctionDefine*, i8)
+declare i32 CompileFunction(CompilerState*, FunctionDefine*, i8)
 
 define void DumpGlobals(CompilerState* Compiler) {
 	/* Walk the globals hashmap and print the offset/size of each */
@@ -166,7 +166,7 @@ define void DumpGlobals(CompilerState* Compiler) {
 	i32 MaxOffset := Globals->NextOffset
 	i32 Base := Compiler->GlobalBase
 	
-	i32 MaxIndex := RawGlobals->BufferMaxCount
+	i32 MaxIndex := RawGlobals->BufferMaxCount As i32
 	
 	for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
@@ -299,14 +299,14 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	Compiler->Initialize(Config, Parser)
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		Compiler->GlobalBase := Config->ImageBase + 0x10
-		Compiler->CodeBase := Config->ImageBase + Parser~>Globals->NextOffset + 0x10
+		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
+		Compiler->CodeBase := (Config->ImageBase + Parser~>Globals->NextOffset + 0x10) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF := BuildELFBuilder()
 		
-		Compiler->GlobalBase := Config->ImageBase + 64 + 0x1000
-		Compiler->CodeBase := Parser~>Globals->NextOffset + 564 + 0x2000
+		Compiler->GlobalBase := (Config->ImageBase + 64 + 0x1000) As i32
+		Compiler->CodeBase := (Parser~>Globals->NextOffset + 564 + 0x2000) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder()
@@ -314,7 +314,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
 		Compiler->PE->PE->ImageBase := Config->ImageBase
 		
-		Compiler->GlobalBase := Config->ImageBase + Compiler->PE->NextRVA
+		Compiler->GlobalBase := (Config->ImageBase + Compiler->PE->NextRVA) As i32
 		Compiler->CodeBase := 0x3000
 	}
 	
@@ -330,7 +330,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	; Loop through each custom type
 	HashMap* Types := Parser~>Types
 	
-	i32 ElementCount := Types->BufferMaxCount
+	i32 ElementCount := Types->BufferMaxCount As i32
 	void* Elements := Types->Elements
 	
 	for (i32 ElementIndex := 0, ElementIndex < ElementCount, ElementIndex += 1) {
@@ -389,7 +389,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		void* Binary := Alloc(FileSize)
 		i8* BinaryBytes := Binary As i8*
 		
-		BinaryBytes[0] := 0xE9
+		BinaryBytes[0] := 0xE9 As i8
 		((Binary + 1) As i32*)[0] := CodeBase + MainOffset - 5
 		((Binary + 8) As i64*)[0] := Config->ImageBase
 		
@@ -459,7 +459,7 @@ define i8 StackIndexToRegister(i8 Index) {
 define i8 PushRegisterStack(CompilerState* Compiler) {
 	i8 Index := Compiler->RegisterStackIndex
 	
-	i8 TrueIndex := Index % 7
+	i8 TrueIndex := (Index % 7) As i8
 	i8 Result := StackIndexToRegister(TrueIndex)
 	
 	if (Index >= 8) {
@@ -478,7 +478,7 @@ define i8 PopRegisterStack(CompilerState* Compiler) {
 	
 	i8 Index := Compiler->RegisterStackIndex
 	
-	i8 TrueIndex := Index % 7
+	i8 TrueIndex := (Index % 7) As i8
 	i8 Result := StackIndexToRegister(TrueIndex)
 	
 	if (Index >= 8) {
@@ -560,7 +560,7 @@ define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister
 }
 
 declare void CompileExpression(CompilerState*, i8, ASTNode*)
-
+declare void Cast(CompilerState*, i8, i8)
 
 ; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
 ;  functions which return 'void'
@@ -573,7 +573,16 @@ define i32 CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, V
 	}
 	
 	if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+		ASTNode* LastValue := TargetVariable->LastValue
+		
 		CompileExpression(Compiler, ResultRegister, TargetVariable->LastValue)
+		
+		i16 LastValueSize := GetTypeSize(LastValue->ValueType)
+		
+		if (LastValueSize <= 4) {
+			Cast(Compiler, ResultRegister, LastValueSize As i8)
+		}
+		
 		return 0
 	}
 	
@@ -723,9 +732,9 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		MAX_REGISTER_PARAMETERS := 6
 	}
 	
-	i8 ParameterCount := FunctionToCompile->ParameterCount
-	i8 RegisterParameterCount := MAX_REGISTER_PARAMETERS
-	i8 StackParameterCount := 0
+	i16 ParameterCount := FunctionToCompile->ParameterCount
+	i16 RegisterParameterCount := MAX_REGISTER_PARAMETERS
+	i16 StackParameterCount := 0
 	
 	if (ParameterCount < MAX_REGISTER_PARAMETERS) {
 		/* If there are less than 4/6 parameters, then the number of register parameters is just the number of parameters */
@@ -742,8 +751,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	/* Set up the stack frame for this function */
-	i16 LocalSpace := FunctionToCompile~>Locals->NextOffset
-	i16 LocalSpaceRemainder := LocalSpace % 16
+	i16 LocalSpace := FunctionToCompile~>Locals->NextOffset As i16
+	i16 LocalSpaceRemainder := (LocalSpace % 16) As i16
 	
 	if (LocalSpaceRemainder) {
 		LocalSpace += 8
@@ -795,7 +804,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 			NextParameterRegister := GetSystemVRegister(RegisterParameterIndex)
 		}
 		else {
-			NextParameterRegister := RegisterParameterIndex + 1
+			NextParameterRegister := (RegisterParameterIndex + 1) As i8
 			
 			if (NextParameterRegister > 2) {
 				NextParameterRegister += 5
@@ -814,7 +823,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		/* Load RAX with the parameter's value (using RBX/old RSP as a base) */
 		
-		i8 NextParameterOffset := (StackParameterIndex + 1) * 8
+		i8 NextParameterOffset := ((StackParameterIndex + 1) * 8) As i8
 		i8 NextParameterSize := GetTypeSize(NextStackParameter->Type) As i8
 		
 		;EmitMove_RX_RIX_DISP8(Compiler, RAX, RBX, NextParameterOffset, NextParameterSize)
@@ -1121,7 +1130,7 @@ bits LoopLables As i64 {
 	[32:63] BreakLabel
 }
 define i64 EnterLoop(CompilerState* Compiler, i32 ContinueLabel, i32 BreakLabel) {
-	LoopLables Result := Compiler->CurrentLoopContinueLabel
+	LoopLables Result := Compiler->CurrentLoopContinueLabel As LoopLables
 	Result.BreakLabel := Compiler->CurrentLoopBreakLabel
 	
 	Compiler->CurrentLoopContinueLabel := ContinueLabel
@@ -1232,7 +1241,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	if (ExpressionType = NODE_TYPE_INTEGER) {
 		/* Simply move the integer being used into the result register */
 		
-		i8 ResultSize := GetTypeSize(ResultType)
+		i8 ResultSize := GetTypeSize(ResultType) As i8
 		i64 IntegerValue := ExpressionToCompile->IntegerValue
 		
 		if (IntegerValue = 0) {
@@ -1371,8 +1380,8 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		if (IS_VARIADIC) {
 			ParameterCount := TargetFunction->ParameterCount - 1
 			
-			i8 VariadicCount := ((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1
-			i8 VariadicBase := ParameterCount
+			i8 VariadicCount := (((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1) As i8
+			i8 VariadicBase := ParameterCount As i8
 			
 			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
 				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
@@ -1393,7 +1402,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 			EmitPush_R64(Compiler, RBX)
 		}
 		
-		for (i64 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
+		for (i32 ParameterIndex := (ParameterCount - 1), ParameterIndex >= 0, ParameterIndex -= 1) {
 			i16 ExpectedSize := 8
 			
 			if !(IS_SYSCALL) {
@@ -1557,11 +1566,11 @@ define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, St
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(Compiler, ResultRegister, TargetAccess->Left)
 		
-		TargetFieldSize := FieldOffset
+		TargetFieldSize := FieldOffset As i8
 		
 		i32 FieldSize := (TargetFieldSize * 8) - 1
-		i8 ShiftLeftBy := FieldSize - TargetField->BitEndIndex
-		i8 ShiftRightBy := ShiftLeftBy + TargetField->BitStartIndex
+		i8 ShiftLeftBy := (FieldSize - TargetField->BitEndIndex) As i8
+		i8 ShiftRightBy := (ShiftLeftBy + TargetField->BitStartIndex) As i8
 		
 		if (ShiftLeftBy < 0) {
 			ShiftRightBy := -ShiftLeftBy
@@ -1600,19 +1609,19 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 	i8 ResultPointerRegister := PushRegisterStack(Compiler)
 	
 	i32 FieldOffset := TargetField->Offset
-	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType)
+	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType) As i8
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
 		
-		TargetFieldSize := TargetField->Offset
+		TargetFieldSize := TargetField->Offset As i8
 		
 		i8 StartIndex := TargetField->BitStartIndex
 		i8 EndIndex := TargetField->BitEndIndex
 		
 		i32 FieldSize := (TargetFieldSize * 8) - 1
-		i8 ShiftLeftBy := FieldSize - (EndIndex - StartIndex)
-		i8 ShiftRightBy := FieldSize - EndIndex
+		i8 ShiftLeftBy := (FieldSize - (EndIndex - StartIndex)) As i8
+		i8 ShiftRightBy := (FieldSize - EndIndex) As i8
 		
 		i64 PartialMask := ((1 As i64) << ((EndIndex + 1) As i8)) - 1
 		
@@ -1683,7 +1692,7 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 	i8 IsSet := !(ValueRegister < 0)
 	
 	if (Index->NodeType = NODE_TYPE_INTEGER) {
-		i32 IndexAsDisplacement := Index->IntegerValue * IndexScale
+		i32 IndexAsDisplacement := (Index->IntegerValue * IndexScale) As i32
 		i8 DisplacementSize := 4
 		
 		if (IndexAsDisplacement <= 112) {
@@ -2149,7 +2158,7 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 				; TODO: UPDATE
 				Type TrueResultType := Left->ValueType
 				
-				ResultSize := GetTypeSize(TrueResultType)
+				ResultSize := GetTypeSize(TrueResultType) As i8
 			}
 			
 			/* If either operand is smaller than the result type, cast it up to the R64 (aka any possible size) */

@@ -118,8 +118,8 @@ define void WriteELFHeader(void* IntoBuffer) {
 	NewHeader->MachineType := ELF_MACHINE_AMD64
 	NewHeader->ELFVersion := 1 /* Use original version of ELF */
 	NewHeader->HeaderSize := 64 /* 64 bytes of headers */
-	NewHeader->ProgramHeadersSize := #ELFProgramHeader
-	NewHeader->SectionHeadersSize := #ELFSectionHeader
+	NewHeader->ProgramHeadersSize := #ELFProgramHeader As i16
+	NewHeader->SectionHeadersSize := #ELFSectionHeader As i16
 	NewHeader->SectionNameHeaderIndex := 1
 }
 
@@ -149,8 +149,8 @@ define ELFSectionHeader* AppendSectionHeader(ELFBuilder* ToBuilder) {
 	
 	return Result
 }
-define i64 AppendString(ELFBuilder* ToBuilder, i8* Text) {
-	i64 StartingIndex := ToBuilder->StringSection->FileSize
+define i32 AppendString(ELFBuilder* ToBuilder, i8* Text) {
+	i32 StartingIndex := ToBuilder->StringSection->FileSize As i32
 	i32 TextLength := StringLength(Text)
 	i32 NewSize := StartingIndex + TextLength + 1
 	
@@ -270,12 +270,12 @@ define ELFBuilder* BuildELFBuilder() {
 define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset, i64 ImageBase) {
 	i32 ProgramHeadersSize := TargetBuilder->ELF->ProgramHeaderEntryCount * #ELFProgramHeader
 	i32 SectionHeadersSize := TargetBuilder->ELF->SectionHeaderEntryCount * #ELFSectionHeader
-	i32 CodeSize := TargetBuilder->CodeProgramHeader->FileSize
-	i32 StringSectionSize := TargetBuilder->StringSection->FileSize
+	i32 CodeSize := TargetBuilder->CodeProgramHeader->FileSize As i32
+	i32 StringSectionSize := TargetBuilder->StringSection->FileSize As i32
 	i32 DataSize := 0
 	
 	if (TargetBuilder->DataProgramHeader) {
-		DataSize := TargetBuilder->DataProgramHeader->MemorySize
+		DataSize := TargetBuilder->DataProgramHeader->MemorySize As i32
 	}
 	
 	i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
@@ -286,8 +286,8 @@ define void FinalizeELFBuilder(ELFBuilder* TargetBuilder, i32 MainOffset, i64 Im
 	TargetBuilder->PHDR->MemorySize := PHDRSize
 	
 	/* These fields are reused to hold the ProgramHeaders/SectionHeaders buffer sizes, but need to be set to their true values */
-	TargetBuilder->ELF->ProgramHeadersSize := #ELFProgramHeader
-	TargetBuilder->ELF->SectionHeadersSize := #ELFSectionHeader
+	TargetBuilder->ELF->ProgramHeadersSize := #ELFProgramHeader As i16
+	TargetBuilder->ELF->SectionHeadersSize := #ELFSectionHeader As i16
 	
 	/* Update the segment which contains the program headers */
 	TargetBuilder->LoadPHDR->FileSize := PHDRSize
