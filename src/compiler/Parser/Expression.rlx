@@ -486,7 +486,7 @@
 							;   as a static method of that type, we return a NODE_TYPE_DEFINE containing the resolved
 							;    FunctionDefine struct, which the compiler will then load the address of.
 							
-							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsPointer(1))
+							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsNonPointer())
 							
 							Result~>Context->Clone(MaybeFunctionName~>Context)->Merge(this->GetCurrentTokenContext())
 							

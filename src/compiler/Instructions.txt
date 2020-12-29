@@ -99,7 +99,7 @@ outb	0xEE	_		NO_RM						_
 outw	0xEF	_		NO_RM|NEEDS_66				_
 outd	0xEF	_		NO_RM						_
 
-lidt	0x0F01	m64		ONE_OP_W_EXT				_
+lidt	0x0F01	m64		ONE_OP_W_EXT				3
 cli		0xFA	_		NO_RM						_
 sti		0xFB	_		NO_RM						_
 

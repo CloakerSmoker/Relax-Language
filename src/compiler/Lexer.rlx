@@ -691,12 +691,12 @@ struct LexerState {
 				; First, we need to use the target output format to decide if `\n` is actually
 				;  `\r\n` or just `\n`
 				
-				i16 NewLine := 0x0A0D
-				i32 NewLineLength := 2
+				i16 NewLine := 0x0A
+				i32 NewLineLength := 1
 				
-				if (this->Config->OutputFormat = OUTPUT_ELF) {
-					NewLine := 0x0A
-					NewLineLength := 1
+				if (this->Config->OutputFormat = OUTPUT_PE) {
+					NewLine := 0x0A0D
+					NewLineLength := 2				
 				}
 				
 				i8* NewLineString := &NewLine As i8*
