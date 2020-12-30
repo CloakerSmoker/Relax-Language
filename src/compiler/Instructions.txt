@@ -44,6 +44,9 @@ and		0x20 	m,r 	RM_OP1 						_
 and		0x80 	m,i 	OP_EXT|RM_OP1|IMM8 			4
 and		0x81 	m,i 	OP_EXT|RM_OP1|IMM32 		4
 
+add		0x01	m,r		RM_OP1						_
+imul	0x0FAF	r,m		RM_OP2						_
+
 mov		0xC7 	m,i 	OP_EXT|RM_OP1|IMMX			0
 mov		0xB8 	m,i64 	NO_RM|REG_IN_OPCODE|IMM64 	_
 mov		0x8B 	r,m 	RM_OP2 						_
@@ -73,6 +76,7 @@ test	0xF7	m,i		ONE_OP_W_EXT				0
 test	0x85	m,r		RM_OP1						_
 
 cmp		0x83	hrm,i8	ONE_OP_W_EXT|IMM8			7
+cmp		0x39	m,r		RM_OP1						_
 
 xchg	0x87	m,r		RM_OP1						_
 xchg	0x87	r,m		RM_OP2						_
@@ -107,3 +111,20 @@ bsr		0x0FBD	hr,hm	RM_OP2						_
 bsf		0x0FBC	hr,hm	RM_OP2						_
 
 lock	0xF0	_		NO_RM						_
+
+repne	0xF2	_		NO_RM						_
+rep		0xF3	_		NO_RM						_
+cld		0xFC	_		NO_RM						_
+std		0xFD	_		NO_RM						_
+
+movsb	0xA4	_		NO_RM						_
+movsw	0xA5	_		NO_RM|NEEDS_66				_
+movsd	0xA5	_		NO_RM						_
+movsq	0xA5	_		NO_RM|REX_W					_
+
+stosb	0xAA	_		NO_RM						_
+stosw	0xAB	_		NO_RM|NEEDS_66				_
+stosd	0xAB	_		NO_RM						_
+stosq	0xAB	_		NO_RM|REX_W					_
+
+ldcr3	0x0F22	r64		ONE_OP_W_EXT				3
