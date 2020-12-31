@@ -134,6 +134,8 @@ i8 NODE_TYPE_TRY := 23
 ;  of a type's size needs to be deferred until compile-time
 i8 NODE_TYPE_GET_TYPE_SIZE := 24
 
+i8 NODE_TYPE_EXPRESSION_BLOCK := 25
+
 ; EndRegion
 
 ; AST node structs region
@@ -558,7 +560,9 @@ struct ASTNode {
 		i32 StringOffsetValue,
 		
 		AssemblyBlock* AssemblyValue,
-		TryCatch* TryNode
+		TryCatch* TryNode,
+		
+		Block* BlockValue
 	},
 	
 	void* LastVisitor

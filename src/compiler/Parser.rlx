@@ -450,6 +450,100 @@ struct ParserState {
 	
 	#Require "./src/compiler/Parser/Expression.rlx"
 	
+	define ASTNode* ParseInitializer(ASTNode* ForNode) {
+		Type ForType := ForNode->ValueType
+		
+		i8 IsArray := ForType.IsArray
+		i16 ForTypeDepth := GetPointerDepth(ForType)
+		TypeInfo* ForBaseType := GetBaseType(ForType)
+		
+		if (ForTypeDepth = 0 && ForBaseType->IsStructType) {
+			i16 InitializerCapacity := 20
+			ASTNode** Initializers := Alloc(InitializerCapacity * #ASTNode*) As ASTNode**
+			
+			i16 InitializerIndex := 0
+			i8 IsFirstInitializer := true
+			
+			while (IsFirstInitializer || this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				Token* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected initializer field name")
+				
+				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected ':' after initializer field name")
+				
+				HashMapElement* FieldElement := ForBaseType~>Fields->Get(FieldName->StringValue)
+				
+				if (FieldElement = null) {
+					FieldName->Error("Unknown struct field")
+				}
+				
+				StructField* Field := FieldElement->Value
+				i8 FieldIsStruct := GetPointerDepth(Field->ValueType) = 0 && GetBaseType(Field->ValueType)->IsStructType
+				
+				; Build a node for `ForNode.Field`
+				
+				StructAccessExpression* Access := Alloc(#StructAccessExpression)
+				
+				Access->Left := ForNode
+				Access->Operator := Alloc(#Token)
+				Access->Operator->Type := TOKEN_TYPE_OPERATOR
+				Access->Operator->IntegerValue := OPERATOR_DOT
+				Access->TargetField := Field
+				
+				; Parse any initializers for `ForNode.Field`
+				
+				if (FieldIsStruct) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for field initializer")
+				}
+				
+				ASTNode* AccessNode := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, Field->ValueType)
+				ASTNode* InitializerValue := this->ParseInitializer(AccessNode)
+				
+				if (FieldIsStruct) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for field initializer")
+				}
+				
+				; If `ForNode.Field` is a struct, then we don't want to assign `ForNode.Field` to anything, since
+				;  there is no value to assign, merely a block of initializers for `ForNode.Field` itself which
+				;   should be directly executed
+				
+				if (FieldIsStruct) {
+					Initializers[InitializerIndex] := InitializerValue
+				}
+				else {
+					BinaryExpression* Assign := Alloc(#BinaryExpression)
+					
+					Assign->Left := AccessNode
+					Assign->Operator := Alloc(#Token)
+					Assign->Operator->Type := TOKEN_TYPE_OPERATOR
+					Assign->Operator->IntegerValue := OPERATOR_COLON_EQUAL
+					Assign->Right := InitializerValue
+					
+					Initializers[InitializerIndex] := ASTNode:New(NODE_TYPE_BINARY, Assign, Field->ValueType)
+				}
+				
+				InitializerIndex += 1
+				IsFirstInitializer := false
+			}
+			
+			Block* InitializersBlock := Alloc(#Block) As Block*
+			
+			InitializersBlock->Statements := Initializers
+			InitializersBlock->StatementCount := InitializerIndex
+			
+			return ASTNode:New(NODE_TYPE_EXPRESSION_BLOCK, InitializersBlock)
+		}
+		else {
+			ASTNode* InitializerExpression := this->ParseExpression()
+			
+			if (InitializerExpression->NodeType = NODE_TYPE_INTEGER) {
+				InitializerExpression := this->DowncastIntegerNode(InitializerExpression)
+			}
+			
+			CheckTypes(this->void, InitializerExpression->ValueType, ForType, InitializerExpression)
+			
+			return InitializerExpression
+		}
+	}
+	
 	define ASTNode* TryParseVariableDeclaration(i8 ForGlobalVariable, i8 ForParameter, i8** ErrorMessage, VariableInfo** OutNewVariable) {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
 		;  and returns an expression which will set that variable to an optional default value (if allowed)
@@ -492,6 +586,15 @@ struct ParserState {
 					this->Unfreeze(DefaultValueExpressionStart)
 					
 					return this->ParseExpression()
+				}
+				else if (ForParameter = false && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+					ASTNode* NewVariableNode := ASTNode:New(NODE_TYPE_VARIABLE, NewVariable, PotentialType)
+					
+					ASTNode* InitializersBlock := this->ParseInitializer(NewVariableNode)
+					
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
+					
+					return InitializersBlock
 				}
 				else {
 					return null

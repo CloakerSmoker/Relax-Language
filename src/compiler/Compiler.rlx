@@ -844,9 +844,15 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
 			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
-			VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 			
-			if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+			if (NextGlobalDefault->BinaryNode->Left->NodeType = NODE_TYPE_VARIABLE) {
+				VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
+				
+				if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+					CompileExpression(Compiler, RAX, NextGlobalDefault)
+				}
+			}
+			else {
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
@@ -937,7 +943,9 @@ declare void CompileUnwindTry(CompilerState*, i8)
 define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
 	
-	Compiler->MarkLineNumber(NodeToCompile~>Context)
+	if (NodeToCompile~>Context->SourceFilePath != null) {
+		Compiler->MarkLineNumber(NodeToCompile~>Context)
+	}
 	
 	i8 NodeType := NodeToCompile->NodeType
 	
@@ -1232,7 +1240,9 @@ define void CompileGetStorageValuePointer(CompilerState* Compiler, ASTNode* Valu
 define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
 	
-	Compiler->MarkLineNumber(ExpressionToCompile~>Context)
+	if (ExpressionToCompile~>Context->SourceFilePath != null) {
+		Compiler->MarkLineNumber(ExpressionToCompile~>Context)
+	}
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
 	Type ResultType := ExpressionToCompile->ValueType
@@ -1292,6 +1302,13 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 		i32 OperandTypeSize := GetTypeStorageSize(ExpressionToCompile->TypeValue)
 		
 		EmitMove_RX_IX(Compiler, ResultRegister, OperandTypeSize, 4)
+	}
+	else if (ExpressionType = NODE_TYPE_EXPRESSION_BLOCK) {
+		Block* ExpressionBlock := ExpressionToCompile->BlockValue
+		
+		for (i32 Index := 0, Index < ExpressionBlock->StatementCount, Index += 1) {
+			CompileExpression(Compiler, RAX, ExpressionBlock->Statements[Index])
+		}
 	}
 }
 
