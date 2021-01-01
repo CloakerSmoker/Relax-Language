@@ -477,6 +477,7 @@ struct ParserState {
 				
 				StructField* Field := FieldElement->Value
 				i8 FieldIsStruct := GetPointerDepth(Field->ValueType) = 0 && GetBaseType(Field->ValueType)->IsStructType
+				i8 FieldIsArray := Field->ValueType.IsArray
 				
 				; Build a node for `ForNode.Field`
 				
@@ -488,16 +489,20 @@ struct ParserState {
 				Access->Operator->IntegerValue := OPERATOR_DOT
 				Access->TargetField := Field
 				
+				if (FieldIsArray) {
+					Access->Operator->IntegerValue := OPERATOR_TILDE_GREATER
+				}
+				
 				; Parse any initializers for `ForNode.Field`
 				
-				if (FieldIsStruct) {
+				if (FieldIsStruct || FieldIsArray) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for field initializer")
 				}
 				
 				ASTNode* AccessNode := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, Field->ValueType)
 				ASTNode* InitializerValue := this->ParseInitializer(AccessNode)
 				
-				if (FieldIsStruct) {
+				if (FieldIsStruct || FieldIsArray) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for field initializer")
 				}
 				
@@ -505,7 +510,7 @@ struct ParserState {
 				;  there is no value to assign, merely a block of initializers for `ForNode.Field` itself which
 				;   should be directly executed
 				
-				if (FieldIsStruct) {
+				if (FieldIsStruct || FieldIsArray) {
 					Initializers[InitializerIndex] := InitializerValue
 				}
 				else {
@@ -530,6 +535,49 @@ struct ParserState {
 			InitializersBlock->StatementCount := InitializerIndex
 			
 			return ASTNode:New(NODE_TYPE_EXPRESSION_BLOCK, InitializersBlock)
+		}
+		else if (IsArray) {
+			ArrayTypeInfo* ForArrayType := GetArrayType(ForType)
+			Type ElementType := ForArrayType->BaseType->AsPointer(ForTypeDepth - 1 As i16)
+			
+			ASTNode** ElementInitiailizers := Alloc(ForArrayType->Length * #ASTNode*)
+			
+			for (i16 Index := 0, Index < ForArrayType->Length, Index += 1) {
+				BinaryExpression* ArrayAccess := Alloc(#BinaryExpression)
+				
+				ArrayAccess->Left := ForNode
+				ArrayAccess->Operator := Alloc(#Token)
+				ArrayAccess->Operator->Type := TOKEN_TYPE_OPERATOR
+				ArrayAccess->Operator->IntegerValue := OPERATOR_OPEN_BRACKET
+				ArrayAccess->Right := ASTNode:New(NODE_TYPE_INTEGER, Index, this->i32->AsNonPointer())
+				
+				ASTNode* ArrayAccessNode := ASTNode:New(NODE_TYPE_BINARY, ArrayAccess, ElementType)
+				
+				ASTNode* ElementInitiailizer := this->ParseInitializer(ArrayAccessNode)
+				
+				CheckTypes(this->void, ElementInitiailizer->ValueType, ElementType, ElementInitiailizer)
+				
+				BinaryExpression* ElementAssign := Alloc(#BinaryExpression)
+				
+				ElementAssign->Left := ArrayAccessNode
+				ElementAssign->Operator := Alloc(#Token)
+				ElementAssign->Operator->Type := TOKEN_TYPE_OPERATOR
+				ElementAssign->Operator->IntegerValue := OPERATOR_COLON_EQUAL
+				ElementAssign->Right := ElementInitiailizer
+				
+				ElementInitiailizers[Index] := ASTNode:New(NODE_TYPE_BINARY, ElementAssign, ElementType)
+				
+				if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					break
+				}
+			}
+			
+			Block* ArrayInitializersBlock := Alloc(#Block) As Block*
+			
+			ArrayInitializersBlock->Statements := ElementInitiailizers
+			ArrayInitializersBlock->StatementCount := (Index + 1) As i16
+			
+			return ASTNode:New(NODE_TYPE_EXPRESSION_BLOCK, ArrayInitializersBlock)
 		}
 		else {
 			ASTNode* InitializerExpression := this->ParseExpression()
