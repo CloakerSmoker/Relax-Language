@@ -42,6 +42,19 @@ struct Test4 {
 	i64 B
 }
 
+struct Test5 {
+	union {
+		void* Function
+		i8* Bytes
+	}
+}
+
+define void SHOULD_NOT_BE_REMOVED() asm {
+	ret
+}
+
+Test5 FunctionPointer {Function: &SHOULD_NOT_BE_REMOVED}
+
 define i32 Main() {
 	i32 I := 4
 	
@@ -68,6 +81,8 @@ define i32 Main() {
 	for (Index := 0, Index < 3, Index += 1) {
 		Print("%i", Array[Index]->A)
 	}
+	
+	Print("%i", FunctionPointer.Bytes[0] = 0xC3)
 	
 	return 0
 }

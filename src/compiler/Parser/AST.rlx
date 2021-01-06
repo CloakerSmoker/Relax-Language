@@ -714,6 +714,9 @@ struct ASTVisitor {
 		else if (NodeType = NODE_TYPE_EXPRESSION) {
 			this->VisitNodes(Node->ExpressionStatement)
 		}
+		else if (NodeType = NODE_TYPE_EXPRESSION_BLOCK) {
+			this->VisitBlocks(Node->BlockValue)
+		}
 		else if (NodeType = NODE_TYPE_TRY) {
 			this->VisitBlocks(Node->TryNode->Body)
 			
