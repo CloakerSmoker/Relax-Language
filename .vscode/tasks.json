@@ -5,14 +5,14 @@
       "label": "Compile",
       "type": "shell",
       "linux": {
-        "command": "./build/compiler.elf",
+        "command": "build/compiler.elf",
         "args": [
           "${relativeFile}",
           "${relativeFileDirname}/${fileBasenameNoExtension}"
         ]
       },
       "windows": {
-        "command": ".\\build\\compiler.exe",
+        "command": "build\\compiler.exe",
         "args": [
           "${relativeFile}",
           "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
