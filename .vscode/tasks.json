@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compile",
+      "type": "shell",
+      "linux": {
+        "command": "./build/compiler.elf",
+        "args": [
+          "${relativeFile}",
+          "${relativeFileDirname}/${fileBasenameNoExtension}"
+        ]
+      },
+      "windows": {
+        "command": ".\\build\\compiler.exe",
+        "args": [
+          "${relativeFile}",
+          "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
+        ]
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Compile and run",
+      "type": "shell",
+      "dependsOn": ["Compile"],
+      "linux": {
+        "command": "${relativeFileDirname}/${fileBasenameNoExtension}"
+      },
+      "windows": {
+        "command": "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Compile and run with arguments",
+      "type": "shell",
+      "dependsOn": ["Compile"],
+      "linux": {
+        "command": "${relativeFileDirname}/${fileBasenameNoExtension}"
+      },
+      "windows": {
+        "command": "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
+      },
+      "args": ["${input:args}"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "args",
+      "description": "Additional commandline arguments."
+    }
+  ]
+}
