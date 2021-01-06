@@ -551,21 +551,33 @@ struct ParserState {
 				ArrayAccess->Operator->IntegerValue := OPERATOR_OPEN_BRACKET
 				ArrayAccess->Right := ASTNode:New(NODE_TYPE_INTEGER, Index, this->i32->AsNonPointer())
 				
-				ASTNode* ArrayAccessNode := ASTNode:New(NODE_TYPE_BINARY, ArrayAccess, ElementType)
+				i8 InitializerIsStruct := GetPointerDepth(ElementType) = 0 && GetBaseType(ElementType)->IsStructType
 				
+				if (InitializerIsStruct) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for field initializer")
+				}
+				
+				ASTNode* ArrayAccessNode := ASTNode:New(NODE_TYPE_BINARY, ArrayAccess, ElementType)
 				ASTNode* ElementInitiailizer := this->ParseInitializer(ArrayAccessNode)
 				
-				CheckTypes(this->void, ElementInitiailizer->ValueType, ElementType, ElementInitiailizer)
-				
-				BinaryExpression* ElementAssign := Alloc(#BinaryExpression)
-				
-				ElementAssign->Left := ArrayAccessNode
-				ElementAssign->Operator := Alloc(#Token)
-				ElementAssign->Operator->Type := TOKEN_TYPE_OPERATOR
-				ElementAssign->Operator->IntegerValue := OPERATOR_COLON_EQUAL
-				ElementAssign->Right := ElementInitiailizer
-				
-				ElementInitiailizers[Index] := ASTNode:New(NODE_TYPE_BINARY, ElementAssign, ElementType)
+				if (InitializerIsStruct) {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for field initializer")
+					
+					ElementInitiailizers[Index] := ElementInitiailizer
+				}
+				else {
+					CheckTypes(this->void, ElementInitiailizer->ValueType, ElementType, ElementInitiailizer)
+					
+					BinaryExpression* ElementAssign := Alloc(#BinaryExpression)
+					
+					ElementAssign->Left := ArrayAccessNode
+					ElementAssign->Operator := Alloc(#Token)
+					ElementAssign->Operator->Type := TOKEN_TYPE_OPERATOR
+					ElementAssign->Operator->IntegerValue := OPERATOR_COLON_EQUAL
+					ElementAssign->Right := ElementInitiailizer
+					
+					ElementInitiailizers[Index] := ASTNode:New(NODE_TYPE_BINARY, ElementAssign, ElementType)
+				}
 				
 				if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 					break

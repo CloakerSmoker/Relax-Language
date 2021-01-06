@@ -37,6 +37,11 @@ struct Test3 {
 	i8 Length
 }
 
+struct Test4 {
+	i64 A
+	i64 B
+}
+
 define i32 Main() {
 	i32 I := 4
 	
@@ -54,13 +59,14 @@ define i32 Main() {
 	
 	Test3 String {Data: {'a', 'b', 'c'}, Length: 3}
 	
-	;String~>Data[0] := 'a'
-	;String~>Data[1] := 'b'
-	;String~>Data[2] := 'c'
-	;String->Length := 3
-	
 	for (Index := 0, Index < String.Length, Index += 1) {
 		Print("%c", String~>Data[Index])
+	}
+	
+	Test4{3} Array {{A: 123}, {A: 432}, {A: 123}}
+	
+	for (Index := 0, Index < 3, Index += 1) {
+		Print("%i", Array[Index]->A)
 	}
 	
 	return 0

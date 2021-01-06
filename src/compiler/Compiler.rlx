@@ -1703,6 +1703,10 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 	
 	if (PointerDepth = 1) {
 		IndexScale := (PointerBase->Size) As i8
+		
+		if (PointerBase->IsStructType) {
+			GetAddress := true
+		}
 	}
 	
 	i8 IsSet := !(ValueRegister < 0)
@@ -1737,7 +1741,13 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 		}
 		
 		if (IsSet || GetAddress) {
-			EmitLea_R64_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			if (IndexScale > 8) {
+				EmitIMul_R64_I8(Compiler, IndexRegister, IndexScale)
+				EmitAdd_RX_RX(Compiler, PointerRegister, IndexRegister, 8)
+			}
+			else {
+				EmitLea_R64_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			}
 			
 			if (IsSet) {
 				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale)

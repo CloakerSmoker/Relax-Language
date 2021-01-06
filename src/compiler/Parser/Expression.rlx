@@ -902,6 +902,10 @@
 					}
 					
 					ResultType := this->DereferencePointerType(LeftType, Left~>Context)
+					
+					if (GetPointerDepth(ResultType) = 0 && GetBaseType(ResultType)->IsStructType) {
+						ResultType := LeftType
+					}
 				}
 				else if (Operator = OPERATOR_LOGICAL_AND || Operator = OPERATOR_LOGICAL_OR) {
 					ResultType := this->i8->AsNonPointer()

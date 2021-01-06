@@ -630,6 +630,10 @@ define void EmitIMul_RX_RX(CompilerState* Compiler, i8 DestinationRegister, i8 S
 	
 	EmitInstruction(Compiler, &I, DestinationRegister, SourceRegister) 
 }
+define void EmitIMul_R64_I8(CompilerState* Compiler, i8 DestinationRegister, i8 Value) {
+	EmitBasicInstruction(Compiler, 0x6B, MODE_RTOR, 8, DestinationRegister, DestinationRegister)
+	PushByte(Compiler, Value)
+}
 
 
 define void EmitCXX(CompilerState* Compiler, i8 Size) {
