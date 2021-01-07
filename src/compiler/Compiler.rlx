@@ -1436,6 +1436,10 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 				}
 				else {
 					ThisParameterRegister := GetSystemVRegister(ParameterIndex - 1 As i8)
+					
+					if (ThisParameterRegister = RCX) {
+						ThisParameterRegister := R10
+					}
 				}
 			}
 			else if (USE_SYSTEMV) {				
