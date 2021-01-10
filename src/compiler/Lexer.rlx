@@ -296,7 +296,7 @@ struct LexerState {
 		return false
 	}
 	define i8 AtEnd() {
-		return this->SourceIndex > this->SourceLength
+		return this->SourceIndex >= this->SourceLength
 	}
 	
 	define void EnsureCapacity(i32 NeededCapacity) {

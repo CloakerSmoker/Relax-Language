@@ -37,7 +37,7 @@ define i8* WToA(i16* String, i32 Length) {
 		Buffer[Index] := String[Index] As i8
 	}
 	
-	Buffer[Index + 1] := 0
+	Buffer[Index] := 0
 	
 	return Buffer
 }
