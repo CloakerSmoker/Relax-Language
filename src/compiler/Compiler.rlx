@@ -292,6 +292,7 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
 	CountReferences(Parser)
 	EliminateGlobals(Parser)
+	FoldConstants(Parser)
 	
 	CompilerState* Compiler := Alloc(#CompilerState)
 	
@@ -983,6 +984,9 @@ define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	else if (NodeType = NODE_TYPE_ASSEMBLY) {
 		CompileAssembly(Compiler, NodeToCompile->AssemblyValue)
 	}
+	else if (NodeType = NODE_TYPE_BLOCK) {
+		CompileBlock(Compiler, NodeToCompile->BlockValue)
+	}
 }
 
 define void CompileReturn(CompilerState* Compiler, ASTNode* ReturnExpression) {
@@ -1106,7 +1110,13 @@ define void CompileIf(CompilerState* Compiler, IfGroup* IfToCompile) {
 		SetLabel(Compiler, NextBranch)
 		NextBranch := NextLabel(Compiler)
 		
-		CompileCondition(Compiler, IfToCompile->Conditions[BranchIndex], NextBranch)
+		ASTNode* Condition := IfToCompile->Conditions[BranchIndex]
+		
+		if (Condition->NodeType = NODE_TYPE_NONE) {
+			continue
+		}
+		
+		CompileCondition(Compiler, Condition, NextBranch)
 		CompileBlock(Compiler, IfToCompile->Bodies[BranchIndex])
 		
 		if (HasElse || (BranchIndex != (BranchCount - 1))) {

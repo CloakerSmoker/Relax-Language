@@ -97,15 +97,13 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 }
 
 define void CountReferences(ParserState* Parser) {
-	ASTVisitor* Visitor := Alloc(#ASTVisitor)
+	ASTVisitor* Visitor := ASTVisitor:New(&CountReferencesVisit)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_VARIABLE)
 	Visitor->AllowType(NODE_TYPE_ASSEMBLY)
-	
-	Visitor->SetVisitFunction(&CountReferencesVisit)
 	
 	if (Parser->MainFunction->Attribute = KEYWORD_ASSEMBLY) {
 		CountReferencesVisitAssembly(Visitor, Parser->MainFunction->AssemblyBody)
@@ -155,15 +153,13 @@ define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 }
 
 define i8 NodeHasSideEffects(ASTNode* Node) {
-	ASTVisitor* Visitor := Alloc(#ASTVisitor)
+	ASTVisitor* Visitor := ASTVisitor:New(&NodeHasSideEffectsVisitor)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_STRUCT_ACCESS)
 	Visitor->AllowType(NODE_TYPE_STRING)
-	
-	Visitor->SetVisitFunction(&NodeHasSideEffectsVisitor)
 	
 	Visitor->VisitNodes(Node)
 	
@@ -243,4 +239,147 @@ define void EliminateGlobals(ParserState* Parser) {
 	; Update how much space is needed for globals, excluding any eliminated globals.
 	
 	Globals->NextOffset := NewNextOffset
+}
+
+define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
+	if (Root->NodeType = NODE_TYPE_BINARY) {
+		if (IsAssignment(Root->BinaryNode->Operator)) {
+			Visitor->VisitNodes(Root->BinaryNode->Right)
+		}
+		else {
+			ASTNode* Left := FoldConstantsVisitor(Visitor, Root->BinaryNode->Left)
+			ASTNode* Right := FoldConstantsVisitor(Visitor, Root->BinaryNode->Right)
+			
+			i8 BinaryOperator := Root->BinaryNode->Operator->IntegerValue As i8
+			
+			if (Left->NodeType = NODE_TYPE_INTEGER && Right->NodeType = NODE_TYPE_INTEGER) {
+				Root->NodeType := NODE_TYPE_INTEGER
+				
+				i64 LeftValue := Left->IntegerValue
+				i64 RightValue := Right->IntegerValue
+				i8 RightByteValue := RightValue As i8
+				
+				i64 ResultValue := 0
+				
+				if 		(BinaryOperator = OPERATOR_PLUS) 			{ ResultValue := LeftValue +  RightValue }
+				else if (BinaryOperator = OPERATOR_MINUS) 			{ ResultValue := LeftValue -  RightValue }
+				else if (BinaryOperator = OPERATOR_STAR) 			{ ResultValue := LeftValue *  RightValue }
+				else if (BinaryOperator = OPERATOR_SLASH) 			{ ResultValue := LeftValue /  RightValue }
+				else if (BinaryOperator = OPERATOR_PERCENT)			{ ResultValue := LeftValue %  RightValue }
+				else if (BinaryOperator = OPERATOR_EQUAL)			{ ResultValue := LeftValue =  RightValue }
+				else if (BinaryOperator = OPERATOR_BANG_EQUAL)		{ ResultValue := LeftValue != RightValue }
+				else if (BinaryOperator = OPERATOR_LESS)			{ ResultValue := LeftValue <  RightValue }
+				else if (BinaryOperator = OPERATOR_LESS_EQAUL)		{ ResultValue := LeftValue <= RightValue }
+				else if (BinaryOperator = OPERATOR_GREATER)			{ ResultValue := LeftValue >  RightValue }
+				else if (BinaryOperator = OPERATOR_GREATER_EQAUL)	{ ResultValue := LeftValue >= RightValue }
+				else if (BinaryOperator = OPERATOR_XOR)				{ ResultValue := LeftValue ^  RightValue }
+				else if (BinaryOperator = OPERATOR_AND)				{ ResultValue := LeftValue &  RightValue }
+				else if (BinaryOperator = OPERATOR_OR)				{ ResultValue := LeftValue |  RightValue }
+				else if (BinaryOperator = OPERATOR_LOGICAL_AND)		{ ResultValue := LeftValue && RightValue }
+				else if (BinaryOperator = OPERATOR_LOGICAL_OR)		{ ResultValue := LeftValue || RightValue }
+				else if (BinaryOperator = OPERATOR_LESS_LESS)		{ ResultValue := LeftValue << RightByteValue }
+				else if (BinaryOperator = OPERATOR_GREATER_GREATER)	{ ResultValue := LeftValue >> RightByteValue }
+				
+				Root->IntegerValue := ResultValue
+			}
+		}
+	}
+	else if (Root->NodeType = NODE_TYPE_UNARY) {
+		ASTNode* Operand := FoldConstantsVisitor(Visitor, Root->UnaryNode->Operand)
+		
+		i8 UnaryOperator := Root->UnaryNode->Operator->IntegerValue As i8
+		
+		if (Operand->ValueType = NODE_TYPE_INTEGER) {
+			Root->NodeType := NODE_TYPE_INTEGER
+			
+			if 		(UnaryOperator = OPERATOR_MINUS) { Root->IntegerValue := -Operand->IntegerValue }
+			else if (UnaryOperator = OPERATOR_TILDE) { Root->IntegerValue := ~Operand->IntegerValue }
+			else if (UnaryOperator = OPERATOR_BANG)  { Root->IntegerValue := !Operand->IntegerValue }
+		}
+		else {
+			Visitor->VisitChildren(Root)
+		}
+	}
+	else if (Root->NodeType = NODE_TYPE_VARIABLE) {
+		VariableInfo* RootVariable := Root->VariableValue
+		
+		if (RootVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+			ASTNode* LastValue := RootVariable->LastValue
+			
+			Root->IntegerValue := LastValue->IntegerValue
+			Root->NodeType := LastValue->NodeType
+		}
+	}
+	else if (Root->NodeType = NODE_TYPE_GET_TYPE_SIZE) {
+		Root->NodeType := NODE_TYPE_INTEGER
+		Root->IntegerValue := GetTypeStorageSize(Root->TypeValue)
+	}
+	else if (Root->NodeType = NODE_TYPE_CALL) {
+		CallExpression* CallNode := Root->CallNode
+		
+		if (CallNode->BuiltinID = BUILTIN_NONE) {
+			FunctionDefine* TargetFunction := CallNode->TargetFunction
+			
+			if (TargetFunction->IsImported = false && TargetFunction->Attribute != KEYWORD_ASSEMBLY) {
+				Visitor->VisitBlocks(TargetFunction->Body)
+			}
+		}
+		
+		Visitor->RawVisitNodes(CallNode->ParameterCount, CallNode->Parameters)
+	}
+	else if (Root->NodeType = NODE_TYPE_IF) {
+		Visitor->VisitChildren(Root)
+		
+		IfGroup* IfNode := Root->IfNode
+		
+		for (i32 BranchIndex := 0, BranchIndex < IfNode->BranchCount, BranchIndex += 1) {
+			ASTNode* Condition := FoldConstantsVisitor(Visitor, IfNode->Conditions[BranchIndex])
+			Block* Body := IfNode->Bodies[BranchIndex]
+			
+			if (Condition->NodeType = NODE_TYPE_INTEGER) {
+				i64 ConditionValue := Condition->IntegerValue
+				
+				if (ConditionValue = 0) {
+					; Constant false condition, eliminate the condition and body
+					
+					Condition->NodeType := NODE_TYPE_NONE
+					Body->StatementCount := 0
+				}
+				else {
+					; Constant true condition
+					
+					if (BranchIndex = 0) {
+						Root->NodeType := NODE_TYPE_BLOCK
+						Root->BlockValue := Body
+					}
+					else {
+						IfNode->BranchCount := (BranchIndex + 1) As i16
+					}
+					
+					break
+				}
+			}
+		}
+	}
+	
+	return Root
+}
+
+define void FoldConstants(ParserState* Parser) {
+	ASTVisitor* Visitor := ASTVisitor:New(&FoldConstantsVisitor)
+	
+	Visitor->AllowType(NODE_TYPE_BINARY)
+	Visitor->AllowType(NODE_TYPE_UNARY)
+	Visitor->AllowType(NODE_TYPE_VARIABLE)
+	Visitor->AllowType(NODE_TYPE_GET_TYPE_SIZE)
+	Visitor->AllowType(NODE_TYPE_CALL)
+	Visitor->AllowType(NODE_TYPE_IF)
+	
+	if (Parser->MainFunction->Attribute != KEYWORD_ASSEMBLY) {
+		Visitor->VisitBlocks(Parser->MainFunction->Body)
+	}
+	
+	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
+	
+	Free(Visitor)
 }

@@ -135,6 +135,7 @@ i8 NODE_TYPE_TRY := 23
 i8 NODE_TYPE_GET_TYPE_SIZE := 24
 
 i8 NODE_TYPE_EXPRESSION_BLOCK := 25
+i8 NODE_TYPE_BLOCK := 26
 
 ; EndRegion
 
@@ -565,7 +566,7 @@ struct ASTNode {
 		Block* BlockValue
 	},
 	
-	void* LastVisitor
+	i32 LastVisitor
 	Type ValueType
 	i8 NodeType
 	
@@ -635,10 +636,24 @@ struct ASTNode {
 
 ; ASTVisitor region
 
+i32 NextASTVisitorID := 1
+
 struct ASTVisitor {
 	void* VisitFunction
 	i64 State
 	i32 NodeTypeMask
+	i32 ID
+	
+	static ASTVisitor* New(void* VisitFunction) {
+		ASTVisitor* this := Alloc(#ASTVisitor)
+		
+		this->VisitFunction := VisitFunction
+		this->ID := NextASTVisitorID
+		
+		NextASTVisitorID += 1
+		
+		return this
+	}
 	
 	define i32 IsTypeAllowed(i8 NodeType) {
 		return !!(this->NodeTypeMask & (1 << NodeType))
@@ -730,17 +745,11 @@ struct ASTVisitor {
 		for (i32 Index := 0, Index < Count, Index += 1) {
 			ASTNode* Node := Nodes[Index]
 			
-			;Print("ASTVisitor visit type %i\n", Node->NodeType)
-			;
-			;if (Node~>Context->SourceFilePath) {
-			;	Node->Warn(null)
-			;}
-			
-			if (Node->LastVisitor = this) {
+			if (Node->LastVisitor = this->ID) {
 				continue
 			}
 			
-			Node->LastVisitor := this
+			Node->LastVisitor := this->ID
 			
 			if (this->IsTypeAllowed(Node->NodeType)) {
 				this->CallVisitor(Node, this->VisitFunction)
