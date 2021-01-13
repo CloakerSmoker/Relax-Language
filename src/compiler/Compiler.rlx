@@ -652,7 +652,9 @@ define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* Targe
 */
 
 define void Cast(CompilerState* Compiler, i8 Register, i8 Size) {
-	EmitMove_R64_RX(Compiler, Register, Register, Size)
+	if (Size <= 4) {
+		EmitMove_R64_RX(Compiler, Register, Register, Size)
+	}
 }
 
 define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionToCompile) {
@@ -921,9 +923,9 @@ define void CompileBlock(CompilerState* Compiler, Block* BlockToCompile) {
 	/* Compiles a block of statements */
 	
 	for (i32 Index := 0, Index < BlockToCompile->StatementCount, Index += 1) {
-		ASTNode* NexLexerment := (BlockToCompile->Statements)[Index]
+		ASTNode* NextStatement := (BlockToCompile->Statements)[Index]
 		
-		Compile(Compiler, NexLexerment)
+		Compile(Compiler, NextStatement)
 	}
 }
 

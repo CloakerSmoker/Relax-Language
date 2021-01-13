@@ -91,7 +91,7 @@ define i32 Main() {
 	;breakpoint:()
 	
 	i32 Result := 0
-	i32* pResult := &Result
+	auto pResult := &Result
 	
 	*pResult := 0xAA
 	

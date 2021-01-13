@@ -608,6 +608,48 @@ struct ParserState {
 		; Try to parse the declaration of a single variable (which can be local, global, or a parameter)
 		;  and returns an expression which will set that variable to an optional default value (if allowed)
 		
+		Token* MaybeAuto := this->PeekNextToken()
+		
+		if (ForParameter = false && MaybeAuto->Is(TOKEN_TYPE_IDENTIFIER) && MaybeAuto->StringValue->Equals("auto")) {
+			this->GetNextToken()
+			
+			Token* AutoVariableName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for auto variable name")
+			Token* AssignmentOperator := this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL, "Expected `:=` for auto variable declaration")
+			
+			; Add the variable early (as void*) just in case the expression somehow references the variable
+			;  (and would throw a parse error)
+			
+			VariableInfo* AutoVariable := Alloc(#VariableInfo)
+			
+			AutoVariable->Name := AutoVariableName->StringValue
+			AutoVariable->Type := this->void->AsPointer(1)
+			AutoVariable->IsGlobal := ForGlobalVariable
+			AutoVariable->IsParameter := ForParameter
+			
+			if (OutNewVariable != 0) {
+				*OutNewVariable := AutoVariable
+			}
+			
+			this->AddVariable(AutoVariable, AutoVariableName)
+			
+			; Parse the variable's initial value, and then update the variable's type using the type of the
+			;  initial value
+			
+			ASTNode* AutoValue := this->ParseExpression()
+			AutoVariable->Type := AutoValue->ValueType
+			
+			; Build an AST node to assign the variable to the initial value, and then return it for the caller
+			;  to compile before this variable is used
+			
+			BinaryExpression* AutoAssign := Alloc(#BinaryExpression)
+			
+			AutoAssign->Left := ASTNode:New(NODE_TYPE_VARIABLE, AutoVariable, AutoVariable->Type)
+			AutoAssign->Operator := AssignmentOperator
+			AutoAssign->Right := AutoValue
+			
+			return ASTNode:New(NODE_TYPE_BINARY, AutoAssign, AutoVariable->Type)
+		}
+		
 		i32 Before := this->Freeze()
 		Type PotentialType := this->TryParseType(true, ErrorMessage)
 		
@@ -1186,58 +1228,87 @@ struct ParserState {
 		}
 	}
 	
+	define i8 ParseProgramStatement() {
+		Token* NextToken := this->PeekNextToken()
+		i8 NextTokenValue := NextToken->Value As i8
+		
+		if (NextToken->Is(TOKEN_TYPE_KEYWORD)) {
+			this->GetNextToken()
+			
+			if (NextTokenValue <= KEYWORD_DLLIMPORT) {
+				; Handles `dllimport`/`declare`/`define`
+				this->ParseFunctionDefinition(this~>Functions, NextToken)
+			}
+			else if (NextTokenValue = KEYWORD_STRUCT) {
+				this->ParseStructDefinition()
+			}
+			else if (NextTokenValue = KEYWORD_BITS) {
+				this->ParseBitsDefinition()
+			}
+			else if (NextTokenValue = KEYWORD_LINUX || NextTokenValue = KEYWORD_WINDOWS) {
+				i8 IgnoreBlock := true
+				
+				if (NextTokenValue = KEYWORD_LINUX && this->Config->OutputFormat = OUTPUT_ELF) {
+					IgnoreBlock := false
+				}
+				else if (NextTokenValue = KEYWORD_WINDOWS && this->Config->OutputFormat = OUTPUT_PE) {
+					IgnoreBlock := false
+				}
+				
+				if (IgnoreBlock) {
+					this->IgnoreBlock()
+				}
+				else {
+					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening '{' for block")
+					
+					while !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						this->ParseProgramStatement()
+					}
+				}
+			}
+			else {
+				NextToken->Error("Unexpected token")
+			}
+		}
+		else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+			; Handles global variable declarations
+			
+			Token* BlameToken := this->PeekNextToken()
+			
+			i8* ErrorMessage := null
+			ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
+			
+			if (ErrorMessage) {
+				BlameToken~>Context->Merge(this->GetCurrentTokenContext())
+				BlameToken->Error(ErrorMessage)
+			}
+			
+			if (DefaultValueExpression != null) {
+				; Handles global variable default value expressions
+				
+				i32 Index := GetArrayLength(this->GlobalDefaults)
+				this->GlobalDefaults := ReAllocArray(this->GlobalDefaults, 1)
+				
+				this->GlobalDefaults[Index] := DefaultValueExpression
+			}
+		}
+		else if (NextToken->Is(TOKEN_TYPE_EOF)) {
+			return true
+		}
+		else {
+			NextToken->Error("Unexpected token")
+		}
+		
+		return false
+	}
+	
 	define void ParseProgram() {
 		; Parse an entire program, aka a list of `dllimport`/`declare`/`define`, `struct`/`bits`, and global
 		;  variable declarations.
 		
 		loop {
-			Token* NextToken := this->PeekNextToken()
-			i8 NextTokenValue := NextToken->Value As i8
-			
-			if (NextToken->Is(TOKEN_TYPE_KEYWORD)) {
-				this->GetNextToken()
-				
-				if (NextTokenValue <= KEYWORD_DLLIMPORT) {
-					; Handles `dllimport`/`declare`/`define`
-					this->ParseFunctionDefinition(this~>Functions, NextToken)
-				}
-				else if (NextTokenValue = KEYWORD_STRUCT) {
-					this->ParseStructDefinition()
-				}
-				else if (NextTokenValue = KEYWORD_BITS) {
-					this->ParseBitsDefinition()
-				}
-				else {
-					NextToken->Error("Unexpected token")
-				}
-			}
-			else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
-				; Handles global variable declarations
-				
-				Token* BlameToken := this->PeekNextToken()
-				
-				i8* ErrorMessage := null
-				ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
-				
-				if (ErrorMessage) {
-					BlameToken~>Context->Merge(this->GetCurrentTokenContext())
-					BlameToken->Error(ErrorMessage)
-				}
-				
-				if (DefaultValueExpression != null) {
-					; Handles global variable default value expressions
-					
-					i32 Index := GetArrayLength(this->GlobalDefaults)
-					this->GlobalDefaults := ReAllocArray(this->GlobalDefaults, 1)
-					
-					this->GlobalDefaults[Index] := DefaultValueExpression
-				}
-			}
-			else if (NextToken->Is(TOKEN_TYPE_EOF)) {
+			if (this->ParseProgramStatement()) {
 				break
-			}
-			else {
-				NextToken->Error("Unexpected token")
 			}
 		}
 	}
