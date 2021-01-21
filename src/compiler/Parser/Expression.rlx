@@ -532,6 +532,11 @@
 				else if (Operator = OPERATOR_STAR) {
 					ResultType := this->DereferencePointerType(ResultType, Operand~>Context)
 				}
+				else if (Operator = OPERATOR_MINUS_MINUS || Operator = OPERATOR_PLUS_PLUS) {
+					if !(Operand->IsStorageValue()) {
+						Operand->Error("Right side operand of `++` and `--` must be a storage value")
+					}
+				}
 				
 				Result := ASTNode:New(NODE_TYPE_UNARY, Alloc(#UnaryExpression), ResultType)
 				
@@ -716,7 +721,35 @@
 			
 			i8 IsStructAccess := Operator = OPERATOR_DOT || Operator = OPERATOR_MINUS_GREATER || Operator = OPERATOR_TILDE_GREATER
 			
-			if (Operator = OPERATOR_OPEN_BRACKET) {
+			if (Operator = OPERATOR_PLUS_PLUS || Operator = OPERATOR_MINUS_MINUS) {
+				if (Operator = OPERATOR_MINUS_MINUS) {
+					OperatorToken->IntegerValue := OPERATOR_MINUS_MINUS_RIGHT
+				}
+				else {
+					OperatorToken->IntegerValue := OPERATOR_PLUS_PLUS_RIGHT
+				}
+				
+				if !(Left->IsStorageValue()) {
+					Left->Error("Operand of `++` and `--` must be a storage value")
+				}
+				
+				UnaryExpression* IncrementDecrement := Alloc(#UnaryExpression)
+				
+				IncrementDecrement->Operand := Left
+				IncrementDecrement->Operator := OperatorToken
+				
+				ASTNode* IncrementDecrementNode := ASTNode:New(NODE_TYPE_UNARY, IncrementDecrement, Left->ValueType)
+				
+				IncrementDecrementNode~>Context->Clone(Left~>Context)->Merge(OperatorToken~>Context)
+				
+				Left := IncrementDecrementNode
+				
+				BeforeOperator := this->Freeze()
+				OperatorToken := this->GetNextToken()
+				
+				continue
+			}
+			else if (Operator = OPERATOR_OPEN_BRACKET) {
 				; If the next operator is `[`, then parse the index expression (for the right operand) and 
 				;  consume the closing `]`
 				

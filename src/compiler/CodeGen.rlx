@@ -572,11 +572,19 @@ define void EmitAdd_R64_IX(CompilerState* Compiler, i8 TargetRegister, i32 Numbe
 	else if (Size <= 4) {EmitAdd_R64_I32(Compiler, TargetRegister, Number)}
 }
 
+define void EmitInc_RX(CompilerState* Compiler, i8 TargetRegister, i8 Size) {
+	EmitBasicInstruction(Compiler, 0xFF, MODE_RTOR, Size, 0, TargetRegister)
+}
+define void EmitInc_RIX(CompilerState* Compiler, i8 TargetRegister, i8 Size) {
+	EmitBasicInstruction(Compiler, 0xFF, MODE_PTOR, Size, 0, TargetRegister)
+}
+
 /*
 ==========================================
 	Subs
 ==========================================
 */
+
 define void EmitSub_RX_RX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(Compiler, 0x2B, MODE_RTOR, Size, DestinationRegister, SourceRegister)
 }
@@ -599,13 +607,15 @@ define void EmitSub_R64_IX(CompilerState* Compiler, i8 TargetRegister, i32 Numbe
 	else if (Size <= 4) {EmitSub_R64_I32(Compiler, TargetRegister, Number)}
 }
 
-
 define void EmitNeg_RX(CompilerState* Compiler, i8 TargetRegister, i8 Size) {
 	EmitBasicInstruction(Compiler, 0xF7, MODE_RTOR, Size, 3, TargetRegister)
 }
 
 define void EmitDec_RX(CompilerState* Compiler, i8 TargetRegister, i8 Size) {
 	EmitBasicInstruction(Compiler, 0xFF, MODE_RTOR, Size, 1, TargetRegister)
+}
+define void EmitDec_RIX(CompilerState* Compiler, i8 TargetRegister, i8 Size) {
+	EmitBasicInstruction(Compiler, 0xFF, MODE_PTOR, Size, 1, TargetRegister)
 }
 
 /*

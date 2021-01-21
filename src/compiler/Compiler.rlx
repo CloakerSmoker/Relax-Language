@@ -1790,7 +1790,9 @@ define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type Result
 	i8 Operator := (ExpressionToCompile->Operator->Value) As i8
 	i8 ResultSize := GetTypeSize(ResultType) As i8
 	
-	if (Operator = OPERATOR_AND) {
+	i8 IsIncrementDecrement := Operator = OPERATOR_PLUS_PLUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_LEFT || Operator = OPERATOR_PLUS_PLUS_LEFT
+	
+	if (Operator = OPERATOR_AND || IsIncrementDecrement) {
 		ASTNode* Operand := ExpressionToCompile->Operand
 		i8 OperandType := Operand->NodeType
 		
@@ -1816,6 +1818,25 @@ define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type Result
 			
 			EmitLea_RAX_Label(Compiler, OperandFunction->LabelNumber)
 			EmitMove_R64_R64(Compiler, ResultRegister, RAX)
+		}
+		
+		i8 OperandSize := GetTypeSize(Operand->ValueType) As i8
+		
+		if (Operator = OPERATOR_PLUS_PLUS_RIGHT || Operator = OPERATOR_PLUS_PLUS_LEFT) {
+			EmitInc_RIX(Compiler, ResultRegister, OperandSize)
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, OperandSize)
+			
+			if (Operator = OPERATOR_PLUS_PLUS_RIGHT) {
+				EmitDec_RX(Compiler, ResultRegister, OperandSize)
+			}
+		}
+		else if (Operator = OPERATOR_MINUS_MINUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_LEFT) {
+			EmitDec_RIX(Compiler, ResultRegister, OperandSize)
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, OperandSize)
+			
+			if (Operator = OPERATOR_MINUS_MINUS_RIGHT) {
+				EmitInc_RX(Compiler, ResultRegister, OperandSize)
+			}
 		}
 	}
 	else {

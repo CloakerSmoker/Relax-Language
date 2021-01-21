@@ -15,6 +15,9 @@ define i8 GetOperatorPrecedence(Token* ForOperator) {
 	else if (Operator >= PRECEDENCE_11) {
 		return 11
 	}
+	else if (Operator >= PRECEDENCE_10) {
+		return 10
+	}
 	else if (Operator >= PRECEDENCE_9) {
 		return 9
 	}
@@ -62,6 +65,9 @@ define i8 GetUnaryOperatorPrecedence(Token* ForOperator) {
 		return 10
 	}
 	else if (Operator = OPERATOR_MINUS || Operator = OPERATOR_TILDE) {
+		return 10
+	}
+	else if (Operator = OPERATOR_MINUS_MINUS || Operator = OPERATOR_PLUS_PLUS) {
 		return 10
 	}
 	else if (Operator = OPERATOR_POUND) {

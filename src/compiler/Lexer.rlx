@@ -71,16 +71,25 @@ i8 PRECEDENCE_9 := 28
 i8 OPERATOR_BANG := 28
 i8 OPERATOR_TILDE := 29
 
-i8 PRECEDENCE_11 := 30
-i8 OPERATOR_OPEN_BRACKET := 30
+i8 PRECEDENCE_10 := 30
+i8 OPERATOR_PLUS_PLUS := 30
+i8 OPERATOR_MINUS_MINUS := 31
 
-i8 PRECEDENCE_12 := 31
-i8 OPERATOR_DOT := 31
-i8 OPERATOR_MINUS_GREATER := 32
-i8 OPERATOR_TILDE_GREATER := 33
+i8 OPERATOR_PLUS_PLUS_LEFT := 30
+i8 OPERATOR_MINUS_MINUS_LEFT := 31
+i8 OPERATOR_PLUS_PLUS_RIGHT := 32
+i8 OPERATOR_MINUS_MINUS_RIGHT := 33
 
-i8 OPERATOR_COLON := 34
-i8 OPERATOR_POUND := 35
+i8 PRECEDENCE_11 := 34
+i8 OPERATOR_OPEN_BRACKET := 34
+
+i8 PRECEDENCE_12 := 35
+i8 OPERATOR_DOT := 35
+i8 OPERATOR_MINUS_GREATER := 36
+i8 OPERATOR_TILDE_GREATER := 37
+
+i8 OPERATOR_COLON := 38
+i8 OPERATOR_POUND := 39
 
 
 i8 PUNCTUATION_OPEN_PAREN := 0
@@ -482,10 +491,17 @@ struct LexerState {
 			return this->AppendOperator(OPERATOR_EQUAL)
 		}
 		else if (NextCharacter = '+') {
+			if (this->NextCharacterMatches('+')) {
+				return this->AppendOperator(OPERATOR_PLUS_PLUS)
+			}
+			
 			return this->AppendOperator(OPERATOR_PLUS)
 		}
 		else if (NextCharacter = '-') {
-			if (this->NextCharacterMatches('>')) {
+			if (this->NextCharacterMatches('-')) {
+				return this->AppendOperator(OPERATOR_MINUS_MINUS)
+			}
+			else if (this->NextCharacterMatches('>')) {
 				return this->AppendOperator(OPERATOR_MINUS_GREATER)
 			}
 			
