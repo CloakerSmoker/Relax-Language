@@ -52,7 +52,11 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 		UnaryExpression* UnaryNode := Node->UnaryNode
 		ASTNode* Operand := UnaryNode->Operand
 		
-		if (UnaryNode->Operator->Value = OPERATOR_AND) {
+		i8 Operator := UnaryNode->Operator->IntegerValue As i8
+		
+		i8 IsIncrementDecrement := Operator = OPERATOR_PLUS_PLUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_LEFT || Operator = OPERATOR_PLUS_PLUS_LEFT
+	
+		if (Operator = OPERATOR_AND || IsIncrementDecrement) {
 			if (Operand->NodeType = NODE_TYPE_DEFINE) {
 				CountReferencesVisitFunction(Visitor, Operand->DefineNode)
 			}

@@ -300,7 +300,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
-		Compiler->CodeBase := (Config->ImageBase + Parser~>Globals->NextOffset + 0x10) As i32
+		Compiler->CodeBase := (Parser~>Globals->NextOffset + 0x10) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF := BuildELFBuilder()
@@ -535,58 +535,56 @@ define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariab
 	return -(Offset + 8)
 }
 
+define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVariable) {
+	i64 GlobalsOffset := Compiler->GlobalBase - Compiler->Config->ImageBase
+	i64 CodeOffset := Compiler->CodeBase
+	i64 ThisCodeOffset := CodeOffset + Compiler->Index
+	
+	return (GlobalsOffset - ThisCodeOffset + TargetVariable->StackOffset) As i32
+}
+
 /* Todo: Merge these three functions into one */
 
 define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
-	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
-	
-	i8 BaseRegister := RBP
-	
 	if (TargetVariable->IsGlobal) {
-		BaseRegister := R15
-	}
-	
-	if (UseDisp8) {
-		EmitLea_R64_R64_DISP8(Compiler, ResultRegister, BaseRegister, Offset As i8)
+		EmitLea_R64_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable))
 	}
 	else {
-		EmitLea_R64_R64_DISP32(Compiler, ResultRegister, BaseRegister, Offset)
-	}
+		i8 UseDisp8 := false
+		i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
 	
-	if (BaseRegister = R15) {
-		AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
+		if (UseDisp8) {
+			EmitLea_R64_R64_DISP8(Compiler, ResultRegister, RBP, Offset As i8)
+		}
+		else {
+			EmitLea_R64_R64_DISP32(Compiler, ResultRegister, RBP, Offset)
+		}
 	}
 }
 
 declare void CompileExpression(CompilerState*, i8, ASTNode*)
 declare void Cast(CompilerState*, i8, i8)
 
-; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
-;  functions which return 'void'
-define i32 CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
+define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->Type.IsArray) {
 		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
-		return 0
 	}
-	
-	if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+	else if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+		; Node: I have no idea why this still needs to exist, FoldConstants should replace uses of these variables
+		
 		ASTNode* LastValue := TargetVariable->LastValue
 		
-		CompileExpression(Compiler, ResultRegister, TargetVariable->LastValue)
+		CompileExpression(Compiler, ResultRegister, LastValue)
 		
 		i16 LastValueSize := GetTypeSize(LastValue->ValueType)
 		
 		if (LastValueSize < 4) {
 			Cast(Compiler, ResultRegister, LastValueSize As i8)
 		}
-		
-		return 0
 	}
-	
-	if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
+	else if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
 		/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
 			So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
 			Any time this could be abused *should* be caught by type checking 
@@ -595,52 +593,33 @@ define i32 CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, V
 		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
 	}
 	else {
-		i8 UseDisp8 := false
-		i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
-		
-		i8 BaseRegister := RBP
-		
 		if (TargetVariable->IsGlobal) {
-			BaseRegister := R15
+			EmitMove_RX_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable), TargetSize)
 		}
-		
-		;if (UseDisp8) {
-		;	EmitMove_RX_RIX_DISP8(Compiler, ResultRegister, BaseRegister, Offset As i8, TargetSize)
-		;}
-		;else {
-		;	EmitMove_RX_RIX_DISP32(Compiler, ResultRegister, BaseRegister, Offset, TargetSize)
-		;}
-		
-		EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, BaseRegister, Offset, UseDisp8, TargetSize)
-		
-		if (BaseRegister = R15) {
-			AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
+		else {
+			i8 UseDisp8 := false
+			i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
+			
+			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, RBP, Offset, UseDisp8, TargetSize)
 		}
 	}
-	
-	return 0
 }
 define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* TargetVariable, i8 SourceRegister) {
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
-	i8 UseDisp8 := false
-	i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
-	
-	i8 BaseRegister := RBP
-	
 	if (TargetVariable->IsGlobal) {
-		BaseRegister := R15
-	}
-	
-	if (UseDisp8) {
-		EmitMove_RIX_DISP8_RX(Compiler, BaseRegister, SourceRegister, Offset As i8, TargetSize)
+		EmitMove_Offset_RX(Compiler, GetGlobalMemoryOffset(Compiler, TargetVariable), SourceRegister, TargetSize)
 	}
 	else {
-		EmitMove_RIX_DISP32_RX(Compiler, BaseRegister, SourceRegister, Offset, TargetSize)
-	}
-	
-	if (BaseRegister = R15) {
-		AddCodeRelocation(Compiler, (Compiler->Index) - (!UseDisp8 * 3) + 1)
+		i8 UseDisp8 := false
+		i32 Offset := GetVariableOffset(Compiler, TargetVariable, &UseDisp8)
+		
+		if (UseDisp8) {
+			EmitMove_RIX_DISP8_RX(Compiler, RBP, SourceRegister, Offset As i8, TargetSize)
+		}
+		else {
+			EmitMove_RIX_DISP32_RX(Compiler, RBP, SourceRegister, Offset, TargetSize)
+		}
 	}
 }
 
@@ -833,10 +812,6 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		CompileSetVariableValue(Compiler, NextStackParameter, RAX)
-	}
-	
-	if (Compiler->Parser~>Globals->NextOffset != 0 && (FunctionToCompile->UsesGlobals || IsMain)) {
-		EmitMove_R32_I32(Compiler, R15, Compiler->GlobalBase)
 	}
 	
 	if (IsMain) {
@@ -2019,26 +1994,22 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 			/* Get old value of left side */
 			
 			if (LeftType = NODE_TYPE_VARIABLE) {
-				i32 Start := Compiler->Index
-				i32 Offset := GetVariableOffset(Compiler, TargetVariable, null)
-				
-				i8 BaseRegister := RBP
-				
-				if (TargetVariable->IsGlobal) {
-					BaseRegister := R15
-				}
-				
-				if (Operator = OPERATOR_PLUS_EQUAL) {
-					EmitAdd_RIX_DISPX_RX(Compiler, BaseRegister, WorkRegister, Offset, ResultSize)
-				}
-				else if (Operator = OPERATOR_MINUS_EQUAL) {
-					EmitSub_RIX_DISPX_RX(Compiler, BaseRegister, WorkRegister, Offset, ResultSize)
-				}
-				
-				if (Compiler->Index != Start) {
-					PopRegisterStack(Compiler)
-					return 0
-				}
+				;if !(TargetVariable->IsGlobal) {
+				;	i32 Start := Compiler->Index
+				;	i32 Offset := GetVariableOffset(Compiler, TargetVariable, null)
+				;	
+				;	if (Operator = OPERATOR_PLUS_EQUAL) {
+				;		EmitAdd_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
+				;	}
+				;	else if (Operator = OPERATOR_MINUS_EQUAL) {
+				;		EmitSub_RIX_DISPX_RX(Compiler, RBP, WorkRegister, Offset, ResultSize)
+				;	}
+				;	
+				;	if (Compiler->Index != Start) {
+				;		PopRegisterStack(Compiler)
+				;		return 0
+				;	}
+				;}
 				
 				CompileGetVariableValue(Compiler, ResultRegister, TargetVariable)
 			}

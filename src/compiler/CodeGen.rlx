@@ -838,3 +838,35 @@ define void EmitIRet(CompilerState* Compiler) {
 	PushByte(Compiler, 0x48)
 	PushByte(Compiler, 0xCF)
 }
+
+define void PushMemoryOffset(CompilerState* Compiler, i32 InstructionOffset, i32 MemoryOffset) {
+	i32 InstructionSize := Compiler->Index - InstructionOffset
+	
+	InstructionSize += 4
+	
+	MemoryOffset -= InstructionSize
+	
+	PushI32(Compiler, MemoryOffset)
+}
+
+define void EmitLea_R64_Offset(CompilerState* Compiler, i8 TargetRegister, i32 Offset) {
+	i32 InstructionOffset := Compiler->Index
+	
+	EmitBasicInstruction(Compiler, 0x8D, 0, 8, TargetRegister, 5)
+	
+	PushMemoryOffset(Compiler, InstructionOffset, Offset)
+}
+define void EmitMove_RX_Offset(CompilerState* Compiler, i8 TargetRegister, i32 Offset, i8 Size) {
+	i32 InstructionOffset := Compiler->Index
+	
+	EmitBasicInstruction(Compiler, 0x8B, 0, Size, TargetRegister, 5)
+
+	PushMemoryOffset(Compiler, InstructionOffset, Offset)
+}
+define void EmitMove_Offset_RX(CompilerState* Compiler, i32 Offset, i8 SourceRegister, i8 Size) {
+	i32 InstructionOffset := Compiler->Index
+	
+	EmitBasicInstruction(Compiler, 0x89, 0, Size, SourceRegister, 5)
+
+	PushMemoryOffset(Compiler, InstructionOffset, Offset)
+}
