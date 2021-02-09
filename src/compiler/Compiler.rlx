@@ -303,7 +303,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->CodeBase := (Parser~>Globals->NextOffset + 0x10) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		Compiler->ELF := BuildELFBuilder()
+		Compiler->ELF := ELFBuilder:New()
 		
 		Compiler->GlobalBase := (Config->ImageBase + 64 + 0x1000) As i32
 		Compiler->CodeBase := (Parser~>Globals->NextOffset + 564 + 0x2000) As i32
@@ -401,10 +401,10 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		BytesWritten := FileSize
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		AddDataSection(Compiler->ELF, Parser~>Globals->NextOffset)
-		AddCodeSection(Compiler->ELF, Compiler->CodeBuffer, Compiler->Index)
+		Compiler->ELF->AddDataSection(Parser~>Globals->NextOffset)
+		Compiler->ELF->AddCodeSection(Compiler->CodeBuffer, Compiler->Index)
 		
-		FinalizeELFBuilder(Compiler->ELF, MainOffset, Config->ImageBase)
+		Compiler->ELF->Finalize(MainOffset, Config->ImageBase)
 		
 		Result := FileWrite(OutputFileHandle, Compiler->ELF->Buffer, Compiler->ELF->BufferSize)
 		BytesWritten := Compiler->ELF->BufferSize
