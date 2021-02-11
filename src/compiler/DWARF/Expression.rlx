@@ -1,0 +1,71 @@
+
+i32 DWARF_EXPRESSION_OPCODE_ADDRESS := 0x3
+i32 DWARF_EXPRESSION_OPCODE_CONSTANT_1 := 0x9
+i32 DWARF_EXPRESSION_OPCODE_CONSTANT_2 := 0xB
+i32 DWARF_EXPRESSION_OPCODE_CONSTANT_4 := 0xD
+i32 DWARF_EXPRESSION_OPCODE_CONSTANT_8 := 0xF
+i32 DWARF_EXPRESSION_OPCODE_DUPLICATE := 0x12
+i32 DWARF_EXPRESSION_OPCODE_DROP := 0x13
+i32 DWARF_EXPRESSION_OPCODE_OVER := 0x14
+i32 DWARF_EXPRESSION_OPCODE_PICK := 0x15
+i32 DWARF_EXPRESSION_OPCODE_SWAP := 0x16
+i32 DWARF_EXPRESSION_OPCODE_ROT := 0x17
+i32 DWARF_EXPRESSION_OPCODE_LITERAL_0 := 0x30
+i32 DWARF_EXPRESSION_OPCODE_REGISTER_OFFSET := 0x70
+i32 DWARF_EXPRESSION_OPCODE_BASE_REGISTER_OFFSET := 0x91
+
+struct DWARFExpressionBuilder {
+	DWARFStream* Stream
+	
+	static DWARFExpressionBuilder* New(DWARFStream* Stream) {
+		DWARFExpressionBuilder* this := Alloc(#DWARFExpressionBuilder)
+		
+		this->Stream := Stream
+		
+		return this
+	}
+	static DWARFExpressionBuilder* New() {
+		return DWARFExpressionBuilder:New(DWARFStream:Tiny())
+	}
+	static DWARFExpressionBuilder* FromStream(DWARFStream* Stream) {
+		return DWARFExpressionBuilder:New(Stream)
+	}
+	
+	define void EmitOpcode(i64 Opcode) {
+		this->Stream->WriteI8(Opcode)
+	}
+	
+	define void EmitPushAddress(i64 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_ADDRESS)
+		this->Stream->WriteI64(Value)
+	}
+	define void EmitPushLiteral(i8 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_LITERAL_0 + Value)
+	}
+	define void EmitPushI8(i64 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_CONSTANT_1)
+		this->Stream->WriteI8(Value)
+	}
+	define void EmitPushI16(i64 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_CONSTANT_2)
+		this->Stream->WriteI16(Value)
+	}
+	define void EmitPushI32(i64 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_CONSTANT_4)
+		this->Stream->WriteI32(Value)
+	}
+	define void EmitPushI64(i64 Value) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_CONSTANT_8)
+		this->Stream->WriteI64(Value)
+	}
+	
+	define void EmitPushBasePointerOffset(i64 Offset) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_BASE_REGISTER_OFFSET)
+		this->Stream->WriteLEB128(Offset)
+	}
+	
+	define void EmitPushRegisterOffset(i8 Register, i64 Offset) {
+		this->EmitOpcode(DWARF_EXPRESSION_OPCODE_REGISTER_OFFSET + Register)
+		this->Stream->WriteLEB128(Offset)
+	}
+}

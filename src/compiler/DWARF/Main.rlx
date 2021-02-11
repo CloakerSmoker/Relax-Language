@@ -1,0 +1,43 @@
+#Require "./src/lib/Console.rlx"
+#Require "./src/lib/Debug.rlx"
+#Require "./src/lib/File.rlx"
+#Require "./src/compiler/ELFBuilder.rlx"
+#Require "./src/compiler/DWARF/DWARFBuilder.rlx"
+
+define i32 Main() {
+	ELFBuilder* Builder := ELFBuilder:New()
+	
+	Builder->AddEmptyDataSection(20)
+	Builder->AddCodeSection({i8: 0x48, 0xC7, 0xC0, 0x00, 0x10, 0x00, 0x40, 0xC7, 0x00, 0x14, 0x00, 0x00, 0x00, 0xC3 }, 14)
+	
+	DWARFBuilder* DWARF := DWARFBuilder:New()
+	
+	DWARF->CreateAbbreviations()
+	DWARF->CreateCompilationUnit("test.txt", "~/Documents", 0x4000_0000, 0x0001_0000)
+	
+	DWARF->AddBaseType("i8", 1)
+	DWARF->AddBaseType("i16", 2)
+	i32 TypeOffset := DWARF->AddBaseType("i32", 4)
+	DWARF->AddBaseType("i64", 8)
+	DWARF->AddBaseType("void", 8)
+	
+	DWARF->AddGlobalVariable("glob", TypeOffset, 0x4000_1000)
+	
+	DWARF->WriteSections(Builder)
+	
+	Builder->Finalize(0, 0x4000_0000)
+	
+
+	FileDelete("out.elf")
+	
+	i64 File := FileOpen("out.elf", FILE_WRITE | FILE_CREATE_NEW)
+	
+	FileWrite(File, Builder->Buffer, Builder->BufferSize)
+	
+	FileClose(File)
+	
+
+	Print("Wrote %i bytes\n", Builder->BufferSize)
+
+	return 0
+}

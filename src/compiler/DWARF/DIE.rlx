@@ -1,0 +1,259 @@
+
+; DIE = single record, describes some flavor of data
+; Subprogram = function
+
+#Require "./src/compiler/DWARF/Stream.rlx"
+
+i16 DWARF_VERSION_5 := 5
+i8 DWARF_COMPILATION_UNIT_TYPE_NORMAL := 1
+i8 DWARF_ADDRESS_SIZE_AMD64 := 8
+
+
+i16 DWARF_ABBREVIATION_TAG_ARRAY := 0x1
+i16 DWARF_ABBREVIATION_TAG_ENTRY_POINT := 0x3
+i16 DWARF_ABBREVIATION_TAG_PARAMETER := 0x5
+i16 DWARF_ABBREVIATION_TAG_POINTER := 0xF
+i16 DWARF_ABBREVIATION_TAG_COMPILATION_UNIT := 0x11
+i16 DWARF_ABBREVIATION_TAG_STRUCTURE := 0x13
+i16 DWARF_ABBREVIATION_TAG_BASE_TYPE := 0x24
+i16 DWARF_ABBREVIATION_TAG_SUBPROGRAM := 0x2E
+i16 DWARF_ABBREVIATION_TAG_VARIABLE := 0x34
+
+i8 DWARF_ABBREVIATION_HAS_NO_CHILDEN := false
+i8 DWARF_ABBREVIATION_HAS_CHILDEN := true
+
+i16 DWARF_ATTRIBUTE_SIBLING := 0x1
+i16 DWARF_ATTRIBUTE_LOCATION := 0x2
+i16 DWARF_ATTRIBUTE_NAME := 0x3
+i16 DWARF_ATTRIBUTE_BYTE_SIZE := 0xB
+i16 DWARF_ATTRIBUTE_STATEMENT_LIST := 0x10
+i16 DWARF_ATTRIBUTE_LOW_ADDRESS := 0x11
+i16 DWARF_ATTRIBUTE_HIGH_ADDRESS := 0x12
+i16 DWARF_ATTRIBUTE_LANGUAGE := 0x13
+i16 DWARF_ATTRIBUTE_COMPILATION_DIRECTORY := 0x1B
+i16 DWARF_ATTRIBUTE_COLUMN := 0x39
+i16 DWARF_ATTRIBUTE_FILE := 0x3A
+i16 DWARF_ATTRIBUTE_LINE := 0x3B
+i16 DWARF_ATTRIBUTE_ENCODING := 0x3E
+i16 DWARF_ATTRIBUTE_TYPE := 0x49
+i16 DWARF_ATTRIBUTE_MAIN_SUBPROGRAM := 0x6A
+
+i8 DWARF_ENCODING_ADDRESS := 0x1
+i8 DWARF_ENCODING_SIGNED_INTEGER := 0x5
+
+i16 DWARF_FORM_ADDRESS := 0x1
+i16 DWARF_FORM_STRING  := 0x8
+i16 DWARF_FORM_DATA_1  := 0xB
+i16 DWARF_FORM_DATA_2  := 0x5
+i16 DWARF_FORM_DATA_4  := 0x6
+i16 DWARF_FORM_DATA_8  := 0x7
+i16 DWARF_FORM_REFERENCE_1 := 0x11
+i16 DWARF_FORM_REFERENCE_2 := 0x12
+i16 DWARF_FORM_REFERENCE_4 := 0x13
+i16 DWARF_FORM_REFERENCE_8 := 0x14
+i16 DWARF_FORM_LOCATION_EXPRESSION := 0x18
+i16 DWARF_FORM_FLAG_PRESENT := 0x19
+
+
+struct DWARFCompilationUnitHeader {
+	i16 Version
+	i8 UnitType
+	i8 AddressSize
+	i32 AbbreviationsOffset
+}
+
+
+struct DWARFDebuggingEntryStreamBuilder {
+	i16 Version
+	i8 UnitType
+	i8 AddressSize
+	i32 AbbreviationsOffset
+	
+	DWARFStream* Stream
+	
+	static DWARFDebuggingEntryStreamBuilder* New() {
+		DWARFDebuggingEntryStreamBuilder* this := Alloc(#DWARFDebuggingEntryStreamBuilder)
+		
+		this->Version := DWARF_VERSION_5
+		this->UnitType := DWARF_COMPILATION_UNIT_TYPE_NORMAL
+		this->AddressSize := DWARF_ADDRESS_SIZE_AMD64
+		this->AbbreviationsOffset := 0
+		
+		this->Stream := DWARFStream:Little()
+		
+		return this
+	}
+	
+	define i32 StartEntry(i32 Tag) {
+		i32 ChildOffset := this->Stream->Index + #DWARFCompilationUnitHeader
+		
+		this->Stream->WriteLEB128(Tag)
+		
+		return ChildOffset + 4
+	}
+	define void StartChildren() {
+		
+	}
+	
+	define void AppendData(void* Value, i32 Size) {
+		this->Stream->Write(Value, Size)
+	}
+	define void AppendString(i8* String) {
+		this->Stream->Write(String, StringLength(String))
+		this->Stream->WriteI8(0)
+	}
+	define void AppendI8(i64 Value) {
+		this->Stream->Write(&Value, 1)
+	}
+	define void AppendI16(i64 Value) {
+		this->Stream->Write(&Value, 2)
+	}
+	define void AppendI32(i64 Value) {
+		this->Stream->Write(&Value, 4)
+	}
+	define void AppendI64(i64 Value) {
+		this->Stream->Write(&Value, 8)
+	}
+	define void AppendULEB128(i64 Value) {
+		this->Stream->WriteULEB128(Value)
+	}
+	define void AppendLEB128(i64 Value) {
+		this->Stream->WriteLEB128(Value)
+	}
+	define DWARFExpressionBuilder* StartAppendExpression() {
+		return DWARFExpressionBuilder:New()
+	}
+	define void EndAppendExpression(DWARFExpressionBuilder* Expression) {
+		this->AppendULEB128(Expression->Stream->Index)
+		this->Stream->WriteStream(Expression->Stream)
+	}
+	
+	define void EndEntry() {
+		
+	}
+	define void EndChildren() {
+		this->Stream->WriteULEB128(0)
+	}
+	
+	define void Serialize(DWARFStream* Stream) {
+		Stream->WriteI32(this->Stream->Index + #DWARFCompilationUnitHeader)
+		Stream->Write(this, #DWARFCompilationUnitHeader)
+		Stream->WriteStream(this->Stream)
+	}
+}
+
+; struct DWARFAbbreviation {
+;	ULEB128 Code
+;	ULEB128 Tag
+;	i8 HasChildren
+;   
+;	Attributes {
+;		ULEB128 Name
+;		ULEB128 Form
+;	}
+;	
+;	ULEB128 NullTerminator
+; }
+
+struct DWARFAbbreviationTableBuilder {
+	DWARFStream* Stream
+	
+	i32 NextAbbreviationCode
+	
+	static DWARFAbbreviationTableBuilder* New() {
+		DWARFAbbreviationTableBuilder* this := Alloc(#DWARFAbbreviationTableBuilder)
+		
+		this->Stream := DWARFStream:Little()
+		this->NextAbbreviationCode := 1
+		
+		return this
+	}
+	
+	define i32 StartAbbreviation(i16 Tag, i8 HasChildren) {
+		i32 AbbreviationCode := this->NextAbbreviationCode
+		this->NextAbbreviationCode += 1
+		
+		this->Stream->WriteLEB128(AbbreviationCode)
+		this->Stream->WriteLEB128(Tag)
+		this->Stream->WriteI8(HasChildren)
+		
+		return AbbreviationCode
+	}
+	define void AppendAttributePair(i32 AttributeName, i32 AttributeForm) {
+		this->Stream->WriteLEB128(AttributeName)
+		this->Stream->WriteLEB128(AttributeForm)
+	}
+	define void EndAbbreviation() {
+		this->Stream->WriteLEB128(0)
+		this->Stream->WriteLEB128(0)
+	}
+	
+	define void End() {
+		this->Stream->WriteLEB128(0)
+	}
+}
+
+; "Form" defines a type of DIE through an abbreviation
+
+struct DWARFAbbreviationEntryHeader {
+	i64 AbbreviationCode
+	i64 AbbreviationTag
+	i8 HasChildren
+}
+
+i8 DWARF_LOCATION_LIST_ENTRY_END := 0x0	; no operands
+i8 DWARF_LOCATION_LIST_ENTRY_START_END := 0x4	; Pair of i64s for start/end address
+
+
+; exprloc class = single location description, built from an expression
+; loclist class = multiple location descripts, for objects which move around, live in a different section
+; location list entry = single byte ID, followed by a flavor of entry
+; bounded location list entry = describes a value which exists at a location while execution is within a address range
+; each location list entry (except for the terminator) is followed with a ULEB128 of the next enty's size
+
+
+; For mapping a delaration to a file/line/column, the decl_file/decl_line/decl_column attributes should be added to
+;  the declaration DIE
+
+; For named entries (variables/functions) add the name attribute to the declaration DIE
+
+; Any DIE describing data should have a location attribute, which contains a value which is a location description
+; Any DIE describing code should have a low_pc and high_pc attribute pair to describe where the DIE's code lives
+; If, for some reason, the location attribute doesn't cut it, low_pc can also be used.
+
+; Base addresses are inherited through the DIE tree, so setting low_pc on the compilation unit should be nice
+
+; Any DIE describing code can have an entry_pc attribute to show the entry point of the DIE (defaults to 0)
+
+; For describing an entitiy (as a string), use the description attribute
+
+; Page 79 for compilation unit attributes
+
+; Subroutine return type is specified in a type attribute (void function = no type attribute)
+; Subroutines should have a low_pc and high_pc
+; Local variables are DIEs inside of subroutines, either formal_parameter-s or local variables
+; Subroutines should have a return_addr attribute for easier callstack walking
+; Maybe need a frame_base attribute which returns the base pointer
+
+; Call sites contain expressions which resolve to the values of parameters
+
+; formal_parameter/variable/constant tagged DIEs should have a name attribute, a location attribute, a type attribute,
+;  variable_parameter (for formal_parameter-s which can be modified like a regular variable)
+;  const_value (for constant-s)
+
+; Base types should have name attributes for the in-language name, and the encoding/byte_size attributes
+; Page 123 for base type encoding values
+
+; Only type modifier DIE tag we need is pointer_type, which has a name and type attribute
+
+; array_type tag has a name, ordering (row major), byte_size, and type attribute
+; Each dimension of the array is descripted by a DIE with the subrange_type tag 
+
+; structs are structure_type-s, and unions are union_type-s, structs should have a name attribute
+; Both should have byte_size fields
+; fields are represented through child DIEs, with the member tag
+; Each member should have a name attribute, and a type attribute along with a data_member_location attribute to specify
+;  the offset of the field
+
+
+; Compilation unit headers are followed by a single compile_unit DIE

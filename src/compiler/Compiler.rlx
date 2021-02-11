@@ -305,8 +305,10 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF := ELFBuilder:New()
 		
-		Compiler->GlobalBase := (Config->ImageBase + 64 + 0x1000) As i32
-		Compiler->CodeBase := (Parser~>Globals->NextOffset + 564 + 0x2000) As i32
+		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
+		Compiler->CodeBase := (0x2000) As i32
+		
+		Print("CB %x\n", Compiler->CodeBase)
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder()
@@ -401,7 +403,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		BytesWritten := FileSize
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
-		Compiler->ELF->AddDataSection(Parser~>Globals->NextOffset)
+		Compiler->ELF->AddEmptyDataSection(Parser~>Globals->NextOffset)
 		Compiler->ELF->AddCodeSection(Compiler->CodeBuffer, Compiler->Index)
 		
 		Compiler->ELF->Finalize(MainOffset, Config->ImageBase)
@@ -536,11 +538,13 @@ define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariab
 }
 
 define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVariable) {
-	i64 GlobalsOffset := Compiler->GlobalBase - Compiler->Config->ImageBase
-	i64 CodeOffset := Compiler->CodeBase
-	i64 ThisCodeOffset := CodeOffset + Compiler->Index
+	; Get the distance from the first global to this code
 	
-	return (GlobalsOffset - ThisCodeOffset + TargetVariable->StackOffset) As i32
+	i64 GlobalsOffset := (Compiler->GlobalBase - Compiler->Config->ImageBase) + Compiler->Index
+	
+	; Then negate it (making it the distance from this code to the first global) and add the variable's offset
+	
+	return (-GlobalsOffset + TargetVariable->StackOffset) As i32
 }
 
 /* Todo: Merge these three functions into one */

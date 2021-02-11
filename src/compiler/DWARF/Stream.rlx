@@ -1,0 +1,151 @@
+#Require "./src/lib/Memory.rlx"
+#Require "./src/lib/Console.rlx"
+
+struct DWARFStream {
+	union {
+		void* Buffer
+		i8* I8Buffer
+		i16* I16Buffer
+		i32* I32Buffer
+		i64* I64Buffer
+	}
+	
+	i32 OriginalCapacity
+	i32 Capacity
+	
+	i32 Index
+	
+	static DWARFStream* New(i32 Capacity) {
+		DWARFStream* this := Alloc(#DWARFStream)
+		
+		this->OriginalCapacity := Capacity
+		this->Capacity := Capacity
+		this->Buffer := Alloc(Capacity)
+
+		return this
+	}
+	static DWARFStream* Big() {
+		return DWARFStream:New(0x1000)
+	}
+	static DWARFStream* Little() {
+		return DWARFStream:New(0x100)
+	}
+	static DWARFStream* Tiny() {
+		return DWARFStream:New(0x20)
+	}
+	
+	define void Free() {
+		Free(this->Buffer)
+		Free(this)
+	}
+	
+	define void* GetCurrentPosition() {
+		return &this->Buffer[this->Index]
+	}
+	define void* GetOffsetPosition(i32 Offset) {
+		return &this->Buffer[Offset]
+	}
+	
+	define void Seek(i32 Offset) {
+		this->Index := Offset
+	}
+	define i32 Tell() {
+		return this->Index
+	}
+	
+	define void Extend(i32 ExtraBytes) {
+		if (this->Index + ExtraBytes >= this->Capacity) {
+			i32 Rounded := (ExtraBytes / this->OriginalCapacity) + 2
+			
+			this->Capacity += Rounded * this->OriginalCapacity
+			this->Buffer := ReAlloc(this->Buffer, this->Capacity)
+		}
+	}
+	
+	define void Write(void* Data, i32 Size) {
+		this->Extend(Size)
+		
+		MoveMemory(&this->I8Buffer[this->Index], Data, Size)
+		
+		this->Index += Size
+	}
+	
+	define void WriteStream(DWARFStream* Other) {
+		this->Write(Other->Buffer, Other->Index)
+		
+		Other->Free()
+	}
+	
+	define void WriteI8(i64 Value) {
+		this->Write(&Value, 1)
+	}
+	define void WriteI16(i64 Value) {
+		this->Write(&Value, 2)
+	}
+	define void WriteI32(i64 Value) {
+		this->Write(&Value, 4)
+	}
+	define void WriteI64(i64 Value) {
+		this->Write(&Value, 8)
+	}
+	
+	define void WriteULEB128(i64 Value) {
+		loop {
+			i32 Byte := (Value & 0b0_1111111) As i32
+			Value := Value >> 7
+			
+			if (Value) {
+				Byte |= 0b1_0000000
+			}
+			
+			this->WriteI8(Byte)
+			
+			if !(Value) {
+				break
+			}
+		}
+	}
+	define void WriteLEB128(i64 Value) {
+		i8 More := true
+		i8 IsNegative := Value < 0
+		
+		i32 Size := 64
+		
+		while (More) {
+			i32 Byte := (Value & 0b0_1111111) As i32
+			Value := Value >> 7
+			
+			if (IsNegative) {
+				Value |= ~0 << ((Size - 7) As i8)
+			}
+			
+			if (Value = 0 && Byte ^ 0b1_0000000) || (Value = -1 && Byte & 0b1_0000000) {
+				More := false
+			}
+			else {
+				Byte |= 0b1_0000000
+			}
+			
+			this->WriteI8(Byte)
+		}
+	}
+	
+	define void Print() {
+		for (i32 Index := 0, Index < this->Index, Index++) {
+			i32 NextByte := this->I8Buffer[Index]
+			
+			Print("%x ", NextByte & 0xFF)
+		}
+		
+		Print("\n")
+	}
+}
+
+
+;define void Main() {
+;	DWARFStream* S := DWARFStream:Big()
+;	
+;	S->WriteLEB128(-123456)
+;	
+;	S->Print()
+;}

@@ -1,0 +1,153 @@
+
+
+#Require "./src/lib/Memory.rlx"
+#Require "./src/compiler/DWARF/Stream.rlx"
+#Require "./src/compiler/DWARF/Expression.rlx"
+#Require "./src/compiler/DWARF/DIE.rlx"
+#Require "./src/compiler/DWARF/FakeTypes.rlx"
+
+struct DWARFBuilder {
+	
+	DWARFDebuggingEntryStreamBuilder* DIEStream
+	DWARFAbbreviationTableBuilder* Abbreviations
+	
+	HashMap Types
+	
+	i32 CompilationUnitTag
+	i32 BaseTypeTag
+	i32 PointerTypeTag
+	i32 StructTypeTag
+	i32 GlobalVariableTypeTag
+	
+	static DWARFBuilder* New() {
+		DWARFBuilder* this := Alloc(#DWARFBuilder)
+		
+		this->DIEStream := DWARFDebuggingEntryStreamBuilder:New()
+		this->Abbreviations := DWARFAbbreviationTableBuilder:New()
+		
+		this~>Types->Initialize()
+		
+		return this
+	}
+	
+	define void CreateAbbreviations() {
+		DWARFAbbreviationTableBuilder* A := this->Abbreviations
+		; ^ much shortened name for sanity's sake
+		
+		this->CompilationUnitTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_COMPILATION_UNIT, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_COMPILATION_DIRECTORY, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_FLAG_PRESENT)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
+		A->EndAbbreviation()
+		
+		this->BaseTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_BASE_TYPE, false)
+			;Abbreviations->AppendAttributePair(DWARF_ATTRIBUTE_FILE, DWARF_FORM_DATA_1)
+			;Abbreviations->AppendAttributePair(DWARF_ATTRIBUTE_COLUMN, DWARF_FORM_DATA_1)
+			;Abbreviations->AppendAttributePair(DWARF_ATTRIBUTE_LINE, DWARF_FORM_DATA_2)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_ENCODING, DWARF_FORM_DATA_1)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+		A->EndAbbreviation()
+		
+		this->PointerTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_POINTER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+		A->EndAbbreviation()
+		
+		this->StructTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+		A->EndAbbreviation()
+		
+		this->GlobalVariableTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_VARIABLE, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
+		A->EndAbbreviation()
+		
+		A->End()
+	}
+	
+	define void CreateCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase, i32 ImageSize) {
+		this->DIEStream->StartEntry(this->CompilationUnitTag)
+			this->DIEStream->AppendString(BaseFile)
+			this->DIEStream->AppendString(Directory)
+			this->DIEStream->AppendI64(ImageBase)
+			this->DIEStream->AppendI32(ImageSize)
+		this->DIEStream->EndEntry()
+	}
+	
+	define i32 AddBaseType(i8* Name, i32 Size) {
+		i32 TypeOffset := this->DIEStream->StartEntry(this->BaseTypeTag)
+			this->DIEStream->AppendI16(Size)
+			this->DIEStream->AppendI8(DWARF_ENCODING_SIGNED_INTEGER)
+			this->DIEStream->AppendString(Name)
+		this->DIEStream->EndEntry()
+		
+		this~>Types->Set(Name, TypeOffset)
+		
+		return TypeOffset
+	}
+	define i32 MakePointerType(i32 PointedToTypeOffset) {
+		i32 PointerOffset := this->DIEStream->StartEntry(this->PointerTypeTag)
+			this->DIEStream->AppendI32(PointedToTypeOffset)
+		this->DIEStream->EndEntry()
+		
+		return PointerOffset
+	}
+	
+	define i32 AddGlobalVariable(i8* Name, i32 TypeOffset, i64 Address) {
+		i32 GlobalOffset := this->DIEStream->StartEntry(this->GlobalVariableTypeTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(TypeOffset)
+			
+			DWARFExpressionBuilder* Expression := this->DIEStream->StartAppendExpression()
+			
+			Expression->EmitPushAddress(Address)
+			
+			this->DIEStream->EndAppendExpression(Expression)
+		this->DIEStream->EndEntry()
+		
+		return GlobalOffset
+	}
+	
+	define i32 TranslateTypeInfo(TypeInfo* T) {
+		
+		;if (T->IsStruct) {
+			
+		;}
+		
+		return 0
+		
+	}
+	
+	define i32 TranslateType(Type T) {
+		TypeInfo* BaseType := GetBaseType(T)
+		
+		HashMapElement* BaseTypeElement := this~>Types->Get(BaseType->Name)
+		
+		i32 BaseTypeOffset := 0
+		
+		if (BaseTypeElement) {
+			BaseTypeOffset := BaseTypeElement->Value As i32
+		}
+		else {
+			BaseTypeOffset := this->TranslateTypeInfo(BaseType)
+		}
+		
+		
+		return 0
+	}
+	
+	define void WriteSections(ELFBuilder* ELF) {
+		DWARFStream* DIEStream := DWARFStream:Little()
+		
+		this->DIEStream->Serialize(DIEStream)
+		
+		DWARFStream* AbbreviationsStream := this->Abbreviations->Stream
+		
+		ELF->AddDataSection(".debug_abbrev", AbbreviationsStream->Buffer, AbbreviationsStream->Index)
+		ELF->AddDataSection(".debug_info", DIEStream->Buffer, DIEStream->Index)
+	}
+}

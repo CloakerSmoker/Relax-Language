@@ -36,10 +36,15 @@ i64 ELF_SECTION_FLAGS_ALLOCATE := 0x02
 i64 ELF_SECTION_FLAGS_EXECUTE  := 0x04
 i64 ELF_SECTION_FLAGS_STRINGS  := 0x20
 
+
+; Custom flag, used to mark that a section only exists for the purpose of mapping a name to some
+;  data which isn't loaded (like debug info)
+i64 ELF_SECTION_FLAGS_HAS_DATA := 0x2222
+
 struct ELFSectionHeader {
 	i32 NameOffset
-	i32 SectionType
-	i64 SectionFlags
+	i32 Type
+	i64 Flags
 	i64 VirtualAddress
 	i64 FileOffset
 	i64 FileSize
@@ -75,12 +80,12 @@ struct ELFHeader unaligned {
 	i32 Flags
 	i16 HeaderSize
 
-	i16 ProgramHeadersSize
+	i16 ProgramHeaderSize
 	i16 ProgramHeaderEntryCount
-	i16 SectionHeadersSize
+	i16 SectionHeaderSize
 	i16 SectionHeaderEntryCount
 
-	i16 SectionNameSectionHeaderIndex
+	i16 SectionNameSectionIndex
 
 	define void WriteDefaults() {
 		; Default values for a statically linked little endian 64 bit x86-64 executable using the SystemV ABI
@@ -96,11 +101,16 @@ struct ELFHeader unaligned {
 		this->ELFVersion        := ELF_VERSION
 		
 		this->HeaderSize                    := #ELFHeader As i16
-		this->ProgramHeadersSize            := #ELFProgramHeader As i16
-		this->SectionHeadersSize            := #ELFSectionHeader As i16
-		this->SectionNameSectionHeaderIndex := 1
+		this->ProgramHeaderSize             := #ELFProgramHeader As i16
+		this->SectionHeaderSize             := #ELFSectionHeader As i16
+
+		this->SectionNameSectionIndex := 1
 	}
 }
+
+; For efficient mapping executable and shared object files must have segments whose file offsets and virtual addresses 
+;  are congruent modulo the page size.
+; From: https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
 
 struct ELFBuilder {
 	union {
@@ -189,8 +199,8 @@ struct ELFBuilder {
 		
 		ELFSectionHeader* TextSection := this->AppendNamedSection(".text")
 		
-		TextSection->SectionType  := ELF_SECTION_TYPE_DATA
-		TextSection->SectionFlags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_EXECUTE
+		TextSection->Type  := ELF_SECTION_TYPE_DATA
+		TextSection->Flags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_EXECUTE
 		TextSection->Alignment    := ELF_ALIGN_NONE
 		TextSection->FileSize     := CodeLength
 		
@@ -199,24 +209,33 @@ struct ELFBuilder {
 		this->CodeSectionHeader := TextSection
 	}
 
-	define void AddDataSection(i32 ReserveBytes) {
+	define void AddEmptyDataSection(i32 ReserveBytes) {
 		ELFProgramHeader* LoadData := this->AppendProgramHeader()
 		
 		LoadData->SegmentType := ELF_SEGMENT_TYPE_LOAD
 		LoadData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
 		LoadData->Alignment   := ELF_ALIGN_NONE
-		LoadData->FileSize    := ReserveBytes
+		LoadData->FileSize    := 0
 		LoadData->MemorySize  := ReserveBytes
 		
 		ELFSectionHeader* DataSection := this->AppendNamedSection(".bss")
 		
-		DataSection->SectionType  := ELF_SECTION_TYPE_NODATA
-		DataSection->SectionFlags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
+		DataSection->Type         := ELF_SECTION_TYPE_NODATA
+		DataSection->Flags        := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
 		DataSection->Alignment    := ELF_ALIGN_NONE
 		DataSection->FileSize     := ReserveBytes
 		
 		this->DataProgramHeader := LoadData
 		this->DataSectionHeader := DataSection
+	}
+	define void AddDataSection(i8* Name, void* Data, i32 Size) {
+		ELFSectionHeader* DataSection := this->AppendNamedSection(Name)
+		
+		DataSection->Type           := ELF_SECTION_TYPE_DATA
+		DataSection->Flags          := ELF_SECTION_FLAGS_HAS_DATA
+		DataSection->Alignment      := ELF_ALIGN_NONE
+		DataSection->VirtualAddress := Data As i64
+		DataSection->FileSize       := Size
 	}
 
 	static ELFBuilder* New() {
@@ -253,7 +272,7 @@ struct ELFBuilder {
 		ELFSectionHeader* StringSection := this->AppendSectionHeader()
 		this->StringSection := StringSection
 		
-		StringSection->SectionType := ELF_SECTION_TYPE_STRING_TABLE
+		StringSection->Type := ELF_SECTION_TYPE_STRING_TABLE
 		StringSection->Alignment := 0x01
 		
 		this->StringBuffer := Alloc(8)
@@ -265,14 +284,24 @@ struct ELFBuilder {
 	}
 
 	define void Finalize(i32 MainOffset, i64 ImageBase) {
-		i32 ProgramHeadersSize := this->Header->ProgramHeaderEntryCount * #ELFProgramHeader
-		i32 SectionHeadersSize := this->Header->SectionHeaderEntryCount * #ELFSectionHeader
+		; Note: the data section is excluded from the size, since a program header with a FileSize of 0 and non-zero 
+		;  MemorySize will have MemorySize zero bytes loaded into memory
+		
+		i32 ProgramHeaderCount := this->Header->ProgramHeaderEntryCount
+		i32 SectionHeaderCount := this->Header->SectionHeaderEntryCount
+		
+		i32 ProgramHeadersSize := ProgramHeaderCount * #ELFProgramHeader
+		i32 SectionHeadersSize := SectionHeaderCount * #ELFSectionHeader
 		i32 CodeSize := this->CodeProgramHeader->FileSize As i32
 		i32 StringSectionSize := this->StringSection->FileSize As i32
 		i32 DataSize := 0
 		
-		if (this->DataProgramHeader != null) {
-			DataSize := this->DataProgramHeader->MemorySize As i32
+		for (i32 Index := 0, Index < SectionHeaderCount, Index += 1) {
+			ELFSectionHeader* NextSectionHeader := this->SectionHeaders[Index]
+			
+			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
+				DataSize += NextSectionHeader->FileSize As i32
+			}
 		}
 		
 		i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
@@ -293,11 +322,11 @@ struct ELFBuilder {
 		i8* ByteBuffer := Buffer As i8*
 		
 		; Calculate the offset of each segment inside the file
-		i32 DataOffset := 64
-		i32 ProgramHeadersOffset := DataOffset + DataSize
+		i32 ProgramHeadersOffset := #ELFHeader
 		i32 SectionHeadersOffset := ProgramHeadersOffset + ProgramHeadersSize
 		i32 StringsOffset := SectionHeadersOffset + SectionHeadersSize
 		i32 CodeOffset := StringsOffset + StringSectionSize
+		i32 DataOffset := CodeOffset + CodeSize
 		
 		; Update the ELF header to contain the program/section header offsets, and entry-point
 		this->Header->ProgramHeadersOffset := ProgramHeadersOffset
@@ -313,16 +342,13 @@ struct ELFBuilder {
 		; Copy the bytes of all the program/section headers into the ELF buffer after the ELF header
 		;  (Which will line up with the offsets written into the header above)
 
-		i32 ProgramHeaderCount := this->Header->ProgramHeaderEntryCount
-		i32 SectionHeaderCount := this->Header->SectionHeaderEntryCount
 		i8* StringBufferBytes := this->StringBuffer
 		i8* CodeBufferBytes := this->CodeBuffer
 		
 		if (this->DataProgramHeader) {
 			; Update the data segment/section. Todo: If 1kb of globals are used, push the code segment back
-			this->DataProgramHeader->FileOffset := DataOffset
-			this->DataProgramHeader->VirtualAddress := ImageBase + DataOffset + 0x1000
-			this->DataSectionHeader->VirtualAddress := ImageBase + DataOffset + 0x1000
+			this->DataProgramHeader->VirtualAddress := ImageBase + 0x1000
+			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
 		}
 		
 		; Update the segments to be relative to the image base
@@ -331,7 +357,10 @@ struct ELFBuilder {
 		this->StringSection->VirtualAddress += ImageBase
 		
 		; Update the code segment+section with the code file offset, and entry-point
+		; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
+		;  and virtual address to be equal modulo 1024
 		i64 CodeBase := ImageBase + 0x2000 + CodeOffset
+		
 		i64 EntryPoint := CodeBase + MainOffset
 		
 		this->Header->EntryPoint := EntryPoint
@@ -343,18 +372,49 @@ struct ELFBuilder {
 		ELFProgramHeader* ProgramHeadersBuffer := (ByteBuffer + ProgramHeadersOffset) As ELFProgramHeader*
 		ELFSectionHeader* SectionHeadersBuffer := (ByteBuffer + SectionHeadersOffset) As ELFSectionHeader*
 		
-		for (i32 Index := 0, Index < ProgramHeaderCount, Index += 1) {
+		for (Index := 0, Index < ProgramHeaderCount, Index += 1) {
 			ELFProgramHeader* NextProgramHeader := this->ProgramHeaders[Index]
 			
-			MoveMemory(ProgramHeadersBuffer[Index], NextProgramHeader, #ELFProgramHeader)			
+			MoveMemory(ProgramHeadersBuffer[Index], NextProgramHeader, #ELFProgramHeader)
 		}
+		
+		i32 NextDataSectionOffset := DataOffset
+		
 		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
-			ELFSectionHeader* NextSectionHeader := this->SectionHeaders[Index]
+			NextSectionHeader := this->SectionHeaders[Index]
 			
-			MoveMemory(SectionHeadersBuffer[Index], NextSectionHeader, #ELFSectionHeader)	
+			i64 OldVirtualAddress := NextSectionHeader->VirtualAddress
+			i64 OldFlags := NextSectionHeader->Flags
+			
+			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
+				Print("Section %i has data flag\n", Index)
+				
+				NextSectionHeader->FileOffset := NextDataSectionOffset
+				NextDataSectionOffset += NextSectionHeader->FileSize As i32
+				
+				NextSectionHeader->VirtualAddress := 0
+				NextSectionHeader->Flags := 0
+			}
+			
+			MoveMemory(SectionHeadersBuffer[Index], NextSectionHeader, #ELFSectionHeader)
+			
+			NextSectionHeader->VirtualAddress := OldVirtualAddress
+			NextSectionHeader->Flags := OldFlags
 		}
 		
 		MoveMemory(&ByteBuffer[StringsOffset], this->StringBuffer, StringSectionSize)
 		MoveMemory(&ByteBuffer[CodeOffset], this->CodeBuffer, CodeSize)
+		
+		NextDataSectionOffset := DataOffset
+		
+		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
+			NextSectionHeader := this->SectionHeaders[Index]
+			
+			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
+				MoveMemory(&ByteBuffer[NextDataSectionOffset], NextSectionHeader->VirtualAddress As void*, NextSectionHeader->FileSize As i32)
+				
+				NextDataSectionOffset += NextSectionHeader->FileSize As i32
+			}
+		}
 	}
 }
