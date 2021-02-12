@@ -17,7 +17,9 @@ struct DWARFBuilder {
 	i32 BaseTypeTag
 	i32 PointerTypeTag
 	i32 StructTypeTag
-	i32 GlobalVariableTypeTag
+	i32 MemberTypeTag
+	i32 VariableTag
+	i32 FunctionDefinitionTag
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -60,22 +62,51 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 		A->EndAbbreviation()
 		
-		this->GlobalVariableTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_VARIABLE, false)
+		this->MemberTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_MEMBER_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
+		A->EndAbbreviation()
+		
+		this->VariableTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_VARIABLE, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
 		A->EndAbbreviation()
 		
+		this->FunctionDefinitionTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_SUBPROGRAM, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_FRAME_BASE, DWARF_FORM_LOCATION_EXPRESSION)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_DATA_1)
+		A->EndAbbreviation()
+		
 		A->End()
 	}
 	
-	define void CreateCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase, i32 ImageSize) {
+	define i32 StartCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase) {
 		this->DIEStream->StartEntry(this->CompilationUnitTag)
 			this->DIEStream->AppendString(BaseFile)
 			this->DIEStream->AppendString(Directory)
 			this->DIEStream->AppendI64(ImageBase)
-			this->DIEStream->AppendI32(ImageSize)
+			
+			i32 ImageSizeOffset := this->DIEStream->Stream->Tell()
+			this->DIEStream->AppendI32(0)
 		this->DIEStream->EndEntry()
+		
+		return ImageSizeOffset
+	}
+	define void EndCompilationUnit(i32 ImageSizeOffset, i32 ImageSize) {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+		
+		i32 CurrentOffset := this->DIEStream->Stream->Tell()
+		
+		this->DIEStream->Stream->Seek(ImageSizeOffset)
+		this->DIEStream->Stream->WriteI32(ImageSize)
+		
+		this->DIEStream->Stream->Seek(CurrentOffset)
 	}
 	
 	define i32 AddBaseType(i8* Name, i32 Size) {
@@ -89,7 +120,7 @@ struct DWARFBuilder {
 		
 		return TypeOffset
 	}
-	define i32 MakePointerType(i32 PointedToTypeOffset) {
+	define i32 AddPointerType(i32 PointedToTypeOffset) {
 		i32 PointerOffset := this->DIEStream->StartEntry(this->PointerTypeTag)
 			this->DIEStream->AppendI32(PointedToTypeOffset)
 		this->DIEStream->EndEntry()
@@ -97,26 +128,119 @@ struct DWARFBuilder {
 		return PointerOffset
 	}
 	
-	define i32 AddGlobalVariable(i8* Name, i32 TypeOffset, i64 Address) {
-		i32 GlobalOffset := this->DIEStream->StartEntry(this->GlobalVariableTypeTag)
+	define i32 StartStruct(i8* Name, i16 Size) {
+		i32 StructOffset := this->DIEStream->StartEntry(this->StructTypeTag)
+			this->DIEStream->AppendI16(Size)
+			this->DIEStream->AppendString(Name)
+		this->DIEStream->EndEntry()
+		
+		return StructOffset
+	}
+	define i32 AddStructField(i8* Name, i32 TypeOffset, i32 Offset) {
+		i32 FieldOffset := this->DIEStream->StartEntry(this->MemberTypeTag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
 			
-			DWARFExpressionBuilder* Expression := this->DIEStream->StartAppendExpression()
+			DWARFExpressionBuilder* OffsetExpression := this->DIEStream->StartAppendExpression()
 			
-			Expression->EmitPushAddress(Address)
+			OffsetExpression->EmitAddConstant(Offset)
 			
-			this->DIEStream->EndAppendExpression(Expression)
+			this->DIEStream->EndAppendExpression(OffsetExpression)
+		this->DIEStream->EndEntry()
+		
+		return FieldOffset
+	}
+	define void EndStruct() {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define i32 StartFunction(i8* Name, i32 ReturnTypeOffset, i64 StartAddress, i32 Size, i8 IsMain) {
+		i32 FunctionOffset := this->DIEStream->StartEntry(this->FunctionDefinitionTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(ReturnTypeOffset)
+			
+			DWARFExpressionBuilder* FrameBaseExpression := this->DIEStream->StartAppendExpression()
+			
+			FrameBaseExpression->EmitPushRegister(DWARF_AMD64_REGISTER_RBP)
+			
+			this->DIEStream->EndAppendExpression(FrameBaseExpression)
+			
+			this->DIEStream->AppendI64(StartAddress)
+			this->DIEStream->AppendI32(Size)
+			this->DIEStream->AppendI8(IsMain)
+		this->DIEStream->EndEntry()
+		
+		return FunctionOffset
+	}
+	define i32 AddLocalVariable(i8* Name, i32 TypeOffset, i32 StackOffset) {
+		i32 LocalOffset := this->DIEStream->StartEntry(this->VariableTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(TypeOffset)
+			
+			DWARFExpressionBuilder* OffsetExpression := this->DIEStream->StartAppendExpression()
+			
+			OffsetExpression->EmitPushBasePointerOffset(StackOffset)
+			
+			this->DIEStream->EndAppendExpression(OffsetExpression)
+		this->DIEStream->EndEntry()
+		
+		return LocalOffset
+	}
+	define void EndFunction() {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define i32 AddGlobalVariable(i8* Name, i32 TypeOffset, i64 Address) {
+		i32 GlobalOffset := this->DIEStream->StartEntry(this->VariableTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(TypeOffset)
+			
+			DWARFExpressionBuilder* LocationExpression := this->DIEStream->StartAppendExpression()
+			
+			LocationExpression->EmitPushAddress(Address)
+			
+			this->DIEStream->EndAppendExpression(LocationExpression)
 		this->DIEStream->EndEntry()
 		
 		return GlobalOffset
 	}
 	
+	declare i32 TranslateType(Type)
+	
 	define i32 TranslateTypeInfo(TypeInfo* T) {
 		
-		;if (T->IsStruct) {
+		if (T->IsStructType) {
+			i32 Offset := this->StartStruct(T->Name->PackToString(), T->Size)
 			
-		;}
+			void* Elements := T~>Fields->Elements
+			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						i8* Name := NextField->Name->PackToString()
+						i32 TypeOffset := this->TranslateType(NextField->ValueType)
+						i32 FieldOffset := NextField->Offset
+						
+						this->AddStructField(Name, TypeOffset, FieldOffset)
+						
+						NextField->Name->UnpackFromString()
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+			
+			this->EndStruct()
+			
+			T->Name->UnpackFromString()
+			
+			return Offset
+		}
 		
 		return 0
 		
@@ -134,10 +258,19 @@ struct DWARFBuilder {
 		}
 		else {
 			BaseTypeOffset := this->TranslateTypeInfo(BaseType)
+			
+			this~>Types->Set(BaseType->Name, BaseTypeOffset)
 		}
 		
+		i32 TypeOffset := BaseTypeOffset
 		
-		return 0
+		i32 PointerDepth := GetPointerDepth(T)
+		
+		for (i32 Index := 0, Index < PointerDepth, Index++) {
+			TypeOffset := this->AddPointerType(TypeOffset)
+		}
+		
+		return TypeOffset
 	}
 	
 	define void WriteSections(ELFBuilder* ELF) {

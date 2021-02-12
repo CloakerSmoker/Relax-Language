@@ -134,3 +134,11 @@ define void PrintType(Type TypeToPrint) {
 	
 	Print("%s", PrintTypeBuffer)
 }
+
+struct StructField {
+	SafeWideString* Name,
+	i16 Offset,
+	Type ValueType,
+	i8 BitStartIndex,
+	i8 BitEndIndex
+}

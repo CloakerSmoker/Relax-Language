@@ -8,20 +8,33 @@ define i32 Main() {
 	ELFBuilder* Builder := ELFBuilder:New()
 	
 	Builder->AddEmptyDataSection(20)
-	Builder->AddCodeSection({i8: 0x48, 0xC7, 0xC0, 0x00, 0x10, 0x00, 0x40, 0xC7, 0x00, 0x14, 0x00, 0x00, 0x00, 0xC3 }, 14)
+	Builder->AddCodeSection({ i8: 0x55, 0x48, 0x89, 0xE5, 0x48, 0xC7, 0xC0, 0x00, 0x10, 0x00, 0x40, 0xC7, 0x00, 0x14, 0x00, 0x00, 0x00, 0xC9, 0xC3 }, 19)
 	
 	DWARFBuilder* DWARF := DWARFBuilder:New()
 	
 	DWARF->CreateAbbreviations()
-	DWARF->CreateCompilationUnit("test.txt", "~/Documents", 0x4000_0000, 0x0001_0000)
+	i32 CompilationUnit := DWARF->StartCompilationUnit("test.txt", "~/Documents", 0x4000_0000)
 	
 	DWARF->AddBaseType("i8", 1)
 	DWARF->AddBaseType("i16", 2)
-	i32 TypeOffset := DWARF->AddBaseType("i32", 4)
+	i32 I32 := DWARF->AddBaseType("i32", 4)
 	DWARF->AddBaseType("i64", 8)
-	DWARF->AddBaseType("void", 8)
+	i32 void := DWARF->AddBaseType("void", 8)
 	
-	DWARF->AddGlobalVariable("glob", TypeOffset, 0x4000_1000)
+	;DWARF->AddGlobalVariable("glob", I32, 0x4000_1000)
+	
+	;DWARF->StartStruct("point", 8)
+	;	DWARF->AddStructField("x", I32, 0)
+	;	DWARF->AddStructField("y", I32, 4)
+	;DWARF->EndStruct()
+	
+	;DWARF->AddGlobalVariable("glob2", I32, 0x4000_1000)
+	
+	DWARF->StartFunction("main", void, 0x4000_22ce, 19, true)
+		DWARF->AddLocalVariable("test", I32, 0)
+	DWARF->EndFunction()
+	
+	DWARF->EndCompilationUnit(CompilationUnit, 0x0001_0000)
 	
 	DWARF->WriteSections(Builder)
 	
