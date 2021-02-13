@@ -12,8 +12,11 @@ define i32 Main() {
 	
 	DWARFBuilder* DWARF := DWARFBuilder:New()
 	
+	i8* DirectoryPath := "~/Documents/Cloned-Relax-Language"
+	i8* FilePath := "source.txt"
+	
 	DWARF->CreateAbbreviations()
-	i32 CompilationUnit := DWARF->StartCompilationUnit("test.txt", "~/Documents", 0x4000_0000)
+	i32 CompilationUnit := DWARF->StartCompilationUnit(FilePath, DirectoryPath, 0x4000_0000, 0)
 	
 	DWARF->AddBaseType("i8", 1)
 	DWARF->AddBaseType("i16", 2)
@@ -30,11 +33,23 @@ define i32 Main() {
 	
 	;DWARF->AddGlobalVariable("glob2", I32, 0x4000_1000)
 	
-	DWARF->StartFunction("main", void, 0x4000_22ce, 19, true)
+	DWARF->StartFunction("main", void, 0x4000_231a, 19, true)
 		DWARF->AddLocalVariable("test", I32, 0)
 	DWARF->EndFunction()
 	
 	DWARF->EndCompilationUnit(CompilationUnit, 0x0001_0000)
+	
+	DWARF->LineInfo->AddDirectory(DirectoryPath)
+	DWARF->LineInfo->AddFile(FilePath)
+	
+	DWARF->LineInfo->EmitSetAddress(0x4000_231a)
+	DWARF->LineInfo->AddLine(0x0, 1, FilePath)
+	DWARF->LineInfo->AddLine(0x1, 2, FilePath)
+	DWARF->LineInfo->AddLine(0x4, 3, FilePath)
+	DWARF->LineInfo->AddLine(0xb, 4, FilePath)
+	DWARF->LineInfo->AddLine(0x11, 5, FilePath)
+	DWARF->LineInfo->AddLine(0x12, 6, FilePath)
+	DWARF->LineInfo->AddLine(0x13, 7, FilePath)
 	
 	DWARF->WriteSections(Builder)
 	

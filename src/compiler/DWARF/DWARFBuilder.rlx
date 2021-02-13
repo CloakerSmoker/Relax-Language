@@ -4,12 +4,13 @@
 #Require "./src/compiler/DWARF/Stream.rlx"
 #Require "./src/compiler/DWARF/Expression.rlx"
 #Require "./src/compiler/DWARF/DIE.rlx"
+#Require "./src/compiler/DWARF/Lines.rlx"
 #Require "./src/compiler/DWARF/FakeTypes.rlx"
 
 struct DWARFBuilder {
-	
 	DWARFDebuggingEntryStreamBuilder* DIEStream
 	DWARFAbbreviationTableBuilder* Abbreviations
+	DWARFLineProgramBuilder* LineInfo
 	
 	HashMap Types
 	
@@ -26,6 +27,7 @@ struct DWARFBuilder {
 		
 		this->DIEStream := DWARFDebuggingEntryStreamBuilder:New()
 		this->Abbreviations := DWARFAbbreviationTableBuilder:New()
+		this->LineInfo := DWARFLineProgramBuilder:New()
 		
 		this~>Types->Initialize()
 		
@@ -42,6 +44,7 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_FLAG_PRESENT)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_STATEMENT_LIST, DWARF_FORM_DATA_4)
 		A->EndAbbreviation()
 		
 		this->BaseTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_BASE_TYPE, false)
@@ -86,7 +89,7 @@ struct DWARFBuilder {
 		A->End()
 	}
 	
-	define i32 StartCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase) {
+	define i32 StartCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase, i32 LineNumberInfoOffset) {
 		this->DIEStream->StartEntry(this->CompilationUnitTag)
 			this->DIEStream->AppendString(BaseFile)
 			this->DIEStream->AppendString(Directory)
@@ -94,6 +97,8 @@ struct DWARFBuilder {
 			
 			i32 ImageSizeOffset := this->DIEStream->Stream->Tell()
 			this->DIEStream->AppendI32(0)
+			
+			this->DIEStream->AppendI32(LineNumberInfoOffset)
 		this->DIEStream->EndEntry()
 		
 		return ImageSizeOffset
@@ -274,13 +279,16 @@ struct DWARFBuilder {
 	}
 	
 	define void WriteSections(ELFBuilder* ELF) {
-		DWARFStream* DIEStream := DWARFStream:Little()
-		
+		DWARFStream* DIEStream := DWARFStream:Big()
 		this->DIEStream->Serialize(DIEStream)
 		
 		DWARFStream* AbbreviationsStream := this->Abbreviations->Stream
 		
+		DWARFStream* LineInfoStream := DWARFStream:Big()
+		this->LineInfo->Serialize(LineInfoStream)
+		
 		ELF->AddDataSection(".debug_abbrev", AbbreviationsStream->Buffer, AbbreviationsStream->Index)
 		ELF->AddDataSection(".debug_info", DIEStream->Buffer, DIEStream->Index)
+		ELF->AddDataSection(".debug_line", LineInfoStream->Buffer, LineInfoStream->Index)
 	}
 }

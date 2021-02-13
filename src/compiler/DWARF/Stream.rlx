@@ -89,6 +89,11 @@ struct DWARFStream {
 		this->Write(&Value, 8)
 	}
 	
+	define void WriteString(i8* String) {
+		this->Write(String, StringLength(String))
+		this->WriteI8(0)
+	}
+	
 	define void WriteULEB128(i64 Value) {
 		loop {
 			i32 Byte := (Value & 0b0_1111111) As i32

@@ -1,4 +1,3 @@
-
 ; DIE = single record, describes some flavor of data
 ; Subprogram = function
 
@@ -7,6 +6,7 @@
 i16 DWARF_VERSION_5 := 5
 i8 DWARF_COMPILATION_UNIT_TYPE_NORMAL := 1
 i8 DWARF_ADDRESS_SIZE_AMD64 := 8
+i8 DWARF_SEGMENT_SELECTOR_SIZE_AMD64 := 0
 
 
 i16 DWARF_ABBREVIATION_TAG_NULL := 0x0
