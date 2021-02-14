@@ -13,7 +13,7 @@ i32 DWARF_LINE_PROGRAM_OPCODE_ADVANCE_PC := 0x2
 i32 DWARF_LINE_PROGRAM_OPCODE_ADVANCE_LINE := 0x3
 i32 DWARF_LINE_PROGRAM_OPCODE_SET_FILE := 0x4
 i32 DWARF_LINE_PROGRAM_OPCODE_SET_PROLOGUE_END := 0xA
-i32 DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN := 0B
+i32 DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN := 0xB
 
 i32 DWARF_LINE_PROGRAM_EXTENDED_OPCODE_END_SEQUENCE := 0x1
 i32 DWARF_LINE_PROGRAM_EXTENDED_OPCODE_SET_ADDRESS := 0x2
@@ -104,30 +104,35 @@ struct DWARFLineProgramBuilder {
 	}
 	
 	define void AddLine(i32 Offset, i32 LineNumber, i8* File) {
-		
 		i32 FileIndex := this->FindOrAddFile(File)
+		
+		i32 OffsetAdvance := Offset - this->CurrentOffset
+		i32 LineAdvance := LineNumber - this->CurrentLine
+		
+		;Print("%x : %s:%i  +(%i)\n", this->LineProgram->Tell() + 0xb1, File, LineNumber, LineAdvance)
 		
 		if (FileIndex != this->CurrentFileIndex) {
 			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_FILE)
 			this->EmitLEB128(FileIndex)
 			
-			this->CurrentLine := 0xFFFF
+			this->CurrentFileIndex := FileIndex
 		}
-		
-		i32 OffsetAdvance := Offset - this->CurrentOffset
-		i32 LineAdvance := LineNumber - this->CurrentLine
 		
 		if (OffsetAdvance + LineAdvance = 0) {
 			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_COPY)
 			
 			return
 		}
+		else if (LineAdvance = 0) {
+			return
+		}
+		
 		
 		this->CurrentOffset := Offset
 		this->CurrentLine := LineNumber
 		
-		i8 OffsetAdvanceFits := OffsetAdvance < this->MaxOffsetAdvance
-		i8 LineAdvanceFits := LineAdvance < this->MaxLineAdvance
+		i8 OffsetAdvanceFits := OffsetAdvance < this->MaxOffsetAdvance && OffsetAdvance > 0
+		i8 LineAdvanceFits := LineAdvance < this->MaxLineAdvance && LineAdvance > 0
 		
 		if (OffsetAdvanceFits && LineAdvanceFits) {
 			i32 Opcode := (LineAdvance - this->LineBase) + (this->LineRange * OffsetAdvance) + this->OpcodeBase
@@ -185,22 +190,18 @@ struct DWARFLineProgramBuilder {
 			Stream->WriteI8(StandardOpcodeOperandCounts[Index])
 		}
 		
-		Stream->WriteI8(this->DirectoryEntryCount)
+		Stream->WriteI8(1)
 		
-		for (Index := 0, Index < this->DirectoryEntryCount, Index++) {
-			Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
-			Stream->WriteULEB128(DWARF_FORM_STRING)
-		}
+		Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
+		Stream->WriteULEB128(DWARF_FORM_STRING)
 		
 		Stream->WriteI8(this->DirectoryEntryCount)
 		Stream->WriteStream(this->DirectoryEntries)
 		
-		Stream->WriteI8(this->FileEntryCount)
+		Stream->WriteI8(1)
 		
-		for (Index := 0, Index < this->FileEntryCount, Index++) {
-			Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
-			Stream->WriteULEB128(DWARF_FORM_STRING)
-		}
+		Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
+		Stream->WriteULEB128(DWARF_FORM_STRING)
 		
 		Stream->WriteI8(this->FileEntryCount)
 		Stream->WriteStream(this->FileEntries)

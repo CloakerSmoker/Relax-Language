@@ -58,39 +58,42 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	i8 DumpFunctionBytes := false
 	
 	for (i32 Index := 0, Index < ArgC, Index += 1) {
-		i8* NextArg := ArgV[Index]
+		i8* NextOption := ArgV[Index]
 		
-		if (StringEquals(NextArg, "--elf")) {
+		if (StringEquals(NextOption, "--elf")) {
 			Config->OutputFormat := OUTPUT_ELF
 		}
-		else if (StringEquals(NextArg, "--pe")) {
+		else if (StringEquals(NextOption, "--pe")) {
 			Config->OutputFormat := OUTPUT_PE
 		}
-		else if (StringEquals(NextArg, "--bin")) {
+		else if (StringEquals(NextOption, "--bin")) {
 			Config->OutputFormat := OUTPUT_BIN
 		}
-		else if (StringEquals(NextArg, "--functions")) {
+		else if (StringEquals(NextOption, "--functions")) {
 			Config->DumpInfo |= DUMP_FUNCTIONS
 		}
-		else if (StringEquals(NextArg, "--globals")) {
+		else if (StringEquals(NextOption, "--globals")) {
 			Config->DumpInfo |= DUMP_GLOBALS
 		}
-		else if (StringEquals(NextArg, "--lines")) {
+		else if (StringEquals(NextOption, "--lines")) {
 			Config->DumpInfo |= DUMP_LINES
 		}
-		else if (StringEquals(NextArg, "--debug")) {
+		else if (StringEquals(NextOption, "--debug")) {
 			Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES
 		}
-		else if (StringEquals(NextArg, "--no-colors")) {
+		else if (StringEquals(NextOption, "--dwarf")) {
+			Config->DebugMode |= DEBUG_EMIT_DWARF
+		}
+		else if (StringEquals(NextOption, "--no-colors")) {
 			NO_COLORS := true
 		}
-		else if (StringEquals(NextArg, "-i") && !InputFilePath) {			
+		else if (StringEquals(NextOption, "-i") && !InputFilePath) {
 			Index += 1
 			InputFilePath := ArgV[Index]
 			
 			Print("Input File: '%s'\n", InputFilePath)
 		}
-		else if (StringEquals(NextArg, "-o") && !OutputFilePath) {
+		else if (StringEquals(NextOption, "-o") && !OutputFilePath) {
 			Index += 1
 			OutputFilePath := ArgV[Index]
 			
@@ -110,9 +113,14 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 	}
 	
+	if (Config->OutputFormat != OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_DWARF) {
+		Print("^60Warning: `--dwarf` flag is only implemented for ELF files.^F0\n")
+	}
+	
 	CurrentConfig := Config
 	UnhandledExceptionHandler := &CompilerUnhandledExceptionHandler
 	
+	Config->SourceFile := InputFilePath
 	Config->TargetABI := ABI_SYSTEMV
 	Config->ImageBase := DEFAULT_IMAGE_BASE
 	

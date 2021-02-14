@@ -249,7 +249,7 @@
 	define ASTNode* ParseStatement() {
 		ASTNode* Result := null
 		
-		;this->PeekNextToken()~>Context->Warn("Marker")
+		Token* FirstToken := this->PeekNextToken()
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
 			Token* NextToken := this->GetCurrentToken()
@@ -326,7 +326,7 @@
 			Result := ASTNode:New(NODE_TYPE_EXPRESSION, Result)
 		}
 		
-		;this->PeekNextToken()~>Context->Warn("Tail")
+		Result~>Context->Clone(FirstToken~>Context)
 		
 		return Result
 	}

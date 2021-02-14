@@ -57,14 +57,16 @@ i8 DUMP_LINES := 4
 
 i8 DEBUG_NONE := 0
 i8 DEBUG_EMIT_FUNCTION_NAMES := 1
+i8 DEBUG_EMIT_DWARF := 2
 
 struct BuildConfig {
-	LexerState* Lexer,
+	LexerState* Lexer
+	i8* SourceFile
 	
-	i64 ImageBase,
-	i8 OutputFormat,
-	i8 TargetABI,
-	i8 DumpInfo,
+	i64 ImageBase
+	i8 OutputFormat
+	i8 TargetABI
+	i8 DumpInfo
 	i8 DebugMode
 }
 

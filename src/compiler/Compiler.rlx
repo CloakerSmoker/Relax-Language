@@ -4,12 +4,15 @@
 ==========================================
 */
 
+#Require "./src/compiler/DWARF/DWARFBuilder.rlx"
 
 struct Label {
 	i32 LabelNumber,
 	i32 OffsetToReplace,
 	i8 IsPlaceholder
 }
+
+declare i32 GetVariableOffset(CompilerState*, VariableInfo*, i8*)
 
 struct CompilerState {
 	BuildConfig* Config,
@@ -73,6 +76,10 @@ struct CompilerState {
 	; Number of functions present in output file
 	i16 FunctionCount
 	
+	DWARFBuilder* DWARF
+	
+	i32 DWARFCompilationUnitOffset
+	
 	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
 		this->Parser := Parser
@@ -100,6 +107,24 @@ struct CompilerState {
 		this->TotalTryDepth := 0
 		
 		this->FunctionCount := 0
+		
+		if (Config->DebugMode & DEBUG_EMIT_DWARF) {
+			this->DWARF := DWARFBuilder:New()
+			this->DWARF->CreateAbbreviations()
+			
+			this->DWARFCompilationUnitOffset := this->DWARF->StartCompilationUnit(Config->SourceFile, ".", Config->ImageBase, 0)
+			
+			this->DWARF->AddBaseType("i8", 1)
+			this->DWARF->AddBaseType("i16", 2)
+			this->DWARF->AddBaseType("i32", 4)
+			this->DWARF->AddBaseType("i64", 8)
+			this->DWARF->AddBaseType("void", 8)
+			
+			this->DWARF->LineInfo->AddDirectory(".")
+			this->DWARF->LineInfo->AddFile(Config->SourceFile)
+			
+			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
+		}
 	}
 	define void Free() {
 		Free(this->CodeBuffer)
@@ -110,7 +135,88 @@ struct CompilerState {
 	SafeWideString* CurrentSourceFile
 	i32 LineNumberHighWaterMark
 	
-	define void BeforeCompileFunction(FunctionDefine* Function) {
+	define void MarkLineNumber(ErrorContext* Context) {
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			i32 Offset := this->CodeBase + this->Index
+			i8* SourceFile := Context->SourceFilePath->PackToString()
+			
+			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, SourceFile)
+			
+			Context->SourceFilePath->UnpackFromString()
+		}
+		
+		if (this->Config->DumpInfo & DUMP_LINES) {
+			SafeWideString* SourceFilePath := Context->SourceFilePath
+			
+			if (SourceFilePath != null && SourceFilePath = this->CurrentSourceFile) {
+				if (Context->LineNumber > this->LineNumberHighWaterMark) {
+					Print("\t%i:	%x\n", Context->LineNumber, this->CodeBase + this->Index)
+					this->LineNumberHighWaterMark := Context->LineNumber
+				}
+			}
+		}
+	}
+	
+	define i32 BeforeCompileFunction(FunctionDefine* Function) {
+		i32 Result := 0
+		
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			this->MarkLineNumber(Function~>Context)
+			
+			i8* FunctionName := Function->Name->PackToString()
+			i32 ReturnTypeOffset := this->DWARF->FindOrTranslateType(Function->ReturnType)
+			i64 FunctionAddress := this->Config->ImageBase + this->CodeBase + this->Index
+			i8 IsMain := Function->Name->Equals("Main")
+			
+			Result := this->DWARF->StartFunction(FunctionName, ReturnTypeOffset, FunctionAddress, IsMain)
+			
+			Function->Name->UnpackFromString()
+			
+			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+				VariableInfo* NextParameter := Function->Parameters[Index]
+				
+				i8* Name := NextParameter->Name->PackToString()
+				i32 TypeOffset := this->DWARF->FindOrTranslateType(NextParameter->Type)
+				i32 StackOffset := GetVariableOffset(this, NextParameter, null)
+				
+				this->DWARF->AddLocalVariable(Name, TypeOffset, StackOffset)
+				
+				NextParameter->Name->UnpackFromString()
+			}
+			
+			HashMap* Locals := Function~>Locals~>BackingMap
+			
+			i32 ElementCount := Locals->BufferMaxCount As i32
+			void* Elements := Locals->Elements
+			
+			for (i32 ElementIndex := 0, ElementIndex < ElementCount, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						VariableInfo* NextLocal := FoundElement->Value As VariableInfo*
+						
+						if (NextLocal->IsParameter) {
+							FoundElement := FoundElement->NextElement
+							
+							continue
+						}
+						
+						Name := NextLocal->Name->PackToString()
+						TypeOffset := this->DWARF->FindOrTranslateType(NextLocal->Type)
+						StackOffset := GetVariableOffset(this, NextLocal, null)
+						
+						this->DWARF->AddLocalVariable(Name, TypeOffset, StackOffset)
+						
+						NextLocal->Name->UnpackFromString()
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+		}
+		
+		
 		if (this->Config->DumpInfo & DUMP_LINES) {
 			Print("[ ^80")
 			Function~>Context->SourceFilePath->Print()
@@ -126,18 +232,25 @@ struct CompilerState {
 			this->CurrentSourceFile := Function~>Context->SourceFilePath
 			this->LineNumberHighWaterMark := Function~>Context->LineNumber
 		}
+		
+		return Result
+	}
+	define void AfterPrologueEnd() {
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			;this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_PROLOGUE_END)
+		}
+	}
+	define void BeforeEpilogueBegin() {
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			;this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN)
+		}
 	}
 	
-	define void MarkLineNumber(ErrorContext* Context) {
-		if (this->Config->DumpInfo & DUMP_LINES) {
-			SafeWideString* SourceFilePath := Context->SourceFilePath
+	define void AfterCompileFunction(FunctionDefine* Function, i32 Data) {
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			i32 FunctionSize := this->Index - Function->CodeOffset
 			
-			if (SourceFilePath != null && SourceFilePath = this->CurrentSourceFile) {
-				if (Context->LineNumber > this->LineNumberHighWaterMark) {
-					Print("\t%i:	%x\n", Context->LineNumber, this->CodeBase + this->Index)
-					this->LineNumberHighWaterMark := Context->LineNumber
-				}				
-			}
+			this->DWARF->EndFunction(Data, FunctionSize)
 		}
 	}
 }
@@ -306,9 +419,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->ELF := ELFBuilder:New()
 		
 		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
-		Compiler->CodeBase := (0x2000) As i32
-		
-		Print("CB %x\n", Compiler->CodeBase)
+		Compiler->CodeBase := (0x231a) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder()
@@ -405,6 +516,11 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF->AddEmptyDataSection(Parser~>Globals->NextOffset)
 		Compiler->ELF->AddCodeSection(Compiler->CodeBuffer, Compiler->Index)
+		
+		if (Config->DebugMode & DEBUG_EMIT_DWARF) {
+			Compiler->DWARF->EndCompilationUnit(Compiler->DWARFCompilationUnitOffset, Compiler->CodeBase + Compiler->Index)
+			Compiler->DWARF->WriteSections(Compiler->ELF)
+		}
 		
 		Compiler->ELF->Finalize(MainOffset, Config->ImageBase)
 		
@@ -683,7 +799,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
 	
-	Compiler->BeforeCompileFunction(FunctionToCompile)
+	i32 DebugData := Compiler->BeforeCompileFunction(FunctionToCompile)
 	
 	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
@@ -818,6 +934,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		CompileSetVariableValue(Compiler, NextStackParameter, RAX)
 	}
 	
+	Compiler->AfterPrologueEnd()
+	
 	if (IsMain) {
 		Compiler->CurrentFunctionStringsLabel := Compiler->GlobalStringsLabel
 		
@@ -831,10 +949,14 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 				VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 				
 				if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+					Compiler->MarkLineNumber(NextGlobalDefault~>Context)
+					
 					CompileExpression(Compiler, RAX, NextGlobalDefault)
 				}
 			}
 			else {
+				Compiler->MarkLineNumber(NextGlobalDefault~>Context)
+				
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
 		}
@@ -853,11 +975,11 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 			since every function automatically gets Leave;Ret emitted for it.
 		*/
 		
-		ASTNode* LasLexerment := Body->Statements[BodyCount - 1]
+		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
-		if (LasLexerment->NodeType = NODE_TYPE_RETURN) {
-			ReturnExpression := LasLexerment->ReturnExpression
-			Body->StatementCount -= 1
+		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
+			;ReturnExpression := LastStatement->ReturnExpression
+			;Body->StatementCount -= 1
 		}
 	}
 	
@@ -866,6 +988,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	CompileBlock(Compiler, Body)
 	
 	if (ReturnExpression) {
+		;Compiler->MarkLineNumber(LastStatement~>Context)
+		
 		CompileExpression(Compiler, RAX, ReturnExpression)
 		
 		i16 ReturnValueSize := GetTypeSize(ReturnExpression->ValueType)
@@ -875,6 +999,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 			Cast(Compiler, RAX, ReturnValueSize As i8)
 		}
 	}
+	
+	;Compiler->BeforeEpilogueBegin()
 	
 	EmitLeave(Compiler)
 	
@@ -892,6 +1018,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	Compiler->CurrentFunction := null
+	
+	Compiler->AfterCompileFunction(FunctionToCompile, DebugData)
 	
 	return FunctionOffset
 }
@@ -985,6 +1113,9 @@ define void CompileReturn(CompilerState* Compiler, ASTNode* ReturnExpression) {
 	if (ReturnValueSize < ReturnTypeSize || ReturnValueSize < 4) {
 		Cast(Compiler, RAX, ReturnValueSize As i8)
 	}
+	
+	;Compiler->BeforeEpilogueBegin()
+	;Compiler->MarkLineNumber(ReturnExpression~>Context)
 	
 	EmitLeave(Compiler)
 	
@@ -1230,10 +1361,6 @@ define void CompileGetStorageValuePointer(CompilerState* Compiler, ASTNode* Valu
 
 define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNode* ExpressionToCompile) {
 	/* Compiles some kind of expression */
-	
-	if (ExpressionToCompile~>Context->SourceFilePath != null) {
-		Compiler->MarkLineNumber(ExpressionToCompile~>Context)
-	}
 	
 	i8 ExpressionType := ExpressionToCompile->NodeType
 	Type ResultType := ExpressionToCompile->ValueType

@@ -387,8 +387,6 @@ struct ELFBuilder {
 			i64 OldFlags := NextSectionHeader->Flags
 			
 			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
-				Print("Section %i has data flag\n", Index)
-				
 				NextSectionHeader->FileOffset := NextDataSectionOffset
 				NextDataSectionOffset += NextSectionHeader->FileSize As i32
 				

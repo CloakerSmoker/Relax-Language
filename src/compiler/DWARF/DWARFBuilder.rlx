@@ -5,7 +5,7 @@
 #Require "./src/compiler/DWARF/Expression.rlx"
 #Require "./src/compiler/DWARF/DIE.rlx"
 #Require "./src/compiler/DWARF/Lines.rlx"
-#Require "./src/compiler/DWARF/FakeTypes.rlx"
+;#Require "./src/compiler/DWARF/FakeTypes.rlx"
 
 struct DWARFBuilder {
 	DWARFDebuggingEntryStreamBuilder* DIEStream
@@ -21,6 +21,7 @@ struct DWARFBuilder {
 	i32 MemberTypeTag
 	i32 VariableTag
 	i32 FunctionDefinitionTag
+	i32 FunctionParameterTag
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -84,6 +85,13 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_DATA_1)
+		A->EndAbbreviation()
+		
+		this->FunctionParameterTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_PARAMETER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_VARIABLE_PARAMETER, DWARF_FORM_FLAG_PRESENT)
 		A->EndAbbreviation()
 		
 		A->End()
@@ -159,8 +167,8 @@ struct DWARFBuilder {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
-	define i32 StartFunction(i8* Name, i32 ReturnTypeOffset, i64 StartAddress, i32 Size, i8 IsMain) {
-		i32 FunctionOffset := this->DIEStream->StartEntry(this->FunctionDefinitionTag)
+	define i32 StartFunction(i8* Name, i32 ReturnTypeOffset, i64 StartAddress, i8 IsMain) {
+		this->DIEStream->StartEntry(this->FunctionDefinitionTag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(ReturnTypeOffset)
 			
@@ -171,14 +179,18 @@ struct DWARFBuilder {
 			this->DIEStream->EndAppendExpression(FrameBaseExpression)
 			
 			this->DIEStream->AppendI64(StartAddress)
-			this->DIEStream->AppendI32(Size)
+			
+			i32 SizeOffset := this->DIEStream->Stream->Tell()
+			this->DIEStream->AppendI32(0)
+			
 			this->DIEStream->AppendI8(IsMain)
 		this->DIEStream->EndEntry()
 		
-		return FunctionOffset
+		return SizeOffset
 	}
-	define i32 AddLocalVariable(i8* Name, i32 TypeOffset, i32 StackOffset) {
-		i32 LocalOffset := this->DIEStream->StartEntry(this->VariableTag)
+	
+	define void AddRawLocalVariable(i32 Tag, i8* Name, i32 TypeOffset, i32 StackOffset) {
+		this->DIEStream->StartEntry(Tag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
 			
@@ -188,10 +200,22 @@ struct DWARFBuilder {
 			
 			this->DIEStream->EndAppendExpression(OffsetExpression)
 		this->DIEStream->EndEntry()
-		
-		return LocalOffset
 	}
-	define void EndFunction() {
+	
+	define void AddFunctionParameter(i8* Name, i32 TypeOffset, i32 StackOffset) {
+		this->AddRawLocalVariable(this->FunctionParameterTag, Name, TypeOffset, StackOffset)
+	}
+	define void AddLocalVariable(i8* Name, i32 TypeOffset, i32 StackOffset) {
+		this->AddRawLocalVariable(this->VariableTag, Name, TypeOffset, StackOffset)
+	}
+	define void EndFunction(i32 SizeOffset, i32 Size) {
+		i32 CurrentOffset := this->DIEStream->Stream->Tell()
+		
+		this->DIEStream->Stream->Seek(SizeOffset)
+		this->DIEStream->Stream->WriteI32(Size)
+		
+		this->DIEStream->Stream->Seek(CurrentOffset)
+		
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
@@ -210,7 +234,7 @@ struct DWARFBuilder {
 		return GlobalOffset
 	}
 	
-	declare i32 TranslateType(Type)
+	declare i32 FindOrTranslateType(Type)
 	
 	define i32 TranslateTypeInfo(TypeInfo* T) {
 		
@@ -228,7 +252,7 @@ struct DWARFBuilder {
 						StructField* NextField := FoundElement->Value
 						
 						i8* Name := NextField->Name->PackToString()
-						i32 TypeOffset := this->TranslateType(NextField->ValueType)
+						i32 TypeOffset := this->FindOrTranslateType(NextField->ValueType)
 						i32 FieldOffset := NextField->Offset
 						
 						this->AddStructField(Name, TypeOffset, FieldOffset)
@@ -251,7 +275,7 @@ struct DWARFBuilder {
 		
 	}
 	
-	define i32 TranslateType(Type T) {
+	define i32 FindOrTranslateType(Type T) {
 		TypeInfo* BaseType := GetBaseType(T)
 		
 		HashMapElement* BaseTypeElement := this~>Types->Get(BaseType->Name)

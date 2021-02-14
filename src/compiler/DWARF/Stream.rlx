@@ -124,7 +124,7 @@ struct DWARFStream {
 				Value |= ~0 << ((Size - 7) As i8)
 			}
 			
-			if (Value = 0 && Byte ^ 0b1_0000000) || (Value = -1 && Byte & 0b1_0000000) {
+			if (Value = 0 && !(Byte & 0b0_1000000)) || (Value = -1 && Byte & 0b0_1000000) {
 				More := false
 			}
 			else {
