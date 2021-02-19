@@ -411,6 +411,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	
 	Compiler->Initialize(Config, Parser)
 	
+	; Todo: Fix all of the random constants for section offsets
+	
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
 		Compiler->CodeBase := (Parser~>Globals->NextOffset + 0x10) As i32
@@ -427,7 +429,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
 		Compiler->PE->PE->ImageBase := Config->ImageBase
 		
-		Compiler->GlobalBase := (Config->ImageBase + Compiler->PE->NextRVA) As i32
+		Compiler->GlobalBase := (Config->ImageBase + 0x2000) As i32
 		Compiler->CodeBase := 0x3000
 	}
 	
