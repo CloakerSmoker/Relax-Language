@@ -245,6 +245,24 @@ define void EliminateGlobals(ParserState* Parser) {
 	Globals->NextOffset := NewNextOffset
 }
 
+define void FoldConstantsBlockVisitor(ASTVisitor* Visitor, Block* Block) {
+	; Remove any NODE_TYPE_NONEs from the block, and repack contained nodes as a linear array of non-none nodes
+	; Effectively translating the block to exactly what it will be compiled as, allowing for us to optimize based on
+	;  the number of nodes inside of a block without worrying about them being NODE_TYPE_NONEs.
+	
+	i16 NewIndex := 0
+	
+	for (i32 Index := 0, Index < Block->StatementCount, Index++) {
+		ASTNode* Next := Block->Statements[Index]
+		
+		if (Next->NodeType != NODE_TYPE_NONE) {
+			Block->Statements[NewIndex++] := Next
+		}
+	}
+	
+	Block->StatementCount := NewIndex
+}
+
 define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 	if (Root->NodeType = NODE_TYPE_BINARY) {
 		if (IsAssignment(Root->BinaryNode->Operator)) {
@@ -293,7 +311,7 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 		
 		i8 UnaryOperator := Root->UnaryNode->Operator->IntegerValue As i8
 		
-		if (Operand->ValueType = NODE_TYPE_INTEGER) {
+		if (Operand->NodeType = NODE_TYPE_INTEGER) {
 			Root->NodeType := NODE_TYPE_INTEGER
 			
 			if 		(UnaryOperator = OPERATOR_MINUS) { Root->IntegerValue := -Operand->IntegerValue }
@@ -327,6 +345,43 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 			if (TargetFunction->IsImported = false && TargetFunction->Attribute != KEYWORD_ASSEMBLY) {
 				Visitor->VisitBlocks(TargetFunction->Body)
 			}
+			
+			if (TargetFunction->Body->StatementCount = 0) {
+				; A call to an empty function
+				
+				ASTNode** NewParameters := Alloc(CallNode->ParameterCount * #ASTNode*)
+				i16 NewParametersIndex := 0
+				
+				; Remove all parameters that do not have side-effects
+				
+				for (i32 ParameterIndex := 0, ParameterIndex < CallNode->ParameterCount, ParameterIndex++) {
+					ASTNode* NextParameter := CallNode->Parameters[ParameterIndex]
+					
+					if (NodeHasSideEffects(NextParameter)) {
+						NewParameters[NewParametersIndex++] := NextParameter
+					}
+				}
+				
+				TargetFunction->CallCount -= 1
+				
+				if (NewParametersIndex = 0) {
+					; If all parameters had no side-effects, remove the node as a whole
+					
+					Root->NodeType := NODE_TYPE_NONE
+				}
+				else {
+					; If some parameters had side-effects, build a NODE_TYPE_EXPRESSION_BLOCK which will evaluate
+					;  just the ones with side-effects, without actually calling the target function
+					
+					Block* ParametersBlock := Alloc(#Block)
+					
+					ParametersBlock->StatementCount := NewParametersIndex As i16
+					ParametersBlock->Statements := NewParameters
+					
+					Root->NodeType := NODE_TYPE_EXPRESSION_BLOCK
+					Root->BlockValue := ParametersBlock
+				}
+			}
 		}
 		
 		Visitor->RawVisitNodes(CallNode->ParameterCount, CallNode->Parameters)
@@ -336,6 +391,11 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 		
 		IfGroup* IfNode := Root->IfNode
 		
+		ASTNode** NewConditions := Alloc(IfNode->BranchCount * #ASTNode*)
+		Block** NewBodies := Alloc(IfNode->BranchCount * #Block*)
+		
+		i16 NewBranchIndex := 0
+		
 		for (i32 BranchIndex := 0, BranchIndex < IfNode->BranchCount, BranchIndex += 1) {
 			ASTNode* Condition := FoldConstantsVisitor(Visitor, IfNode->Conditions[BranchIndex])
 			Block* Body := IfNode->Bodies[BranchIndex]
@@ -344,25 +404,63 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 				i64 ConditionValue := Condition->IntegerValue
 				
 				if (ConditionValue = 0) {
-					; Constant false condition, eliminate the condition and body
+					; Constant false condition, skip branch entirely
 					
-					Condition->NodeType := NODE_TYPE_NONE
-					Body->StatementCount := 0
+					continue
 				}
 				else {
 					; Constant true condition
 					
 					if (BranchIndex = 0) {
+						; If this is the first branch, delete the if statement as a whole and just replace it with
+						;  the body of the branch
+						
 						Root->NodeType := NODE_TYPE_BLOCK
 						Root->BlockValue := Body
 					}
-					else {
-						IfNode->BranchCount := (BranchIndex + 1) As i16
-					}
+					
+					; Since this is the final branch (and will always be taken if reached), we can remove any `else` branch
+					;  and stop processing any more branches
+					
+					IfNode->ElseBranch := null
+					
+					NewConditions[NewBranchIndex] := Condition
+					NewBodies[NewBranchIndex++] := Body
 					
 					break
 				}
 			}
+			
+			NewConditions[NewBranchIndex] := Condition
+			NewBodies[NewBranchIndex++] := Body
+		}
+		
+		if (Root->NodeType = NODE_TYPE_BLOCK) {
+			; This node has been replaced with the body of a constant true branch, free all if-related buffers
+			
+			Free(IfNode->Conditions)
+			Free(IfNode->Bodies)
+			Free(NewConditions)
+			Free(NewBodies)
+		}
+		else if (NewBranchIndex = 0 && IfNode->ElseBranch = null) {
+			; This node only contained constant false conditions (which were removed), delete the node as a whole
+			
+			Free(NewConditions)
+			Free(NewBodies)
+			
+			Root->NodeType := NODE_TYPE_NONE
+		}
+		else {
+			; This node still contains at least one brach with a non-constant condition, free the old buffers
+			;  and replace them with the new buffers (which don't contain any dead branches)
+			
+			Free(IfNode->Conditions)
+			Free(IfNode->Bodies)
+			
+			IfNode->BranchCount := NewBranchIndex
+			IfNode->Conditions := NewConditions
+			IfNode->Bodies := NewBodies
 		}
 	}
 	
@@ -371,6 +469,8 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 
 define void FoldConstants(ParserState* Parser) {
 	ASTVisitor* Visitor := ASTVisitor:New(&FoldConstantsVisitor)
+	
+	Visitor->SetBlockVisitFunction(&FoldConstantsBlockVisitor)
 	
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_UNARY)

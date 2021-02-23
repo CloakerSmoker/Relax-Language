@@ -646,6 +646,7 @@ i32 NextASTVisitorID := 1
 
 struct ASTVisitor {
 	void* VisitFunction
+	void* BlockVisitFunction
 	i64 State
 	i32 NodeTypeMask
 	i32 ID
@@ -678,7 +679,10 @@ struct ASTVisitor {
 	define void SetVisitFunction(void* Function) {
 		this->VisitFunction := Function
 	}
-	define void CallVisitor(ASTNode* Node, void* VisitFunction) asm {
+	define void SetBlockVisitFunction(void* Function) {
+		this->BlockVisitFunction := Function
+	}
+	define void CallVisitor(void* Node, void* VisitFunction) asm {
 		jmp, rdx
 	}
 	
@@ -690,12 +694,18 @@ struct ASTVisitor {
 			Block* Next := Blocks[Index]
 			
 			this->RawVisitNodes(Next->StatementCount, Next->Statements)
+
+			if (this->BlockVisitFunction != null) {
+				this->CallVisitor(Next, this->BlockVisitFunction)
+			}
 		}
 	}
 	define void VisitBlocks(... Blocks) {
 		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
 	}
 	define void VisitChildren(ASTNode* Node) {
+		Node->LastVisitor := this->ID
+		
 		i8 NodeType := Node->NodeType
 		
 		if (NodeType = NODE_TYPE_UNARY) {
