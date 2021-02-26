@@ -76,6 +76,8 @@ struct CompilerState {
 	; Number of functions present in output file
 	i16 FunctionCount
 	
+	i32 DistanceBetweenGlobalsAndCode
+	
 	DWARFBuilder* DWARF
 	
 	i32 DWARFCompilationUnitOffset
@@ -416,12 +418,16 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
 		Compiler->CodeBase := (Parser~>Globals->NextOffset + 0x10) As i32
+		
+		Compiler->DistanceBetweenGlobalsAndCode := Parser~>Globals->NextOffset
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF := ELFBuilder:New()
 		
 		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
 		Compiler->CodeBase := (0x231a) As i32
+		
+		Compiler->DistanceBetweenGlobalsAndCode := 0x1000
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder()
@@ -431,6 +437,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		Compiler->GlobalBase := (Config->ImageBase + 0x2000) As i32
 		Compiler->CodeBase := 0x3000
+		
+		Compiler->DistanceBetweenGlobalsAndCode := 0x2000
 	}
 	
 	Compiler->GlobalStringsLabel := NextLabel(Compiler)
@@ -658,7 +666,7 @@ define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariab
 define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVariable) {
 	; Get the distance from the first global to this code
 	
-	i64 GlobalsOffset := (Compiler->GlobalBase - Compiler->Config->ImageBase) + Compiler->Index
+	i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index
 	
 	; Then negate it (making it the distance from this code to the first global) and add the variable's offset
 	
