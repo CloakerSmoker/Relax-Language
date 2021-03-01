@@ -86,7 +86,7 @@ define i8 IsPath(i16 Character, i16 AllowExtra) {
 	else if (Character = '/' || Character = '\') {
 		return true
 	}
-	else if (Character = '.') {
+	else if (Character = '.' || Character = '-') {
 		return true
 	}
 	else if (AllowExtra) {

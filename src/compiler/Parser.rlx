@@ -718,7 +718,7 @@ struct ParserState {
 	#Require "./src/compiler/Parser/Assembly.rlx"
 	#Require "./src/compiler/Parser/Statement.rlx"
 	
-	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken, TypeInfo* ThisType) {
+	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken, TypeInfo* ThisType, i8 ForMethod) {
 		i8 Mode := FirstToken->Value As i8
 		
 		i8 ForStatic := Mode = KEYWORD_STATIC
@@ -746,7 +746,7 @@ struct ParserState {
 		i8 ParameterCount := 0
 		VariableInfo** ParameterList := Alloc(16 * #VariableInfo) As VariableInfo**
 		
-		if (ThisType != 0) {
+		if (ForMethod) {
 			; If we are defining a method, then we need to build the `this` parameter, and insert it into the 
 			;  parameter list
 	
@@ -896,6 +896,15 @@ struct ParserState {
 		NewDefine->Parameters := ParameterList
 		NewDefine->ParameterCount := ParameterCount
 		
+		; `FUNCTION_IS_METHOD` when `ForStatic` is false, and
+		; `FUNCTION_IS_STATIC_METHOD` when `ForStatic` is true
+		; `0`/false when neither is true
+		NewDefine->IsMethod := ForMethod | (ForStatic << 1) As i8
+		
+		if (NewDefine->IsMethod) {
+			NewDefine->MethodOfTypeName := ThisType->Name
+		}
+		
 		if (ForDefine) {
 			; Only copy the variable map containing the parameter locals if it... exists.
 			
@@ -965,7 +974,7 @@ struct ParserState {
 			NewDefine->HasFullDefinition := true
 			this->CurrentFunction := null
 		
-			if (ThisType = null && NameToken->StringValue->Equals("Main")) {
+			if (!ForMethod && NameToken->StringValue->Equals("Main")) {
 				this->MainFunction := NewDefine
 			}
 		}
@@ -973,7 +982,7 @@ struct ParserState {
 		return NewDefine
 	}
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken) {
-		return this->ParseFunctionDefinition(Namespace, FirstToken, null)
+		return this->ParseFunctionDefinition(Namespace, FirstToken, null, false)
 	}
 	
 	define TypeInfo* ParseCustomTypeName(Token* NameToken, i8 Flags) {
@@ -1054,20 +1063,10 @@ struct ParserState {
 						TypeInfo* ThisType := NewType
 						
 						if (IsStaticMethod) {
-							; Static methods take no `this` parameter, so we need to mark that `ThisType`
-							;  isn't present to prevent `ParseFunction` from automatically adding
-							;   the `this` parameter
-							
 							MethodNamespace := StaticMethods
-							ThisType := null
 						}
 						
-						FunctionDefine* Method := this->ParseFunctionDefinition(MethodNamespace, MethodKeyword, ThisType)
-						
-						; `FUNCTION_IS_METHOD` when `IsStaticMethod` is false, and
-						;  `FUNCTION_IS_STATIC_METHOD` when `IsStaticMethod` is true
-						Method->IsMethod := (true + IsStaticMethod) As i8
-						Method->MethodOfTypeName := NameToken->StringValue
+						this->ParseFunctionDefinition(MethodNamespace, MethodKeyword, ThisType, !IsStaticMethod)
 						
 						; Ignore commas after methods, they aren't actually needed for parsing
 						this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
