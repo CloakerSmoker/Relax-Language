@@ -45,6 +45,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	BuildConfig* Config := Alloc(#BuildConfig)
 	
 	Config->DumpInfo := 0
+	Config->LineEnding := LINE_ENDING_DEFAULT
 	
 	windows {
 		Config->OutputFormat := OUTPUT_PE
@@ -60,33 +61,24 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	for (i32 Index := 0, Index < ArgC, Index += 1) {
 		i8* NextOption := ArgV[Index]
 		
-		if (StringEquals(NextOption, "--elf")) {
-			Config->OutputFormat := OUTPUT_ELF
-		}
-		else if (StringEquals(NextOption, "--pe")) {
-			Config->OutputFormat := OUTPUT_PE
-		}
-		else if (StringEquals(NextOption, "--bin")) {
-			Config->OutputFormat := OUTPUT_BIN
-		}
-		else if (StringEquals(NextOption, "--functions")) {
-			Config->DumpInfo |= DUMP_FUNCTIONS
-		}
-		else if (StringEquals(NextOption, "--globals")) {
-			Config->DumpInfo |= DUMP_GLOBALS
-		}
-		else if (StringEquals(NextOption, "--lines")) {
-			Config->DumpInfo |= DUMP_LINES
-		}
-		else if (StringEquals(NextOption, "--debug")) {
-			Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES
-		}
-		else if (StringEquals(NextOption, "--dwarf")) {
-			Config->DebugMode |= DEBUG_EMIT_DWARF
-		}
+		if      (StringEquals(NextOption, "--elf")) { Config->OutputFormat := OUTPUT_ELF }
+		else if (StringEquals(NextOption, "--pe" )) { Config->OutputFormat := OUTPUT_PE  }
+		else if (StringEquals(NextOption, "--bin")) { Config->OutputFormat := OUTPUT_BIN }
+		
+		else if (StringEquals(NextOption, "--functions")) { Config->DumpInfo |= DUMP_FUNCTIONS }
+		else if (StringEquals(NextOption, "--globals"  )) { Config->DumpInfo |= DUMP_GLOBALS   }
+		else if (StringEquals(NextOption, "--lines"    )) { Config->DumpInfo |= DUMP_LINES     }
+		
+		else if (StringEquals(NextOption, "--debug")) { Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES }
+		else if (StringEquals(NextOption, "--dwarf")) { Config->DebugMode |= DEBUG_EMIT_DWARF          }
+			
+		else if (StringEquals(NextOption, "--cr"  )) { Config->LineEnding := LINE_ENDING_CR   }
+		else if (StringEquals(NextOption, "--crlf")) { Config->LineEnding := LINE_ENDING_CRLF }
+		
 		else if (StringEquals(NextOption, "--no-colors")) {
 			NO_COLORS := true
 		}
+		
 		else if (StringEquals(NextOption, "-i") && !InputFilePath) {
 			Index += 1
 			InputFilePath := ArgV[Index]
@@ -115,6 +107,15 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	if (Config->OutputFormat != OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_DWARF) {
 		Print("^60Warning: `--dwarf` flag is only implemented for ELF files.^F0\n")
+	}
+	
+	if (Config->LineEnding = LINE_ENDING_DEFAULT) {
+		if (Config->OutputFormat = OUTPUT_PE) {
+			Config->LineEnding := LINE_ENDING_CRLF 
+		}
+		else {
+			Config->LineEnding := LINE_ENDING_CR
+		}
 	}
 	
 	CurrentConfig := Config

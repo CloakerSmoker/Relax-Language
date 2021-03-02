@@ -704,13 +704,13 @@ struct LexerState {
 			; Only actually replace escape sequences when we're not working with a raw string
 			
 			if !(SkipEscapes) {
-				; First, we need to use the target output format to decide if `\n` is actually
+				; First, we need to use the line ending option to decide if `\n` is actually
 				;  `\r\n` or just `\n`
 				
 				i16 NewLine := 0x0A
 				i32 NewLineLength := 1
 				
-				if (this->Config->OutputFormat = OUTPUT_PE) {
+				if (this->Config->LineEnding = LINE_ENDING_CRLF) {
 					NewLine := 0x0A0D
 					NewLineLength := 2				
 				}

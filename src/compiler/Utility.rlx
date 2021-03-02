@@ -59,6 +59,10 @@ i8 DEBUG_NONE := 0
 i8 DEBUG_EMIT_FUNCTION_NAMES := 1
 i8 DEBUG_EMIT_DWARF := 2
 
+i8 LINE_ENDING_DEFAULT := 0
+i8 LINE_ENDING_CR := 1
+i8 LINE_ENDING_CRLF := 2
+
 struct BuildConfig {
 	LexerState* Lexer
 	i8* SourceFile
@@ -68,6 +72,7 @@ struct BuildConfig {
 	i8 TargetABI
 	i8 DumpInfo
 	i8 DebugMode
+	i8 LineEnding
 }
 
 declare void PrettyError(ErrorContext*, i8*, i8)
