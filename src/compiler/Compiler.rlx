@@ -926,11 +926,16 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		CompileSetVariableValue(Compiler, NextParameter, NextParameterRegister)
 	}
 	
+	; On SystemV, there's only a return address between entry RSP and the stack parameters, but on windows, there's
+	;  0x20 bytes of "shadow space" which we need to account for
+	
+	i32 StackParametersOffset := 0x20 * !USE_SYSTEMV 
+	
 	for (i8 StackParameterIndex := 0, StackParameterIndex < StackParameterCount, StackParameterIndex += 1) {
 		/* For each stack parameter */
 		
 		/* Get the VariableInfo structure for the parameter */
-		VariableInfo* NextStackParameter := (FunctionToCompile->Parameters)[StackParameterIndex + MAX_REGISTER_PARAMETERS]
+		VariableInfo* NextStackParameter := FunctionToCompile->Parameters[StackParameterIndex + MAX_REGISTER_PARAMETERS]
 		
 		/* Load RAX with the parameter's value (using RBX/old RSP as a base) */
 		
@@ -938,7 +943,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		i8 NextParameterSize := GetTypeSize(NextStackParameter->Type) As i8
 		
 		;EmitMove_RX_RIX_DISP8(Compiler, RAX, RBX, NextParameterOffset, NextParameterSize)
-		EmitMove_RX_RIX_DISPX(Compiler, RAX, RBX, NextParameterOffset, true, NextParameterSize)
+		EmitMove_RX_RIX_DISPX(Compiler, RAX, RBX, StackParametersOffset + NextParameterOffset, true, NextParameterSize)
 		
 		/* Write RAX(/the parameter's value) into the parameter's stack space */
 		CompileSetVariableValue(Compiler, NextStackParameter, RAX)
@@ -1480,6 +1485,10 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
 	
 	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (Compiler->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
+	
+	if (TargetFunction && TargetFunction->Attribute = KEYWORD_X64) {
+		USE_SYSTEMV := false
+	}
 	
 	i8 REGISTER_PARAMETER_COUNT := 4
 	
