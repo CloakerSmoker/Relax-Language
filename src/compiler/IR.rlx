@@ -1,4 +1,16 @@
+#Require "./src/lib/Memory.rlx"
+#Require "./src/lib/File.rlx"
+
+#Require "./src/lib/String.rlx"
 #Require "./src/lib/Console.rlx"
+#Require "./src/lib/SafeString.rlx"
+#Require "./src/lib/HashMap.rlx"
+#Require "./src/lib/Debug.rlx"
+
+#Require "./src/compiler/Utility.rlx"
+#Require "./src/compiler/Lexer.rlx"
+#Require "./src/compiler/Parser.rlx"
+
 
 
 ;declare i8 Frob(i8*)
@@ -63,13 +75,13 @@ struct IRVariable {
 struct IRLoadLocal {
 	; Loads the value of the local variable Source into DestinationRegister
 	
-	IRVariable* Source
+	IRVariable Source
 	i32 DestinationRegister
 }
 struct IRLoadGlobal {
 	; Loads the value of the global variable Source into DestinationRegister
 	
-	IRVariable* Source
+	IRVariable Source
 	i32 DestinationRegister
 }
 struct IRLoadIndex {
@@ -100,13 +112,13 @@ struct IRLoadInteger {
 struct IRLoadLocalAddress {
 	; Loads the address of local variable Source into DestinationRegister
 	
-	IRVariable* Source
+	IRVariable Source
 	i32 DestinationRegister
 }
 struct IRLoadGlobalAddress {
 	; Loads the address of global variable Source into DestinationRegister
 	
-	IRVariable* Source
+	IRVariable Source
 	i32 DestinationRegister
 }
 struct IRLoadIndexAddress {
@@ -137,13 +149,13 @@ struct IRLoadLabelAddress {
 struct IRStoreLocal {
 	; Stores the value of SourceRegister into the local variable Destination
 	
-	IRVariable* Destination
+	IRVariable Destination
 	i32 SourceRegister
 }
 struct IRStoreGlobal {
 	; Stores the value of SourceRegister into the global variable Destination
 	
-	IRVariable* Destination
+	IRVariable Destination
 	i32 SourceRegister
 }
 struct IRStoreIndirect {
@@ -197,7 +209,8 @@ struct IRCall {
 	i8 Size
 }
 struct IRReturn {
-	i32 ReturnValue
+	i32 ReturnValueRegister
+	i8 ReturnValueSize
 }
 struct IRConditional {
 	i32 Condition
@@ -270,6 +283,7 @@ struct IRNode {
 		IRUnary UnaryNode
 		
 		IRConditional ConditionalNode
+		IRReturn ReturnNode
 		
 		i32 CallToBlock
 		i32 JumpToBlock
@@ -279,13 +293,7 @@ struct IRNode {
 	i8 IsPresent
 	
 	define void Print() {
-		if (this->Type = IR_LOAD_LOCAL_VARIABLE) {
-			Print("load_local.%i, T%i, %s", this~>LoadLocalNode->Source->Size, this~>LoadLocalNode->DestinationRegister, this~>LoadLocalNode->Source->Name)
-		}
-		else if (this->Type = IR_LOAD_GLOBAL_VARIABLE) {
-			Print("load_global.%i, T%i, %s", this~>LoadGlobalNode->Source->Size, this~>LoadGlobalNode->DestinationRegister, this~>LoadGlobalNode->Source->Name)
-		}
-		else if (this->Type = IR_LOAD_INTEGER) {
+		if (this->Type = IR_LOAD_INTEGER) {
 			Print("load_integer.%i, T%i, %i", this~>LoadIntegerNode->Size, this~>LoadIntegerNode->DestinationRegister, this~>LoadIntegerNode->SourceValue)
 		}
 		else if (this->Type = IR_UNARY) {
@@ -302,7 +310,31 @@ struct IRNode {
 			
 			Print("cond.%i, T%i, L%i, L%i", Conditional->ConditionSize, Conditional->Condition, Conditional->TrueBlock, Conditional->FalseBlock)
 		}
+		else if (this->Type = IR_LOAD_LOCAL_VARIABLE) {
+			IRLoadLocal* LoadLocal := this~>LoadLocalNode
+			IRVariable* LoadVariable := LoadLocal~>Source
+			
+			Print("load_local.%i, T%i, local(%s)", LoadVariable->Size, LoadLocal->DestinationRegister, LoadVariable->Name)
+		}
+		else if (this->Type = IR_STORE_LOCAL_VARIABLE) {
+			IRStoreLocal* StoreLocal := this~>StoreLocalNode
+			IRVariable* StoreVariable := StoreLocal~>Destination
+			
+			Print("store_local.%i, local(%s), T%i", StoreVariable->Size, StoreVariable->Name, StoreLocal->SourceRegister)
+		}
+		else if (this->Type = IR_RETURN) {
+			Print("return.%i, T%i", this~>ReturnNode->ReturnValueSize, this~>ReturnNode->ReturnValueRegister)
+		}
 	}
+}
+
+define i8 OperatorToCharacter(i64 Operator) {
+	return "           = < >  +-*/%&|^  !~"[Operator]
+}
+
+bits LoopLables As i64 {
+	[0:31] ContinueLabel,
+	[32:63] BreakLabel
 }
 
 struct IRCompilerState {
@@ -314,12 +346,11 @@ struct IRCompilerState {
 	
 	i32 NextNodeIndex
 	
-	i32 LabelCount
-	
 	i32 BlockCount
 	i32 BlockCapacity
 	i32* BlockOffsets
 	i32* BlockSizes
+	i8* BlocksVisited
 	
 	i32 CurrentBlock
 	
@@ -332,6 +363,7 @@ struct IRCompilerState {
 		this->BlockCapacity := 0x200
 		this->BlockOffsets := Alloc(this->BlockCapacity * #i32)
 		this->BlockSizes := Alloc(this->BlockCapacity * #i32)
+		this->BlocksVisited := Alloc(this->BlockCapacity * #i8)
 		
 		this->CurrentBlock := -1
 		
@@ -459,6 +491,266 @@ struct IRCompilerState {
 		
 		this->SetLabel()
 	}
+	define void EmitReturn(i32 ValueRegister, i8 ValueSize) {
+		IRNode* RawNode := this->AppendNode(IR_RETURN)
+		
+		IRReturn* Node := RawNode~>ReturnNode
+		
+		Node->ReturnValueRegister := ValueRegister
+		Node->ReturnValueSize := ValueSize
+		
+		this->SetLabel()
+	}
+	define i32 EmitLoadLocal(VariableInfo* Variable) {
+		IRNode* RawNode := this->AppendNode(IR_LOAD_LOCAL_VARIABLE)
+		
+		IRLoadLocal* Node := RawNode~>LoadLocalNode
+		
+		Node~>Source->Name := CloneMemory(Variable->Name->PackToString(), Variable->Name->Length)
+		Node~>Source->Offset := Variable->StackOffset
+		Node~>Source->Size := GetTypeSize(Variable->Type) As i8
+		
+		Variable->Name->UnpackFromString()
+		
+		Node->DestinationRegister := this->AllocateRegister(RawNode)
+		
+		return Node->DestinationRegister
+	}
+	define void EmitStoreLocal(VariableInfo* Variable, i32 ValueRegister) {
+		IRNode* RawNode := this->AppendNode(IR_STORE_LOCAL_VARIABLE)
+		
+		IRStoreLocal* Node := RawNode~>StoreLocalNode
+		
+		Node~>Destination->Name := CloneMemory(Variable->Name->PackToString(), Variable->Name->Length)
+		Node~>Destination->Offset := Variable->StackOffset
+		Node~>Destination->Size := GetTypeSize(Variable->Type) As i8
+		
+		Variable->Name->UnpackFromString()
+		
+		Node->SourceRegister := ValueRegister
+	}
+	
+	define i32 CompileExpression(ASTNode* Target) {
+		i8 ResultSize := GetTypeSize(Target->ValueType) As i8
+		
+		if (Target->NodeType = NODE_TYPE_INTEGER) {
+			return this->EmitInteger(Target->IntegerValue, ResultSize)
+		}
+		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
+			return this->EmitLoadLocal(Target->VariableValue)
+		}
+		else if (Target->NodeType = NODE_TYPE_UNARY) {
+			UnaryExpression* Unary := Target->UnaryNode
+			
+			i32 Operand := this->CompileExpression(Unary->Operand)
+			
+			return this->EmitUnary(OperatorToCharacter(Unary->Operator->IntegerValue), Operand, ResultSize)
+		}
+		else if (Target->NodeType = NODE_TYPE_BINARY) {
+			BinaryExpression* Binary := Target->BinaryNode
+			
+			if (Binary->Operator->IntegerValue = OPERATOR_COLON_EQUAL) {
+				ASTNode* LeftNode := Binary->Left
+				i32 NewValueRegister := this->CompileExpression(Binary->Right)
+				
+				if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
+					this->EmitStoreLocal(LeftNode->VariableValue, NewValueRegister)
+				}				
+			}
+			else {
+				i32 Left := this->CompileExpression(Binary->Left)
+				i32 Right := this->CompileExpression(Binary->Right)
+				
+				return this->EmitBinary(Left, OperatorToCharacter(Binary->Operator->IntegerValue), Right, ResultSize)
+			}
+		}
+		
+		return 0
+	}
+	
+	declare void CompileBlock(Block*)
+	
+	define void CompileIf(IfGroup* Target) {
+		i32 BranchCount := Target->BranchCount
+		i32 HasElse := (Target->ElseBranch) != 0
+		
+		i32 EndLabel := this->ReserveLabel()
+		i32 NextBranch := 0
+		
+		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex += 1) {
+			if (BranchIndex != 0) {
+				this->SetLabel(NextBranch)
+			}
+			
+			NextBranch := this->ReserveLabel()
+			
+			ASTNode* Condition := Target->Conditions[BranchIndex]
+			
+			if (Condition->NodeType = NODE_TYPE_NONE) {
+				continue
+			}
+			
+			i32 ConditionRegister := this->CompileExpression(Condition)
+			i32 BodyLabel := this->ReserveLabel()
+			
+			this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, NextBranch)
+			
+			this->SetLabel(BodyLabel)
+			
+			this->CompileBlock(Target->Bodies[BranchIndex])
+			
+			this->EmitJump(EndLabel)
+		}
+		
+		this->SetLabel(NextBranch)
+		this->EmitJump(EndLabel)
+		
+		if (Target->ElseBranch) {
+			this->CompileBlock(Target->ElseBranch)
+			this->EmitJump(EndLabel)
+		}
+		
+		this->SetLabel(EndLabel)
+		;this->EmitJump(this->BlockCount)
+	}
+	
+	i32 CurrentLoopContinueLabel
+	i32 CurrentLoopBreakLabel
+	
+	define i64 EnterLoop(i32 ContinueLabel, i32 BreakLabel) {
+		LoopLables Result := this->CurrentLoopContinueLabel As LoopLables
+		Result.BreakLabel := this->CurrentLoopBreakLabel
+		
+		this->CurrentLoopContinueLabel := ContinueLabel
+		this->CurrentLoopBreakLabel := BreakLabel
+		
+		return Result As i64
+	}
+	define void ExitLoop(i64 PackedLoopState) {
+		LoopLables LoopState := PackedLoopState As LoopLables
+		
+		this->CurrentLoopContinueLabel := LoopState.ContinueLabel
+		this->CurrentLoopBreakLabel := LoopState.BreakLabel
+	}
+	
+	define void CompileLoop(Block* LoopBody) {
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		this->CompileBlock(LoopBody)
+		
+		this->EmitJump(StartLabel)
+		this->SetLabel(EndLabel)
+		
+		this->ExitLoop(LoopState)
+	}
+	define void CompileWhile(WhileLoop* WhileToCompile) {
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		i32 BodyLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		ASTNode* Condition := WhileToCompile->Condition
+		
+		i32 ConditionRegister := this->CompileExpression(Condition)
+		this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, EndLabel)
+		
+		this->SetLabel(BodyLabel)
+		this->CompileBlock(WhileToCompile->Body)
+		
+		this->EmitJump(StartLabel)
+		this->SetLabel(EndLabel)
+		
+		this->ExitLoop(LoopState)
+	}
+	
+	define void CompileStatement(ASTNode* Target) {
+		
+		if (Target->NodeType = NODE_TYPE_EXPRESSION) {
+			this->CompileExpression(Target->ExpressionStatement)
+		}
+		else if (Target->NodeType = NODE_TYPE_RETURN) {
+			i32 ReturnValue := this->CompileExpression(Target->ReturnExpression)
+			this->EmitReturn(ReturnValue, GetTypeSize(Target->ReturnExpression->ValueType) As i8)
+		}
+		else if (Target->NodeType = NODE_TYPE_IF) {
+			this->CompileIf(Target->IfNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_LOOP) {
+			this->CompileLoop(Target->LoopBody)
+		}
+		else if (Target->NodeType = NODE_TYPE_WHILE) {
+			this->CompileWhile(Target->WhileNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_CONTINUEBREAK) {
+			if (Target->IsContinue) {
+				this->EmitJump(this->CurrentLoopContinueLabel)
+			}
+			else {
+				this->EmitJump(this->CurrentLoopBreakLabel)
+			}
+		}
+	}
+	
+	define void CompileBlock(Block* Target) {
+		for (i32 Index := 0, Index < Target->StatementCount, Index++) {
+			this->CompileStatement(Target->Statements[Index])
+		}
+	}
+	
+	define IRNode* GetBlockNode(i32 Block, i32 Node) {
+		return this->Nodes[this->BlockOffsets[Block] + Node]
+	}
+	
+	define void EliminateJumpChains(i32 Index) {
+		i32 Start := this->BlockOffsets[Index]
+		i32 Size := this->BlockSizes[Index]
+		
+		if (Size != 0) {
+			IRNode* Terminator := this->Nodes[Start + Size - 1]
+			
+			if (Terminator->Type = IR_JUMP) {
+				IRNode* JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
+				
+				while (JumpToFirstNode->Type = IR_JUMP) {
+					Terminator->JumpToBlock := JumpToFirstNode->JumpToBlock
+					JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
+				}
+			}
+			else if (Terminator->Type = IR_CONDITIONAL) {
+				i32 TrueBlock := Terminator~>ConditionalNode->TrueBlock
+				i32 FalseBlock := Terminator~>ConditionalNode->FalseBlock
+				
+				IRNode* TrueFirstNode := this->GetBlockNode(TrueBlock, 0)
+				
+				while (TrueFirstNode->Type = IR_JUMP) {
+					Terminator~>ConditionalNode->TrueBlock := TrueBlock := TrueFirstNode->JumpToBlock
+					TrueFirstNode := this->GetBlockNode(TrueBlock, 0)
+				}
+				
+				IRNode* FalseFirstNode := this->GetBlockNode(FalseBlock, 0)
+				
+				while (FalseFirstNode->Type = IR_JUMP) {
+					Terminator~>ConditionalNode->FalseBlock := FalseBlock := FalseFirstNode->JumpToBlock
+					FalseFirstNode := this->GetBlockNode(FalseBlock, 0)
+				}
+			}
+		}
+	}
+	define void Prune() {
+		for (i32 Index := 0, Index < this->BlockCount, Index++) {
+			this->EliminateJumpChains(Index)
+		}
+	}
 	
 	define void PrintBlocks() {
 		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
@@ -473,6 +765,7 @@ struct IRCompilerState {
 				IRNode* NextNode := this->Nodes[NextBlockStart + NodeIndex] 
 				
 				NextNode->Print()
+				Print("\n")
 			}
 			
 			Print("}\n")
@@ -484,13 +777,20 @@ struct IRCompilerState {
 		}
 	}
 	define void PrintControlFlowGraph(i32 Index) {
+		if (this->BlocksVisited[Index]) {
+			return
+		}
+		
+		this->BlocksVisited[Index] := true
+		
 		i32 Start := this->BlockOffsets[Index]
 		i32 Size := this->BlockSizes[Index]
 		
 		Print("\tL%i [shape=box label=\"L%i:\\l", Index, Index)
 		
 		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
-			Print(" %x\t", Start + NodeIndex)
+			;Print(" %x\t", Start + NodeIndex)
+			Print("\t")
 			
 			IRNode* NextNode := this->Nodes[Start + NodeIndex] 
 			
@@ -500,16 +800,25 @@ struct IRCompilerState {
 		
 		Print("\"];\n")
 		
-		if (NextNode != null) {
+		if (Size > 0) {
+			NextNode := this->Nodes[Start + Size - 1]
+			
 			if (NextNode->Type = IR_JUMP) {
-				this->PrintControlFlowGraph(NextNode->JumpToBlock)
-				Print("\tL%i -> L%i;\n", Index, NextNode->JumpToBlock)
+				i32 TargetBlock := NextNode->JumpToBlock
+				
+				Print("\tL%i -> L%i;\n", Index, TargetBlock)
+				
+				this->PrintControlFlowGraph(TargetBlock)
 			}
 			else if (NextNode->Type = IR_CONDITIONAL) {
-				this->PrintControlFlowGraph(NextNode~>ConditionalNode->TrueBlock)
-				this->PrintControlFlowGraph(NextNode~>ConditionalNode->FalseBlock)
-				Print("\tL%i -> L%i;\n", Index, NextNode~>ConditionalNode->TrueBlock)
-				Print("\tL%i -> L%i;\n", Index, NextNode~>ConditionalNode->FalseBlock)
+				i32 TrueBlock := NextNode~>ConditionalNode->TrueBlock
+				i32 FalseBlock := NextNode~>ConditionalNode->FalseBlock
+				
+				Print("\tL%i -> L%i [label=\"true\"];\n", Index, TrueBlock)
+				Print("\tL%i -> L%i [label=\"false\"];\n", Index, FalseBlock)
+				
+				this->PrintControlFlowGraph(TrueBlock)
+				this->PrintControlFlowGraph(FalseBlock)
 			}
 		}
 	}
@@ -520,34 +829,71 @@ struct IRCompilerState {
 
 #Require "./src/lib/Debug.rlx"
 
-define void Main() {
-	; graphviz
+define void Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
+	
+	if (ArgC != 2) {
+		Print("No input file\n")
+		Exit(1)
+	}
+	
+	BuildConfig* Config := Alloc(#BuildConfig)
+	
+	Config->DumpInfo := 0
+	Config->LineEnding := LINE_ENDING_DEFAULT
+	
+	windows {
+		Config->OutputFormat := OUTPUT_PE
+	}
+	linux {
+		Config->OutputFormat := OUTPUT_ELF
+	}
+	
+	i8* InputFilePath := ArgV[1]
+	
+	i32 SourceLength := 0
+	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
+	
+	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
+	Config->Lexer := Lexer
+	
+	ParserState* Parser := ParserState:New(Config, Lexer)
+	Parser->ParseProgram()
 	
 	IRCompilerState* IR := IRCompilerState:New()
 	
 	IR->SetLabel()
 	
-	i32 Left := IR->EmitInteger(20, 4)
-	i32 Right := IR->EmitInteger(192, 4)
+	if (Parser->MainFunction = null) {
+		Print("No main function\n")
+		Exit(1)
+	}
 	
-	i32 JumpToTrue := IR->ReserveLabel()
-	i32 JumpToFalse := IR->ReserveLabel()
+	IR->CompileBlock(Parser->MainFunction->Body)
 	
-	IR->EmitConditional(Left, 4, JumpToTrue, JumpToFalse)
-	
-	IR->EmitInteger(1, 1)
-	IR->EmitInteger(2, 1)
-	
-	IR->SetLabel(JumpToFalse)
-	Left := IR->EmitUnary('!', Left, 4)
-	
-	IR->SetLabel(JumpToTrue)
-	IR->EmitBinary(Left, '+', Right, 4)
+	;i32 Left := IR->EmitInteger(20, 4)
+	;i32 Right := IR->EmitInteger(192, 4)
+	;
+	;i32 JumpToTrue := IR->ReserveLabel()
+	;i32 JumpToFalse := IR->ReserveLabel()
+	;
+	;IR->EmitConditional(Left, 4, JumpToTrue, JumpToFalse)
+	;
+	;IR->EmitInteger(1, 1)
+	;IR->EmitInteger(2, 1)
+	;
+	;IR->SetLabel(JumpToFalse)
+	;Left := IR->EmitUnary('!', Left, 4)
+	;
+	;IR->SetLabel(JumpToTrue)
+	;IR->EmitBinary(Left, '+', Right, 4)
 	
 	IR->EndBlock()
 	
 	;Print("Blocks:\n")
 	;IR->PrintBlocks()
+	
+	IR->Prune()
 	
 	Print("digraph CFG {\n")
 	IR->PrintControlFlowGraph()

@@ -288,3 +288,15 @@ define i8 GetNumberSize(i64 NumberToCheck) {
 		return 1
 	}
 }
+
+define i32 RoundTo(i32 Value, i32 BaseValue) {
+	/* Rounds Value up to a multiple of BaseValue */
+	
+	i32 Remainder := Value % BaseValue
+	
+	if (Remainder = 0) {
+		return Value
+	}
+	
+	return (Value - Remainder) + BaseValue
+}

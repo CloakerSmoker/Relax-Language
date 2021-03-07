@@ -23,7 +23,6 @@ struct VariableInfo {
 	i8 IsThis
 }
 
-declare i32 RoundTo(i32, i32)
 declare i16 GetTypeStorageSize(Type)
 
 struct VariableHashMap {

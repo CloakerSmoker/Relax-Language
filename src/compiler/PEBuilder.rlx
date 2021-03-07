@@ -411,18 +411,6 @@ struct PEBuilder {
 	i32 NextRVA
 }
 
-define i32 RoundTo(i32 Value, i32 BaseValue) {
-	/* Rounds Value up to a multiple of BaseValue */
-	
-	i32 Remainder := Value % BaseValue
-	
-	if (Remainder = 0) {
-		return Value
-	}
-	
-	return (Value - Remainder) + BaseValue
-}
-
 define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 	/* Extends BuilderToReAlloc->Buffer to NewSize, and reassigns all the header pointers to the new buffer */
 	
