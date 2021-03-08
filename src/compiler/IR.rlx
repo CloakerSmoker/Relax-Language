@@ -56,34 +56,38 @@
 ; Fun()		 => IR_CALL
 ; return	 => IR_RETURN
 
+bits TemporaryRegister As i64 {
+	[0:61] PointerValue
+	[62:63] IsVariable
+}
+
 struct IRVariable {
 	i8* Name
 	i32 Offset
 	i8 Size
+	i8 IsGlobal
+	i8 ReferenceCount
 	
-	static IRVariable* New(i8* Name, i32 Offset, i8 Size) {
+	static IRVariable* New(i8* Name, i32 Offset, i8 Size, i8 IsGlobal) {
 		IRVariable* this := Alloc(#IRVariable)
 		
 		this->Name := Name
 		this->Offset := Offset
 		this->Size := Size
+		this->IsGlobal := IsGlobal
 		
 		return this
 	}
+	define i64 ToRegister() {
+		TemporaryRegister Result
+		
+		Result.PointerValue := this As i64
+		Result.IsVariable := true
+		
+		return Result As i64
+	}
 }
 
-struct IRLoadLocal {
-	; Loads the value of the local variable Source into DestinationRegister
-	
-	IRVariable Source
-	i32 DestinationRegister
-}
-struct IRLoadGlobal {
-	; Loads the value of the global variable Source into DestinationRegister
-	
-	IRVariable Source
-	i32 DestinationRegister
-}
 struct IRLoadIndex {
 	; Loads the IndexRegister-th element out of the array of IndexScale sized elements pointed to by SourceRegister 
 	;  into DestinationRegister
@@ -105,18 +109,12 @@ struct IRLoadInteger {
 	; Loads a (Size * 8) bit integer into DestinationRegister
 	
 	i64 SourceValue
-	i32 DestinationRegister
+	i64 DestinationRegister
 	i8 Size
 }
 
-struct IRLoadLocalAddress {
+struct IRLoadVariableAddress {
 	; Loads the address of local variable Source into DestinationRegister
-	
-	IRVariable Source
-	i32 DestinationRegister
-}
-struct IRLoadGlobalAddress {
-	; Loads the address of global variable Source into DestinationRegister
 	
 	IRVariable Source
 	i32 DestinationRegister
@@ -146,18 +144,6 @@ struct IRLoadLabelAddress {
 	i32 Offset
 }
 
-struct IRStoreLocal {
-	; Stores the value of SourceRegister into the local variable Destination
-	
-	IRVariable Destination
-	i32 SourceRegister
-}
-struct IRStoreGlobal {
-	; Stores the value of SourceRegister into the global variable Destination
-	
-	IRVariable Destination
-	i32 SourceRegister
-}
 struct IRStoreIndirect {
 	; Stores the value of SourceRegister into *DestinationRegister as a Size byte value
 	
@@ -183,21 +169,27 @@ struct IRStoreOffset {
 	i8 Size
 }
 
+struct IRMove {
+	i64 Destination
+	i64 Source
+	i8 Size
+}
+
 struct IRBinary {
 	; Does binary operation (LeftRegister Operator RightRegister) and stores the result into DestinationRegister
 	
-	i32 DestinationRegister
-	i32 LeftRegister
+	i64 DestinationRegister
+	i64 LeftRegister
 	i32 Operator
-	i32 RightRegister
+	i64 RightRegister
 	i8 Size
 }
 struct IRUnary {
 	; Does the unary operation (Operator OperandRegister) and stores the result into DestinationRegister
 	
-	i32 DestinationRegister
+	i64 DestinationRegister
 	i32 Operator
-	i32 OperandRegister
+	i64 OperandRegister
 	i8 Size
 }
 
@@ -209,11 +201,11 @@ struct IRCall {
 	i8 Size
 }
 struct IRReturn {
-	i32 ReturnValueRegister
+	i64 ReturnValueRegister
 	i8 ReturnValueSize
 }
 struct IRConditional {
-	i32 Condition
+	i64 Condition
 	i32 TrueBlock
 	i32 FalseBlock
 	
@@ -234,24 +226,20 @@ struct IRFunction {
 	IRBlock* Body
 }
 
-i8 IR_LOAD_LOCAL_VARIABLE           := 1
-i8 IR_LOAD_GLOBAL_VARIABLE          := 2
 i8 IR_LOAD_INDEX                    := 3
 i8 IR_LOAD_OFFSET                   := 4
 i8 IR_LOAD_INTEGER                  := 5
 
-i8 IR_LOAD_LOCAL_VARIABLE_ADDRESS   := 6
-i8 IR_LOAD_GLOBAL_VARIABLE_ADDRESS  := 7
+i8 IR_LOAD_VARIABLE_ADDRESS         := 6
 i8 IR_LOAD_INDEX_ADDRESS            := 8
 i8 IR_LOAD_OFFSET_ADDRESS           := 9
 i8 IR_LOAD_LABEL_ADDRESS            := 10
 
-i8 IR_STORE_LOCAL_VARIABLE          := 11
-i8 IR_STORE_GLOBAL_VARIABLE         := 12
 i8 IR_STORE_INDIRECT                := 13
 i8 IR_STORE_INDEX                   := 14
 i8 IR_STORE_OFFSET                  := 15
 
+i8 IR_MOVE                          := 1
 i8 IR_BINARY                        := 16
 i8 IR_UNARY                         := 17
 i8 IR_RETURN                        := 18
@@ -259,25 +247,80 @@ i8 IR_CALL                          := 19
 i8 IR_JUMP                          := 20
 i8 IR_CONDITIONAL                   := 21
 
+define void IRPrint(i8* Format, ... Args) {
+	i32 Length := StringLength(Format)
+	i32 ArgIndex := 1
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Next := Format[Index]
+		
+		if (Next = '%') {
+			Index += 1
+			Next := Format[Index]
+			void NextArg := Args[ArgIndex]
+			
+			if (Next = 'i') {
+				Print(NextArg As i64)
+			}
+			else if (Next = 'x') {
+				PrintHex(NextArg As i64)
+			}
+			else if (Next = 'c') {
+				PrintCharacter(NextArg As i8)
+			}
+			else if (Next = 's') {
+				PrintString(NextArg As i8*)
+			}
+			else if (Next = 'l') {
+				PrintLiteral(NextArg As i64)
+			}
+			else if (Next = 'b') {
+				PrintBinary(NextArg As i64)
+			}
+			else if (Next = 't') {
+				TemporaryRegister Register := NextArg As TemporaryRegister
+				
+				if (Register.IsVariable) {
+					IRVariable* Variable := Register.PointerValue As IRVariable*
+					
+					Print("v(%s)", Variable->Name)
+				}
+				else {
+					Print("T%i", NextArg As i64)
+				}
+			}
+			
+			ArgIndex += 1
+		}
+		else if (Next = '^') {
+			Index += 2
+			i8 Fore := GetCharacterValue(Format[Index - 1])
+			i8 Back := GetCharacterValue(Format[Index])
+			
+			SetColor(Fore, Back)
+		}
+		else {
+			PrintCharacter(Next)
+		}
+	}
+}
+
 struct IRNode {
 	union {
-		IRLoadLocal LoadLocalNode
-		IRLoadGlobal LoadGlobalNode
 		IRLoadIndex LoadIndexNode
 		IRLoadOffset LoadOffsetNode
 		IRLoadInteger LoadIntegerNode
 		
-		IRLoadLocalAddress LoadLocalAddressNode
-		IRLoadGlobalAddress LoadGlobalAddressNode
+		IRLoadVariableAddress LoadVariableAddressNode
 		IRLoadIndexAddress LoadIndexAddressNode
 		IRLoadOffsetAddress LoadOffsetAddressNode
 		IRLoadLabelAddress LoadLabelAddressNode
 		
-		IRStoreLocal StoreLocalNode
-		IRStoreGlobal StoreGlobalNode
 		IRStoreIndirect StoreIndirectNode
 		IRStoreIndex StoreIndexNode
 		IRStoreOffset StoreOffsetNode
+		
+		IRMove MoveNode
 		
 		IRBinary BinaryNode
 		IRUnary UnaryNode
@@ -290,40 +333,31 @@ struct IRNode {
 	}
 	
 	i8 Type
-	i8 IsPresent
+	i8 IsNotPresent
 	
 	define void Print() {
-		if (this->Type = IR_LOAD_INTEGER) {
-			Print("load_integer.%i, T%i, %i", this~>LoadIntegerNode->Size, this~>LoadIntegerNode->DestinationRegister, this~>LoadIntegerNode->SourceValue)
+		if (this->Type = IR_MOVE) {
+			IRPrint("move.%i, %t, %t", this~>MoveNode->Size, this~>MoveNode->Destination, this~>MoveNode->Source)
+		}
+		else if (this->Type = IR_LOAD_INTEGER) {
+			IRPrint("load_integer.%i, %t, %i", this~>LoadIntegerNode->Size, this~>LoadIntegerNode->DestinationRegister, this~>LoadIntegerNode->SourceValue)
 		}
 		else if (this->Type = IR_UNARY) {
-			Print("unary.%i, T%i, %c, T%i", this~>UnaryNode->Size, this~>UnaryNode->DestinationRegister, this~>UnaryNode->Operator, this~>UnaryNode->OperandRegister)
+			IRPrint("unary.%i, %t, %c, %t", this~>UnaryNode->Size, this~>UnaryNode->DestinationRegister, this~>UnaryNode->Operator, this~>UnaryNode->OperandRegister)
 		}
 		else if (this->Type = IR_BINARY) {
-			Print("binary.%i, T%i, T%i, %c, T%i", this~>BinaryNode->Size, this~>BinaryNode->DestinationRegister, this~>BinaryNode->LeftRegister, this~>BinaryNode->Operator, this~>BinaryNode->RightRegister)
+			IRPrint("binary.%i, %t, %t, %c, %t", this~>BinaryNode->Size, this~>BinaryNode->DestinationRegister, this~>BinaryNode->LeftRegister, this~>BinaryNode->Operator, this~>BinaryNode->RightRegister)
 		}
 		else if (this->Type = IR_JUMP) {
-			Print("jump, L%i", this->JumpToBlock)
+			IRPrint("jump, L%i", this->JumpToBlock)
 		}
 		else if (this->Type = IR_CONDITIONAL) {
 			IRConditional* Conditional := this~>ConditionalNode
 			
-			Print("cond.%i, T%i, L%i, L%i", Conditional->ConditionSize, Conditional->Condition, Conditional->TrueBlock, Conditional->FalseBlock)
-		}
-		else if (this->Type = IR_LOAD_LOCAL_VARIABLE) {
-			IRLoadLocal* LoadLocal := this~>LoadLocalNode
-			IRVariable* LoadVariable := LoadLocal~>Source
-			
-			Print("load_local.%i, T%i, local(%s)", LoadVariable->Size, LoadLocal->DestinationRegister, LoadVariable->Name)
-		}
-		else if (this->Type = IR_STORE_LOCAL_VARIABLE) {
-			IRStoreLocal* StoreLocal := this~>StoreLocalNode
-			IRVariable* StoreVariable := StoreLocal~>Destination
-			
-			Print("store_local.%i, local(%s), T%i", StoreVariable->Size, StoreVariable->Name, StoreLocal->SourceRegister)
+			IRPrint("cond.%i, %t, L%i, L%i", Conditional->ConditionSize, Conditional->Condition, Conditional->TrueBlock, Conditional->FalseBlock)
 		}
 		else if (this->Type = IR_RETURN) {
-			Print("return.%i, T%i", this~>ReturnNode->ReturnValueSize, this~>ReturnNode->ReturnValueRegister)
+			IRPrint("return.%i, %t", this~>ReturnNode->ReturnValueSize, this~>ReturnNode->ReturnValueRegister)
 		}
 	}
 }
@@ -338,13 +372,17 @@ bits LoopLables As i64 {
 }
 
 struct IRCompilerState {
-	i32 NextVirtualRegister
+	i64 NextVirtualRegister
 	IRNode** RegisterAssignments
+	i8* RegisterReferenceCounts
 	
 	i32 NodeCapacity
 	IRNode* Nodes
 	
-	i32 NextNodeIndex
+	union {
+		i32 NextNodeIndex
+		i32 NodeCount
+	}
 	
 	i32 BlockCount
 	i32 BlockCapacity
@@ -353,6 +391,9 @@ struct IRCompilerState {
 	i8* BlocksVisited
 	
 	i32 CurrentBlock
+	
+	HashMap GlobalsToIRVariables
+	HashMap LocalsToIRVariables
 	
 	static IRCompilerState* New() {
 		IRCompilerState* this := Alloc(#IRCompilerState)
@@ -368,8 +409,36 @@ struct IRCompilerState {
 		this->CurrentBlock := -1
 		
 		this->RegisterAssignments := Alloc(0x1000)
+		this->RegisterReferenceCounts := Alloc(0x1000)
+		
+		this~>LocalsToIRVariables->Initialize()
 		
 		return this
+	}
+	
+	define IRVariable* FindOrAddVariable(VariableInfo* ActualVariable) {
+		if (ActualVariable->IsGlobal) {
+		
+		}
+		else {
+			HashMapElement* FoundLocalElement := this~>LocalsToIRVariables->Get(ActualVariable->Name)
+			
+			if (FoundLocalElement) {
+				return FoundLocalElement->Value
+			}
+			else {
+				i8* Name := CloneMemory(ActualVariable->Name->PackToString(), ActualVariable->Name->Length)
+				ActualVariable->Name->UnpackFromString()
+				
+				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, GetTypeSize(ActualVariable->Type) As i8, false)
+				
+				this~>LocalsToIRVariables->Set(ActualVariable->Name, NewVariable)
+				
+				return NewVariable
+			}
+		}
+		
+		return null
 	}
 	
 	declare IRNode* AppendNode(i8)
@@ -407,7 +476,7 @@ struct IRCompilerState {
 	define void Extend(i32 ExtraNodeCount) {
 		if (this->NextNodeIndex + ExtraNodeCount >= this->NodeCapacity) {
 			this->NodeCapacity += 0x500
-			this->Nodes := Alloc(this->NodeCapacity)
+			this->Nodes := ReAlloc(this->Nodes, this->NodeCapacity * #IRNode)
 		}
 	}
 	
@@ -421,22 +490,40 @@ struct IRCompilerState {
 		return Result
 	}
 	
-	define void SetRegisterAssignment(i32 Register, IRNode* Node) {
+	define void SetRegisterAssignment(i64 Register, IRNode* Node) {
 		this->RegisterAssignments[Register] := Node
 	}
-	define IRNode* GetRegisterAssignment(i32 Register) {
+	define IRNode* GetRegisterAssignment(i64 Register) {
 		return this->RegisterAssignments[Register]
 	}
-	define i32 AllocateRegister(IRNode* ForNode) {
-		i32 Result := this->NextVirtualRegister
+	define i64 AllocateRegister(IRNode* ForNode) {
+		i64 Result := this->NextVirtualRegister
 		
 		this->SetRegisterAssignment(Result, ForNode)
 		this->NextVirtualRegister += 1
 		
 		return Result
 	}
+	define i64 UseRegister(i64 RawRegister) {
+		TemporaryRegister Register := RawRegister As TemporaryRegister
+		
+		;Print("UR %x\n", RawRegister)
+		
+		if (Register.IsVariable) {
+			IRVariable* Variable := Register.PointerValue As IRVariable*
+			
+			;Print("V %x\n", Variable)
+			Variable->ReferenceCount += 1
+			
+		}
+		else {
+			this->RegisterReferenceCounts[RawRegister] += 1		
+		}
+		
+		return RawRegister
+	}
 	
-	define i32 EmitInteger(i64 Value, i8 Size) {
+	define i64 EmitInteger(i64 Value, i8 Size) {
 		IRNode* RawNode := this->AppendNode(IR_LOAD_INTEGER)
 		
 		IRLoadInteger* Node := RawNode~>LoadIntegerNode
@@ -447,27 +534,27 @@ struct IRCompilerState {
 		
 		return Node->DestinationRegister
 	}
-	define i32 EmitUnary(i32 Operator, i32 Operand, i8 Size) {
+	define i64 EmitUnary(i32 Operator, i64 Operand, i8 Size) {
 		IRNode* RawNode := this->AppendNode(IR_UNARY)
 		
 		IRUnary* Node := RawNode~>UnaryNode
 		
 		Node->DestinationRegister := this->AllocateRegister(RawNode)
 		Node->Operator := Operator
-		Node->OperandRegister := Operand
+		Node->OperandRegister := this->UseRegister(Operand)
 		Node->Size := Size
 		
 		return Node->DestinationRegister
 	}
-	define i32 EmitBinary(i32 Left, i32 Operator, i32 Right, i8 Size) {
+	define i64 EmitBinary(i64 Left, i32 Operator, i64 Right, i8 Size) {
 		IRNode* RawNode := this->AppendNode(IR_BINARY)
 		
 		IRBinary* Node := RawNode~>BinaryNode
 		
 		Node->DestinationRegister := this->AllocateRegister(RawNode)
-		Node->LeftRegister := Left
+		Node->LeftRegister := this->UseRegister(Left)
 		Node->Operator := Operator
-		Node->RightRegister := Right
+		Node->RightRegister := this->UseRegister(Right)
 		Node->Size := Size
 		
 		return Node->DestinationRegister
@@ -479,70 +566,51 @@ struct IRCompilerState {
 		
 		this->SetLabel()
 	}
-	define void EmitConditional(i32 Condition, i8 ConditionSize, i32 TrueBlock, i32 FalseBlock) {
+	define void EmitConditional(i64 Condition, i8 ConditionSize, i32 TrueBlock, i32 FalseBlock) {
 		IRNode* RawNode := this->AppendNode(IR_CONDITIONAL)
 		
 		IRConditional* Node := RawNode~>ConditionalNode
 		
-		Node->Condition := Condition
+		Node->Condition := this->UseRegister(Condition)
 		Node->ConditionSize := ConditionSize
 		Node->TrueBlock := TrueBlock
 		Node->FalseBlock := FalseBlock
 		
 		this->SetLabel()
 	}
-	define void EmitReturn(i32 ValueRegister, i8 ValueSize) {
+	define void EmitReturn(i64 ValueRegister, i8 ValueSize) {
 		IRNode* RawNode := this->AppendNode(IR_RETURN)
 		
 		IRReturn* Node := RawNode~>ReturnNode
 		
-		Node->ReturnValueRegister := ValueRegister
+		Node->ReturnValueRegister := this->UseRegister(ValueRegister)
 		Node->ReturnValueSize := ValueSize
 		
 		this->SetLabel()
 	}
-	define i32 EmitLoadLocal(VariableInfo* Variable) {
-		IRNode* RawNode := this->AppendNode(IR_LOAD_LOCAL_VARIABLE)
+	define void EmitMove(i64 Destination, i64 Source, i8 Size) {
+		IRNode* RawNode := this->AppendNode(IR_MOVE)
 		
-		IRLoadLocal* Node := RawNode~>LoadLocalNode
+		IRMove* Node := RawNode~>MoveNode
 		
-		Node~>Source->Name := CloneMemory(Variable->Name->PackToString(), Variable->Name->Length)
-		Node~>Source->Offset := Variable->StackOffset
-		Node~>Source->Size := GetTypeSize(Variable->Type) As i8
-		
-		Variable->Name->UnpackFromString()
-		
-		Node->DestinationRegister := this->AllocateRegister(RawNode)
-		
-		return Node->DestinationRegister
-	}
-	define void EmitStoreLocal(VariableInfo* Variable, i32 ValueRegister) {
-		IRNode* RawNode := this->AppendNode(IR_STORE_LOCAL_VARIABLE)
-		
-		IRStoreLocal* Node := RawNode~>StoreLocalNode
-		
-		Node~>Destination->Name := CloneMemory(Variable->Name->PackToString(), Variable->Name->Length)
-		Node~>Destination->Offset := Variable->StackOffset
-		Node~>Destination->Size := GetTypeSize(Variable->Type) As i8
-		
-		Variable->Name->UnpackFromString()
-		
-		Node->SourceRegister := ValueRegister
+		Node->Destination := Destination
+		Node->Source := this->UseRegister(Source)
+		Node->Size := Size
 	}
 	
-	define i32 CompileExpression(ASTNode* Target) {
+	define i64 CompileExpression(ASTNode* Target) {
 		i8 ResultSize := GetTypeSize(Target->ValueType) As i8
 		
 		if (Target->NodeType = NODE_TYPE_INTEGER) {
 			return this->EmitInteger(Target->IntegerValue, ResultSize)
 		}
 		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
-			return this->EmitLoadLocal(Target->VariableValue)
+			return this->FindOrAddVariable(Target->VariableValue)->ToRegister()
 		}
 		else if (Target->NodeType = NODE_TYPE_UNARY) {
 			UnaryExpression* Unary := Target->UnaryNode
 			
-			i32 Operand := this->CompileExpression(Unary->Operand)
+			i64 Operand := this->CompileExpression(Unary->Operand)
 			
 			return this->EmitUnary(OperatorToCharacter(Unary->Operator->IntegerValue), Operand, ResultSize)
 		}
@@ -551,15 +619,17 @@ struct IRCompilerState {
 			
 			if (Binary->Operator->IntegerValue = OPERATOR_COLON_EQUAL) {
 				ASTNode* LeftNode := Binary->Left
-				i32 NewValueRegister := this->CompileExpression(Binary->Right)
+				i64 NewValueRegister := this->CompileExpression(Binary->Right)
 				
 				if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-					this->EmitStoreLocal(LeftNode->VariableValue, NewValueRegister)
-				}				
+					i64 VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+					
+					this->EmitMove(VariableRegister, NewValueRegister, ResultSize)
+				}
 			}
 			else {
-				i32 Left := this->CompileExpression(Binary->Left)
-				i32 Right := this->CompileExpression(Binary->Right)
+				i64 Left := this->CompileExpression(Binary->Left)
+				i64 Right := this->CompileExpression(Binary->Right)
 				
 				return this->EmitBinary(Left, OperatorToCharacter(Binary->Operator->IntegerValue), Right, ResultSize)
 			}
@@ -590,7 +660,7 @@ struct IRCompilerState {
 				continue
 			}
 			
-			i32 ConditionRegister := this->CompileExpression(Condition)
+			i64 ConditionRegister := this->CompileExpression(Condition)
 			i32 BodyLabel := this->ReserveLabel()
 			
 			this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, NextBranch)
@@ -661,7 +731,7 @@ struct IRCompilerState {
 		
 		ASTNode* Condition := WhileToCompile->Condition
 		
-		i32 ConditionRegister := this->CompileExpression(Condition)
+		i64 ConditionRegister := this->CompileExpression(Condition)
 		this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, EndLabel)
 		
 		this->SetLabel(BodyLabel)
@@ -679,8 +749,8 @@ struct IRCompilerState {
 			this->CompileExpression(Target->ExpressionStatement)
 		}
 		else if (Target->NodeType = NODE_TYPE_RETURN) {
-			i32 ReturnValue := this->CompileExpression(Target->ReturnExpression)
-			this->EmitReturn(ReturnValue, GetTypeSize(Target->ReturnExpression->ValueType) As i8)
+			i64 ReturnValueRegister := this->CompileExpression(Target->ReturnExpression)
+			this->EmitReturn(ReturnValueRegister, GetTypeSize(Target->ReturnExpression->ValueType) As i8)
 		}
 		else if (Target->NodeType = NODE_TYPE_IF) {
 			this->CompileIf(Target->IfNode)
@@ -711,7 +781,7 @@ struct IRCompilerState {
 		return this->Nodes[this->BlockOffsets[Block] + Node]
 	}
 	
-	define void EliminateJumpChains(i32 Index) {
+	define void EliminateJumpChainsInBlock(i32 Index) {
 		i32 Start := this->BlockOffsets[Index]
 		i32 Size := this->BlockSizes[Index]
 		
@@ -746,10 +816,68 @@ struct IRCompilerState {
 			}
 		}
 	}
-	define void Prune() {
+	define void EliminateJumpChains() {
 		for (i32 Index := 0, Index < this->BlockCount, Index++) {
-			this->EliminateJumpChains(Index)
+			this->EliminateJumpChainsInBlock(Index)
 		}
+	}
+	define void EliminateDeadCode()  {
+		for (i32 Index := this->NodeCount - 1, Index >= 0, Index--) {
+			IRNode* NextNode := this->Nodes[Index]
+			
+			if (NextNode->Type = IR_LOAD_INTEGER) {
+				i64 LoadIntegerDestination := NextNode~>LoadIntegerNode->DestinationRegister
+				
+				if (this->RegisterReferenceCounts[LoadIntegerDestination] = 0) {
+					NextNode->IsNotPresent := true
+				}
+			}
+			else if (NextNode->Type = IR_UNARY) {
+				i64 UnaryDestination := NextNode~>UnaryNode->DestinationRegister
+				i64 UnaryOperand := NextNode~>UnaryNode->OperandRegister
+				
+				if (this->RegisterReferenceCounts[UnaryDestination] = 0) {
+					this->RegisterReferenceCounts[UnaryOperand] -= 1
+					
+					NextNode->IsNotPresent := true
+				}
+			}
+			else if (NextNode->Type = IR_BINARY) {
+				i64 BinaryDestination := NextNode~>BinaryNode->DestinationRegister
+				i64 BinaryLeft := NextNode~>BinaryNode->LeftRegister
+				i64 BinaryRight := NextNode~>BinaryNode->RightRegister
+				
+				if (this->RegisterReferenceCounts[BinaryDestination] = 0) {
+					this->RegisterReferenceCounts[BinaryLeft] -= 1
+					this->RegisterReferenceCounts[BinaryRight] -= 1
+					
+					NextNode->IsNotPresent := true
+				}	
+			}
+		}
+	}
+	define IRNode* FindLastStore(i32 InBlock, i32 FromOffset, IRVariable* ForVariable) {
+		;i32 Start := this->BlockOffsets[InBlock]
+		;i32 Size := this->BlockSizes[InBlock]
+		;
+		;for (i32 Index := FromOffset - 1, Index >= 0, Index--) {
+		;	IRNode* NextNode := this->Nodes[Start + Index]
+		;	
+		;}
+		;
+		return null
+	}
+	define void EliminateDeadStores() {
+		;for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+		;	i32 Start := this->BlockOffsets[BlockIndex]
+		;	i32 Size := this->BlockSizes[BlockIndex]
+		;	
+		;	for (i32 Index := 0, Index < Size, Index++) {
+		;		IRNode* NextNode := this->Nodes[Start + Index]
+		;		
+		;	}
+		;}
+		
 	}
 	
 	define void PrintBlocks() {
@@ -760,10 +888,9 @@ struct IRCompilerState {
 			Print("l%i (%i, %i) {\n", BlockIndex, NextBlockStart, NextBlockSize)
 			
 			for (i32 NodeIndex := 0, NodeIndex < NextBlockSize, NodeIndex++) {
-				Print(" %x\t", NextBlockStart + NodeIndex)
+				IRNode* NextNode := this->Nodes[NextBlockStart + NodeIndex]
 				
-				IRNode* NextNode := this->Nodes[NextBlockStart + NodeIndex] 
-				
+				Print(" %x %i\t", NextBlockStart + NodeIndex, NextNode->IsNotPresent)
 				NextNode->Print()
 				Print("\n")
 			}
@@ -789,11 +916,13 @@ struct IRCompilerState {
 		Print("\tL%i [shape=box label=\"L%i:\\l", Index, Index)
 		
 		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
-			;Print(" %x\t", Start + NodeIndex)
-			Print("\t")
-			
 			IRNode* NextNode := this->Nodes[Start + NodeIndex] 
 			
+			if (NextNode->IsNotPresent) {
+				continue
+			}
+			
+			Print("\t")
 			NextNode->Print()
 			Print("\\l")
 		}
@@ -893,7 +1022,9 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;Print("Blocks:\n")
 	;IR->PrintBlocks()
 	
-	IR->Prune()
+	;IR->EliminateDeadStores()
+	;IR->EliminateDeadCode()
+	IR->EliminateJumpChains()
 	
 	Print("digraph CFG {\n")
 	IR->PrintControlFlowGraph()
