@@ -897,7 +897,9 @@ struct LexerState {
 		this->TokenIndex := FrozenState
 	}
 	define Token* GetCurrentToken() {
-		this->TokenIndex -= 1
+		if (this->TokenIndex > 0) {
+			this->TokenIndex -= 1
+		}
 		
 		return this->GetNextToken()
 	}

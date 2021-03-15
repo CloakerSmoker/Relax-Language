@@ -302,12 +302,10 @@ struct ParserState {
 		this->Lexer->TokenIndex := FrozenState
 	}
 	define Token* GetCurrentToken() {
-		this->Lexer->TokenIndex -= 1
-		
-		return this->Lexer->GetNextToken()
+		return this->Lexer->GetCurrentToken()
 	}
 	define ErrorContext* GetCurrentTokenContext() {
-		return this->GetCurrentToken()~>Context
+		return this->Lexer->GetCurrentTokenContext()
 	}
 	define Token* GetNextToken() {
 		return this->Lexer->GetNextToken()
@@ -1271,7 +1269,7 @@ struct ParserState {
 		else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
 			; Handles global variable declarations
 			
-			Token* BlameToken := this->PeekNextToken()
+			Token* BlameToken := NextToken
 			
 			i8* ErrorMessage := null
 			ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
