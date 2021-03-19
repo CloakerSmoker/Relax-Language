@@ -281,8 +281,6 @@ i32 E_REX_W := 0x2000			; The instruction needs REX.W
 i32 E_NEEDS_66 := 0x4000		; The instruction needs the 0x66 prefix
 
 struct Instruction {
-	i8{6} Name
-	
 	union {
 		i8{2} Opcode
 		i16 PackedOpcode
@@ -293,8 +291,13 @@ struct Instruction {
 	i16 Flags
 	i16 Extra
 	
+	i8 NameLength
+	i8{0} Name
+	
 	define Instruction* Next() {
-		return this + #Instruction
+		i32 Size := this->NameLength + 1 + #Instruction
+		
+		return this + Size
 	}
 }
 

@@ -8,8 +8,6 @@
 #Require "./src/compiler/Lexer.rlx"
 
 struct SerializedInstruction {
-	i8{6} Name
-	
 	union {
 		i8{2} Opcode
 		i16 PackedOpcode
@@ -19,6 +17,9 @@ struct SerializedInstruction {
 	
 	i16 Flags
 	i16 Extra
+	
+	i8 NameLength
+	i8{0} Name
 }
 
 ;ret c3 - no_rm -
@@ -99,7 +100,6 @@ define void BuildSymbolMap(HashMap* M) {
 
 struct InstructionSerializer {
 	LexerState* Lexer
-	SerializedInstruction Instruction
 	i64 File
 	
 	static InstructionSerializer* New(LexerState* Lexer, i64 File) {
@@ -129,7 +129,7 @@ struct InstructionSerializer {
 	
 	define void SerializeAll() {
 		LexerState* Lexer := this->Lexer
-		SerializedInstruction* Instruction := this~>Instruction
+		SerializedInstruction* Instruction := Alloc(#SerializedInstruction + 127)
 		
 		while !(this->Lexer->AtEnd()) {
 			SafeWideString* Name := Lexer->GetNextToken()->StringValue
@@ -142,11 +142,15 @@ struct InstructionSerializer {
 			Name->Print()
 			Print("'\n")
 			
-			for (i32 NameIndex := 0, NameIndex < 6, NameIndex += 1) {
+			for (i32 NameIndex := 0, NameIndex < Name->Length, NameIndex += 1) {
 				Instruction~>Name[NameIndex] := Name->ASCIICharacterAt(NameIndex, 0)
 			}
 			
-			Instruction->PackedOpcode := Lexer->GetNextToken()->IntegerValue & 0xFFFF
+			Instruction~>Name[NameIndex] := 0
+			
+			Instruction->NameLength := Name->Length As i8
+			
+			Instruction->PackedOpcode := (Lexer->GetNextToken()->IntegerValue & 0xFFFF) As i16
 			
 			Print("	Opcode = %x\n", Instruction->PackedOpcode)
 			
@@ -159,7 +163,7 @@ struct InstructionSerializer {
 					OperandToken->Error("Undefined symbol")
 				}
 				
-				i32 OperandMask := OperandToken->Value << (OperandIndex * 16 As i8)
+				i32 OperandMask := (OperandToken->Value << (OperandIndex * 16 As i8)) As i32
 				
 				Print("		Operand[%i] = %x\n", OperandIndex, OperandToken->Value)
 				
@@ -177,7 +181,7 @@ struct InstructionSerializer {
 			Instruction->Flags := 0
 			
 			loop {
-				Instruction->Flags |= Lexer->GetNextToken()->Value
+				Instruction->Flags |= Lexer->GetNextToken()->Value As i16
 				
 				if !(this->NextMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OR)) {
 					break
@@ -191,17 +195,18 @@ struct InstructionSerializer {
 			
 			Print("	Flags = %x (two byte? %i)\n", Instruction->Flags, !!(Instruction->Flags & 0x1000))
 			
-			Instruction->Extra := Lexer->GetNextToken()->Value
+			Instruction->Extra := Lexer->GetNextToken()->Value As i16
 			
 			Print("	Extra = %x\n", Instruction->Extra)
 			
-			FileWrite(this->File, this~>Instruction, #SerializedInstruction)
+			FileWrite(this->File, Instruction, #SerializedInstruction + Instruction->NameLength + 1)
 			
 			Print("Wrote '")
 			Name->Print()
 			Print("'\n")
 		}
 		
+		; Write a space past the end of the file to 0-extend it, writing the null instruction used to terminate the list
 		FileSeek(this->File, #SerializedInstruction - 1, SEEK_RELATIVE)
 		FileWrite(this->File, " ", 1)
 	}

@@ -127,5 +127,9 @@ stosw	0xAB	_		NO_RM|NEEDS_66				_
 stosd	0xAB	_		NO_RM						_
 stosq	0xAB	_		NO_RM|REX_W					_
 
-ldcr3	0x0F22	r64		ONE_OP_W_EXT				3
+movcr3	0x0F22	r64		ONE_OP_W_EXT				3
+syscall	0x0F05	_		NO_RM						_
+
+; Todo: remove
+
 syscl	0x0F05	_		NO_RM						_
