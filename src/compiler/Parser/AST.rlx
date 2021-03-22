@@ -143,6 +143,8 @@ i8 NODE_TYPE_GET_TYPE_SIZE := 24
 i8 NODE_TYPE_EXPRESSION_BLOCK := 25
 i8 NODE_TYPE_BLOCK := 26
 
+i8 NODE_TYPE_CAST := 27
+
 ; EndRegion
 
 ; AST node structs region
@@ -573,6 +575,8 @@ struct ASTNode {
 		TryCatch* TryNode,
 		
 		Block* BlockValue
+		
+		ASTNode* CastFromValue
 	},
 	
 	i32 LastVisitor

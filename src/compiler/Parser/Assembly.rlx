@@ -38,15 +38,15 @@
 		InstructionListEntry* ListHead := ListHeadElement->Value As InstructionListEntry*
 		
 		while (ListHead) {
-			Instruction* Instruction := ListHead~>Instruction
+			Instruction* NextInstruction := ListHead~>Instruction
 			
 			if (EncodedOperands = 0) {
-				if (Instruction->OperandMask = 0) {
-					return Instruction
+				if (NextInstruction->OperandMask = 0) {
+					return NextInstruction
 				}
 			}
-			else if (Instruction->OperandMask & EncodedOperands = EncodedOperands) {
-				return Instruction
+			else if (NextInstruction->OperandMask & EncodedOperands = EncodedOperands) {
+				return NextInstruction
 			}
 			
 			ListHead := ListHead->Next

@@ -6,7 +6,7 @@
 
 #Require "./src/compiler/DWARF/DWARFBuilder.rlx"
 
-struct Label {
+struct LabelInfo {
 	i32 LabelNumber,
 	i32 OffsetToReplace,
 	i8 IsPlaceholder
@@ -40,7 +40,7 @@ struct CompilerState {
 	i32 CodeRelocationCount,
 	
 	/* Record of label definitions/usages inside of CodeBuffer, for actually linking labels */
-	Label** Labels,
+	LabelInfo** Labels,
 	i32 LabelCount,
 	i32 LabelBufferCapacity,
 	
@@ -93,7 +93,7 @@ struct CompilerState {
 		this->CodeRelocations := Alloc(8)
 		this->CodeRelocationCount := 0
 		
-		this->Labels := Alloc(80) As Label**
+		this->Labels := Alloc(80) As LabelInfo**
 		this->LabelCount := 0
 		this->LabelBufferCapacity := 10
 		

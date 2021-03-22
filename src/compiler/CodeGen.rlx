@@ -14,15 +14,15 @@ define void EnsureLabelBufferCapacity(CompilerState* Compiler) {
 	/* Ensures that Compiler can hold at least one more label in its label buffer */
 	
 	if (Compiler->LabelBufferCapacity <= (Compiler->LabelCount + 1)) {
-		Compiler->Labels := ReAlloc((Compiler->Labels) As void*, (Compiler->LabelBufferCapacity + 10) * 8) As Label**
+		Compiler->Labels := ReAlloc((Compiler->Labels) As void*, (Compiler->LabelBufferCapacity + 10) * 8) As LabelInfo**
 		Compiler->LabelBufferCapacity += 10
 	}
 }
 
-define Label* AppendLabel(CompilerState* Compiler, i32 LabelNumber, i8 IsPlaceholder) {
+define LabelInfo* AppendLabel(CompilerState* Compiler, i32 LabelNumber, i8 IsPlaceholder) {
 	EnsureLabelBufferCapacity(Compiler)
 	
-	Label* NewLabel := Alloc(#Label) As Label*
+	LabelInfo* NewLabel := Alloc(#LabelInfo) As LabelInfo*
 	
 	NewLabel->LabelNumber := LabelNumber
 	NewLabel->OffsetToReplace := Compiler->Index
@@ -46,7 +46,7 @@ define void OffsetLabel(CompilerState* Compiler, i32 Offset) {
 	(Compiler->CodeBuffer As i32* + Compiler->Index - 4)[0] += Offset
 }
 
-define Label* SetLabel(CompilerState* Compiler, i32 LabelNumber) {
+define LabelInfo* SetLabel(CompilerState* Compiler, i32 LabelNumber) {
 	/* Creates a new label which points to the current Compiler->Index */
 	
 	return AppendLabel(Compiler, LabelNumber, false)
@@ -54,7 +54,7 @@ define Label* SetLabel(CompilerState* Compiler, i32 LabelNumber) {
 
 define void ResolveLabel(CompilerState* Compiler, i32 LabelNumber, i32 Value) {
 	for (i32 Index := 0, Index < Compiler->LabelCount, Index += 1) {
-		Label* NextLabel := (Compiler->Labels)[Index]
+		LabelInfo* NextLabel := (Compiler->Labels)[Index]
 		
 		if (NextLabel->LabelNumber = LabelNumber && NextLabel->IsPlaceholder) {
 			i32* ActualPlaceholder := ((Compiler->CodeBuffer) + (NextLabel->OffsetToReplace)) As i32*
@@ -66,7 +66,7 @@ define void ResolveAllLabels(CompilerState* Compiler) {
 	/* Goes through each label which is not a placeholder, but actually points to an index */
 	
 	for (i32 Index := 0, Index < Compiler->LabelCount, Index += 1) {
-		Label* NextLabel := (Compiler->Labels)[Index]
+		LabelInfo* NextLabel := (Compiler->Labels)[Index]
 		
 		if !(NextLabel->IsPlaceholder) {
 			/* And resolves each use of the label to the offset */
@@ -291,44 +291,44 @@ struct InstructionInfo {
 	i8 Size
 }
 
-define void EmitInstruction(CompilerState* Compiler, InstructionInfo* Instruction, i8 DestinationRegister, i8 SourceRegister) {
-	i8 OpcodeOne := Instruction->OpcodeOne
-	i8 OpcodeTwo := Instruction->OpcodeTwo
-	i8 REX := Instruction->REX
+define void EmitInstruction(CompilerState* Compiler, InstructionInfo* Info, i8 DestinationRegister, i8 SourceRegister) {
+	i8 OpcodeOne := Info->OpcodeOne
+	i8 OpcodeTwo := Info->OpcodeTwo
+	i8 REX := Info->REX
 	
-	if (Instruction->Size = 1) {
-		OpcodeOne := Instruction->ByteOpcodeOne
-		OpcodeTwo := Instruction->ByteOpcodeTwo
+	if (Info->Size = 1) {
+		OpcodeOne := Info->ByteOpcodeOne
+		OpcodeTwo := Info->ByteOpcodeTwo
 		REX := REX | REX_BASE
 	}
-	else if (Instruction->Size = 2) {
+	else if (Info->Size = 2) {
 		EmitLegacySizePrefix(Compiler)
 	}
-	else if (Instruction->Size = 8) {
+	else if (Info->Size = 8) {
 		REX := REX | REX_W
 	}
 	
-	if (Instruction->HasTwoByteOpcode) {
-		EmitREXBigOpcodeModRM(Compiler, OpcodeOne, OpcodeTwo, Instruction->Mode, DestinationRegister, SourceRegister, REX)
+	if (Info->HasTwoByteOpcode) {
+		EmitREXBigOpcodeModRM(Compiler, OpcodeOne, OpcodeTwo, Info->Mode, DestinationRegister, SourceRegister, REX)
 	}
 	else {
-		EmitREXOpcodeModRM(Compiler, OpcodeOne, Instruction->Mode, DestinationRegister, SourceRegister, REX)
+		EmitREXOpcodeModRM(Compiler, OpcodeOne, Info->Mode, DestinationRegister, SourceRegister, REX)
 	}
 }
 
 define void EmitBasicInstruction(CompilerState* Compiler, i16 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
 	/* Helper so each caller doesn't have to build an InstructionInfo and call EmitInstruction */
 	
-	InstructionInfo Instruction
+	InstructionInfo Info
 	
-	Instruction.HasTwoByteOpcode := false
-	Instruction.REX := 0
-	Instruction.OpcodeOne := Opcode As i8
-	Instruction.ByteOpcodeOne := (Opcode - 1) As i8
-	Instruction.Mode := Mode
-	Instruction.Size := Size
+	Info.HasTwoByteOpcode := false
+	Info.REX := 0
+	Info.OpcodeOne := Opcode As i8
+	Info.ByteOpcodeOne := (Opcode - 1) As i8
+	Info.Mode := Mode
+	Info.Size := Size
 	
-	EmitInstruction(Compiler, &Instruction, DestinationRegister, SourceRegister)
+	EmitInstruction(Compiler, &Info, DestinationRegister, SourceRegister)
 }
 define void EmitBasicInstructionDisplacement(CompilerState* Compiler, i16 Opcode, i8 Size, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 DisplacementSize) {
 	if (DisplacementSize = 1) {

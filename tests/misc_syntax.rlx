@@ -42,11 +42,6 @@ struct ExtraText {
 
 /* /* Nested */ comment ;;;;;;; /* c /* o /* m /* m */ e */ n */ t */ */
 
-define void* Test() {
-	i32 L := 0
-	
-	return &L As void*
-}
 define i32 Test2() {
 	return 1 << 2 & 10000000
 }
@@ -85,7 +80,7 @@ define i32 Main() {
 	
 	Print(",%i", #ExtraText)
 	
-	Test* BestFit := 5754784 As Test*
+	Test* BestFit := Test:*(5754784)
 	i32 BestFitRating := 2000011101
 	
 	;breakpoint:()

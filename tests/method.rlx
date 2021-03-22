@@ -73,5 +73,7 @@ define i32 Main() {
 	
 	Print(L.GetValue(90))
 	
+	;i32 D := L.GetValue()
+	
 	return 0
 }

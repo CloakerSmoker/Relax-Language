@@ -245,22 +245,22 @@ define void EliminateGlobals(ParserState* Parser) {
 	Globals->NextOffset := NewNextOffset
 }
 
-define void FoldConstantsBlockVisitor(ASTVisitor* Visitor, Block* Block) {
+define void FoldConstantsBlockVisitor(ASTVisitor* Visitor, Block* Target) {
 	; Remove any NODE_TYPE_NONEs from the block, and repack contained nodes as a linear array of non-none nodes
 	; Effectively translating the block to exactly what it will be compiled as, allowing for us to optimize based on
 	;  the number of nodes inside of a block without worrying about them being NODE_TYPE_NONEs.
 	
 	i16 NewIndex := 0
 	
-	for (i32 Index := 0, Index < Block->StatementCount, Index++) {
-		ASTNode* Next := Block->Statements[Index]
+	for (i32 Index := 0, Index < Target->StatementCount, Index++) {
+		ASTNode* Next := Target->Statements[Index]
 		
 		if (Next->NodeType != NODE_TYPE_NONE) {
-			Block->Statements[NewIndex++] := Next
+			Target->Statements[NewIndex++] := Next
 		}
 	}
 	
-	Block->StatementCount := NewIndex
+	Target->StatementCount := NewIndex
 }
 
 define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
