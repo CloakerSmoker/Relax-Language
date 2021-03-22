@@ -509,6 +509,7 @@
 						;   if `Name` is the name of a function)
 						
 						FunctionDefine* FoundDefine := null
+						Type ThisType := TYPE_NONE
 						
 						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 							; We have `&Name:OtherName`, which means we need to lookup a static method for our result
@@ -519,6 +520,9 @@
 							FoundDefine := this->LookupStaticMethod(StaticMethodTypeName, StaticMethodName)
 						}
 						else if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+							; We've got `&Name.Whatever`, which is either getting the address of a method
+							;  (aka `Name` is a type), or getting the address of a field (aka `Name` is a variable name)
+							
 							Token* MethodTypeName := MaybeFunctionName
 							Token* MethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected method name")
 							
@@ -530,6 +534,7 @@
 								HashMapElement* MethodElement := MethodBase~>Methods->Get(MethodName->StringValue)
 								
 								if (MethodElement) {
+									ThisType := MethodBase->AsPointer(1)
 									FoundDefine := MethodElement->Value
 								}
 							}
@@ -550,13 +555,60 @@
 							;   as a static method of that type, we return a NODE_TYPE_DEFINE containing the resolved
 							;    FunctionDefine struct, which the compiler will then load the address of.
 							
+							NextToken~>Context->Merge(this->GetCurrentTokenContext())
+							
+							; For any flavor of `&Fn`, if there's an `(` right after, then we expect a list of parameter
+							;  types so we can get the address of a specific overload for a function
+							
+							if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+								; So, we build a fake "parameter list" where each value has the actual type specified, but
+								;  no value. This is enough to trick `this->MatchFunctionCall()` into doing the overload matching
+								;   for us, and just returning a result.
+								
+								ASTNode** ParameterTypes := Alloc(15 * #ASTNode*)
+								i8 ParameterTypeCount := 0
+								
+								if (ThisType != TYPE_NONE) {
+									; If we had `&Type.Method`, then we need to insert the `this` parameter to make sure
+									;  we match methods (which already expect the `this` parameter)
+									
+									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, ThisType)
+								}
+								
+								if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
+									
+									while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+										ASTNode* DummyNode := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
+										
+										ParameterTypes[ParameterTypeCount++] := DummyNode
+									}
+									
+									this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected ')' for parameter type list")
+								}
+								
+								NextToken~>Context->Merge(this->GetCurrentTokenContext())
+								
+								FoundDefine := this->MatchFunctionCall(FoundDefine, ParameterTypes, ParameterTypeCount, NextToken~>Context)
+								
+								; We've matched our "call" to a function, now we just clean up a bit.
+								
+								for (i32 ParameterTypeIndex := 0, ParameterTypeIndex < ParameterTypeCount, ParameterTypeIndex++) {
+									Free(ParameterTypes[ParameterTypeIndex])
+								}
+								
+								Free(ParameterTypes)
+							}
+							else if (FoundDefine->Next != null) {
+								; `&Fn` without a `(` after, but `Fn` is overloaded. Nothing we can do, there's no way
+								;   to know which version of the function to get the address of.
+								
+								NextToken->Error("Getting the address of an overloaded function is not possible without using the `&Fn(Type, ...)` syntax")
+							}
+							
 							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsNonPointer())
 							
 							Result~>Context->Clone(MaybeFunctionName~>Context)->Merge(this->GetCurrentTokenContext())
-							
-							if (FoundDefine->Next != null) {
-								Result->Error("Getting the address of an overloaded function is not possible")
-							}
 						}
 						else {
 							; With `&Name`, `Name` was not defined as a function. `&Name:OtherName`, any path where

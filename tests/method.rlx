@@ -73,7 +73,7 @@ define i32 Main() {
 	
 	Print(L.GetValue(90))
 	
-	;i32 D := L.GetValue()
+	Print(" %i", &Test.GetValue() != &Test.GetValue(i8))
 	
 	return 0
 }

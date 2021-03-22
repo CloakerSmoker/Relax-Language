@@ -38,5 +38,7 @@ define i32 Main() {
 	Conflict(&T)	/* &T is a pointer, with no specific overload, so it calls the generic i64* overload */
 	/* Uncomment for the an incredible looking stream of errors: Conflict(1, 2, 300000) */
 	
+	Print("%i", &Conflict(i64, i64) != &Conflict(i64, i64, i64, i64))
+	
 	return 0
 }
