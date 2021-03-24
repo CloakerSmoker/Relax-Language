@@ -90,90 +90,8 @@
 		return Result
 	}
 	
-	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, ASTNode* ThisParameter, i8** ErrorMessage) {
-		Token* StaticMethodNameToken := null
-		i8 HasFollowingColon := false
-		
-		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-			; `Name` followed by a `:`, either a `builtin:()` call, or a `static:method()` call.
-			
-			HasFollowingColon := true
-			
-			if (this->PeekNextToken()->Is(TOKEN_TYPE_IDENTIFIER)) {
-				; Remember the name of the static method for later
-				
-				StaticMethodNameToken := this->GetNextToken()
-			}
-		}
-		
-		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-			*ErrorMessage := "Expected opening `(` for function call."
-			return null
-		}
-		
-		i8 ParameterCount := 0
-		
-		if (ThisParameter != null) {
-			ParameterCount += 1
-		}
-		
-		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
-		
-		if (ThisParameter != null) {
-			Parameters[0] := ThisParameter
-		}
-		
-		CallExpression* Result := null
-		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, NameToken~>Context, this->GetCurrentTokenContext())
-		
-		SafeWideString* Name := NameToken->StringValue
-		
-		if (HasFollowingColon && StaticMethodNameToken = null) {
-			; If we've matched the `name:` format, but not `name:other`, then we need to convert `name`
-			;  into a specific built-in function identifier, and just return the result node.
-			
-			if (Name->Equals("syscall")) {
-				Result->BuiltinID := BUILTIN_SYSCALL
-				ResultNode->ValueType := this->i64->AsNonPointer()
-				
-				if (this->Config->OutputFormat = OUTPUT_PE) {
-					ResultNode->Warn("Windows syscall numbers change near-constantly, using the native API is a bad idea.")
-				}
-			}
-			else if (Name->Equals("breakpoint") && ParameterCount = 0) {
-				Result->BuiltinID := BUILTIN_BREAKPOINT
-				ResultNode->ValueType := this->i8->AsNonPointer()
-			}
-			else {
-				NameToken->Error("No built-in function by this name found.")
-			}
-			
-			return ResultNode
-		}
-		
-		FunctionDefine* FoundDefine := null
-		
-		if (StaticMethodNameToken != null) {
-			; If we matched the `name:other` format, we can just directly look up the static method,
-			;  using the same function as `&name:other`
-			
-			FoundDefine := this->LookupStaticMethod(NameToken, StaticMethodNameToken)
-		}
-		else {
-			HashMapElement* FoundDefineElement := FunctionNamespace->Get(Name)
-			
-			if !(FoundDefineElement) {
-				; If there are no functions by this name in the target namespace, error out
-				
-				NameToken->Error("Function definition not found.")
-			}
-			
-			; Otherwise, convert the HashMapElement* into a FunctionDefine*
-			
-			FoundDefine := FoundDefineElement->Value As FunctionDefine*
-		}
-		
-		; Now, we've found a function which has the correct name for this function call. However, since a
+	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, ErrorContext* BlameContext) {
+		; We've found a function which has the correct name for this function call. However, since a
 		;  name can be defined multiple times as long as it takes a different number or set of parameter types
 		;   we need to go through and find which actual function to call.
 		
@@ -193,19 +111,19 @@
 			
 			i32 ThisFunctionRating := 0
 			
-			i8 IS_VARIADIC := false
+			i8 IsVariadic := false
 			
 			if (Next->Attribute = OPERATOR_DOT) {
 				; Variadic functions automatically get rated much worse than regular functions, as
 				;  they are the most general version of a function.
 				
-				IS_VARIADIC := true
+				IsVariadic := true
 				ThisFunctionRating := 100000
 				
 				NextParameterCount -= 1
 			}
 			
-			if (NextParameterCount = ParameterCount || IS_VARIADIC) {
+			if (NextParameterCount = ParameterCount || IsVariadic) {
 				; Only when the function we're checking against takes the correct number of parameters (or is
 				;  variadic) we actually calculate how compatible all of the parameters are.
 				
@@ -278,7 +196,7 @@
 			ManualErrorMessagePrelude()
 			
 			Print("No matching overload found for:\n")
-			PrettyError(ResultNode~>Context, Red | Bright)
+			PrettyError(BlameContext, Red | Bright)
 			
 			Next := FoundDefine
 			
@@ -324,6 +242,77 @@
 		
 		; This is only reached when we did match against a function, which will be stored inside of BestFit.
 		
+		return BestFit
+	}
+	
+	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, ASTNode* ThisParameter, i8** ErrorMessage) {
+		i8 HasFollowingColon := false
+		
+		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+			; `NonTypeName` followed by `:`, must be a legacy built-in call
+			
+			HasFollowingColon := true
+		}
+		
+		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			*ErrorMessage := "Expected opening `(` for function call."
+			return null
+		}
+		
+		i8 ParameterCount := 0
+		
+		if (ThisParameter != null) {
+			ParameterCount += 1
+		}
+		
+		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+		
+		if (ThisParameter != null) {
+			Parameters[0] := ThisParameter
+		}
+		
+		CallExpression* Result := null
+		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, NameToken~>Context, this->GetCurrentTokenContext())
+		
+		SafeWideString* Name := NameToken->StringValue
+		
+		if (HasFollowingColon) {
+			; If we've matched the `name:` format, but not `name:other`, then we need to convert `name`
+			;  into a specific built-in function identifier, and just return the result node.
+			
+			if (Name->Equals("syscall")) {
+				Result->BuiltinID := BUILTIN_SYSCALL
+				ResultNode->ValueType := this->i64->AsNonPointer()
+				
+				if (this->Config->OutputFormat = OUTPUT_PE) {
+					ResultNode->Warn("Windows syscall numbers change near-constantly, using the native API is a bad idea.")
+				}
+			}
+			else if (Name->Equals("breakpoint") && ParameterCount = 0) {
+				Result->BuiltinID := BUILTIN_BREAKPOINT
+				ResultNode->ValueType := this->i8->AsNonPointer()
+			}
+			else {
+				NameToken->Error("No built-in function by this name found.")
+			}
+			
+			return ResultNode
+		}
+		
+		HashMapElement* FoundDefineElement := FunctionNamespace->Get(Name)
+		
+		if !(FoundDefineElement) {
+			; If there are no functions by this name in the target namespace, error out
+			
+			NameToken->Error("Function definition not found.")
+		}
+		
+		; Otherwise, convert the HashMapElement* into a FunctionDefine*
+		
+		FunctionDefine* FoundDefine := FoundDefineElement->Value As FunctionDefine*
+		
+		FunctionDefine* BestFit := this->MatchFunctionCall(FoundDefine, Parameters, ParameterCount, ResultNode~>Context)
+		
 		Result->TargetFunction := BestFit
 		ResultNode->ValueType := BestFit->ReturnType
 		
@@ -357,16 +346,193 @@
 			;   function calls, returning an ASTNode* for each, and null when it couldn't parse any flavor of
 			;    function call, aka this identifier is just a variable access.
 			
-			Result := this->TryParseFunctionCall(NextToken, &ErrorMessage)
+			HashMapElement* TypeElement := this~>Types->Get(NextToken->StringValue)
 			
-			if (Result && ErrorMessage = null) {
-				return Result
+			if (TypeElement) {
+				TypeInfo* StaticBase := TypeElement->Value
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+					Token* StaticMethodNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
+					
+					if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+						this->GetCurrentTokenContext()->Error("Expected opening `(` for static method call")
+					}
+					
+					i8 ParameterCount := 0
+					ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+					
+					CallExpression* ResultCall := null
+					Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultCall, NextToken~>Context, this->GetCurrentTokenContext())
+					
+					HashMapElement* FirstFunctionElement := StaticBase~>StaticMethods->Get(StaticMethodNameToken->StringValue)
+					
+					if !(FirstFunctionElement) {
+						StaticMethodNameToken->Error("Undefined static method")
+					}
+					
+					FunctionDefine* FirstFunction := FirstFunctionElement->Value
+					
+					FunctionDefine* TargetFunction := this->MatchFunctionCall(FirstFunction, Parameters, ParameterCount, Result~>Context)
+					
+					ResultCall->TargetFunction := TargetFunction
+					Result->ValueType := TargetFunction->ReturnType
+				}
+				else {
+					i16 PointerDepth := 0
+					
+					while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+						PointerDepth += 1
+					}
+					
+					Type TargetType := StaticBase->AsPointer(PointerDepth)
+				
+					if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+						i32 ConstantOffset := this->GlobalConstantBufferSize
+						i8* ConstantsBuffer := this->GlobalConstantsBuffer
+						
+						if (CurrentFunction) {
+							ConstantOffset := CurrentFunction->ConstantBufferSize
+							ConstantsBuffer := CurrentFunction->ConstantsBuffer
+						}
+						
+						i32 NewConstantBufferSize := ConstantOffset
+						
+						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_POUND)) {
+							Token* MustBeFile := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected `#File \"<path>\"` directive")
+							
+							if !(MustBeFile->StringValue->Equals("file")) {
+								MustBeFile->Error("Expected '#File \"<path>\" directive")
+							}
+							
+							Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected \"<path>\" for `#File` directive")
+							
+							this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing `]` after `#File` directive")
+							
+							i8* RawFilePath := FilePathToken->StringValue->PackToString()
+							
+							i64 File := FileOpen(RawFilePath, FILE_READ)
+							
+							if (File < 0) {
+								ManualErrorMessagePrelude()
+								Print("\nCouldn't open file, error code %x\n", FileGetError(File))
+								FilePathToken->Error(null)
+							}
+							
+							i32 FileSize := FileGetSize(File)
+							
+							NewConstantBufferSize += FileSize + 1
+							ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+							
+							void* FileBuffer := ConstantsBuffer + ConstantOffset
+							
+							FileRead(File, FileBuffer, FileSize)
+							
+							FileClose(File)
+							
+							FilePathToken->StringValue->UnpackFromString()
+						}
+						else {
+							if (GetBaseType(TargetType)->IsBuiltin = false || GetPointerDepth(TargetType) != 0) {
+								; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
+								;  easily write into the constant buffer
+								
+								NextToken->Error("Element type must be a built in, non-pointer type")
+							}
+							
+							i32 ElementSize := GetTypeSize(TargetType)
+							i32 BeforeElements := this->Freeze()
+							i32 ElementCount := 0
+							
+							; In order to figure out how much buffer the constant buffer needs to be, first we go through
+							;  and count each element in the data
+							
+							loop {
+								this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								
+								ElementCount += 1
+								
+								if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+									; Commas between each element are optional.
+									
+									continue
+								}
+								else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)) {
+									; A `}` will terminate this block of data
+									
+									break
+								}
+							}
+							
+							; Now, we extend the constant buffer so it can hold the additional constant data
+							
+							NewConstantBufferSize += 8 + ElementCount * ElementSize
+							ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+							
+							void* ElementBuffer := ConstantsBuffer + ConstantOffset
+							i32 ElementIndex := 0
+							
+							this->Unfreeze(BeforeElements)
+							
+							; And finally, we process the entire block of constant data elements again, but actually write
+							;  each element into the (extended) constant data buffer this time
+							
+							loop {
+								Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								
+								; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
+								;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
+								;   overlap zone, but those 8 bytes aren't written to the output file, and are overlapped by
+								;    any constant data following this data.
+								*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
+								ElementIndex += 1
+								
+								if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+									continue
+								}
+								else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)) {
+									break
+								}
+							}
+						}
+						
+						; Update the correct constant buffer/constant buffer size, and return a NODE_TYPE_STRING
+						;  (which really should be renamed) containing the offset of the newly appended constant data.
+						
+						if (CurrentFunction) {
+							CurrentFunction->ConstantBufferSize := NewConstantBufferSize
+							CurrentFunction->ConstantsBuffer := ConstantsBuffer
+						}
+						else {
+							this->GlobalConstantBufferSize := NewConstantBufferSize
+							this->GlobalConstantsBuffer := ConstantsBuffer
+						}
+						
+						Result := ASTNode:New(NODE_TYPE_STRING, ConstantOffset, this->PointerToType(TargetType))
+						
+						MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, Result~>Context)
+					}
+					else {						
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' before expression for cast")
+						Result := ASTNode:New(NODE_TYPE_CAST, this->ParseExpression(0), TargetType)
+						
+						Token* CloseParen := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected '}' after expression for cast")
+						
+						Result~>Context->Clone(NextToken~>Context)->Merge(CloseParen~>Context)
+					}
+				}
 			}
 			else {
-				; Just a regular old variable access, call TranslateTokenToNode so any special variables
-				;  get correctly translated into nodes
+				Result := this->TryParseFunctionCall(NextToken, &ErrorMessage)
 				
-				return this->TranslateTokenToNode(NextToken)
+				if (Result && ErrorMessage = null) {
+					return Result
+				}
+				else {
+					; Just a regular old variable access, call TranslateTokenToNode so any special variables
+					;  get correctly translated into nodes
+					
+					return this->TranslateTokenToNode(NextToken)
+				}
 			}
 		}
 		else if (NextToken->Type = TOKEN_TYPE_STRING || NextToken->Type = TOKEN_TYPE_WIDE_STRING) {
@@ -461,6 +627,7 @@
 						;   if `Name` is the name of a function)
 						
 						FunctionDefine* FoundDefine := null
+						Type ThisType := TYPE_NONE
 						
 						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 							; We have `&Name:OtherName`, which means we need to lookup a static method for our result
@@ -469,6 +636,26 @@
 							Token* StaticMethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
 							
 							FoundDefine := this->LookupStaticMethod(StaticMethodTypeName, StaticMethodName)
+						}
+						else if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+							; We've got `&Name.Whatever`, which is either getting the address of a method
+							;  (aka `Name` is a type), or getting the address of a field (aka `Name` is a variable name)
+							
+							Token* MethodTypeName := MaybeFunctionName
+							Token* MethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected method name")
+							
+							HashMapElement* MethodBaseElement := this~>Types->Get(MethodTypeName->StringValue)
+							
+							if (MethodBaseElement) {
+								TypeInfo* MethodBase := MethodBaseElement->Value
+								
+								HashMapElement* MethodElement := MethodBase~>Methods->Get(MethodName->StringValue)
+								
+								if (MethodElement) {
+									ThisType := MethodBase->AsPointer(1)
+									FoundDefine := MethodElement->Value
+								}
+							}
 						}
 						else {
 							; Else, we've just got `&Name`, so we check for `Name` as a function
@@ -486,13 +673,60 @@
 							;   as a static method of that type, we return a NODE_TYPE_DEFINE containing the resolved
 							;    FunctionDefine struct, which the compiler will then load the address of.
 							
+							NextToken~>Context->Merge(this->GetCurrentTokenContext())
+							
+							; For any flavor of `&Fn`, if there's an `(` right after, then we expect a list of parameter
+							;  types so we can get the address of a specific overload for a function
+							
+							if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+								; So, we build a fake "parameter list" where each value has the actual type specified, but
+								;  no value. This is enough to trick `this->MatchFunctionCall()` into doing the overload matching
+								;   for us, and just returning a result.
+								
+								ASTNode** ParameterTypes := Alloc(15 * #ASTNode*)
+								i8 ParameterTypeCount := 0
+								
+								if (ThisType != TYPE_NONE) {
+									; If we had `&Type.Method`, then we need to insert the `this` parameter to make sure
+									;  we match methods (which already expect the `this` parameter)
+									
+									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, ThisType)
+								}
+								
+								if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
+									
+									while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+										ASTNode* DummyNode := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
+										
+										ParameterTypes[ParameterTypeCount++] := DummyNode
+									}
+									
+									this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected ')' for parameter type list")
+								}
+								
+								NextToken~>Context->Merge(this->GetCurrentTokenContext())
+								
+								FoundDefine := this->MatchFunctionCall(FoundDefine, ParameterTypes, ParameterTypeCount, NextToken~>Context)
+								
+								; We've matched our "call" to a function, now we just clean up a bit.
+								
+								for (i32 ParameterTypeIndex := 0, ParameterTypeIndex < ParameterTypeCount, ParameterTypeIndex++) {
+									Free(ParameterTypes[ParameterTypeIndex])
+								}
+								
+								Free(ParameterTypes)
+							}
+							else if (FoundDefine->Next != null) {
+								; `&Fn` without a `(` after, but `Fn` is overloaded. Nothing we can do, there's no way
+								;   to know which version of the function to get the address of.
+								
+								NextToken->Error("Getting the address of an overloaded function is not possible without using the `&Fn(Type, ...)` syntax")
+							}
+							
 							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsNonPointer())
 							
 							Result~>Context->Clone(MaybeFunctionName~>Context)->Merge(this->GetCurrentTokenContext())
-							
-							if (FoundDefine->Next != null) {
-								Result->Error("Getting the address of an overloaded function is not possible")
-							}
 						}
 						else {
 							; With `&Name`, `Name` was not defined as a function. `&Name:OtherName`, any path where
@@ -556,15 +790,15 @@
 			; Like with the TOKEN_TYPE_STRING flavors, we need to grab the correct constant buffer for
 			;  the current context of the parser. Aka either inside of a function, or outside of a function.
 			
-			i32 ConstantOffset := this->GlobalConstantBufferSize
-			i8* ConstantsBuffer := this->GlobalConstantsBuffer
+			ConstantOffset := this->GlobalConstantBufferSize
+			ConstantsBuffer := this->GlobalConstantsBuffer
 			
 			if (CurrentFunction) {
 				ConstantOffset := CurrentFunction->ConstantBufferSize
 				ConstantsBuffer := CurrentFunction->ConstantsBuffer
 			}
 			
-			i32 NewConstantBufferSize := ConstantOffset
+			NewConstantBufferSize := ConstantOffset
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
 				; For constant data contained in an external file, the syntax is `{Type file: "path"}`
@@ -580,14 +814,14 @@
 				}
 				
 				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after 'file'")
-				Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
+				FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
 				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
 				
 				; Read the specified file, write its data into the constant buffer, and remember the offset
 				;  of the data, and increment the size of the constant buffer
-				i8* RawFilePath := FilePathToken->StringValue->ToString()
+				RawFilePath := FilePathToken->StringValue->ToString()
 				
-				i64 File := FileOpen(RawFilePath, FILE_READ)
+				File := FileOpen(RawFilePath, FILE_READ)
 				
 				if (File < 0) {
 					ManualErrorMessagePrelude()
@@ -595,12 +829,12 @@
 					FilePathToken->Error(null)
 				}
 				
-				i32 FileSize := FileGetSize(File)
+				FileSize := FileGetSize(File)
 				
 				NewConstantBufferSize += FileSize + 1
 				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 				
-				void* FileBuffer := ConstantsBuffer + ConstantOffset
+				FileBuffer := ConstantsBuffer + ConstantOffset
 				
 				FileRead(File, FileBuffer, FileSize)
 				
@@ -620,9 +854,9 @@
 				
 				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after array element type")
 				
-				i32 ElementSize := GetTypeSize(ElementType)
-				i32 BeforeElements := this->Freeze()
-				i32 ElementCount := 0
+				ElementSize := GetTypeSize(ElementType)
+				BeforeElements := this->Freeze()
+				ElementCount := 0
 				
 				; In order to figure out how much buffer the constant buffer needs to be, first we go through
 				;  and count each element in the data
@@ -649,8 +883,8 @@
 				NewConstantBufferSize += 8 + ElementCount * ElementSize
 				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 				
-				void* ElementBuffer := ConstantsBuffer + ConstantOffset
-				i32 ElementIndex := 0
+				ElementBuffer := ConstantsBuffer + ConstantOffset
+				ElementIndex := 0
 				
 				this->Unfreeze(BeforeElements)
 				
@@ -658,7 +892,7 @@
 				;  each element into the (extended) constant data buffer this time
 				
 				loop {
-					Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+					NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
 					
 					; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
 					;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
@@ -832,6 +1066,8 @@
 						
 						Left->ValueType := this->PointerToType(Left->ValueType)
 					}
+					
+					RightToken~>Context->Merge(Left~>Context)
 					
 					i8* ErrorMessage := null
 					Result := this->TryParseFunctionCall(RightToken, LeftBase~>Methods, Left, &ErrorMessage)

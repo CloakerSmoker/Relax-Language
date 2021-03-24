@@ -143,6 +143,8 @@ i8 NODE_TYPE_GET_TYPE_SIZE := 24
 i8 NODE_TYPE_EXPRESSION_BLOCK := 25
 i8 NODE_TYPE_BLOCK := 26
 
+i8 NODE_TYPE_CAST := 27
+
 ; EndRegion
 
 ; AST node structs region
@@ -282,7 +284,7 @@ i32 E_NEEDS_66 := 0x4000		; The instruction needs the 0x66 prefix
 
 struct Instruction {
 	union {
-		i8{2} Opcode
+		i8[2] Opcode
 		i16 PackedOpcode
 	}
 	
@@ -292,7 +294,7 @@ struct Instruction {
 	i16 Extra
 	
 	i8 NameLength
-	i8{0} Name
+	i8[0] Name
 	
 	define Instruction* Next() {
 		i32 Size := this->NameLength + 1 + #Instruction
@@ -346,10 +348,7 @@ struct AssemblyBlock {
 	InstructionNode** Instructions,
 	HashMap Labels
 	
-	union {
-		ASTNode*{16} RegisterValues
-		i8 Shim
-	}
+	ASTNode*[16] RegisterValues
 }
 
 i32 SHIM_SIZEOF_ASSEMBLYBLOCK := 8 + 8 + #HashMap + 16 * 8
@@ -573,6 +572,8 @@ struct ASTNode {
 		TryCatch* TryNode,
 		
 		Block* BlockValue
+		
+		ASTNode* CastFromValue
 	},
 	
 	i32 LastVisitor

@@ -33,7 +33,7 @@ Font Font8x12 {
 }
 
 struct Test3 {
-	i8{7} Data
+	i8[7] Data
 	i8 Length
 }
 
@@ -59,7 +59,7 @@ define i32 Main() {
 	i32 I := 4
 	
 	Test2 T {Nest: {A: 1, B: 2, D: &I}, C: 3}
-	i32{4} Q {0x432, 0x123, 0x576, 0x234}
+	i32[4] Q {0x432, 0x123, 0x576, 0x234}
 	
 	Print("%i,%i,%i,%i,", T.Nest.A, T.Nest.B, T.C, *T.Nest.D)
 	Print("%ix%i,%c-%c,", Font8x12.Width, Font8x12.Height, Font8x12.FirstCharacter, Font8x12.LastCharacter)
@@ -76,7 +76,7 @@ define i32 Main() {
 		Print("%c", String~>Data[Index])
 	}
 	
-	Test4{3} Array {{A: 123}, {A: 432}, {A: 123}}
+	Test4[3] Array {{A: 123}, {A: 432}, {A: 123}}
 	
 	for (Index := 0, Index < 3, Index += 1) {
 		Print("%i", Array[Index]->A)

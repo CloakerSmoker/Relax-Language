@@ -113,7 +113,7 @@ define void StringifyType(void* RawBuffer, Type T) {
 	Buffer[Index + Depth] := 0
 }
 
-i8{100} PrintTypeBuffer
+i8[100] PrintTypeBuffer
 
 define void PrintType(Type TypeToPrint) {
 	; Prints a type, including its pointer depth

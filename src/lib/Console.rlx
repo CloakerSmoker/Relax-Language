@@ -62,7 +62,7 @@ define void PrintCharacter(i8 Character) {
 }
 
 
-i8{96} PrintBuffer
+i8[96] PrintBuffer
 
 define void PrintString(i8* AString) {
 	PrintCharacters(AString, StringLength(AString))

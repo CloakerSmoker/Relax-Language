@@ -269,7 +269,7 @@ struct SigAction {
 	void* Handler
 	i64 Flags
 	void* Restorer
-	i64{8} Mask
+	i64[8] Mask
 }
 
 define void SigRestorer() asm {
