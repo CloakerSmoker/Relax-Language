@@ -351,12 +351,8 @@
 			if (TypeElement) {
 				TypeInfo* StaticBase := TypeElement->Value
 				
-				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected ':' after type name for static method call or cast")
-				
-				Token* MaybeOpenParen := this->PeekNextToken()
-				
-				if (MaybeOpenParen->Is(TOKEN_TYPE_IDENTIFIER)) {
-					Token* StaticMethodNameToken := this->GetNextToken()
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+					Token* StaticMethodNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
 					
 					if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 						this->GetCurrentTokenContext()->Error("Expected opening `(` for static method call")
@@ -381,26 +377,148 @@
 					ResultCall->TargetFunction := TargetFunction
 					Result->ValueType := TargetFunction->ReturnType
 				}
-				else if (MaybeOpenParen->Is(TOKEN_TYPE_OPERATOR, OPERATOR_STAR) 
-				      || MaybeOpenParen->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-					  
+				else {
 					i16 PointerDepth := 0
 					
 					while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
 						PointerDepth += 1
 					}
 					
-					Type CastToType := StaticBase->AsPointer(PointerDepth)
-					
-					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected '(' before expression for cast")
-					Result := ASTNode:New(NODE_TYPE_CAST, this->ParseExpression(0), CastToType)
-					
-					Token* CloseParen := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected ')' after expression for cast")
-					
-					Result~>Context->Clone(NextToken~>Context)->Merge(CloseParen~>Context)
-				}
-				else {
-					MaybeOpenParen->Error("Unexpected token")
+					Type TargetType := StaticBase->AsPointer(PointerDepth)
+				
+					if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+						i32 ConstantOffset := this->GlobalConstantBufferSize
+						i8* ConstantsBuffer := this->GlobalConstantsBuffer
+						
+						if (CurrentFunction) {
+							ConstantOffset := CurrentFunction->ConstantBufferSize
+							ConstantsBuffer := CurrentFunction->ConstantsBuffer
+						}
+						
+						i32 NewConstantBufferSize := ConstantOffset
+						
+						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_POUND)) {
+							Token* MustBeFile := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected `#File \"<path>\"` directive")
+							
+							if !(MustBeFile->StringValue->Equals("file")) {
+								MustBeFile->Error("Expected '#File \"<path>\" directive")
+							}
+							
+							Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected \"<path>\" for `#File` directive")
+							
+							this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing `]` after `#File` directive")
+							
+							i8* RawFilePath := FilePathToken->StringValue->PackToString()
+							
+							i64 File := FileOpen(RawFilePath, FILE_READ)
+							
+							if (File < 0) {
+								ManualErrorMessagePrelude()
+								Print("\nCouldn't open file, error code %x\n", FileGetError(File))
+								FilePathToken->Error(null)
+							}
+							
+							i32 FileSize := FileGetSize(File)
+							
+							NewConstantBufferSize += FileSize + 1
+							ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+							
+							void* FileBuffer := ConstantsBuffer + ConstantOffset
+							
+							FileRead(File, FileBuffer, FileSize)
+							
+							FileClose(File)
+							
+							FilePathToken->StringValue->UnpackFromString()
+						}
+						else {
+							if (GetBaseType(TargetType)->IsBuiltin = false || GetPointerDepth(TargetType) != 0) {
+								; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
+								;  easily write into the constant buffer
+								
+								NextToken->Error("Element type must be a built in, non-pointer type")
+							}
+							
+							i32 ElementSize := GetTypeSize(TargetType)
+							i32 BeforeElements := this->Freeze()
+							i32 ElementCount := 0
+							
+							; In order to figure out how much buffer the constant buffer needs to be, first we go through
+							;  and count each element in the data
+							
+							loop {
+								this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								
+								ElementCount += 1
+								
+								if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+									; Commas between each element are optional.
+									
+									continue
+								}
+								else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)) {
+									; A `}` will terminate this block of data
+									
+									break
+								}
+							}
+							
+							; Now, we extend the constant buffer so it can hold the additional constant data
+							
+							NewConstantBufferSize += 8 + ElementCount * ElementSize
+							ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
+							
+							void* ElementBuffer := ConstantsBuffer + ConstantOffset
+							i32 ElementIndex := 0
+							
+							this->Unfreeze(BeforeElements)
+							
+							; And finally, we process the entire block of constant data elements again, but actually write
+							;  each element into the (extended) constant data buffer this time
+							
+							loop {
+								Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								
+								; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
+								;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
+								;   overlap zone, but those 8 bytes aren't written to the output file, and are overlapped by
+								;    any constant data following this data.
+								*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
+								ElementIndex += 1
+								
+								if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+									continue
+								}
+								else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET)) {
+									break
+								}
+							}
+						}
+						
+						; Update the correct constant buffer/constant buffer size, and return a NODE_TYPE_STRING
+						;  (which really should be renamed) containing the offset of the newly appended constant data.
+						
+						if (CurrentFunction) {
+							CurrentFunction->ConstantBufferSize := NewConstantBufferSize
+							CurrentFunction->ConstantsBuffer := ConstantsBuffer
+						}
+						else {
+							this->GlobalConstantBufferSize := NewConstantBufferSize
+							this->GlobalConstantsBuffer := ConstantsBuffer
+						}
+						
+						Result := ASTNode:New(NODE_TYPE_STRING, ConstantOffset, this->PointerToType(TargetType))
+						
+						MergeContexts(NextToken~>Context, this->GetCurrentToken()~>Context, Result~>Context)
+					}
+					else {						
+						this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' before expression for cast")
+						Result := ASTNode:New(NODE_TYPE_CAST, this->ParseExpression(0), TargetType)
+						
+						Token* CloseParen := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected '}' after expression for cast")
+						
+						Result~>Context->Clone(NextToken~>Context)->Merge(CloseParen~>Context)
+					}
 				}
 			}
 			else {
@@ -672,15 +790,15 @@
 			; Like with the TOKEN_TYPE_STRING flavors, we need to grab the correct constant buffer for
 			;  the current context of the parser. Aka either inside of a function, or outside of a function.
 			
-			i32 ConstantOffset := this->GlobalConstantBufferSize
-			i8* ConstantsBuffer := this->GlobalConstantsBuffer
+			ConstantOffset := this->GlobalConstantBufferSize
+			ConstantsBuffer := this->GlobalConstantsBuffer
 			
 			if (CurrentFunction) {
 				ConstantOffset := CurrentFunction->ConstantBufferSize
 				ConstantsBuffer := CurrentFunction->ConstantsBuffer
 			}
 			
-			i32 NewConstantBufferSize := ConstantOffset
+			NewConstantBufferSize := ConstantOffset
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER)) {
 				; For constant data contained in an external file, the syntax is `{Type file: "path"}`
@@ -696,14 +814,14 @@
 				}
 				
 				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after 'file'")
-				Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
+				FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected file path")
 				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
 				
 				; Read the specified file, write its data into the constant buffer, and remember the offset
 				;  of the data, and increment the size of the constant buffer
-				i8* RawFilePath := FilePathToken->StringValue->ToString()
+				RawFilePath := FilePathToken->StringValue->ToString()
 				
-				i64 File := FileOpen(RawFilePath, FILE_READ)
+				File := FileOpen(RawFilePath, FILE_READ)
 				
 				if (File < 0) {
 					ManualErrorMessagePrelude()
@@ -711,12 +829,12 @@
 					FilePathToken->Error(null)
 				}
 				
-				i32 FileSize := FileGetSize(File)
+				FileSize := FileGetSize(File)
 				
 				NewConstantBufferSize += FileSize + 1
 				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 				
-				void* FileBuffer := ConstantsBuffer + ConstantOffset
+				FileBuffer := ConstantsBuffer + ConstantOffset
 				
 				FileRead(File, FileBuffer, FileSize)
 				
@@ -736,9 +854,9 @@
 				
 				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected `:` after array element type")
 				
-				i32 ElementSize := GetTypeSize(ElementType)
-				i32 BeforeElements := this->Freeze()
-				i32 ElementCount := 0
+				ElementSize := GetTypeSize(ElementType)
+				BeforeElements := this->Freeze()
+				ElementCount := 0
 				
 				; In order to figure out how much buffer the constant buffer needs to be, first we go through
 				;  and count each element in the data
@@ -765,8 +883,8 @@
 				NewConstantBufferSize += 8 + ElementCount * ElementSize
 				ConstantsBuffer := ReAlloc(ConstantsBuffer, NewConstantBufferSize)
 				
-				void* ElementBuffer := ConstantsBuffer + ConstantOffset
-				i32 ElementIndex := 0
+				ElementBuffer := ConstantsBuffer + ConstantOffset
+				ElementIndex := 0
 				
 				this->Unfreeze(BeforeElements)
 				
@@ -774,7 +892,7 @@
 				;  each element into the (extended) constant data buffer this time
 				
 				loop {
-					Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+					NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
 					
 					; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
 					;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this

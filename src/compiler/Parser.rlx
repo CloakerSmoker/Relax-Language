@@ -291,6 +291,9 @@ struct ParserState {
 		if (this~>Types->Get(NewLocal->Name) != null) {
 			BlameToken->Error("Name is already reserved by a type")
 		}
+		else if (this~>Globals->Get(NewLocal->Name)) {
+			BlameToken->Error("Local variable will shadow global variable")
+		}
 		
 		this->CurrentFunction~>Locals->Add(NewLocal, BlameToken)
 	}
@@ -390,20 +393,34 @@ struct ParserState {
 		
 		Type Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
 		
-		if (AllowArrayType && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
-			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
+		if (AllowArrayType) {
+			i8 HasOpenBrace := this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
+			i8 HasOpenBracket := false
 			
-			if (*ErrorMessage = null) {
-				TypeInfo* ResultBase := GetBaseType(Result)
+			if !(HasOpenBrace) {
+				HasOpenBracket := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
+			}
+		
+			if (HasOpenBrace || HasOpenBracket) {
+				Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
 				
-				if (ResultBase->IsIncomplete && PointerDepth = 0) {
-					NameToken->Error("Array types must not be incomplete")
+				if (*ErrorMessage = null) {
+					TypeInfo* ResultBase := GetBaseType(Result)
+					
+					if (ResultBase->IsIncomplete && PointerDepth = 0) {
+						NameToken->Error("Array types must not be incomplete")
+					}
+					
+					Result := MakeArrayType(Result, SizeToken->IntegerValue As i16)
+					Result.IsArray := true
+					
+					if (HasOpenBrace) {
+						this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
+					}
+					else if (HasOpenBracket) {
+						this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for array type", ErrorMessage)
+					}
 				}
-				
-				Result := MakeArrayType(Result, SizeToken->IntegerValue As i16)
-				Result.IsArray := true
-				
-				this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
 			}
 		}
 		
@@ -1155,7 +1172,7 @@ struct ParserState {
 	}
 	
 	define void ParseBitsDefinition() {
-		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for bits name")
 		
 		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_BITS)
 		
