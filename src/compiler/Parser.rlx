@@ -393,34 +393,20 @@ struct ParserState {
 		
 		Type Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
 		
-		if (AllowArrayType) {
-			i8 HasOpenBrace := this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)
-			i8 HasOpenBracket := false
+		if (AllowArrayType && this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
 			
-			if !(HasOpenBrace) {
-				HasOpenBracket := this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)
-			}
-		
-			if (HasOpenBrace || HasOpenBracket) {
-				Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
+			if (*ErrorMessage = null) {
+				TypeInfo* ResultBase := GetBaseType(Result)
 				
-				if (*ErrorMessage = null) {
-					TypeInfo* ResultBase := GetBaseType(Result)
-					
-					if (ResultBase->IsIncomplete && PointerDepth = 0) {
-						NameToken->Error("Array types must not be incomplete")
-					}
-					
-					Result := MakeArrayType(Result, SizeToken->IntegerValue As i16)
-					Result.IsArray := true
-					
-					if (HasOpenBrace) {
-						this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}' for array type", ErrorMessage)
-					}
-					else if (HasOpenBracket) {
-						this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for array type", ErrorMessage)
-					}
+				if (ResultBase->IsIncomplete && PointerDepth = 0) {
+					NameToken->Error("Array types must not be incomplete")
 				}
+				
+				Result := MakeArrayType(Result, SizeToken->IntegerValue As i16)
+				Result.IsArray := true
+				
+				this->TryConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing ']' for array type", ErrorMessage)
 			}
 		}
 		

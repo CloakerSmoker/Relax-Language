@@ -157,8 +157,8 @@ struct WindowsDirectory unaligned {
 	
 	i64 Reserved
 	
-	i8{260} Name
-	i8{14} ShortName
+	i8[260] Name
+	i8[14] ShortName
 	
 	i32 FileType
 	i32 CreatorType
