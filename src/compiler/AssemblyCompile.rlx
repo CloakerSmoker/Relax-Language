@@ -201,6 +201,10 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 			else if (Base->Flags & E_REG_IN_OPCODE) {
 				i8 TargetRegister := OperandOne->RegisterNumber
 				
+				if (RegisterRequiresREX(TargetRegister)) {
+					REX |= REX_B
+				}
+				
 				PushByte(Compiler, REX)
 				PushByte(Compiler, Base~>Opcode[0] + ClampRegisterNumber(TargetRegister))
 				

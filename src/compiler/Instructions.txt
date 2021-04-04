@@ -37,6 +37,7 @@
 
 not		0xF7 	m 		OP_EXT|RM_OP1 				2
 ret		0xC3 	_ 		NO_RM 						_
+leave	0xC9 	_ 		NO_RM 						_
 neg		0xF7 	m 		OP_EXT|RM_OP1 				3
 
 and		0x23 	r,m 	RM_OP2 						_
@@ -132,6 +133,11 @@ stosq	0xAB	_		NO_RM|REX_W					_
 
 movcr3	0x0F22	r64		ONE_OP_W_EXT				3
 syscall	0x0F05	_		NO_RM						_
+
+wrmsr	0x0F30	_		NO_RM						_
+rdmsr	0x0F32	_		NO_RM						_
+
+sysret	0x0F07	_		NO_RM|REX_W					_
 
 ; Todo: remove
 
