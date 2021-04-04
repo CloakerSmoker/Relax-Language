@@ -267,12 +267,15 @@
 		
 		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
 		
+		ErrorContext* FirstTokenContext := NameToken~>Context
+		
 		if (ThisParameter != null) {
 			Parameters[0] := ThisParameter
+			FirstTokenContext := ThisParameter~>Context
 		}
 		
 		CallExpression* Result := null
-		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, NameToken~>Context, this->GetCurrentTokenContext())
+		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, FirstTokenContext, this->GetCurrentTokenContext())
 		
 		SafeWideString* Name := NameToken->StringValue
 		
@@ -304,7 +307,7 @@
 		if !(FoundDefineElement) {
 			; If there are no functions by this name in the target namespace, error out
 			
-			NameToken->Error("Function definition not found.")
+			ResultNode->Error("Function definition not found.")
 		}
 		
 		; Otherwise, convert the HashMapElement* into a FunctionDefine*

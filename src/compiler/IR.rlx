@@ -248,6 +248,26 @@ i8 IR_CALL                          := 19
 i8 IR_JUMP                          := 20
 i8 IR_CONDITIONAL                   := 21
 
+define i8* OperatorToString(i8 Operator) {
+	i8*[40] Operators {
+		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+		"&&", "||",
+		"=", "!=", "<", "<=", ">", ">=",
+		"as",
+		"+", "-",
+		"*", "/", "%",
+		"&", "|", "^",
+		"<<", ">>",
+		"!", "~",
+		"++", "--", "++", "--",
+		"[",
+		".", "->", "~>",
+		":", "#"
+	}
+	
+	return Operators[Operator]
+}
+
 define void IRPrint(i8* Format, ... Args) {
 	i32 Length := StringLength(Format)
 	i32 ArgIndex := 1
@@ -277,6 +297,9 @@ define void IRPrint(i8* Format, ... Args) {
 			}
 			else if (Next = 'b') {
 				PrintBinary(NextArg As i64)
+			}
+			else if (Next = 'o') {
+				Print(OperatorToString(NextArg As i8))
 			}
 			else if (Next = 't') {
 				TemporaryRegister Register := NextArg As TemporaryRegister
@@ -321,7 +344,7 @@ struct IRNode {
 		IRStoreIndex StoreIndexNode
 		IRStoreOffset StoreOffsetNode
 		
-		i64{2} Operands
+		i64[2] Operands
 		i64 Source
 		i64 Operand
 		
@@ -341,36 +364,32 @@ struct IRNode {
 	i64 Destination
 	
 	i8 Size
-	i8 Type
+	i8 Kind
 	i8 IsNotPresent
 	
 	define void Print() {
-		if (this->Type = IR_MOVE) {
+		if (this->Kind = IR_MOVE) {
 			IRPrint("move.%i, %t, %t", this->Size, this->Destination, this->Source)
 		}
-		else if (this->Type = IR_LOAD_INTEGER) {
+		else if (this->Kind = IR_LOAD_INTEGER) {
 			IRPrint("load_integer.%i, %t, %i", this->Size, this->Destination, this->SourceValue)
 		}
-		else if (this->Type = IR_UNARY) {
-			IRPrint("unary.%i, %t, %c, %t", this->Size, this->Destination, this->Operator, this->Operand)
+		else if (this->Kind = IR_UNARY) {
+			IRPrint("unary.%i, %t, %o, %t", this->Size, this->Destination, this->Operator, this->Operand)
 		}
-		else if (this->Type = IR_BINARY) {
-			IRPrint("binary.%i, %t, %t, %c, %t", this->Size, this->Destination, this~>Operands[0], this->Operator, this~>Operands[1])
+		else if (this->Kind = IR_BINARY) {
+			IRPrint("binary.%i, %t, %t, %o, %t", this->Size, this->Destination, this~>Operands[0], this->Operator, this~>Operands[1])
 		}
-		else if (this->Type = IR_JUMP) {
+		else if (this->Kind = IR_JUMP) {
 			IRPrint("jump, L%i", this->JumpToBlock)
 		}
-		else if (this->Type = IR_CONDITIONAL) {
+		else if (this->Kind = IR_CONDITIONAL) {
 			IRPrint("cond.%i, %t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
 		}
-		else if (this->Type = IR_RETURN) {
+		else if (this->Kind = IR_RETURN) {
 			IRPrint("return.%i, %t", this->Size, this->Operand)
 		}
 	}
-}
-
-define i8 OperatorToCharacter(i64 Operator) {
-	return "           = < >  +-*/%&|^  !~"[Operator]
 }
 
 bits LoopLables As i64 {
@@ -414,7 +433,6 @@ struct IRBackendTraits {
 
 struct IRCompilerState {
 	i64 NextVirtualRegister
-	IRNode** RegisterAssignments
 	i8* RegisterReferenceCounts
 	
 	i32 NodeCapacity
@@ -452,7 +470,6 @@ struct IRCompilerState {
 		
 		this->CurrentBlock := -1
 		
-		this->RegisterAssignments := Alloc(0x1000)
 		this->RegisterReferenceCounts := Alloc(0x1000)
 		
 		this~>LocalsToIRVariables->Initialize()
@@ -552,12 +569,12 @@ struct IRCompilerState {
 		}
 	}
 	
-	define IRNode* AppendNode(i8 Type) {
+	define IRNode* AppendNode(i8 Kind) {
 		this->Extend(#IRNode)
 		
 		IRNode* Result := this->Nodes[this->NextNodeIndex++]
 		
-		Result->Type := Type
+		Result->Kind := Kind
 		
 		return Result
 	}
@@ -567,19 +584,8 @@ struct IRCompilerState {
 		return (Offset / #IRNode) As i32
 	}
 	
-	define void SetRegisterAssignment(i64 Register, IRNode* Node) {
-		this->RegisterAssignments[Register] := Node
-	}
-	define IRNode* GetRegisterAssignment(i64 Register) {
-		return this->RegisterAssignments[Register]
-	}
 	define i64 AllocateRegister(IRNode* ForNode) {
-		i64 Result := this->NextVirtualRegister
-		
-		this->SetRegisterAssignment(Result, ForNode)
-		this->NextVirtualRegister += 1
-		
-		return Result
+		return this->NextVirtualRegister++
 	}
 	define i64 UseRegister(i64 RawRegister) {
 		TemporaryRegister Register := RawRegister As TemporaryRegister
@@ -701,7 +707,7 @@ struct IRCompilerState {
 			
 			i64 Operand := this->CompileExpression(Unary->Operand)
 			
-			return this->EmitUnary(OperatorToCharacter(Unary->Operator->IntegerValue), Operand, ResultSize)
+			return this->EmitUnary(Unary->Operator->IntegerValue As i32, Operand, ResultSize)
 		}
 		else if (Target->NodeType = NODE_TYPE_BINARY) {
 			BinaryExpression* Binary := Target->BinaryNode
@@ -713,7 +719,6 @@ struct IRCompilerState {
 				if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
 					i64 VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
 					
-					;this->GetRegisterAssignment(NewValueRegister)->Destination := VariableRegister
 					this->EmitMove(VariableRegister, NewValueRegister, 4)
 				}
 			}
@@ -721,7 +726,7 @@ struct IRCompilerState {
 				i64 Left := this->CompileExpression(Binary->Left)
 				i64 Right := this->CompileExpression(Binary->Right)
 				
-				return this->EmitBinary(Left, OperatorToCharacter(Binary->Operator->IntegerValue), Right, ResultSize)
+				return this->EmitBinary(Left, Binary->Operator->IntegerValue As i32, Right, ResultSize)
 			}
 		}
 		
@@ -867,8 +872,8 @@ struct IRCompilerState {
 		}
 	}
 	
-	define IRNode* GetBlockNode(i32 Block, i32 Node) {
-		return this->Nodes[this->BlockOffsets[Block] + Node]
+	define IRNode* GetBlockNode(i32 Index, i32 Node) {
+		return this->Nodes[this->BlockOffsets[Index] + Node]
 	}
 	
 	define void EliminateJumpChainsInBlock(i32 Index) {
@@ -878,25 +883,25 @@ struct IRCompilerState {
 		if (Size != 0) {
 			IRNode* Terminator := this->Nodes[Start + Size - 1]
 			
-			if (Terminator->Type = IR_JUMP) {
+			if (Terminator->Kind = IR_JUMP) {
 				IRNode* JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
 				
-				while (JumpToFirstNode->Type = IR_JUMP) {
+				while (JumpToFirstNode->Kind = IR_JUMP) {
 					Terminator->JumpToBlock := JumpToFirstNode->JumpToBlock
 					JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
 				}
 			}
-			else if (Terminator->Type = IR_CONDITIONAL) {
+			else if (Terminator->Kind = IR_CONDITIONAL) {
 				IRNode* TrueBlockFirstNode := this->GetBlockNode(Terminator->TrueBlock, 0)
 				
-				while (TrueBlockFirstNode->Type = IR_JUMP) {
+				while (TrueBlockFirstNode->Kind = IR_JUMP) {
 					Terminator->TrueBlock := TrueBlockFirstNode->JumpToBlock
 					TrueBlockFirstNode := this->GetBlockNode(Terminator->TrueBlock, 0)
 				}
 				
 				IRNode* FalseFirstNode := this->GetBlockNode(Terminator->FalseBlock, 0)
 				
-				while (FalseFirstNode->Type = IR_JUMP) {
+				while (FalseFirstNode->Kind = IR_JUMP) {
 					Terminator->FalseBlock := FalseFirstNode->JumpToBlock
 					FalseFirstNode := this->GetBlockNode(Terminator->FalseBlock, 0)
 				}
@@ -912,19 +917,19 @@ struct IRCompilerState {
 		for (i32 Index := this->NodeCount - 1, Index >= 0, Index--) {
 			IRNode* NextNode := this->Nodes[Index]
 			
-			if (NextNode->Type = IR_LOAD_INTEGER) {
+			if (NextNode->Kind = IR_LOAD_INTEGER) {
 				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
 					NextNode->IsNotPresent := true
 				}
 			}
-			else if (NextNode->Type = IR_UNARY || NextNode->Type = IR_MOVE) {
+			else if (NextNode->Kind = IR_UNARY || NextNode->Kind = IR_MOVE) {
 				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
 					this->DestroyRegisterReference(NextNode->Operand)
 					
 					NextNode->IsNotPresent := true
 				}
 			}
-			else if (NextNode->Type = IR_BINARY) {
+			else if (NextNode->Kind = IR_BINARY) {
 				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
 					this->DestroyRegisterReference(NextNode~>Operands[0])
 					this->DestroyRegisterReference(NextNode~>Operands[1])
@@ -973,11 +978,11 @@ struct IRCompilerState {
 		IRNode* Left := this->GetBlockNode(BlockIndex, LeftIndex)
 		IRNode* Right := this->GetBlockNode(BlockIndex, RightIndex)
 		
-		if (Left->Type != Right->Type) {
+		if (Left->Kind != Right->Kind) {
 			return false
 		}
 		
-		if (Left->Type = IR_LOAD_INTEGER) {
+		if (Left->Kind = IR_LOAD_INTEGER) {
 			return Left->SourceValue = Right->SourceValue
 		}
 		
@@ -988,12 +993,12 @@ struct IRCompilerState {
 			return false
 		}
 		
-		if (Left->Type = IR_UNARY) {
+		if (Left->Kind = IR_UNARY) {
 			if (Left->Operator != Right->Operator) {
 				return false
 			}
 		}
-		else if (Left->Type = IR_BINARY) {
+		else if (Left->Kind = IR_BINARY) {
 			if (Left->Operator != Right->Operator) {
 				return false
 			}
@@ -1037,16 +1042,16 @@ struct IRCompilerState {
 				IRNode* LastNode := this->FindNodeCopy(BlockIndex, NodeIndex, CurrentNodeIndex)
 				
 				if (LastNode != null) {
-					if (CurrentNode->Type != IR_LOAD_INTEGER) {
+					if (CurrentNode->Kind != IR_LOAD_INTEGER) {
 						this->DestroyRegisterReference(CurrentNode~>Operands[0])
 					}
 					
-					if (CurrentNode->Type = IR_BINARY) {
+					if (CurrentNode->Kind = IR_BINARY) {
 						;IRPrint("asoidua %t\n", CurrentNode~>Operands[1])
 						this->DestroyRegisterReference(CurrentNode~>Operands[1])
 					}
 					
-					CurrentNode->Type := IR_MOVE
+					CurrentNode->Kind := IR_MOVE
 					CurrentNode->Source := this->UseRegister(LastNode->Destination)
 				}
 			}
@@ -1074,7 +1079,7 @@ struct IRCompilerState {
 					IRNode* LastStore := this->FindLastStore(BlockIndex, Index, NextNode->Destination)
 					
 					if (LastStore != null) {
-						;Print("Found last %i\n", LastStore->Type)
+						;Print("Found last %i\n", LastStore->Kind)
 						
 						LastStore->IsNotPresent := true
 					}
@@ -1094,7 +1099,7 @@ struct IRCompilerState {
 					continue
 				}
 				
-				if (NextNode->Type = IR_MOVE) {
+				if (NextNode->Kind = IR_MOVE) {
 					;IRPrint("Find last store for %t for ", NextNode->Operand) NextNode->Print() Print("\n")
 					
 					IRNode* MoveAssigner := this->FindLastStore(BlockIndex, Index, NextNode->Operand, true)
@@ -1133,22 +1138,22 @@ struct IRCompilerState {
 				this->Backend->MapRegister(NextNode->Destination)
 			}
 			
-			if (NextNode->Type != IR_LOAD_INTEGER) {
+			if (NextNode->Kind != IR_LOAD_INTEGER) {
 				this->DestroyRegisterReference(NextNode->Operand)
 				
-				if (NextNode->Type = IR_BINARY) {
+				if (NextNode->Kind = IR_BINARY) {
 					this->DestroyRegisterReference(NextNode~>Operands[1])
 				}
 			}
 			
 			this->Backend->EmitNode(NextNode)
 			
-			if (NextNode->Type != IR_LOAD_INTEGER) {
+			if (NextNode->Kind != IR_LOAD_INTEGER) {
 				if (this->GetRegisterReferenceCount(NextNode->Operand) = 0) {
 					this->Backend->UnMapRegister(NextNode->Operand)
 				}
 				
-				if (NextNode->Type = IR_BINARY) {
+				if (NextNode->Kind = IR_BINARY) {
 					if (this->GetRegisterReferenceCount(NextNode~>Operands[1]) = 0) {
 						this->Backend->UnMapRegister(NextNode~>Operands[1])
 					}
@@ -1159,10 +1164,10 @@ struct IRCompilerState {
 		if (Size > 0) {
 			NextNode := this->Nodes[Start + Size - 1]
 			
-			if (NextNode->Type = IR_JUMP) {		
+			if (NextNode->Kind = IR_JUMP) {		
 				this->Generate(NextNode->JumpToBlock)
 			}
-			else if (NextNode->Type = IR_CONDITIONAL) {
+			else if (NextNode->Kind = IR_CONDITIONAL) {
 				this->Generate(NextNode->TrueBlock)
 				this->Generate(NextNode->FalseBlock)
 			}
@@ -1224,12 +1229,12 @@ struct IRCompilerState {
 		if (Size > 0) {
 			NextNode := this->Nodes[Start + Size - 1]
 			
-			if (NextNode->Type = IR_JUMP) {
+			if (NextNode->Kind = IR_JUMP) {
 				Print("\tL%i -> L%i;\n", Index, NextNode->JumpToBlock)
 				
 				this->PrintControlFlowGraph(NextNode->JumpToBlock)
 			}
-			else if (NextNode->Type = IR_CONDITIONAL) {
+			else if (NextNode->Kind = IR_CONDITIONAL) {
 				Print("\tL%i -> L%i [label=\"true\"];\n", Index, NextNode->TrueBlock)
 				Print("\tL%i -> L%i [label=\"false\"];\n", Index, NextNode->FalseBlock)
 				

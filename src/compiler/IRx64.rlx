@@ -1,0 +1,332 @@
+
+define i8* _R(i32 Index) {
+	if (Index >= 16) {
+		return Concatenate("stack", IToA(Index - 15))
+	}
+	
+	i8*[16] Names {"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"}
+	
+	return Names[Index]
+}
+
+/*
+
+I can barely remember how this works
+
+Virtual Register = IR register, a variable or temporary. Unlimited number can exist at once
+Real Register = An actual storage location, but not guaranteed to be an actual register.
+
+Now this might sound funky, since virtual/real registers are both abstract ideas of a storage location, *but* real
+ registers are Actually partitioned as:
+	0-15: Actual x64 registers
+	16+ : Offsets into the stack
+
+So, by just having a generic "allocate real register" function and grabbing the next free real register, we can seamlessly
+ implement spilling onto the stack, since once the first 16 real registers are allocated, a new one must be created, and
+  that new one will live on the stack.
+  
+This does complicate code a bit though, mainly because before emitting actual instructions, there has to be a check
+ for if a register is on the stack or not.
+ 
+ 
+Better:
+
+Introduce a "storage" concept instead, don't even call it a register.
+
+Each storage location holds a single value from an IR register
+
+
+
+StoreVirtualRegister
+PutRegisterInFreeStorage
+AssignRegisterStorage
+DiscardRegisterStorage
+
+
+*/
+
+
+struct IRToX64 {
+	IRCompilerState* IR
+	CompilerState Compiler
+	
+	i8 StorageLocationCount
+	i64* StorageLocations
+	i8* StorageLocationReferenceCounts
+	
+	static IRToX64* New() {
+		IRToX64* this := Alloc(#IRToX64)
+		
+		this->StorageLocationCount := 16
+		this->StorageLocations := Alloc(this->StorageLocationCount * #i64)
+		this->StorageLocationReferenceCounts := Alloc(this->StorageLocationCount * #i8)
+		
+		this->StorageLocations[RSP] := -1
+		this->StorageLocations[RBP] := -1
+		this->StorageLocations[R15] := -1
+		
+		this~>Compiler->CodeBufferSize := 0x1000
+		this~>Compiler->CodeBuffer := Alloc(this~>Compiler->CodeBufferSize)
+		
+		return this
+	}
+	
+	define i8 FindRegisterStorage(i64 Register) {
+		for (i8 Index := 0, Index < this->StorageLocationCount, Index++) {
+			if (this->StorageLocations[Index] = Register) {
+				return Index
+			}
+		}
+		
+		IRPrint("Warning, lookup for %t failed\n", Register)
+		
+		return -1 As i8
+	}
+	
+	define i8 IsStorageOnStack(i64 StorageIndex) {
+		return StorageIndex >= 16
+	}
+	define i32 GetStorageStackOffset(i64 StorageIndex) {
+		return ((StorageIndex - 16) * 8) As i32
+	}
+	
+	define i8 AllocateNewStackStorage() {
+		i8 Result := this->StorageLocationCount++
+		
+		this->StorageLocations := ReAlloc(this->StorageLocations, this->StorageLocationCount * #i64)
+		this->StorageLocationReferenceCounts := ReAlloc(this->StorageLocationReferenceCounts, this->StorageLocationCount * #i8)
+		
+		return Result
+	}
+	
+	define i8 AssignRegisterStorage(i64 Register) {
+		for (i8 StorageIndex := 0, StorageIndex < this->StorageLocationCount, StorageIndex++) {
+			if (this->StorageLocations[StorageIndex] = 0) {
+				this->StorageLocations[StorageIndex] := Register
+				
+				this->StorageLocationReferenceCounts[StorageIndex] := 1
+				
+				IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
+				;IRPrint("  = %t\n", this->Registers[Index])
+				return StorageIndex
+			}
+		}
+		
+		StorageIndex := this->AllocateNewStackStorage()
+		IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
+		this->StorageLocations[StorageIndex] := Register
+		this->StorageLocationReferenceCounts[StorageIndex] := 1
+		
+		return StorageIndex
+	}
+	define i8 ReassignRegisterStorage(i64 Register, i8 StorageIndex) {
+		IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
+		this->StorageLocations[StorageIndex] := Register
+		
+		return StorageIndex
+	}
+	
+	define void DiscardStorageValue(i8 StorageIndex) {
+		this->StorageLocationReferenceCounts[StorageIndex] := 0
+		this->StorageLocations[StorageIndex] := 0
+	}
+	
+	define void DiscardRegisterStorage(i64 Register) {
+		i8 StorageIndex := this->FindRegisterStorage(Register)
+		
+		if (StorageIndex < 0) {
+			;Print("N/A\n")
+			return
+		}
+		
+		IRPrint("\tRemoving reference from %s, which contains virtual value %t, with", _R(StorageIndex), Register)
+		
+		this->StorageLocationReferenceCounts[StorageIndex] -= 1
+		
+		IRPrint(" %i references left to this register\n",this->StorageLocationReferenceCounts[StorageIndex])
+		
+		if (this->StorageLocationReferenceCounts[StorageIndex] = 0) {
+			IRPrint("\t%s is now empty, used to hold value %t\n", _R(StorageIndex), Register)
+			
+			this->DiscardStorageValue(StorageIndex)
+		}
+	}
+	
+	define void EmitMove(i8 DestinationStorageIndex, i8 SourceStorageIndex, i8 Size) {
+		i8 DestinationOnStack := this->IsStorageOnStack(DestinationStorageIndex)
+		i8 SourceOnStack := this->IsStorageOnStack(SourceStorageIndex)
+		
+		if (DestinationOnStack && SourceOnStack) {
+			i32 SourceStackOffset := this->GetStorageStackOffset(SourceStorageIndex)
+			
+			SourceStorageIndex := R15
+			EmitMove_RX_RIX_DISPX(this~>Compiler, SourceStorageIndex, RBP, SourceStackOffset, Size)
+		}
+		
+		if (DestinationOnStack) {
+			i32 DestinationStackOffset := this->GetStorageStackOffset(DestinationStorageIndex)
+			
+			EmitMove_RIX_DISPX_RX(this~>Compiler, RBP, SourceStorageIndex, DestinationStackOffset, Size)
+		}
+		else if (SourceOnStack) {
+			SourceStackOffset := this->GetStorageStackOffset(SourceStorageIndex)
+			
+			EmitMove_RX_RIX_DISPX(this~>Compiler, DestinationStorageIndex, RBP, SourceStackOffset, Size)
+		}
+		else {
+			EmitMove_RX_RX(this~>Compiler, DestinationStorageIndex, SourceStorageIndex, Size)
+		}
+	}
+
+	define void EmitNode(IRNode* Node) {
+		Print("\tEmitting node: ") Node->Print() Print("\n")
+		
+		if (Node->Kind = IR_LOAD_INTEGER) {
+			i8 IntegerDestination := this->FindRegisterStorage(Node->Destination)
+			
+			if (this->IsStorageOnStack(IntegerDestination)) {
+				i32 IntegerDestinationOffset := this->GetStorageStackOffset(IntegerDestination)
+				
+				EmitMove_RIX_DISPX_IX(this~>Compiler, RBP, IntegerDestinationOffset, Node->SourceValue, 4)
+			}
+			else {
+				EmitMove_RX_IX(this~>Compiler, IntegerDestination, Node->SourceValue, 4)
+			}
+		}
+		else if (Node->Kind = IR_RETURN) {
+			i8 ReturnValue := this->FindRegisterStorage(Node->Operand)
+			
+			if (ReturnValue != RAX) {
+				this->EmitMove(RAX, ReturnValue, Node->Size)
+			}
+			
+			EmitReturn(this~>Compiler)
+		}
+		else if (Node->Kind = IR_MOVE) {
+			i8 MoveDestination := this->FindRegisterStorage(Node->Destination)
+			i8 MoveSource := this->FindRegisterStorage(Node->Operand)
+			
+			this->EmitMove(MoveDestination, MoveSource, Node->Size)
+		}
+		else if (Node->Kind = IR_UNARY) {
+			i64 UnaryOperand := Node->Operand
+			
+			i8 OperandStorage := this->FindRegisterStorage(UnaryOperand)
+			
+			if (this->IR->GetRegisterReferenceCount(UnaryOperand) != 0) {
+				i8 OperandClone := this->AssignRegisterStorage(UnaryOperand)
+				
+				this->EmitMove(OperandClone, OperandStorage, Node->Size)
+				
+				OperandStorage := OperandClone
+			}
+			
+			this->DiscardRegisterStorage(Node->Destination)
+			this->ReassignRegisterStorage(Node->Destination, OperandStorage)
+			
+			if (this->IsStorageOnStack(OperandStorage)) {
+				i32 OperandStackOffset := this->GetStorageStackOffset(OperandStorage)
+				
+				if (Node->Operator = OPERATOR_MINUS) {
+					EmitNeg_RIX_DISPX(this~>Compiler, RBP, OperandStackOffset, Node->Size)
+				}
+				else if (Node->Operator = OPERATOR_BANG) {
+					
+				}
+			}
+			else {
+				if (Node->Operator = OPERATOR_MINUS) {
+					EmitNeg_RX(this~>Compiler, OperandStorage, Node->Size)
+				}
+				else if (Node->Operator = OPERATOR_BANG) {
+					
+				}
+			}
+		}
+		else if (Node->Kind = IR_BINARY) {
+			; First, we need to bind the result (virtual) register to the actual register the left operand lives in
+			;  since any binary instruction operates in place
+			
+			i64 LeftOperand := Node~>Operands[0]
+			i64 RightOperand := Node~>Operands[1]
+			
+			IRPrint("Emitting binary expression (%t %o %t)\n", LeftOperand, Node->Operator, RightOperand)
+			
+			i8 LeftStorage := this->FindRegisterStorage(LeftOperand)
+			i8 RightStorage := this->FindRegisterStorage(RightOperand)
+			
+			if (this->IR->GetRegisterReferenceCount(LeftOperand) != 0) {
+				i8 LeftClone := this->AssignRegisterStorage(LeftOperand)
+				
+				IRPrint("Copied %t to %s from %s for binary, as a future expression must reuse this virtual value\n", LeftOperand, _R(LeftClone), _R(LeftStorage))
+				
+				this->StorageLocationReferenceCounts[LeftClone] := 1
+				
+				this->EmitMove(LeftClone, LeftStorage, Node->Size)
+				
+				LeftStorage := LeftClone
+			}
+			
+			; Discard the storage automatically assigned to hold the result, and reassign the storage containing
+			;  the left side operand to contain the result
+			
+			this->DiscardRegisterStorage(Node->Destination)
+			this->ReassignRegisterStorage(Node->Destination, LeftStorage)
+			
+			IRPrint("Done with binary fidding, final expression: (%s %o %s)\n", _R(LeftStorage), Node->Operator, _R(RightStorage))
+			
+			i8 LeftOnStack := this->IsStorageOnStack(LeftStorage)
+			i8 RightOnStack := this->IsStorageOnStack(RightStorage)
+			
+			if (LeftOnStack && RightOnStack) {
+				i32 RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
+				
+				RightStorage := R15
+				
+				EmitMove_RX_RIX_DISPX(this~>Compiler, RightStorage, RBP, RightStorageStackOffset, Node->Size)
+			}
+			
+			if (LeftOnStack) {
+				; Left register lives on the stack
+				
+				i32 LeftStorageStackOffset := this->GetStorageStackOffset(LeftStorage)
+				
+				if (Node->Operator = OPERATOR_PLUS) {
+					EmitAdd_RIX_DISPX_RX(this~>Compiler, RBP, RightStorage, LeftStorageStackOffset, Node->Size)
+				}
+			}
+			else if (RightOnStack) {
+				RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
+				
+				if (Node->Operator = OPERATOR_PLUS) {
+					EmitAdd_RX_RIX_DISPX(this~>Compiler, LeftStorage, RBP, RightStorageStackOffset, Node->Size)
+				}
+			}
+			else {
+				if (Node->Operator = OPERATOR_PLUS) {
+					EmitAdd_RX_RX(this~>Compiler, LeftStorage, RightStorage, Node->Size)
+				}
+			}
+		}
+		
+		Print("\n")
+		
+	}
+	
+	define IRBackendTraits* GetTraits() {
+		return IRBackendTraits:New(this, &IRToX64.AssignRegisterStorage, &IRToX64.DiscardRegisterStorage, &IRToX64.EmitNode)
+	}
+	
+	define void PrintCode() {
+		for (i32 Index := 0, Index < this~>Compiler->Index, Index++) {
+			i32 NextByte := this~>Compiler->CodeBuffer[Index]
+			
+			i8 First := NumberToCharacter(((NextByte >> 4) & 0xF) As i8)
+			i8 Second := NumberToCharacter(((NextByte) & 0xF) As i8)
+			
+			Print("%c%c ", First, Second)
+		}
+		
+		Print("\n")
+	}
+}
