@@ -247,6 +247,7 @@ i8 IR_RETURN                        := 18
 i8 IR_CALL                          := 19
 i8 IR_JUMP                          := 20
 i8 IR_CONDITIONAL                   := 21
+i8 IR_CONDITIONAL_NOT               := 22
 
 define i8* OperatorToString(i8 Operator) {
 	i8*[40] Operators {
@@ -385,6 +386,9 @@ struct IRNode {
 		}
 		else if (this->Kind = IR_CONDITIONAL) {
 			IRPrint("cond.%i, %t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
+		}
+		else if (this->Kind = IR_CONDITIONAL_NOT) {
+			IRPrint("cond.%i, !%t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
 		}
 		else if (this->Kind = IR_RETURN) {
 			IRPrint("return.%i, %t", this->Size, this->Operand)

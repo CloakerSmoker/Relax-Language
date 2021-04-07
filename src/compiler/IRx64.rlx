@@ -48,25 +48,22 @@ DiscardRegisterStorage
 
 struct IRToX64 {
 	IRCompilerState* IR
-	CompilerState Compiler
+	X64Generator* Generator
 	
 	i8 StorageLocationCount
 	i64* StorageLocations
-	i8* StorageLocationReferenceCounts
 	
 	static IRToX64* New() {
 		IRToX64* this := Alloc(#IRToX64)
 		
 		this->StorageLocationCount := 16
 		this->StorageLocations := Alloc(this->StorageLocationCount * #i64)
-		this->StorageLocationReferenceCounts := Alloc(this->StorageLocationCount * #i8)
 		
 		this->StorageLocations[RSP] := -1
 		this->StorageLocations[RBP] := -1
 		this->StorageLocations[R15] := -1
 		
-		this~>Compiler->CodeBufferSize := 0x1000
-		this~>Compiler->CodeBuffer := Alloc(this~>Compiler->CodeBufferSize)
+		this->Generator := X64Generator:New()
 		
 		return this
 	}
@@ -94,7 +91,6 @@ struct IRToX64 {
 		i8 Result := this->StorageLocationCount++
 		
 		this->StorageLocations := ReAlloc(this->StorageLocations, this->StorageLocationCount * #i64)
-		this->StorageLocationReferenceCounts := ReAlloc(this->StorageLocationReferenceCounts, this->StorageLocationCount * #i8)
 		
 		return Result
 	}
@@ -103,8 +99,6 @@ struct IRToX64 {
 		for (i8 StorageIndex := 0, StorageIndex < this->StorageLocationCount, StorageIndex++) {
 			if (this->StorageLocations[StorageIndex] = 0) {
 				this->StorageLocations[StorageIndex] := Register
-				
-				this->StorageLocationReferenceCounts[StorageIndex] := 1
 				
 				IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
 				;IRPrint("  = %t\n", this->Registers[Index])
@@ -115,7 +109,6 @@ struct IRToX64 {
 		StorageIndex := this->AllocateNewStackStorage()
 		IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
 		this->StorageLocations[StorageIndex] := Register
-		this->StorageLocationReferenceCounts[StorageIndex] := 1
 		
 		return StorageIndex
 	}
@@ -127,7 +120,6 @@ struct IRToX64 {
 	}
 	
 	define void DiscardStorageValue(i8 StorageIndex) {
-		this->StorageLocationReferenceCounts[StorageIndex] := 0
 		this->StorageLocations[StorageIndex] := 0
 	}
 	
@@ -139,17 +131,9 @@ struct IRToX64 {
 			return
 		}
 		
-		IRPrint("\tRemoving reference from %s, which contains virtual value %t, with", _R(StorageIndex), Register)
-		
-		this->StorageLocationReferenceCounts[StorageIndex] -= 1
-		
-		IRPrint(" %i references left to this register\n",this->StorageLocationReferenceCounts[StorageIndex])
-		
-		if (this->StorageLocationReferenceCounts[StorageIndex] = 0) {
-			IRPrint("\t%s is now empty, used to hold value %t\n", _R(StorageIndex), Register)
-			
-			this->DiscardStorageValue(StorageIndex)
-		}
+		IRPrint("\tDiscarding %s, used to hold value %t\n", _R(StorageIndex), Register)
+
+		this->DiscardStorageValue(StorageIndex)
 	}
 	
 	define void EmitMove(i8 DestinationStorageIndex, i8 SourceStorageIndex, i8 Size) {
@@ -160,21 +144,29 @@ struct IRToX64 {
 			i32 SourceStackOffset := this->GetStorageStackOffset(SourceStorageIndex)
 			
 			SourceStorageIndex := R15
-			EmitMove_RX_RIX_DISPX(this~>Compiler, SourceStorageIndex, RBP, SourceStackOffset, Size)
+			;EmitMove_RX_RIX_DISPX(this~>Compiler, SourceStorageIndex, RBP, SourceStackOffset, Size)
+			
+			this->Generator->Move_RX_RIX_DISPX(Size, SourceStorageIndex, RBP, SourceStackOffset)
 		}
 		
 		if (DestinationOnStack) {
 			i32 DestinationStackOffset := this->GetStorageStackOffset(DestinationStorageIndex)
 			
-			EmitMove_RIX_DISPX_RX(this~>Compiler, RBP, SourceStorageIndex, DestinationStackOffset, Size)
+			;EmitMove_RIX_DISPX_RX(this~>Compiler, RBP, SourceStorageIndex, DestinationStackOffset, Size)
+			
+			this->Generator->Move_RIX_DISPX_RX(Size, RBP, DestinationStackOffset, SourceStorageIndex)
 		}
 		else if (SourceOnStack) {
 			SourceStackOffset := this->GetStorageStackOffset(SourceStorageIndex)
 			
-			EmitMove_RX_RIX_DISPX(this~>Compiler, DestinationStorageIndex, RBP, SourceStackOffset, Size)
+			;EmitMove_RX_RIX_DISPX(this~>Compiler, DestinationStorageIndex, RBP, SourceStackOffset, Size)
+			
+			this->Generator->Move_RX_RIX_DISPX(Size, DestinationStorageIndex, RBP, SourceStackOffset)
 		}
 		else {
-			EmitMove_RX_RX(this~>Compiler, DestinationStorageIndex, SourceStorageIndex, Size)
+			;EmitMove_RX_RX(this~>Compiler, DestinationStorageIndex, SourceStorageIndex, Size)
+			
+			this->Generator->Move_RX_RX(Size, DestinationStorageIndex, SourceStorageIndex)
 		}
 	}
 
@@ -187,10 +179,19 @@ struct IRToX64 {
 			if (this->IsStorageOnStack(IntegerDestination)) {
 				i32 IntegerDestinationOffset := this->GetStorageStackOffset(IntegerDestination)
 				
-				EmitMove_RIX_DISPX_IX(this~>Compiler, RBP, IntegerDestinationOffset, Node->SourceValue, 4)
+				;EmitMove_RIX_DISPX_IX(this~>Compiler, RBP, IntegerDestinationOffset, Node->SourceValue, 4)
+				
+				; TODO: Handle Node->SourceValue being 64 bits, since Move_RIX_DISPX_IX can only do 8-32 bits
+				;  so we'll need to do
+				;   mov r15, %value%
+				;   mov [RBP + IntegerDestinationOffset], r15
+				
+				this->Generator->Move_RIX_DISPX_IX(4, RBP, IntegerDestinationOffset, Node->SourceValue As i32)
 			}
 			else {
-				EmitMove_RX_IX(this~>Compiler, IntegerDestination, Node->SourceValue, 4)
+				;EmitMove_RX_IX(this~>Compiler, IntegerDestination, Node->SourceValue, 4)
+				
+				this->Generator->Move_RX_IX(4, IntegerDestination, Node->SourceValue)
 			}
 		}
 		else if (Node->Kind = IR_RETURN) {
@@ -200,13 +201,18 @@ struct IRToX64 {
 				this->EmitMove(RAX, ReturnValue, Node->Size)
 			}
 			
-			EmitReturn(this~>Compiler)
+			;EmitReturn(this~>Compiler)
+			
+			this->Generator->Ret()
 		}
 		else if (Node->Kind = IR_MOVE) {
 			i8 MoveDestination := this->FindRegisterStorage(Node->Destination)
 			i8 MoveSource := this->FindRegisterStorage(Node->Operand)
 			
-			this->EmitMove(MoveDestination, MoveSource, Node->Size)
+			this->DiscardStorageValue(MoveDestination)
+			this->ReassignRegisterStorage(Node->Destination, MoveSource)
+			
+			;this->EmitMove(MoveDestination, MoveSource, Node->Size)
 		}
 		else if (Node->Kind = IR_UNARY) {
 			i64 UnaryOperand := Node->Operand
@@ -228,7 +234,9 @@ struct IRToX64 {
 				i32 OperandStackOffset := this->GetStorageStackOffset(OperandStorage)
 				
 				if (Node->Operator = OPERATOR_MINUS) {
-					EmitNeg_RIX_DISPX(this~>Compiler, RBP, OperandStackOffset, Node->Size)
+					;EmitNeg_RIX_DISPX(this~>Compiler, RBP, OperandStackOffset, Node->Size)
+					
+					this->Generator->Neg_RIX_DISPX(Node->Size, RBP, OperandStackOffset)
 				}
 				else if (Node->Operator = OPERATOR_BANG) {
 					
@@ -236,7 +244,9 @@ struct IRToX64 {
 			}
 			else {
 				if (Node->Operator = OPERATOR_MINUS) {
-					EmitNeg_RX(this~>Compiler, OperandStorage, Node->Size)
+					;EmitNeg_RX(this~>Compiler, OperandStorage, Node->Size)
+					
+					this->Generator->Neg_RX(Node->Size, OperandStorage)
 				}
 				else if (Node->Operator = OPERATOR_BANG) {
 					
@@ -260,8 +270,6 @@ struct IRToX64 {
 				
 				IRPrint("Copied %t to %s from %s for binary, as a future expression must reuse this virtual value\n", LeftOperand, _R(LeftClone), _R(LeftStorage))
 				
-				this->StorageLocationReferenceCounts[LeftClone] := 1
-				
 				this->EmitMove(LeftClone, LeftStorage, Node->Size)
 				
 				LeftStorage := LeftClone
@@ -283,7 +291,9 @@ struct IRToX64 {
 				
 				RightStorage := R15
 				
-				EmitMove_RX_RIX_DISPX(this~>Compiler, RightStorage, RBP, RightStorageStackOffset, Node->Size)
+				;EmitMove_RX_RIX_DISPX(this~>Compiler, RightStorage, RBP, RightStorageStackOffset, Node->Size)
+				
+				this->Generator->Move_RX_RIX_DISPX(Node->Size, RightStorage, RBP, RightStorageStackOffset)
 			}
 			
 			if (LeftOnStack) {
@@ -292,19 +302,25 @@ struct IRToX64 {
 				i32 LeftStorageStackOffset := this->GetStorageStackOffset(LeftStorage)
 				
 				if (Node->Operator = OPERATOR_PLUS) {
-					EmitAdd_RIX_DISPX_RX(this~>Compiler, RBP, RightStorage, LeftStorageStackOffset, Node->Size)
+					;EmitAdd_RIX_DISPX_RX(this~>Compiler, RBP, RightStorage, LeftStorageStackOffset, Node->Size)
+					
+					this->Generator->Add_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
 				}
 			}
 			else if (RightOnStack) {
 				RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
 				
 				if (Node->Operator = OPERATOR_PLUS) {
-					EmitAdd_RX_RIX_DISPX(this~>Compiler, LeftStorage, RBP, RightStorageStackOffset, Node->Size)
+					;EmitAdd_RX_RIX_DISPX(this~>Compiler, LeftStorage, RBP, RightStorageStackOffset, Node->Size)
+					
+					this->Generator->Add_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
 				}
 			}
 			else {
 				if (Node->Operator = OPERATOR_PLUS) {
-					EmitAdd_RX_RX(this~>Compiler, LeftStorage, RightStorage, Node->Size)
+					;EmitAdd_RX_RX(this~>Compiler, LeftStorage, RightStorage, Node->Size)
+					
+					this->Generator->Add_RX_RX(Node->Size, LeftStorage, RightStorage)
 				}
 			}
 		}
@@ -318,8 +334,8 @@ struct IRToX64 {
 	}
 	
 	define void PrintCode() {
-		for (i32 Index := 0, Index < this~>Compiler->Index, Index++) {
-			i32 NextByte := this~>Compiler->CodeBuffer[Index]
+		for (i32 Index := 0, Index < this->Generator->CodeBufferIndex, Index++) {
+			i32 NextByte := this->Generator->CodeBufferBytes[Index]
 			
 			i8 First := NumberToCharacter(((NextByte >> 4) & 0xF) As i8)
 			i8 Second := NumberToCharacter(((NextByte) & 0xF) As i8)
