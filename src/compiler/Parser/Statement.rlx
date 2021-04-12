@@ -304,6 +304,9 @@
 				
 				this->InLoop := OldInLoop
 			}
+			else {
+				NextToken->Error("Unexpected keyword")
+			}
 		}
 		else {
 			i8* ErrorMessage := null
