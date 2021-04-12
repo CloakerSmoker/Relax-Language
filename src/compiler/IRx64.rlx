@@ -45,6 +45,10 @@ DiscardRegisterStorage
 
 */
 
+struct X64LabelReference {
+	i32 LabelNumber
+	i32 CodeOffset
+}
 
 struct IRToX64 {
 	IRCompilerState* IR
@@ -52,6 +56,14 @@ struct IRToX64 {
 	
 	i8 StorageLocationCount
 	i64* StorageLocations
+	
+	i32 LabelCapacity
+	i32 LabelCount
+	i32* LabelPositions
+	
+	i32 LabelReferenceCapacity
+	i32 LabelReferenceCount
+	X64LabelReference* LabelReferences
 	
 	static IRToX64* New() {
 		IRToX64* this := Alloc(#IRToX64)
@@ -65,7 +77,40 @@ struct IRToX64 {
 		
 		this->Generator := X64Generator:New()
 		
+		this->LabelCapacity := 100
+		this->LabelPositions := Alloc(this->LabelCapacity * #i32)
+		
+		this->LabelReferenceCapacity := 100
+		this->LabelReferences := Alloc(this->LabelReferenceCapacity * #X64LabelReference)
+		
 		return this
+	}
+	
+	define void SetLabel(i32 LabelNumber) {
+	 
+	}
+	define void UseLabel(i32 LabelNumber) {
+		if (this->LabelReferenceCount + 10 >= this->LabelReferenceCapacity) {
+			this->LabelReferenceCapacity += 100
+			this->LabelReferences := ReAlloc(this->LabelReferences, this->LabelReferenceCapacity * #X64LabelReference)
+		}
+		
+		X64LabelReference* Reference := this->LabelReferences[this->LabelReferenceCount++]
+		
+		Reference->LabelNumber := LabelNumber
+		Reference->CodeOffset := this->Generator->CodeBufferIndex
+	}
+	
+	define i8 GetSystemVParameterStorage(i8 ParameterIndex) {
+		if (ParameterIndex < 6) {
+			; RDI, RSI, RDX, RCX, R8, R9
+			return i8[7, 6, 2, 1, 8, 9][ParameterIndex]
+		}
+		else {
+			; Todo: Stack parameters
+			
+			return 0
+		}
 	}
 	
 	define i8 FindRegisterStorage(i64 Register) {
@@ -169,11 +214,79 @@ struct IRToX64 {
 			this->Generator->Move_RX_RX(Size, DestinationStorageIndex, SourceStorageIndex)
 		}
 	}
-
+	
+	i32 CurrentFunctionPrologueStart
+	i32 CurrentFunctionPrologueEnd
+	
+	define void EndFunction() {
+		i32 StackVariables := this->StorageLocationCount - 16
+		
+		i32 StackSize := StackVariables * 8
+		
+		i32 OldIndex := this->Generator->CodeBufferIndex
+		i32 PrologueStart := this->CurrentFunctionPrologueStart
+		i32 PrologueEnd := this->CurrentFunctionPrologueEnd
+		
+		if (StackSize < 127) {
+			; This is... a bit of a mess. But it is a correct mess
+			; The idea is that we've just finished compiling a function which needs X bytes on the stack
+			;  and since we can only figure out X by compiling the function, we need to backtrack and
+			;   rewrite the `sub rsp, 0` at the start of the function to be `sub rsp, X`.
+			; But, in some cases X might be 0, or only a single byte, so we need to handle totally removing
+			;  the `sub`, and transforming the `sub rsp, i32` into `sub rsp, i8`
+			
+			this->Generator->CodeBufferIndex := PrologueStart
+			void* Prologue := this->Generator->GetPointerToTail()
+			
+			if (StackSize != 0) {
+				this->Generator->Sub_RX_I8(8, RBP, StackSize As i8)
+			}
+			
+			i32 OldPrologueSize := PrologueEnd - PrologueStart
+			i32 NewPrologueSize := this->Generator->CodeBufferIndex - PrologueStart
+			
+			i32 PrologueSizeDifference := OldPrologueSize - NewPrologueSize
+			
+			void* OldPrologueTail := Prologue + OldPrologueSize
+			void* NewPrologueTail := Prologue + NewPrologueSize
+			
+			i32 FunctionBodySize := OldIndex - PrologueEnd
+			
+			MoveMemory(NewPrologueTail, OldPrologueTail, FunctionBodySize)
+			
+			this->Generator->CodeBufferIndex := PrologueStart + NewPrologueSize + FunctionBodySize
+		}
+		else {
+			this->Generator->CodeBufferIndex := PrologueEnd - 4
+			i32* ExistingStackSize := this->Generator->GetPointerToTail() 
+			
+			*ExistingStackSize := StackSize
+			
+			this->Generator->CodeBufferIndex := OldIndex
+		}
+	}
+	
 	define void EmitNode(IRNode* Node) {
 		Print("\tEmitting node: ") Node->Print() Print("\n")
 		
-		if (Node->Kind = IR_LOAD_INTEGER) {
+		if (Node->Kind = IR_FUNCTION) {
+			for (i8 ParameterIndex := 0, ParameterIndex < Node~>FunctionNode->ParameterCount, ParameterIndex++) {
+				i64 ParameterRegister := Node~>FunctionNode->Parameters[ParameterIndex]
+				i8 ParameterStorage := this->GetSystemVParameterStorage(ParameterIndex)
+				
+				this->ReassignRegisterStorage(ParameterRegister, ParameterStorage)
+			}
+			
+			this->Generator->Push_R64(RBP)
+			this->Generator->Move_RX_RX(8, RBP, RSP)
+			
+			this->CurrentFunctionPrologueStart := this->Generator->CodeBufferIndex
+			
+			this->Generator->Sub_RX_I32(8, RBP, 0)
+			
+			this->CurrentFunctionPrologueEnd := this->Generator->CodeBufferIndex
+		}
+		else if (Node->Kind = IR_LOAD_INTEGER) {
 			i8 IntegerDestination := this->FindRegisterStorage(Node->Destination)
 			
 			if (this->IsStorageOnStack(IntegerDestination)) {
@@ -203,6 +316,7 @@ struct IRToX64 {
 			
 			;EmitReturn(this~>Compiler)
 			
+			this->Generator->Leave()
 			this->Generator->Ret()
 		}
 		else if (Node->Kind = IR_MOVE) {
@@ -330,7 +444,7 @@ struct IRToX64 {
 	}
 	
 	define IRBackendTraits* GetTraits() {
-		return IRBackendTraits:New(this, &IRToX64.AssignRegisterStorage, &IRToX64.DiscardRegisterStorage, &IRToX64.EmitNode)
+		return IRBackendTraits:New(this, &IRToX64.AssignRegisterStorage, &IRToX64.DiscardRegisterStorage, &IRToX64.EmitNode, &IRToX64.EndFunction)
 	}
 	
 	define void PrintCode() {

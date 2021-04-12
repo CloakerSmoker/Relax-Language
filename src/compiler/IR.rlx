@@ -213,41 +213,41 @@ struct IRConditional {
 	i8 ConditionSize
 }
 
-struct IRBlock {
-	IRNode* Body
-	
-	union {
-		i32 NodeCount
-		i32 LabelNumber
-	}
-}
-
 struct IRFunction {
-	;FunctionDefine* ASTNode
-	IRBlock* Body
+	i64* Parameters
+	i32 ParameterCount
 }
 
-i8 IR_LOAD_INDEX                    := 3
-i8 IR_LOAD_OFFSET                   := 4
-i8 IR_LOAD_INTEGER                  := 5
 
-i8 IR_LOAD_VARIABLE_ADDRESS         := 6
+i8 IR_BINARY                        := 1
+i8 IR_HAS_TWO_OPERANDS              := 1
+
+i8 IR_MOVE                          := 2
+i8 IR_UNARY                         := 3
+i8 IR_HAS_ONE_OPERAND               := 3
+
+i8 IR_LOAD_INTEGER                  := 4
+i8 IR_HAS_DESTINATION               := 4
+
+i8 IR_LOAD_INDEX                    := 5
+i8 IR_LOAD_OFFSET                   := 6
+
+i8 IR_LOAD_VARIABLE_ADDRESS         := 7
 i8 IR_LOAD_INDEX_ADDRESS            := 8
 i8 IR_LOAD_OFFSET_ADDRESS           := 9
 i8 IR_LOAD_LABEL_ADDRESS            := 10
 
-i8 IR_STORE_INDIRECT                := 13
-i8 IR_STORE_INDEX                   := 14
-i8 IR_STORE_OFFSET                  := 15
+i8 IR_STORE_INDIRECT                := 11
+i8 IR_STORE_INDEX                   := 12
+i8 IR_STORE_OFFSET                  := 13
 
-i8 IR_MOVE                          := 1
-i8 IR_BINARY                        := 16
-i8 IR_UNARY                         := 17
-i8 IR_RETURN                        := 18
-i8 IR_CALL                          := 19
-i8 IR_JUMP                          := 20
-i8 IR_CONDITIONAL                   := 21
-i8 IR_CONDITIONAL_NOT               := 22
+i8 IR_RETURN                        := 14
+i8 IR_CALL                          := 15
+i8 IR_JUMP                          := 16
+i8 IR_CONDITIONAL                   := 17
+i8 IR_CONDITIONAL_NOT               := 18
+
+i8 IR_FUNCTION                      := 19
 
 define i8* OperatorToString(i8 Operator) {
 	i8*[40] Operators {
@@ -345,6 +345,8 @@ struct IRNode {
 		IRStoreIndex StoreIndexNode
 		IRStoreOffset StoreOffsetNode
 		
+		IRFunction FunctionNode
+		
 		i64[2] Operands
 		i64 Source
 		i64 Operand
@@ -393,6 +395,22 @@ struct IRNode {
 		else if (this->Kind = IR_RETURN) {
 			IRPrint("return.%i, %t", this->Size, this->Operand)
 		}
+		else if (this->Kind = IR_FUNCTION) {
+			IRPrint("function")
+			
+			for (i32 Index := 0, Index < this~>FunctionNode->ParameterCount, Index++) {
+				i64 NextParameter := this~>FunctionNode->Parameters[Index]
+				
+				IRPrint(", %t", NextParameter)
+			}
+		}
+	}
+	
+	define i8 Is(i8 Kind) {
+		return this->Kind = Kind
+	}
+	define i8 IsInCategory(i8 Category) {
+		return this->Kind <= Category
 	}
 }
 
@@ -405,15 +423,20 @@ struct IRBackendTraits {
 	void* State
 	void* MapRegister
 	void* UnMapRegister
+	
+	void* EndFunction
+	
+	void* SetLabel
 	void* EmitNode
 	
-	static IRBackendTraits* New(void* State, void* MapRegister, void* UnMapRegister, void* EmitNode) {
+	static IRBackendTraits* New(void* State, void* MapRegister, void* UnMapRegister, void* EmitNode, void* EndFunction) {
 		IRBackendTraits* this := Alloc(#IRBackendTraits)
 		
-		this->State := State
-		this->MapRegister := MapRegister
+		this->State         := State
+		this->MapRegister   := MapRegister
 		this->UnMapRegister := UnMapRegister
-		this->EmitNode := EmitNode
+		this->EmitNode      := EmitNode
+		this->EndFunction   := EndFunction
 		
 		return this
 	}
@@ -430,6 +453,11 @@ struct IRBackendTraits {
 	}
 	define void EmitNode(IRNode* Node) {
 		asm (rdi := this->State, rsi := Node, rax := this->EmitNode) {
+			call, rax
+		}
+	}
+	define void EndFunction() {
+		asm (rdi := this->State, rax := this->EndFunction) {
 			call, rax
 		}
 	}
@@ -876,6 +904,22 @@ struct IRCompilerState {
 		}
 	}
 	
+	define void CompileFunction(FunctionDefine* Function) {
+		IRNode* RawNode := this->AppendNode(IR_FUNCTION)
+		IRFunction* Node  := RawNode~>FunctionNode
+		
+		Node->ParameterCount := Function->ParameterCount
+		Node->Parameters := Alloc(Node->ParameterCount * #i64)
+		
+		for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+			i64 ParameterRegister := this->FindOrAddVariable(Function->Parameters[Index])->ToRegister()
+			
+			Node->Parameters[Index] := ParameterRegister
+		}
+		
+		this->CompileBlock(Function->Body)
+	}
+	
 	define IRNode* GetBlockNode(i32 Index, i32 Node) {
 		return this->Nodes[this->BlockOffsets[Index] + Node]
 	}
@@ -945,6 +989,14 @@ struct IRCompilerState {
 	}
 	
 	define IRNode* FindLastStore(i32 InBlock, i32 FromOffset, i64 ForVariable, i8 Force) {
+		; Find the last node which stores a value in the given variable
+		;  if Force, then any nodes which use the given variable as an operand will not abort the search
+		; Since this is used for locating dead stores, this is very important, since
+		;  1 store
+		;  2 use
+		;  3 store
+		; would tell us that the value stored @1 can't be eliminated, since @2 uses it
+		
 		i32 Start := this->BlockOffsets[InBlock]
 		i32 Size := this->BlockSizes[InBlock]
 		
@@ -955,19 +1007,26 @@ struct IRCompilerState {
 				continue
 			}
 			
-			if (NextNode->Destination = ForVariable) {
-				return NextNode
-			}
-			else {
-				if (Force) {
-					continue
+			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
+				if (NextNode->Destination = ForVariable) {
+					return NextNode
 				}
-				
-				if (NextNode->Operand = ForVariable) {
-					return null
-				}
-				else if (NextNode~>Operands[1] = ForVariable) {
-					return null
+				else {
+					if (Force) {
+						continue
+					}
+					
+					if (NextNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+						if (NextNode->Operand = ForVariable) {
+							return null
+						}
+					}
+					
+					if (NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+						if (NextNode~>Operands[1] = ForVariable) {
+							return null
+						}
+					}
 				}
 			}
 		}
@@ -990,32 +1049,37 @@ struct IRCompilerState {
 			return Left->SourceValue = Right->SourceValue
 		}
 		
-		i32 LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left->Operand, true))
-		i32 RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right->Operand, true))
+		i8 HasOneOperand  := Left->IsInCategory(IR_HAS_ONE_OPERAND)
+		i8 HasTwoOperands := Left->IsInCategory(IR_HAS_TWO_OPERANDS)
 		
-		if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
-			return false
-		}
+		if (HasOneOperand) {
+			i32 LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left->Operand, true))
+			i32 RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right->Operand, true))
 		
-		if (Left->Kind = IR_UNARY) {
-			if (Left->Operator != Right->Operator) {
-				return false
-			}
-		}
-		else if (Left->Kind = IR_BINARY) {
-			if (Left->Operator != Right->Operator) {
-				return false
-			}
-			
-			LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left~>Operands[1], true))
-			RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right~>Operands[1], true))
-			
 			if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
 				return false
 			}
-		}
+			
+			if (HasTwoOperands) {
+				LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left~>Operands[1], true))
+				RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right~>Operands[1], true))
+				
+				if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
+					return false
+				}
+			}
 		
-		return true
+			if (Left->Kind = IR_UNARY || Left->Kind = IR_BINARY) {
+				if (Left->Operator != Right->Operator) {
+					return false
+				}
+			}
+			
+			return true
+		}
+		else {
+			return false
+		}
 	}
 	
 	define IRNode* FindNodeCopy(i32 BlockIndex, i32 Offset, i32 Target) {
@@ -1043,20 +1107,23 @@ struct IRCompilerState {
 				i32 CurrentNodeIndex := Start + NodeIndex
 				
 				IRNode* CurrentNode := this->Nodes[CurrentNodeIndex]
-				IRNode* LastNode := this->FindNodeCopy(BlockIndex, NodeIndex, CurrentNodeIndex)
 				
-				if (LastNode != null) {
-					if (CurrentNode->Kind != IR_LOAD_INTEGER) {
-						this->DestroyRegisterReference(CurrentNode~>Operands[0])
-					}
+				if (CurrentNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+					IRNode* LastNode := this->FindNodeCopy(BlockIndex, NodeIndex, CurrentNodeIndex)
 					
-					if (CurrentNode->Kind = IR_BINARY) {
-						;IRPrint("asoidua %t\n", CurrentNode~>Operands[1])
-						this->DestroyRegisterReference(CurrentNode~>Operands[1])
+					if (LastNode != null) {
+						if (CurrentNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+							this->DestroyRegisterReference(CurrentNode~>Operands[0])
+						}
+						
+						if (CurrentNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+							;IRPrint("asoidua %t\n", CurrentNode~>Operands[1])
+							this->DestroyRegisterReference(CurrentNode~>Operands[1])
+						}
+						
+						CurrentNode->Kind := IR_MOVE
+						CurrentNode->Source := this->UseRegister(LastNode->Destination)
 					}
-					
-					CurrentNode->Kind := IR_MOVE
-					CurrentNode->Source := this->UseRegister(LastNode->Destination)
 				}
 			}
 		}
@@ -1070,7 +1137,7 @@ struct IRCompilerState {
 			for (i32 Index := 0, Index < Size, Index++) {
 				IRNode* NextNode := this->Nodes[Start + Index]
 				
-				if (NextNode->IsNotPresent) {
+				if (NextNode->IsNotPresent || !NextNode->IsInCategory(IR_HAS_DESTINATION)) {
 					continue
 				}
 				
@@ -1131,6 +1198,8 @@ struct IRCompilerState {
 		i32 Start := this->BlockOffsets[Index]
 		i32 Size := this->BlockSizes[Index]
 		
+		IRNode* FirstNode := this->Nodes[Start]
+		
 		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
 			IRNode* NextNode := this->Nodes[Start + NodeIndex] 
 			
@@ -1138,26 +1207,31 @@ struct IRCompilerState {
 				continue
 			}
 			
-			if (NextNode->Destination) {
+			;Print("Generate {") NextNode->Print() Print("}\n")
+			
+			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
 				this->Backend->MapRegister(NextNode->Destination)
 			}
 			
-			if (NextNode->Kind != IR_LOAD_INTEGER) {
+			i8 HasOneOperand  := NextNode->IsInCategory(IR_HAS_ONE_OPERAND)
+			i8 HasTwoOperands := NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)
+			
+			if (HasOneOperand) {
 				this->DestroyRegisterReference(NextNode->Operand)
 				
-				if (NextNode->Kind = IR_BINARY) {
+				if (HasTwoOperands) {
 					this->DestroyRegisterReference(NextNode~>Operands[1])
 				}
 			}
 			
 			this->Backend->EmitNode(NextNode)
 			
-			if (NextNode->Kind != IR_LOAD_INTEGER) {
+			if (HasOneOperand) {
 				if (this->GetRegisterReferenceCount(NextNode->Operand) = 0) {
 					this->Backend->UnMapRegister(NextNode->Operand)
 				}
 				
-				if (NextNode->Kind = IR_BINARY) {
+				if (HasTwoOperands) {
 					if (this->GetRegisterReferenceCount(NextNode~>Operands[1]) = 0) {
 						this->Backend->UnMapRegister(NextNode~>Operands[1])
 					}
@@ -1175,6 +1249,10 @@ struct IRCompilerState {
 				this->Generate(NextNode->TrueBlock)
 				this->Generate(NextNode->FalseBlock)
 			}
+		}
+		
+		if (FirstNode->Is(IR_FUNCTION)) {
+			this->Backend->EndFunction()
 		}
 	}
 	define void Generate() {
@@ -1298,7 +1376,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 		Exit(1)
 	}
 	
-	IR->CompileBlock(Parser->MainFunction->Body)
+	IR->CompileFunction(Parser->MainFunction)
 	
 	;i32 Left := IR->EmitInteger(20, 4)
 	;i32 Right := IR->EmitInteger(192, 4)
@@ -1323,7 +1401,6 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;IR->PrintBlocks()
 	
 	; Remove instructions inside of blocks
-	;IR->EliminateMoves()
 	IR->EliminateSomething()
 	IR->EliminateDeadStores()
 	IR->EliminateDeadCode()

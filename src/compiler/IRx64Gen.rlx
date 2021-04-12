@@ -291,9 +291,44 @@ struct X64Generator {
 		this->WriteGenericInstructionDisplacementMR(Size, 0x01, Base, Displacement, Right)
 	}
 	
+	; SUB r/mX, imm8 (MI)
+	define void Sub_RX_I8(i8 Size, i8 Target, i16 Value) {
+		if (Size = 1) {
+			; 81 /5 ib
+			this->WriteGenericInstructionMR(1, 0x81, MODE_RTOR, Target, 5)
+		}
+		else {
+			; 83 /5 ib
+			this->WriteGenericInstructionMR(Size, 0x83, MODE_RTOR, Target, 5)
+		}
+		
+		this->WriteI8(Value)
+	}
 	
+	; SUB r/mX, imm32 (MR)
+	; 81 /5 id
+	define void Sub_RX_I32(i8 Size, i8 Target, i32 Value) {
+		this->WriteGenericInstructionMR(Size, 0x81, MODE_RTOR, Target, 5)
+		this->WriteI32(Value)
+	}
 	
+	; PUSH r64
+	; 50+rd
+	define void Push_R64(i8 Target) {
+		this->WriteREXOpcode(0, 0x50, Target)
+	}
 	
+	; POP r64
+	; 58+rd
+	define void Pop_R64(i8 Target) {
+		this->WriteREXOpcode(0, 0x58, Target)
+	}
+	
+	; LEAVE
+	; C9
+	define void Leave() {
+		this->WriteI8(0xC9)
+	}
 	
 	; RET
 	; C3
