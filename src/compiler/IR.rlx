@@ -1334,6 +1334,8 @@ struct IRCompilerState {
 #Require "./src/compiler/IRx64Gen.rlx"
 #Require "./src/compiler/IRx64.rlx"
 
+#Require "./src/compiler/PEBuilder.rlx"
+
 define void Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
@@ -1415,6 +1417,24 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	IR->Generate()
 	x64Gen->PrintCode()
+	
+	PEBuilder* PE := BuildBuilder()
+	
+	PE->ImportFixupBase := x64Gen->Generator->CodeBuffer
+	PE->PE->ImageBase := 0x4000_0000
+	
+	AddImport(PE, AToS("User32.dll"), AToS("MessageBoxA"), 300)
+	
+	AddData(PE, Parser~>Globals->NextOffset)
+	AddCode(PE, x64Gen->Generator->CodeBuffer, x64Gen->Generator->CodeBufferIndex, 0)
+	
+	FinalizeBuilder(PE)
+	
+	FileDelete("out_ir.exe")
+	
+	i64 OutputFileHandle := FileOpen("out_ir.exe", FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
+	FileWrite(OutputFileHandle, PE->Buffer, PE->BufferSize)
+	FileClose(OutputFileHandle)
 	
 	;Print("digraph CFG {\n")
 	;IR->PrintControlFlowGraph()

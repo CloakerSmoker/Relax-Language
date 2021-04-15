@@ -143,12 +143,22 @@ struct X64Generator {
 	
 	define void WriteREXOpcode(i8 REX, i16 Opcode) {
 		this->WriteREX(0, 0, REX)
+		
+		if (Opcode & 0xFF00) {
+			this->WriteI8(((Opcode >> 8) & 0xFF) As i8)
+		}
+		
 		this->WriteI8(Opcode)
 	}
 	define void WriteREXOpcode(i8 REX, i16 Opcode, i8 Operand) {
 		Opcode += this->ClampRegisterNumber(Operand)
 		
 		this->WriteREX(0, Operand, REX)
+		
+		if (Opcode & 0xFF00) {
+			this->WriteI8(((Opcode >> 8) & 0xFF) As i8)
+		}
+		
 		this->WriteI8(Opcode & 0xFF)
 	}
 	
@@ -175,7 +185,7 @@ struct X64Generator {
 		this->WriteSIB(Scale, this->ClampRegisterNumber(Index), this->ClampRegisterNumber(Base))
 	}
 	
-	define void WriteGenericInstructionRM(i8 Size, i16 Opcode, i8 Mode, i8 Destination, i8 Source) {
+	define void WriteGenericInstruction(i8 Size, i16 Opcode) {
 		i8 REX := 0
 		
 		if (Size = 1) {
@@ -188,7 +198,12 @@ struct X64Generator {
 			REX |= REX_W
 		}
 		
-		this->WriteREXOpcodeModRM(REX, Opcode, Mode, Destination, Source)
+		this->WriteREXOpcode(REX, Opcode)
+	}
+	
+	define void WriteGenericInstructionRM(i8 Size, i16 Opcode, i8 Mode, i8 Destination, i8 Source) {
+		this->WriteGenericInstruction(Size, Opcode)
+		this->WriteModRM(Mode, Destination, Source)
 	}
 	define void WriteGenericInstructionMR(i8 Size, i16 Opcode, i8 Mode, i8 Destination, i8 Source) {
 		this->WriteGenericInstructionRM(Size, Opcode, Mode, Source, Destination)
@@ -269,6 +284,23 @@ struct X64Generator {
 		else if (Size = 4) { this->WriteI32(Value As i32) }
 	}
 	
+	; XCHG rax, r64
+	; REX.W + 90 + rd
+	define void XChg_RAX_R64(i8 Target) {
+		this->WriteREXOpcode(REX_W, 0x90, Target)
+	}
+	
+	; XCHG rX, r/mX (rm)
+	; 87 /r
+	define void XChg_RX_RX(i8 Size, i8 Left, i8 Right) {
+		this->WriteGenericInstructionRM(Size, 0x87, MODE_RTOR, Left, Right)
+	}
+	define void XChg_RX_RIX_DISPX(i8 Size, i8 Left, i8 RightBase, i32 Displacement) {
+		this->WriteGenericInstructionDisplacementRM(Size, 0x87, Left, RightBase, Displacement)
+	}
+	define void XChg_RIX_DISPX_RX(i8 Size, i8 LeftBase, i32 Displacement, i8 Right) {
+		this->WriteGenericInstructionDisplacementRM(Size, 0x87, Right, LeftBase, Displacement)
+	}
 	
 	; ADD rX, r/mX (RM)
 	; 03 /r
@@ -312,6 +344,31 @@ struct X64Generator {
 		this->WriteI32(Value)
 	}
 	
+	
+	; CXX
+	; 99
+	define void CXX(i8 Size) {
+		this->WriteGenericInstruction(Size, 0x99)
+	}
+	
+	; IDIV rax, r/mX (M)
+	; F7 /7
+	define void IDiv_RAX_RX(i8 Size, i8 Operand) {
+		this->WriteGenericInstructionMR(Size, 0xF7, MODE_RTOR, Operand, 7)
+	}
+	define void IDiv_RAX_RIX_DISPX(i8 Size, i8 Base, i32 Displacement) {
+		this->WriteGenericInstructionDisplacementMR(Size, 0xF7, Base, Displacement, 7)
+	}
+	
+	; IMUL rX, r/mX (RM)
+	; 0F AF /r
+	define void IMul_RX_RX(i8 Size, i8 Left, i8 Right) {
+		this->WriteGenericInstructionRM(Size, 0x0FAF, MODE_RTOR, Left, Right)
+	}
+	define void IMul_RX_RIX_DISPX(i8 Size, i8 Left, i8 RightBase, i32 Displacement) {
+		this->WriteGenericInstructionDisplacementRM(Size, 0x0FAF, Left, RightBase, Displacement)
+	}
+	
 	; PUSH r64
 	; 50+rd
 	define void Push_R64(i8 Target) {
@@ -347,4 +404,35 @@ struct X64Generator {
 	define void Neg_RIX_DISPX(i8 Size, i8 Base, i32 Displacement) {
 		this->WriteGenericInstructionDisplacementMR(Size, 0xF7, Base, Displacement, 3)
 	}
+	
+	; CMP rX, r/mX (RM)
+	; 3B /r
+	define void Cmp_RX_RX(i8 Size, i8 Left, i8 Right) {
+		this->WriteGenericInstructionRM(Size, 0x3B, MODE_RTOR, Left, Right)
+	}
+	define void Cmp_RX_RIX_DISPX(i8 Size, i8 Left, i8 RightBase, i32 Displacement) {
+		this->WriteGenericInstructionDisplacementRM(Size, 0x3B, Left, RightBase, Displacement)
+	}
+	
+	; CMP r/mX, rX (MR)
+	; 39 /r
+	define void Cmp_RIX_DISPX_RX(i8 Size, i8 LeftBase, i32 Displacement, i8 Right) {
+		this->WriteGenericInstructionDisplacementMR(Size, 0x39, LeftBase, Displacement, Right)
+	}
+	
+	; SETcc r/m8 (M)
+	; 0F 9X
+	define void SetE_R8 (i8 Target) { this->WriteGenericInstructionMR(4, 0x0F94, MODE_RTOR, Target, 0) }
+	define void SetNE_R8(i8 Target) { this->WriteGenericInstructionMR(4, 0x0F95, MODE_RTOR, Target, 0) }
+	define void SetL_R8 (i8 Target) { this->WriteGenericInstructionMR(4, 0x0F9C, MODE_RTOR, Target, 0) }
+	define void SetLE_R8(i8 Target) { this->WriteGenericInstructionMR(4, 0x0F9E, MODE_RTOR, Target, 0) }
+	define void SetG_R8 (i8 Target) { this->WriteGenericInstructionMR(4, 0x0F9F, MODE_RTOR, Target, 0) }
+	define void SetGE_R8(i8 Target) { this->WriteGenericInstructionMR(4, 0x0F9D, MODE_RTOR, Target, 0) }
+	
+	define void SetE_RI8_DISPX (i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F94, Base, Displacement, 0) }
+	define void SetNE_RI8_DISPX(i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F95, Base, Displacement, 0) }
+	define void SetL_RI8_DISPX (i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F9C, Base, Displacement, 0) }
+	define void SetLE_RI8_DISPX(i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F9E, Base, Displacement, 0) }
+	define void SetG_RI8_DISPX (i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F9F, Base, Displacement, 0) }
+	define void SetGE_RI8_DISPX(i8 Base, i32 Displacement) { this->WriteGenericInstructionDisplacementMR(4, 0x0F9D, Base, Displacement, 0) }
 }

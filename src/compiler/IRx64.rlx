@@ -50,6 +50,8 @@ struct X64LabelReference {
 	i32 CodeOffset
 }
 
+i8 X64_TEMP_REGISTER := RDX ; register used for when data we need in a register is stored elsewhere
+
 struct IRToX64 {
 	IRCompilerState* IR
 	X64Generator* Generator
@@ -71,9 +73,9 @@ struct IRToX64 {
 		this->StorageLocationCount := 16
 		this->StorageLocations := Alloc(this->StorageLocationCount * #i64)
 		
+		this->StorageLocations[X64_TEMP_REGISTER] := -1
 		this->StorageLocations[RSP] := -1
 		this->StorageLocations[RBP] := -1
-		this->StorageLocations[R15] := -1
 		
 		this->Generator := X64Generator:New()
 		
@@ -188,7 +190,7 @@ struct IRToX64 {
 		if (DestinationOnStack && SourceOnStack) {
 			i32 SourceStackOffset := this->GetStorageStackOffset(SourceStorageIndex)
 			
-			SourceStorageIndex := R15
+			SourceStorageIndex := X64_TEMP_REGISTER
 			;EmitMove_RX_RIX_DISPX(this~>Compiler, SourceStorageIndex, RBP, SourceStackOffset, Size)
 			
 			this->Generator->Move_RX_RIX_DISPX(Size, SourceStorageIndex, RBP, SourceStackOffset)
@@ -266,6 +268,12 @@ struct IRToX64 {
 		}
 	}
 	
+	define i8 IsComparison(Token* OperatorToken) {
+		i8 Operator := OperatorToken->Value As i8
+		
+		return (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
+	}
+	
 	define void EmitNode(IRNode* Node) {
 		Print("\tEmitting node: ") Node->Print() Print("\n")
 		
@@ -296,8 +304,8 @@ struct IRToX64 {
 				
 				; TODO: Handle Node->SourceValue being 64 bits, since Move_RIX_DISPX_IX can only do 8-32 bits
 				;  so we'll need to do
-				;   mov r15, %value%
-				;   mov [RBP + IntegerDestinationOffset], r15
+				;   mov X64_TEMP_REGISTER, %value%
+				;   mov [RBP + IntegerDestinationOffset], X64_TEMP_REGISTER
 				
 				this->Generator->Move_RIX_DISPX_IX(4, RBP, IntegerDestinationOffset, Node->SourceValue As i32)
 			}
@@ -403,7 +411,7 @@ struct IRToX64 {
 			if (LeftOnStack && RightOnStack) {
 				i32 RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
 				
-				RightStorage := R15
+				RightStorage := X64_TEMP_REGISTER
 				
 				;EmitMove_RX_RIX_DISPX(this~>Compiler, RightStorage, RBP, RightStorageStackOffset, Node->Size)
 				
@@ -411,30 +419,212 @@ struct IRToX64 {
 			}
 			
 			if (LeftOnStack) {
-				; Left register lives on the stack
-				
 				i32 LeftStorageStackOffset := this->GetStorageStackOffset(LeftStorage)
+				
+				if (this->IsComparison(Node->Operator)) {
+					this->Generator->Cmp_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
+				}
 				
 				if (Node->Operator = OPERATOR_PLUS) {
 					;EmitAdd_RIX_DISPX_RX(this~>Compiler, RBP, RightStorage, LeftStorageStackOffset, Node->Size)
 					
 					this->Generator->Add_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
 				}
+				else if (Node->Operator = OPERATOR_STAR) {
+					; IMul only has RM encodings, so we need to swap things around so we do a RM operation
+					;  but store the result in M without touching R
+					
+					this->Generator->XChg_RX_RIX_DISPX(Node->Size, RightStorage, RBP, LeftStorageStackOffset)
+					this->Generator->IMul_RX_RIX_DISPX(Node->Size, RightStorage, RBP, LeftStorageStackOffset)
+					this->Generator->XChg_RX_RIX_DISPX(Node->Size, RightStorage, RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_SLASH || Node->Operator = OPERATOR_PERCENT) {
+					; `stack / register` or `stack % register`
+					;  First, we need to get `stack` into RAX without clobbering RAX
+					
+					if (this->StorageLocations[RAX]) {
+						; RAX has a value, swap it and `stack` (saving the old value)
+						
+						this->Generator->XChg_RX_RIX_DISPX(Node->Size, RAX, RBP, LeftStorageStackOffset)
+					}
+					else {
+						; RAX doesn't have a value, just move `stack` into RAX
+						
+						this->Generator->Move_RX_RIX_DISPX(Node->Size, RAX, RBP, LeftStorageStackOffset)
+					}
+					
+					this->Generator->CXX(Node->Size)
+					this->Generator->IDiv_RAX_RX(Node->Size, RightStorage)
+					
+					; Alright, we've done the operation, now we need to:
+					;  Move our result (which is in RAX for `/`, and RDX for `%`) back to `stack`
+					;  Restore the old value of RAX (if it had an old value)
+					
+					if (this->StorageLocations[RAX]) {
+						; No matter the operator, swap RAX and `stack` back if RAX needs to be restored
+						; This always puts the result of `stack / register` into `stack`, which might be the correct
+						;  result, but for `stack % register` we need to still move RDX into `stack`
+						
+						this->Generator->XChg_RX_RIX_DISPX(Node->Size, RAX, RBP, LeftStorageStackOffset)
+					}
+					else if (Node->Operator = OPERATOR_SLASH) {
+						; RAX didn't have a value, we don't need to restore it, and can directly our result from RAX
+						;  to stack
+						
+						this->Generator->Move_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RAX)
+					}
+					
+					; Ok, so by now we're 100% certain that RAX holds the correct value, and that `stack / register` is all
+					;  done, which means we only need to store the result of `stack % register` into the right place, and
+					;   we're done.
+					
+					if (Node->Operator = OPERATOR_PERCENT) {
+						this->Generator->Move_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RDX)
+					}
+				}
+				else if (Node->Operator = OPERATOR_EQUAL) {
+					this->Generator->SetE_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_BANG_EQUAL) {
+					this->Generator->SetNE_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_LESS) {
+					this->Generator->SetL_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_LESS_EQAUL) {
+					this->Generator->SetLE_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_GREATER) {
+					this->Generator->SetG_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
+					this->Generator->SetGE_RI8_DISPX(RBP, LeftStorageStackOffset)
+				}
 			}
 			else if (RightOnStack) {
 				RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
+				
+				if (this->IsComparison(Node->Operator)) {
+					this->Generator->Cmp_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
 				
 				if (Node->Operator = OPERATOR_PLUS) {
 					;EmitAdd_RX_RIX_DISPX(this~>Compiler, LeftStorage, RBP, RightStorageStackOffset, Node->Size)
 					
 					this->Generator->Add_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
 				}
+				else if (Node->Operator = OPERATOR_STAR) {
+					this->Generator->IMul_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_SLASH || Node->Operator = OPERATOR_PERCENT) {
+					if (LeftStorage != RAX) {
+						if (this->StorageLocations[RAX]) {						
+							this->Generator->XChg_RAX_R64(LeftStorage)
+						}
+						else {
+							this->Generator->Move_RX_RX(Node->Size, RAX, LeftStorage)
+						}
+					}
+					
+					this->Generator->CXX(Node->Size)
+					this->Generator->IDiv_RAX_RIX_DISPX(Node->Size, RBP, RightStorageStackOffset)
+					
+					if (LeftStorage != RAX) {
+						if (this->StorageLocations[RAX]) {						
+							this->Generator->XChg_RAX_R64(LeftStorage)
+						}
+						else if (Node->Operator = OPERATOR_SLASH) {
+							this->Generator->Move_RX_RX(Node->Size, LeftStorage, RAX)
+						}
+						
+						if (Node->Operator = OPERATOR_PERCENT) {
+							this->Generator->Move_RX_RX(Node->Size, LeftStorage, RDX)
+						}
+					}
+				}
+				else if (Node->Operator = OPERATOR_EQUAL) {
+					this->Generator->SetE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_BANG_EQUAL) {
+					this->Generator->SetNE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS) {
+					this->Generator->SetL_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS_EQAUL) {
+					this->Generator->SetLE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_GREATER) {
+					this->Generator->SetG_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
+					this->Generator->SetGE_R8(LeftStorage)
+				}
 			}
 			else {
+				if (this->IsComparison(Node->Operator)) {
+					this->Generator->Cmp_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				
 				if (Node->Operator = OPERATOR_PLUS) {
 					;EmitAdd_RX_RX(this~>Compiler, LeftStorage, RightStorage, Node->Size)
 					
 					this->Generator->Add_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_STAR) {
+					this->Generator->IMul_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_SLASH || Node->Operator = OPERATOR_PERCENT) {
+					if (LeftStorage != RAX) {
+						if (this->StorageLocations[RAX]) {
+							this->Generator->XChg_RAX_R64(LeftStorage)
+						}
+						else {
+							this->Generator->Move_RX_RX(Node->Size, RAX, LeftStorage)
+						}
+						
+						if (RightStorage = RAX) {
+							; If we've just swapped the left operand into RAX, and the right operand into LeftStorage
+							;  from RAX then we need to update RightStorage to be the register that was swapped into 
+							;   instead of RAX
+							
+							RightStorage := LeftStorage
+						}
+					}
+					
+					this->Generator->CXX(Node->Size)
+					this->Generator->IDiv_RAX_RX(Node->Size, RightStorage)
+					
+					if (LeftStorage != RAX) {
+						if (this->StorageLocations[RAX]) {
+							this->Generator->XChg_RAX_R64(LeftStorage)
+						}
+						else if (Node->Operator = OPERATOR_SLASH) {
+							this->Generator->Move_RX_RX(Node->Size, LeftStorage, RAX)
+						}
+						
+						if (Node->Operator = OPERATOR_PERCENT) {
+							this->Generator->Move_RX_RX(Node->Size, LeftStorage, RDX)
+						}
+					}
+				}
+				else if (Node->Operator = OPERATOR_EQUAL) {
+					this->Generator->SetE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_BANG_EQUAL) {
+					this->Generator->SetNE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS) {
+					this->Generator->SetL_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS_EQAUL) {
+					this->Generator->SetLE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_GREATER) {
+					this->Generator->SetG_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
+					this->Generator->SetGE_R8(LeftStorage)
 				}
 			}
 		}
