@@ -268,9 +268,7 @@ struct IRToX64 {
 		}
 	}
 	
-	define i8 IsComparison(Token* OperatorToken) {
-		i8 Operator := OperatorToken->Value As i8
-		
+	define i8 IsComparison(i32 Operator) {
 		return (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
 	}
 	
@@ -356,22 +354,26 @@ struct IRToX64 {
 				i32 OperandStackOffset := this->GetStorageStackOffset(OperandStorage)
 				
 				if (Node->Operator = OPERATOR_MINUS) {
-					;EmitNeg_RIX_DISPX(this~>Compiler, RBP, OperandStackOffset, Node->Size)
-					
 					this->Generator->Neg_RIX_DISPX(Node->Size, RBP, OperandStackOffset)
 				}
+				else if (Node->Operator = OPERATOR_TILDE) {
+					this->Generator->Not_RIX_DISPX(Node->Size, RBP, OperandStackOffset)
+				}
 				else if (Node->Operator = OPERATOR_BANG) {
-					
+					this->Generator->Cmp_RIX_DISPX_I8(Node->Size, RBP, OperandStackOffset, 0)
+					this->Generator->SetE_RI8_DISPX(RBP, OperandStackOffset)
 				}
 			}
 			else {
 				if (Node->Operator = OPERATOR_MINUS) {
-					;EmitNeg_RX(this~>Compiler, OperandStorage, Node->Size)
-					
 					this->Generator->Neg_RX(Node->Size, OperandStorage)
 				}
+				else if (Node->Operator = OPERATOR_TILDE) {
+					this->Generator->Not_RX(Node->Size, OperandStorage)
+				}
 				else if (Node->Operator = OPERATOR_BANG) {
-					
+					this->Generator->Test_RX_RX(Node->Size, OperandStorage, OperandStorage)
+					this->Generator->SetE_R8(OperandStorage)
 				}
 			}
 		}
@@ -429,6 +431,9 @@ struct IRToX64 {
 					;EmitAdd_RIX_DISPX_RX(this~>Compiler, RBP, RightStorage, LeftStorageStackOffset, Node->Size)
 					
 					this->Generator->Add_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_MINUS) {
+					this->Generator->Sub_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
 				}
 				else if (Node->Operator = OPERATOR_STAR) {
 					; IMul only has RM encodings, so we need to swap things around so we do a RM operation
@@ -500,6 +505,36 @@ struct IRToX64 {
 				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
 					this->Generator->SetGE_RI8_DISPX(RBP, LeftStorageStackOffset)
 				}
+				else if (Node->Operator = OPERATOR_AND) {
+					this->Generator->And_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_OR) {
+					this->Generator->Or_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_XOR) {
+					this->Generator->Xor_RIX_DISPX_RX(Node->Size, RBP, LeftStorageStackOffset, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS_LESS || Node->Operator = OPERATOR_GREATER_GREATER) {
+					if (RightStorage != RCX) {
+						if (this->StorageLocations[RCX] = 0) {
+							this->Generator->Move_RX_RX(Node->Size, RCX, RightStorage)
+						}
+						else {
+							this->Generator->XChg_RX_RX(Node->Size, RCX, RightStorage)
+						}
+					}
+					
+					if (Node->Operator = OPERATOR_LESS_LESS) {
+						this->Generator->SAL_RIX_DISPX_CL(Node->Size, RBP, LeftStorageStackOffset)
+					}
+					else if (Node->Operator = OPERATOR_GREATER_GREATER) {
+						this->Generator->SHR_RIX_DISPX_CL(Node->Size, RBP, LeftStorageStackOffset)
+					}
+					
+					if (RightStorage != RCX && this->StorageLocations[RCX] != 0) {
+						this->Generator->XChg_RX_RX(Node->Size, RCX, RightStorage)
+					}
+				}
 			}
 			else if (RightOnStack) {
 				RightStorageStackOffset := this->GetStorageStackOffset(RightStorage)
@@ -512,6 +547,9 @@ struct IRToX64 {
 					;EmitAdd_RX_RIX_DISPX(this~>Compiler, LeftStorage, RBP, RightStorageStackOffset, Node->Size)
 					
 					this->Generator->Add_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_MINUS) {
+					this->Generator->Sub_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
 				}
 				else if (Node->Operator = OPERATOR_STAR) {
 					this->Generator->IMul_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
@@ -560,6 +598,65 @@ struct IRToX64 {
 				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
 					this->Generator->SetGE_R8(LeftStorage)
 				}
+				else if (Node->Operator = OPERATOR_AND) {
+					this->Generator->And_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_OR) {
+					this->Generator->Or_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_XOR) {
+					this->Generator->Xor_RX_RIX_DISPX(Node->Size, LeftStorage, RBP, RightStorageStackOffset)
+				}
+				else if (Node->Operator = OPERATOR_LESS_LESS || Node->Operator = OPERATOR_GREATER_GREATER) {
+					; We need to get the right operand off of the stack, and into RCX
+					
+					if (this->StorageLocations[RCX] = 0) {
+						; RCX doesn't hold anything, just overwrite it
+						
+						this->Generator->Move_RX_RIX_DISPX(Node->Size, RCX, RBP, RightStorageStackOffset)
+					}
+					else {
+						; RCX holds a value
+						
+						if (LeftStorage = RCX) {
+							; RCX is the left operand, move it to the temp register, and then overwrite it
+							
+							LeftStorage := X64_TEMP_REGISTER
+							
+							this->Generator->Move_RX_RX(Node->Size, LeftStorage, RCX)
+							this->Generator->Move_RX_RIX_DISPX(Node->Size, RCX, RBP, RightStorageStackOffset)
+						}
+						else {
+							; Swap the old value onto the stack, and the right operand into RCX
+							
+							this->Generator->XChg_RX_RIX_DISPX(Node->Size, RCX, RBP, RightStorageStackOffset)
+						}
+					}
+					
+					; Do the operation
+					
+					if (Node->Operator = OPERATOR_LESS_LESS) {
+						this->Generator->SAL_RX_CL(Node->Size, LeftStorage)
+					}
+					else if (Node->Operator = OPERATOR_GREATER_GREATER) {
+						this->Generator->SHR_RX_CL(Node->Size, LeftStorage)
+					}
+					
+					if (this->StorageLocations[RCX] != 0) {
+						; We have an old value we need to restore RCX to
+						
+						if (LeftStorage = X64_TEMP_REGISTER) {
+							; Old value was the left operand, move it directly back into RCX
+							
+							this->Generator->Move_RX_RX(Node->Size, RCX, X64_TEMP_REGISTER)
+						}
+						else {
+							; Old value was swapped onto stack, swap it back into RCX
+							
+							this->Generator->XChg_RX_RIX_DISPX(Node->Size, RCX, RBP, RightStorageStackOffset)
+						}
+					}
+				}
 			}
 			else {
 				if (this->IsComparison(Node->Operator)) {
@@ -570,6 +667,9 @@ struct IRToX64 {
 					;EmitAdd_RX_RX(this~>Compiler, LeftStorage, RightStorage, Node->Size)
 					
 					this->Generator->Add_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_MINUS) {
+					this->Generator->Sub_RX_RX(Node->Size, LeftStorage, RightStorage)
 				}
 				else if (Node->Operator = OPERATOR_STAR) {
 					this->Generator->IMul_RX_RX(Node->Size, LeftStorage, RightStorage)
@@ -625,6 +725,36 @@ struct IRToX64 {
 				}
 				else if (Node->Operator = OPERATOR_GREATER_EQAUL) {
 					this->Generator->SetGE_R8(LeftStorage)
+				}
+				else if (Node->Operator = OPERATOR_AND) {
+					this->Generator->And_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_OR) {
+					this->Generator->Or_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_XOR) {
+					this->Generator->Xor_RX_RX(Node->Size, LeftStorage, RightStorage)
+				}
+				else if (Node->Operator = OPERATOR_LESS_LESS || Node->Operator = OPERATOR_GREATER_GREATER) {
+					if (RightStorage != RCX) {
+						if (this->StorageLocations[RCX] = 0) {
+							this->Generator->Move_RX_RX(Node->Size, RCX, RightStorage)
+						}
+						else {							
+							this->Generator->XChg_RX_RX(Node->Size, RCX, RightStorage)
+						}
+					}
+					
+					if (Node->Operator = OPERATOR_LESS_LESS) {
+						this->Generator->SAL_RX_CL(Node->Size, LeftStorage)
+					}
+					else if (Node->Operator = OPERATOR_GREATER_GREATER) {
+						this->Generator->SHR_RX_CL(Node->Size, LeftStorage)
+					}
+					
+					if (RightStorage != RCX && this->StorageLocations[RCX] != 0) {
+						this->Generator->XChg_RX_RX(Node->Size, RCX, RightStorage)
+					}
 				}
 			}
 		}

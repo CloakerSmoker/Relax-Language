@@ -1049,12 +1049,23 @@ struct IRCompilerState {
 			return Left->SourceValue = Right->SourceValue
 		}
 		
+		;Print("NodesAreEqual {") Left->Print() Print("} == {") Right->Print() Print("}\n")
+		
 		i8 HasOneOperand  := Left->IsInCategory(IR_HAS_ONE_OPERAND)
 		i8 HasTwoOperands := Left->IsInCategory(IR_HAS_TWO_OPERANDS)
 		
 		if (HasOneOperand) {
-			i32 LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left->Operand, true))
-			i32 RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right->Operand, true))
+			IRNode* LeftLastStore  := this->FindLastStore(BlockIndex, LeftIndex, Left->Operand, true)
+			IRNode* RightLastStore := this->FindLastStore(BlockIndex, RightIndex, Right->Operand, true)
+			
+			if (LeftLastStore = null || RightLastStore = null) {
+				return false
+			}
+			
+			i32 LeftOperand  := this->GetNodeIndex(LeftLastStore)
+			i32 RightOperand := this->GetNodeIndex(RightLastStore)
+			
+			;Print("\tLO: %i, RO: %i\n", LeftOperand, RightOperand)
 		
 			if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
 				return false
@@ -1400,7 +1411,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	IR->EndBlock()
 	
 	;Print("Blocks:\n")
-	;IR->PrintBlocks()
+	IR->PrintBlocks()
 	
 	; Remove instructions inside of blocks
 	IR->EliminateSomething()
