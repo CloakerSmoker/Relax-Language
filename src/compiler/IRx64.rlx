@@ -89,7 +89,14 @@ struct IRToX64 {
 	}
 	
 	define void SetLabel(i32 LabelNumber) {
-	 
+		if (LabelNumber + 20 >= this->LabelCapacity) {
+			this->LabelCapacity := LabelNumber + 50
+			this->LabelPositions := ReAlloc(this->LabelPositions, this->LabelCapacity * #i32)
+		}
+		
+		Print("Lable[%i] := %x\n", LabelNumber, this->Generator->CodeBufferIndex)
+		
+		this->LabelPositions[LabelNumber] := this->Generator->CodeBufferIndex
 	}
 	define void UseLabel(i32 LabelNumber) {
 		if (this->LabelReferenceCount + 10 >= this->LabelReferenceCapacity) {
@@ -97,10 +104,30 @@ struct IRToX64 {
 			this->LabelReferences := ReAlloc(this->LabelReferences, this->LabelReferenceCapacity * #X64LabelReference)
 		}
 		
+		Print("UseLabel %i at %i\n", LabelNumber, this->Generator->CodeBufferIndex - 4)
+		
 		X64LabelReference* Reference := this->LabelReferences[this->LabelReferenceCount++]
 		
 		Reference->LabelNumber := LabelNumber
-		Reference->CodeOffset := this->Generator->CodeBufferIndex
+		Reference->CodeOffset := this->Generator->CodeBufferIndex - 4
+	}
+	define void LinkLabels() {
+		Print("LRC %i\n", this->LabelReferenceCount)
+		
+		for (i32 Index := 0, Index < this->LabelReferenceCount, Index++) {
+			X64LabelReference* Reference := this->LabelReferences[Index]
+			
+			
+			i32 Destination := this->LabelPositions[Reference->LabelNumber]
+			i32* Placeholder := this->Generator->CodeBuffer + Reference->CodeOffset
+			i32 Displacement := Destination - (Reference->CodeOffset + 4)
+			
+			Print("%i => %i (%i)\n", Reference->CodeOffset, Destination, Displacement)
+			
+			Placeholder[0] += Displacement
+			
+			Print("%i\n", Placeholder[0])
+		}
 	}
 	
 	define i8 GetSystemVParameterStorage(i8 ParameterIndex) {
@@ -217,6 +244,8 @@ struct IRToX64 {
 		}
 	}
 	
+	i32 CurrentFunctionLabelBase
+	i32 CurrentFunctionLabelReferenceBase
 	i32 CurrentFunctionPrologueStart
 	i32 CurrentFunctionPrologueEnd
 	
@@ -256,6 +285,20 @@ struct IRToX64 {
 			
 			MoveMemory(NewPrologueTail, OldPrologueTail, FunctionBodySize)
 			
+			i32 LabelBase := this->CurrentFunctionLabelBase
+			i32 LabelCount := this->LabelCount - LabelBase
+			
+			for (i32 LabelIndex := 0, LabelIndex < LabelCount, LabelIndex++) {
+				this->LabelPositions[LabelBase + LabelIndex] -= PrologueSizeDifference
+			}
+			
+			i32 LabelReferenceBase := this->CurrentFunctionLabelReferenceBase
+			i32 LabelReferenceCount := this->LabelReferenceCount - LabelReferenceBase
+			
+			for (LabelIndex := 0, LabelIndex < LabelReferenceCount, LabelIndex++) {
+				this->LabelReferences[LabelReferenceBase + LabelIndex]->CodeOffset -= PrologueSizeDifference
+			}
+			
 			this->Generator->CodeBufferIndex := PrologueStart + NewPrologueSize + FunctionBodySize
 		}
 		else {
@@ -291,6 +334,9 @@ struct IRToX64 {
 			this->Generator->Sub_RX_I32(8, RBP, 0)
 			
 			this->CurrentFunctionPrologueEnd := this->Generator->CodeBufferIndex
+			
+			this->CurrentFunctionLabelBase := this->LabelCount
+			this->CurrentFunctionLabelReferenceBase := this->LabelReferenceCount
 		}
 		else if (Node->Kind = IR_LOAD_INTEGER) {
 			i8 IntegerDestination := this->FindRegisterStorage(Node->Destination)
@@ -339,7 +385,7 @@ struct IRToX64 {
 			
 			i8 OperandStorage := this->FindRegisterStorage(UnaryOperand)
 			
-			if (this->IR->GetRegisterReferenceCount(UnaryOperand) != 0) {
+			if (Node->Destination != UnaryOperand && this->IR->GetRegisterReferenceCount(UnaryOperand) != 0) {
 				i8 OperandClone := this->AssignRegisterStorage(UnaryOperand)
 				
 				this->EmitMove(OperandClone, OperandStorage, Node->Size)
@@ -389,7 +435,7 @@ struct IRToX64 {
 			i8 LeftStorage := this->FindRegisterStorage(LeftOperand)
 			i8 RightStorage := this->FindRegisterStorage(RightOperand)
 			
-			if (this->IR->GetRegisterReferenceCount(LeftOperand) != 0) {
+			if (Node->Destination != LeftOperand && this->IR->GetRegisterReferenceCount(LeftOperand) != 0) {
 				i8 LeftClone := this->AssignRegisterStorage(LeftOperand)
 				
 				IRPrint("Copied %t to %s from %s for binary, as a future expression must reuse this virtual value\n", LeftOperand, _R(LeftClone), _R(LeftStorage))
@@ -758,13 +804,17 @@ struct IRToX64 {
 				}
 			}
 		}
+		else if (Node->Kind = IR_JUMP) {
+			this->Generator->JMP_REL32(0)
+			this->UseLabel(Node->JumpToBlock)
+		}
 		
 		Print("\n")
 		
 	}
 	
 	define IRBackendTraits* GetTraits() {
-		return IRBackendTraits:New(this, &IRToX64.AssignRegisterStorage, &IRToX64.DiscardRegisterStorage, &IRToX64.EmitNode, &IRToX64.EndFunction)
+		return IRBackendTraits:New(this, &IRToX64.AssignRegisterStorage, &IRToX64.DiscardRegisterStorage, &IRToX64.EmitNode, &IRToX64.SetLabel, &IRToX64.EndFunction)
 	}
 	
 	define void PrintCode() {

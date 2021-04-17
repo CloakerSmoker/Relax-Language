@@ -429,13 +429,14 @@ struct IRBackendTraits {
 	void* SetLabel
 	void* EmitNode
 	
-	static IRBackendTraits* New(void* State, void* MapRegister, void* UnMapRegister, void* EmitNode, void* EndFunction) {
+	static IRBackendTraits* New(void* State, void* MapRegister, void* UnMapRegister, void* EmitNode, void* SetLabel, void* EndFunction) {
 		IRBackendTraits* this := Alloc(#IRBackendTraits)
 		
 		this->State         := State
 		this->MapRegister   := MapRegister
 		this->UnMapRegister := UnMapRegister
 		this->EmitNode      := EmitNode
+		this->SetLabel      := SetLabel
 		this->EndFunction   := EndFunction
 		
 		return this
@@ -453,6 +454,11 @@ struct IRBackendTraits {
 	}
 	define void EmitNode(IRNode* Node) {
 		asm (rdi := this->State, rsi := Node, rax := this->EmitNode) {
+			call, rax
+		}
+	}
+	define void SetLabel(i32 LabelNumber) {
+		asm (rdi := this->State, rsi := LabelNumber, rax := this->SetLabel) {
 			call, rax
 		}
 	}
@@ -1206,10 +1212,22 @@ struct IRCompilerState {
 		
 		this->BlocksVisited[Index] := true
 		
+		this->Backend->SetLabel(Index)
+		
 		i32 Start := this->BlockOffsets[Index]
 		i32 Size := this->BlockSizes[Index]
 		
 		IRNode* FirstNode := this->Nodes[Start]
+		
+		if (Size > 0) {
+			IRNode* LastNode := this->Nodes[Start + Size - 1]
+			
+			if (LastNode->Kind = IR_JUMP) {
+				if (LastNode->JumpToBlock = Index + 1) {
+					LastNode->IsNotPresent := true
+				}
+			}
+		}
 		
 		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
 			IRNode* NextNode := this->Nodes[Start + NodeIndex] 
@@ -1251,14 +1269,12 @@ struct IRCompilerState {
 		}
 		
 		if (Size > 0) {
-			NextNode := this->Nodes[Start + Size - 1]
-			
-			if (NextNode->Kind = IR_JUMP) {		
-				this->Generate(NextNode->JumpToBlock)
+			if (LastNode->Kind = IR_JUMP) {
+				this->Generate(LastNode->JumpToBlock)
 			}
-			else if (NextNode->Kind = IR_CONDITIONAL) {
-				this->Generate(NextNode->TrueBlock)
-				this->Generate(NextNode->FalseBlock)
+			else if (LastNode->Kind = IR_CONDITIONAL) {
+				this->Generate(LastNode->TrueBlock)
+				this->Generate(LastNode->FalseBlock)
 			}
 		}
 		
@@ -1411,7 +1427,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	IR->EndBlock()
 	
 	;Print("Blocks:\n")
-	IR->PrintBlocks()
+	;IR->PrintBlocks()
 	
 	; Remove instructions inside of blocks
 	IR->EliminateSomething()
@@ -1427,6 +1443,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	IR->PrintBlocks()
 	
 	IR->Generate()
+	x64Gen->LinkLabels()
 	x64Gen->PrintCode()
 	
 	PEBuilder* PE := BuildBuilder()

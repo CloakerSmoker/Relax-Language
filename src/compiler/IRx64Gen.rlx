@@ -555,4 +555,11 @@ struct X64Generator {
 	define void SHR_RIX_DISPX_CL(i8 Size, i8 Base, i32 Displacement) {
 		this->WriteGenericInstructionDisplacementMR(Size, 0xD3, Base, Displacement, 5)
 	}
+	
+	; JMP rel32
+	; E9 cd
+	define void JMP_REL32(i32 Displacement) {
+		this->WriteI8(0xE9)
+		this->WriteI32(0)
+	}
 }
