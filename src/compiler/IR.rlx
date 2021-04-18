@@ -218,16 +218,23 @@ struct IRFunction {
 	i32 ParameterCount
 }
 
-
-i8 IR_BINARY                        := 1
-i8 IR_HAS_TWO_OPERANDS              := 1
-
-i8 IR_MOVE                          := 2
-i8 IR_UNARY                         := 3
-i8 IR_HAS_ONE_OPERAND               := 3
-
-i8 IR_LOAD_INTEGER                  := 4
-i8 IR_HAS_DESTINATION               := 4
+; Masks used to decide how a given node kind can be optimized
+;                                          9 7 5 3 1
+;                                        11 8 6 4 2
+;                                         10
+i32 IR_HAS_DESTINATION               := 0b00000011110
+i32 IR_HAS_TWO_OPERANDS              := 0b00000000010
+i32 IR_HAS_ONE_OPERAND               := 0b01100101110
+i8 IR_BINARY                         := 1
+i8 IR_MOVE                           := 2
+i8 IR_UNARY                          := 3
+i8 IR_LOAD_INTEGER                   := 4
+i8 IR_RETURN                         := 5
+i8 IR_CALL                           := 6
+i8 IR_JUMP                           := 7
+i8 IR_CONDITIONAL                    := 8
+i8 IR_CONDITIONAL_NOT                := 9
+i8 IR_FUNCTION                       := 10
 
 i8 IR_LOAD_INDEX                    := 5
 i8 IR_LOAD_OFFSET                   := 6
@@ -241,13 +248,6 @@ i8 IR_STORE_INDIRECT                := 11
 i8 IR_STORE_INDEX                   := 12
 i8 IR_STORE_OFFSET                  := 13
 
-i8 IR_RETURN                        := 14
-i8 IR_CALL                          := 15
-i8 IR_JUMP                          := 16
-i8 IR_CONDITIONAL                   := 17
-i8 IR_CONDITIONAL_NOT               := 18
-
-i8 IR_FUNCTION                      := 19
 
 define i8* OperatorToString(i8 Operator) {
 	i8*[40] Operators {
@@ -366,8 +366,8 @@ struct IRNode {
 	
 	i64 Destination
 	
-	i8 Size
 	i8 Kind
+	i8 Size
 	i8 IsNotPresent
 	
 	define void Print() {
@@ -409,8 +409,8 @@ struct IRNode {
 	define i8 Is(i8 Kind) {
 		return this->Kind = Kind
 	}
-	define i8 IsInCategory(i8 Category) {
-		return this->Kind <= Category
+	define i8 IsInCategory(i32 Category) {
+		return ((1 << this->Kind) & Category) != 0
 	}
 }
 
@@ -875,6 +875,32 @@ struct IRCompilerState {
 		
 		this->ExitLoop(LoopState)
 	}
+	define void CompileFor(ForLoop* ForToCompile) {
+		this->CompileExpression(ForToCompile->Initializer)
+		
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		i32 BodyLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		ASTNode* Condition := ForToCompile->Condition
+		
+		i64 ConditionRegister := this->CompileExpression(Condition)
+		this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, EndLabel)
+		
+		this->SetLabel(BodyLabel)
+		this->CompileBlock(ForToCompile->Body)
+		
+		this->CompileExpression(ForToCompile->Step)
+		this->EmitJump(StartLabel)
+		
+		this->SetLabel(EndLabel)
+		this->ExitLoop(LoopState)
+	}
 	
 	define void CompileStatement(ASTNode* Target) {
 		
@@ -893,6 +919,9 @@ struct IRCompilerState {
 		}
 		else if (Target->NodeType = NODE_TYPE_WHILE) {
 			this->CompileWhile(Target->WhileNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_FOR) {
+			this->CompileFor(Target->ForNode)
 		}
 		else if (Target->NodeType = NODE_TYPE_CONTINUEBREAK) {
 			if (Target->IsContinue) {
@@ -1078,8 +1107,15 @@ struct IRCompilerState {
 			}
 			
 			if (HasTwoOperands) {
-				LeftOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, LeftIndex, Left~>Operands[1], true))
-				RightOperand := this->GetNodeIndex(this->FindLastStore(BlockIndex, RightIndex, Right~>Operands[1], true))
+				LeftLastStore  := this->FindLastStore(BlockIndex, LeftIndex, Left~>Operands[1], true)
+				RightLastStore := this->FindLastStore(BlockIndex, RightIndex, Right~>Operands[1], true)
+				
+				if (LeftLastStore = null || RightLastStore = null) {
+					return false
+				}
+				
+				LeftOperand  := this->GetNodeIndex(LeftLastStore)
+				RightOperand := this->GetNodeIndex(RightLastStore)
 				
 				if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
 					return false
@@ -1192,10 +1228,10 @@ struct IRCompilerState {
 					
 					IRNode* MoveAssigner := this->FindLastStore(BlockIndex, Index, NextNode->Operand, true)
 					
-					;Print("  = %x {", MoveAssigner) MoveAssigner->Print() Print("}\n")
-					;Print("  RC %i\n", this->GetRegisterReferenceCount(MoveAssigner->Destination))
+					if (MoveAssigner != null && this->GetRegisterReferenceCount(MoveAssigner->Destination) = 1) {
+						;Print("  = %x {", MoveAssigner) MoveAssigner->Print() Print("}\n")
+						;Print("  RC %i\n", this->GetRegisterReferenceCount(MoveAssigner->Destination))
 					
-					if (this->GetRegisterReferenceCount(MoveAssigner->Destination) = 1) {
 						MoveAssigner->Destination := NextNode->Destination
 						
 						NextNode->IsNotPresent := true
@@ -1439,34 +1475,34 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	; Remove entire blocks
 	IR->EliminateJumpChains()
+	;
+	;IR->PrintBlocks()
+	;
+	;IR->Generate()
+	;x64Gen->LinkLabels()
+	;x64Gen->PrintCode()
+	;
+	;PEBuilder* PE := BuildBuilder()
+	;
+	;PE->ImportFixupBase := x64Gen->Generator->CodeBuffer
+	;PE->PE->ImageBase := 0x4000_0000
+	;
+	;AddImport(PE, AToS("User32.dll"), AToS("MessageBoxA"), 300)
+	;
+	;AddData(PE, Parser~>Globals->NextOffset)
+	;AddCode(PE, x64Gen->Generator->CodeBuffer, x64Gen->Generator->CodeBufferIndex, 0)
+	;
+	;FinalizeBuilder(PE)
+	;
+	;FileDelete("out_ir.exe")
+	;
+	;i64 OutputFileHandle := FileOpen("out_ir.exe", FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
+	;FileWrite(OutputFileHandle, PE->Buffer, PE->BufferSize)
+	;FileClose(OutputFileHandle)
 	
-	IR->PrintBlocks()
-	
-	IR->Generate()
-	x64Gen->LinkLabels()
-	x64Gen->PrintCode()
-	
-	PEBuilder* PE := BuildBuilder()
-	
-	PE->ImportFixupBase := x64Gen->Generator->CodeBuffer
-	PE->PE->ImageBase := 0x4000_0000
-	
-	AddImport(PE, AToS("User32.dll"), AToS("MessageBoxA"), 300)
-	
-	AddData(PE, Parser~>Globals->NextOffset)
-	AddCode(PE, x64Gen->Generator->CodeBuffer, x64Gen->Generator->CodeBufferIndex, 0)
-	
-	FinalizeBuilder(PE)
-	
-	FileDelete("out_ir.exe")
-	
-	i64 OutputFileHandle := FileOpen("out_ir.exe", FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
-	FileWrite(OutputFileHandle, PE->Buffer, PE->BufferSize)
-	FileClose(OutputFileHandle)
-	
-	;Print("digraph CFG {\n")
-	;IR->PrintControlFlowGraph()
-	;Print("}\n")
+	Print("digraph CFG {\n")
+	IR->PrintControlFlowGraph()
+	Print("}\n")
 	
 	
 }

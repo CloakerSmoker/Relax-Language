@@ -1,5 +1,7 @@
 
 define i8* _R(i32 Index) {
+	;Print("_R(%i)\n", Index)
+	
 	if (Index >= 16) {
 		return Concatenate("stack", IToA(Index - 15))
 	}
@@ -94,7 +96,11 @@ struct IRToX64 {
 			this->LabelPositions := ReAlloc(this->LabelPositions, this->LabelCapacity * #i32)
 		}
 		
-		Print("Lable[%i] := %x\n", LabelNumber, this->Generator->CodeBufferIndex)
+		if (LabelNumber >= this->LabelCount) {
+			this->LabelCount := LabelNumber + 1
+		}
+		
+		Print("Lable[%i] := %i\n", LabelNumber, this->Generator->CodeBufferIndex)
 		
 		this->LabelPositions[LabelNumber] := this->Generator->CodeBufferIndex
 	}
@@ -288,12 +294,16 @@ struct IRToX64 {
 			i32 LabelBase := this->CurrentFunctionLabelBase
 			i32 LabelCount := this->LabelCount - LabelBase
 			
+			Print("EndFunction, %i label positions to relocate\n", LabelCount)
+			
 			for (i32 LabelIndex := 0, LabelIndex < LabelCount, LabelIndex++) {
 				this->LabelPositions[LabelBase + LabelIndex] -= PrologueSizeDifference
 			}
 			
 			i32 LabelReferenceBase := this->CurrentFunctionLabelReferenceBase
 			i32 LabelReferenceCount := this->LabelReferenceCount - LabelReferenceBase
+			
+			Print("             %i label references to relocate\n", LabelReferenceCount)
 			
 			for (LabelIndex := 0, LabelIndex < LabelReferenceCount, LabelIndex++) {
 				this->LabelReferences[LabelReferenceBase + LabelIndex]->CodeOffset -= PrologueSizeDifference
@@ -807,6 +817,23 @@ struct IRToX64 {
 		else if (Node->Kind = IR_JUMP) {
 			this->Generator->JMP_REL32(0)
 			this->UseLabel(Node->JumpToBlock)
+		}
+		else if (Node->Kind = IR_CONDITIONAL) {
+			i8 ConditionalOperand := this->FindRegisterStorage(Node->Operand)
+			
+			Print("if !(%s) goto L%i\n", _R(ConditionalOperand), Node->FalseBlock)
+			
+			if (this->IsStorageOnStack(ConditionalOperand)) {
+				i32 ConditionalOperandOffset := this->GetStorageStackOffset(ConditionalOperand)
+				
+				this->Generator->Cmp_RIX_DISPX_I8(Node->Size, RBP, ConditionalOperandOffset, 0)
+			}
+			else {
+				this->Generator->Test_RX_RX(Node->Size, ConditionalOperand, ConditionalOperand)
+			}
+			
+			this->Generator->JZ_REL32(0)
+			this->UseLabel(Node->FalseBlock)
 		}
 		
 		Print("\n")
