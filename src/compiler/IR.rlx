@@ -750,21 +750,41 @@ struct IRCompilerState {
 		else if (Target->NodeType = NODE_TYPE_BINARY) {
 			BinaryExpression* Binary := Target->BinaryNode
 			
-			if (Binary->Operator->IntegerValue = OPERATOR_COLON_EQUAL) {
+			i8 BinaryOperator := Binary->Operator->IntegerValue As i8
+			
+			if (OPERATOR_FIRST_ASSIGNMENT <= BinaryOperator && BinaryOperator <= OPERATOR_LAST_ASSIGNMENT) {
 				ASTNode* LeftNode := Binary->Left
-				i64 NewValueRegister := this->CompileExpression(Binary->Right)
+				i64 AssignmentRight := this->CompileExpression(Binary->Right)
 				
-				if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-					i64 VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+				if (BinaryOperator = OPERATOR_COLON_EQUAL) {	
+					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
+						i64 VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+						
+						this->EmitMove(VariableRegister, AssignmentRight, 4)
+					}
+				}
+				else {
+					if (BinaryOperator <= OPERATOR_PERCENT_EQUAL) {	
+						BinaryOperator += OPERATOR_PLUS - OPERATOR_PLUS_EQUAL
+					}
+					else {
+						BinaryOperator += OPERATOR_AND - OPERATOR_AND_EQUAL
+					}
 					
-					this->EmitMove(VariableRegister, NewValueRegister, 4)
+					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
+						VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+						
+						i64 CompoundResult := this->EmitBinary(VariableRegister, BinaryOperator, AssignmentRight, ResultSize)
+						
+						this->EmitMove(VariableRegister, CompoundResult, ResultSize)
+					}
 				}
 			}
 			else {
 				i64 Left := this->CompileExpression(Binary->Left)
 				i64 Right := this->CompileExpression(Binary->Right)
 				
-				return this->EmitBinary(Left, Binary->Operator->IntegerValue As i32, Right, ResultSize)
+				return this->EmitBinary(Left, BinaryOperator As i32, Right, ResultSize)
 			}
 		}
 		
