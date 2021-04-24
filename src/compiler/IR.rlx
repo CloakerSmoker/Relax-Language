@@ -219,12 +219,12 @@ struct IRFunction {
 }
 
 ; Masks used to decide how a given node kind can be optimized
-;                                          9 7 5 3 1
-;                                        11 8 6 4 2
-;                                         10
-i32 IR_HAS_DESTINATION               := 0b00000011110
-i32 IR_HAS_TWO_OPERANDS              := 0b00000000010
-i32 IR_HAS_ONE_OPERAND               := 0b01100101110
+;                                          15 12 9 7 5 3 1
+;                                           14 11 8 6 4 2
+;                                         16 13 10
+i32 IR_HAS_DESTINATION               := 0b01111100000011110
+i32 IR_HAS_TWO_OPERANDS              := 0b00000000000000010
+i32 IR_HAS_ONE_OPERAND               := 0b01111101100101110
 i8 IR_BINARY                         := 1
 i8 IR_MOVE                           := 2
 i8 IR_UNARY                          := 3
@@ -236,12 +236,15 @@ i8 IR_CONDITIONAL                    := 8
 i8 IR_CONDITIONAL_NOT                := 9
 i8 IR_FUNCTION                       := 10
 
-i8 IR_LOAD_INDEX                    := 5
-i8 IR_LOAD_OFFSET                   := 6
+i8 IR_LOAD                           := 11
+i8 IR_LOAD_INDEX                     := 12
+i8 IR_LOAD_OFFSET                    := 13
+i8 IR_LOAD_ADDRESS                   := 14
+i8 IR_LOAD_OFFSET_ADDRESS            := 15
+i8 IR_ALLOCATE                       := 16
 
 i8 IR_LOAD_VARIABLE_ADDRESS         := 7
 i8 IR_LOAD_INDEX_ADDRESS            := 8
-i8 IR_LOAD_OFFSET_ADDRESS           := 9
 i8 IR_LOAD_LABEL_ADDRESS            := 10
 
 i8 IR_STORE_INDIRECT                := 11
@@ -332,18 +335,18 @@ define void IRPrint(i8* Format, ... Args) {
 
 struct IRNode {
 	union {
-		IRLoadIndex LoadIndexNode
-		IRLoadOffset LoadOffsetNode
-		IRLoadInteger LoadIntegerNode
-		
-		IRLoadVariableAddress LoadVariableAddressNode
-		IRLoadIndexAddress LoadIndexAddressNode
-		IRLoadOffsetAddress LoadOffsetAddressNode
-		IRLoadLabelAddress LoadLabelAddressNode
-		
-		IRStoreIndirect StoreIndirectNode
-		IRStoreIndex StoreIndexNode
-		IRStoreOffset StoreOffsetNode
+		;IRLoadIndex LoadIndexNode
+		;IRLoadOffset LoadOffsetNode
+		;IRLoadInteger LoadIntegerNode
+		;
+		;IRLoadVariableAddress LoadVariableAddressNode
+		;IRLoadIndexAddress LoadIndexAddressNode
+		;IRLoadOffsetAddress LoadOffsetAddressNode
+		;IRLoadLabelAddress LoadLabelAddressNode
+		;
+		;IRStoreIndirect StoreIndirectNode
+		;IRStoreIndex StoreIndexNode
+		;IRStoreOffset StoreOffsetNode
 		
 		IRFunction FunctionNode
 		
@@ -360,6 +363,8 @@ struct IRNode {
 		i32 JumpToBlock
 		i32 TrueBlock
 		i32 Operator
+		i32 Offset
+		i32 AllocateSize
 	}
 	
 	i32 FalseBlock
@@ -403,6 +408,21 @@ struct IRNode {
 				
 				IRPrint(", %t", NextParameter)
 			}
+		}
+		else if (this->Kind = IR_LOAD) {
+			IRPrint("load.%i, %t, %t", this->Size, this->Destination, this->Operand)
+		}
+		else if (this->Kind = IR_LOAD_OFFSET) {
+			IRPrint("load_offset.%i, %t, %t + %i", this->Size, this->Destination, this->Source, this->Offset)
+		}
+		else if (this->Kind = IR_LOAD_ADDRESS) {
+			IRPrint("load_address, %t, %t", this->Destination, this->Source)
+		}
+		else if (this->Kind = IR_LOAD_OFFSET_ADDRESS) {
+			IRPrint("load_offset_address, %t, %t + %i", this->Destination, this->Source, this->Offset)
+		}
+		else if (this->Kind = IR_ALLOCATE) {
+			IRPrint("allocate, %t, %i", this->Destination, this->AllocateSize)
 		}
 	}
 	
@@ -517,6 +537,8 @@ struct IRCompilerState {
 		return this
 	}
 	
+	declare void EmitAllocate(i64, i32)
+	
 	define IRVariable* FindOrAddVariable(VariableInfo* ActualVariable) {
 		if (ActualVariable->IsGlobal) {
 		
@@ -531,9 +553,15 @@ struct IRCompilerState {
 				i8* Name := CloneMemory(ActualVariable->Name->PackToString(), ActualVariable->Name->Length)
 				ActualVariable->Name->UnpackFromString()
 				
-				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, GetTypeSize(ActualVariable->Type) As i8, false)
+				i8 ActualVariableSize := GetTypeSize(ActualVariable->Type) As i8
+				
+				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, ActualVariableSize, false)
 				
 				this~>LocalsToIRVariables->Set(ActualVariable->Name, NewVariable)
+				
+				if (ActualVariableSize > 8) {
+					this->EmitAllocate(NewVariable->ToRegister(), ActualVariableSize)
+				}
 				
 				return NewVariable
 			}
@@ -622,9 +650,19 @@ struct IRCompilerState {
 		return (Offset / #IRNode) As i32
 	}
 	
-	define i64 AllocateRegister(IRNode* ForNode) {
+	define i64 AllocateRegister(i32 Size) {
+		i64 Result := this->NextVirtualRegister++
+		
+		if (Size > 8) {
+			this->EmitAllocate(Result, Size)
+		}
+		
+		return Result
+	}
+	define i64 AllocateRegister() {
 		return this->NextVirtualRegister++
 	}
+	
 	define i64 UseRegister(i64 RawRegister) {
 		TemporaryRegister Register := RawRegister As TemporaryRegister
 		
@@ -668,10 +706,17 @@ struct IRCompilerState {
 		}
 	}
 	
+	define void EmitAllocate(i64 Register, i32 Size) {
+		IRNode* Node := this->AppendNode(IR_ALLOCATE)
+		
+		Node->Destination := Register
+		Node->AllocateSize := Size
+	}
+	
 	define i64 EmitInteger(i64 Value, i8 Size) {
 		IRNode* Node := this->AppendNode(IR_LOAD_INTEGER)
 		
-		Node->Destination := this->AllocateRegister(Node)
+		Node->Destination := this->AllocateRegister(Size)
 		Node->SourceValue := Value
 		Node->Size := Size
 		
@@ -680,7 +725,7 @@ struct IRCompilerState {
 	define i64 EmitUnary(i32 Operator, i64 Operand, i8 Size) {
 		IRNode* Node := this->AppendNode(IR_UNARY)
 		
-		Node->Destination := this->AllocateRegister(Node)
+		Node->Destination := this->AllocateRegister(Size)
 		Node->Operator := Operator
 		Node->Operand := this->UseRegister(Operand)
 		Node->Size := Size
@@ -690,7 +735,7 @@ struct IRCompilerState {
 	define i64 EmitBinary(i64 Left, i32 Operator, i64 Right, i8 Size) {
 		IRNode* Node := this->AppendNode(IR_BINARY)
 		
-		Node->Destination := this->AllocateRegister(Node)
+		Node->Destination := this->AllocateRegister(Size)
 		Node->Operator := Operator
 		Node~>Operands[0] := this->UseRegister(Left)
 		Node~>Operands[1] := this->UseRegister(Right)
@@ -730,6 +775,93 @@ struct IRCompilerState {
 		Node->Source := this->UseRegister(Source)
 		Node->Size := Size
 	}
+	define i64 EmitLoad(i64 Source, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_LOAD)
+		
+		Node->Destination := this->AllocateRegister(Size)
+		Node->Source := this->UseRegister(Source)
+		Node->Size := Size
+		
+		return Node->Destination
+	}
+	define i64 EmitLoadOffset(i64 Source, i32 Offset, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := this->UseRegister(Source)
+		Node->Offset := Offset
+		Node->Size := Size
+		
+		return Node->Destination
+	}
+	
+	define i64 EmitLoadAddress(i64 Source) {
+		IRNode* Node := this->AppendNode(IR_LOAD_ADDRESS)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := Source
+		
+		return Node->Destination
+	}
+	define i64 EmitLoadOffsetAddress(i64 Source, i32 Offset) {
+		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET_ADDRESS)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := this->UseRegister(Source)
+		Node->Offset := Offset
+		
+		return Node->Destination
+	}
+	
+	declare i64 CompileExpression(ASTNode*)
+	
+	define i64 CompileStructAccessLeft(StructAccessExpression* Access) {
+		ASTNode* Left := Access->Left
+		
+		if (Access->Operator->Value = OPERATOR_DOT) {
+			if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+				;CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
+				;return 0
+			}
+			else if (Left->NodeType = NODE_TYPE_VARIABLE) {
+				return this->EmitLoadAddress(this->FindOrAddVariable(Left->VariableValue)->ToRegister())
+			}
+		}
+		
+		return this->CompileExpression(Left)
+	}
+	
+	define i64 CompileStructAccessAddress(StructAccessExpression* Access) {
+		StructField* Field := Access->TargetField
+		
+		i8 FieldSize := GetTypeSize(Field->ValueType) As i8
+		i32 FieldOffset := Field->Offset
+		
+		i64 LeftRegister := this->CompileStructAccessLeft(Access)
+		
+		if (FieldOffset = 0) {
+			return LeftRegister
+		}
+		else {
+			return this->EmitLoadOffsetAddress(LeftRegister, FieldOffset)
+		}
+	}
+	
+	define i64 CompileStructAccess(StructAccessExpression* Access) {
+		StructField* Field := Access->TargetField
+		
+		i8 FieldSize := GetTypeSize(Field->ValueType) As i8
+		i32 FieldOffset := Field->Offset
+		
+		i64 LeftRegister := this->CompileStructAccessLeft(Access)
+		
+		if (FieldOffset = 0) {
+			return this->EmitLoad(LeftRegister, FieldSize)
+		}
+		else {		
+			return this->EmitLoadOffset(LeftRegister, FieldOffset, FieldSize)
+		}
+	}
 	
 	define i64 CompileExpression(ASTNode* Target) {
 		i8 ResultSize := GetTypeSize(Target->ValueType) As i8
@@ -737,15 +869,33 @@ struct IRCompilerState {
 		if (Target->NodeType = NODE_TYPE_INTEGER) {
 			return this->EmitInteger(Target->IntegerValue, ResultSize)
 		}
+		else if (Target->NodeType = NODE_TYPE_ZERO) {
+			return this->EmitInteger(0, 4)
+		}
 		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
 			return this->FindOrAddVariable(Target->VariableValue)->ToRegister()
+		}
+		else if (Target->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			if (Target->AccessNode->Operator->Value = OPERATOR_TILDE_GREATER) {
+				return this->CompileStructAccessAddress(Target->AccessNode)
+			}
+			else {
+				return this->CompileStructAccess(Target->AccessNode)
+			}
 		}
 		else if (Target->NodeType = NODE_TYPE_UNARY) {
 			UnaryExpression* Unary := Target->UnaryNode
 			
 			i64 Operand := this->CompileExpression(Unary->Operand)
 			
-			return this->EmitUnary(Unary->Operator->IntegerValue As i32, Operand, ResultSize)
+			i8 UnaryOperator := Unary->Operator->IntegerValue As i8
+			
+			if (UnaryOperator = OPERATOR_STAR) {
+				return this->EmitLoad(Operand, ResultSize)
+			}
+			else {
+				return this->EmitUnary(UnaryOperator, Operand, ResultSize)
+			}
 		}
 		else if (Target->NodeType = NODE_TYPE_BINARY) {
 			BinaryExpression* Binary := Target->BinaryNode
@@ -923,9 +1073,13 @@ struct IRCompilerState {
 	}
 	
 	define void CompileStatement(ASTNode* Target) {
-		
 		if (Target->NodeType = NODE_TYPE_EXPRESSION) {
-			this->CompileExpression(Target->ExpressionStatement)
+			if (Target->ExpressionStatement->NodeType != NODE_TYPE_NONE) {
+				; TODO: Remove check for NODE_TYPE_NONE once FoldConstants is called on the input AST, since it
+				;  will remove all NODE_TYPE_NONE nodes
+				
+				this->CompileExpression(Target->ExpressionStatement)
+			}
 		}
 		else if (Target->NodeType = NODE_TYPE_RETURN) {
 			i64 ReturnValueRegister := this->CompileExpression(Target->ReturnExpression)
