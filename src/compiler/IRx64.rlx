@@ -60,6 +60,7 @@ struct IRToX64 {
 	
 	i8 StorageLocationCount
 	i64* StorageLocations
+	i32* StorageSizes
 	
 	i32 LabelCapacity
 	i32 LabelCount
@@ -74,6 +75,7 @@ struct IRToX64 {
 		
 		this->StorageLocationCount := 16
 		this->StorageLocations := Alloc(this->StorageLocationCount * #i64)
+		this->StorageSizes := Alloc(this->StorageLocationCount * #i32)
 		
 		this->StorageLocations[X64_TEMP_REGISTER] := -1
 		this->StorageLocations[RSP] := -1
@@ -175,20 +177,24 @@ struct IRToX64 {
 		return Result
 	}
 	
-	define i8 AssignRegisterStorage(i64 Register) {
-		for (i8 StorageIndex := 0, StorageIndex < this->StorageLocationCount, StorageIndex++) {
-			if (this->StorageLocations[StorageIndex] = 0) {
-				this->StorageLocations[StorageIndex] := Register
-				
-				IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
-				;IRPrint("  = %t\n", this->Registers[Index])
-				return StorageIndex
+	define i8 AssignRegisterStorage(i64 Register, i32 Size) {
+		if (Size <= 8) {
+			for (i8 StorageIndex := 0, StorageIndex < this->StorageLocationCount, StorageIndex++) {
+				if (this->StorageLocations[StorageIndex] = 0) {
+					this->StorageLocations[StorageIndex] := Register
+					this->StorageSizes[StorageIndex] := Size
+					
+					IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
+					;IRPrint("  = %t\n", this->Registers[Index])
+					return StorageIndex
+				}
 			}
 		}
 		
 		StorageIndex := this->AllocateNewStackStorage()
 		IRPrint("\t%s now holds virtual value %t\n", _R(StorageIndex), Register)
 		this->StorageLocations[StorageIndex] := Register
+		this->StorageSizes[StorageIndex] := Size
 		
 		return StorageIndex
 	}
@@ -325,10 +331,22 @@ struct IRToX64 {
 		return (OPERATOR_FIRST_SHORT_CIRCUIT <= Operator && Operator <= OPERATOR_LAST_COMPARISON)
 	}
 	
+	define i8 NextIsFreeForRegister(IRNode* Node, i64 Register) {
+		IRNode* Next := Node->Next()
+		
+		return (Next->Kind = IR_FREE && Next->Operand = Register)
+	}
+	
 	define void EmitNode(IRNode* Node) {
 		Print("\tEmitting node: ") Node->Print() Print("\n")
 		
-		if (Node->Kind = IR_FUNCTION) {
+		if (Node->Kind = IR_ALLOCATE) {
+			this->AssignRegisterStorage(Node->Destination, Node->AllocateSize)
+		}
+		else if (Node->Kind = IR_FREE) {
+			this->DiscardRegisterStorage(Node->Operand)
+		}
+		else if (Node->Kind = IR_FUNCTION) {
 			for (i8 ParameterIndex := 0, ParameterIndex < Node~>FunctionNode->ParameterCount, ParameterIndex++) {
 				i64 ParameterRegister := Node~>FunctionNode->Parameters[ParameterIndex]
 				i8 ParameterStorage := this->GetSystemVParameterStorage(ParameterIndex)
@@ -395,8 +413,8 @@ struct IRToX64 {
 			
 			i8 OperandStorage := this->FindRegisterStorage(UnaryOperand)
 			
-			if (Node->Destination != UnaryOperand && this->IR->GetRegisterReferenceCount(UnaryOperand) != 0) {
-				i8 OperandClone := this->AssignRegisterStorage(UnaryOperand)
+			if (Node->Destination != UnaryOperand && !this->NextIsFreeForRegister(Node, UnaryOperand)) {
+				i8 OperandClone := this->AssignRegisterStorage(UnaryOperand, this->StorageSizes[OperandStorage])
 				
 				this->EmitMove(OperandClone, OperandStorage, Node->Size)
 				
@@ -445,8 +463,8 @@ struct IRToX64 {
 			i8 LeftStorage := this->FindRegisterStorage(LeftOperand)
 			i8 RightStorage := this->FindRegisterStorage(RightOperand)
 			
-			if (Node->Destination != LeftOperand && this->IR->GetRegisterReferenceCount(LeftOperand) != 0) {
-				i8 LeftClone := this->AssignRegisterStorage(LeftOperand)
+			if (Node->Destination != LeftOperand && !this->NextIsFreeForRegister(Node, LeftOperand)) {
+				i8 LeftClone := this->AssignRegisterStorage(LeftOperand, this->StorageSizes[LeftStorage])
 				
 				IRPrint("Copied %t to %s from %s for binary, as a future expression must reuse this virtual value\n", LeftOperand, _R(LeftClone), _R(LeftStorage))
 				

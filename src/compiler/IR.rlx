@@ -219,12 +219,12 @@ struct IRFunction {
 }
 
 ; Masks used to decide how a given node kind can be optimized
-;                                          15 12 9 7 5 3 1
-;                                           14 11 8 6 4 2
-;                                         16 13 10
-i32 IR_HAS_DESTINATION               := 0b01111100000011110
-i32 IR_HAS_TWO_OPERANDS              := 0b00000000000000010
-i32 IR_HAS_ONE_OPERAND               := 0b01111101100101110
+;                                           15 12 9 7 5 3 1
+;                                         17 14 11 8 6 4 2
+;                                          16 13 10
+i32 IR_HAS_DESTINATION               := 0b011111100000011110
+i32 IR_HAS_TWO_OPERANDS              := 0b000000000000000010
+i32 IR_HAS_ONE_OPERAND               := 0b001111101100101110
 i8 IR_BINARY                         := 1
 i8 IR_MOVE                           := 2
 i8 IR_UNARY                          := 3
@@ -242,6 +242,7 @@ i8 IR_LOAD_OFFSET                    := 13
 i8 IR_LOAD_ADDRESS                   := 14
 i8 IR_LOAD_OFFSET_ADDRESS            := 15
 i8 IR_ALLOCATE                       := 16
+i8 IR_FREE                           := 17
 
 i8 IR_LOAD_VARIABLE_ADDRESS         := 7
 i8 IR_LOAD_INDEX_ADDRESS            := 8
@@ -424,6 +425,9 @@ struct IRNode {
 		else if (this->Kind = IR_ALLOCATE) {
 			IRPrint("allocate, %t, %i", this->Destination, this->AllocateSize)
 		}
+		else if (this->Kind = IR_FREE) {
+			IRPrint("free, %t", this->Operand)
+		}
 	}
 	
 	define i8 Is(i8 Kind) {
@@ -431,6 +435,10 @@ struct IRNode {
 	}
 	define i8 IsInCategory(i32 Category) {
 		return ((1 << this->Kind) & Category) != 0
+	}
+	
+	define IRNode* Next() {
+		return this + #IRNode
 	}
 }
 
@@ -489,7 +497,18 @@ struct IRBackendTraits {
 	}
 }
 
+struct IRLiveRegister {
+	i64 Key
+	
+	union {
+		i8 ReferenceCount
+		i64 Padding
+	}
+}
+
 struct IRCompilerState {
+	IRLiveRegister[100] LiveRegisters
+	
 	i64 NextVirtualRegister
 	i8* RegisterReferenceCounts
 	
@@ -537,7 +556,78 @@ struct IRCompilerState {
 		return this
 	}
 	
+	define IRLiveRegister* FindOrAddLiveRegister(i64 Register) {
+		i64 FirstIndex := Register % 100
+		i64 BestFreeIndex := 100
+		
+		IRPrint("FindOrAddLiveRegister(%t), %i\n", Register, FirstIndex)
+		
+		for (i64 Index := FirstIndex, Index < 100, Index++) {
+			IRLiveRegister* Next := this~>LiveRegisters[Index]
+			
+			if (Next->Key = Register) {
+				return Next
+			}
+			else if (Next->Key = 0 && Index < BestFreeIndex) {
+				BestFreeIndex := Index
+			}
+		}
+		
+		if (BestFreeIndex = 100) {
+			BestFreeIndex := -1
+		}
+		
+		for (Index := FirstIndex, Index >= 0, Index--) {
+			IRLiveRegister* Last := this~>LiveRegisters[Index]
+			
+			if (Last->Key = Register) {
+				return Last
+			}
+			else if (Last->Key = 0 && Index > BestFreeIndex) {
+				BestFreeIndex := Index
+			}
+		}
+		
+		if (BestFreeIndex < 0 || BestFreeIndex >= 100) {
+			IRPrint("FindOrAddLiveRegister(%t) failed\n", Register)
+			Throw(123)
+		}
+		
+		IRLiveRegister* Result := this~>LiveRegisters[BestFreeIndex]
+		
+		Result->Key := Register
+		
+		return Result
+	}
+	
 	declare void EmitAllocate(i64, i32)
+	declare void EmitFree(i64)
+	
+	define void AddLiveRegisterReference(i64 Register) {
+		Print("AddRef: ")
+		
+		auto LiveRegister := this->FindOrAddLiveRegister(Register)
+		
+		LiveRegister->ReferenceCount += 1
+	}
+	define void DestroyLiveRegisterReference(i64 Register) {
+		Print("Destroy: ")
+		
+		auto LiveRegister := this->FindOrAddLiveRegister(Register)
+		
+		if (LiveRegister->ReferenceCount = 0) {
+			IRPrint("DestroyRegisterReference(%t) for value that wasn't alive\n", Register)
+			Throw(123)
+		}
+		
+		LiveRegister->ReferenceCount -= 1
+		
+		if (LiveRegister->ReferenceCount = 0) {
+			LiveRegister->Key := 0
+			
+			this->EmitFree(Register)
+		}
+	}
 	
 	define IRVariable* FindOrAddVariable(VariableInfo* ActualVariable) {
 		if (ActualVariable->IsGlobal) {
@@ -559,9 +649,8 @@ struct IRCompilerState {
 				
 				this~>LocalsToIRVariables->Set(ActualVariable->Name, NewVariable)
 				
-				if (ActualVariableSize > 8) {
-					this->EmitAllocate(NewVariable->ToRegister(), ActualVariableSize)
-				}
+				this->EmitAllocate(NewVariable->ToRegister(), ActualVariableSize)
+				this->AddLiveRegisterReference(NewVariable->ToRegister())
 				
 				return NewVariable
 			}
@@ -602,32 +691,6 @@ struct IRCompilerState {
 		return this->BlockCount++
 	}
 	
-	define void CompactBlock(i32 Index) {
-		i32 Start := this->BlockOffsets[Index]
-		i32 Size := this->BlockSizes[Index]
-		
-		i32 NewNodeIndex := 0
-		
-		IRNode* Nodes := this->Nodes[Start]
-		
-		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
-			IRNode* NextNode := Nodes[NodeIndex]
-			
-			if (NextNode->IsNotPresent) {
-				continue
-			}
-			
-			MoveMemory(Nodes[NewNodeIndex++], NextNode, #IRNode)
-		}
-		
-		this->BlockSizes[Index] := NewNodeIndex
-	}
-	define void CompactBlocks() {
-		for (i32 Index := 0, Index < this->BlockCount, Index++) {
-			this->CompactBlock(Index)
-		}
-	}
-	
 	define void Extend(i32 ExtraNodeCount) {
 		if (this->NextNodeIndex + ExtraNodeCount >= this->NodeCapacity) {
 			this->NodeCapacity += 0x500
@@ -653,17 +716,18 @@ struct IRCompilerState {
 	define i64 AllocateRegister(i32 Size) {
 		i64 Result := this->NextVirtualRegister++
 		
-		if (Size > 8) {
-			this->EmitAllocate(Result, Size)
-		}
+		this->EmitAllocate(Result, Size)
+		this->AddLiveRegisterReference(Result)
 		
 		return Result
 	}
 	define i64 AllocateRegister() {
-		return this->NextVirtualRegister++
+		return this->AllocateRegister(8)
 	}
 	
 	define i64 UseRegister(i64 RawRegister) {
+		this->DestroyLiveRegisterReference(RawRegister)
+		
 		TemporaryRegister Register := RawRegister As TemporaryRegister
 		
 		;Print("UR %x\n", RawRegister)
@@ -712,36 +776,47 @@ struct IRCompilerState {
 		Node->Destination := Register
 		Node->AllocateSize := Size
 	}
+	define void EmitFree(i64 Register) {
+		IRNode* Node := this->AppendNode(IR_FREE)
+		
+		Node->Operand := Register
+	}
 	
 	define i64 EmitInteger(i64 Value, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
 		IRNode* Node := this->AppendNode(IR_LOAD_INTEGER)
 		
-		Node->Destination := this->AllocateRegister(Size)
+		Node->Destination := Destination
 		Node->SourceValue := Value
 		Node->Size := Size
 		
-		return Node->Destination
+		return Destination
 	}
 	define i64 EmitUnary(i32 Operator, i64 Operand, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
 		IRNode* Node := this->AppendNode(IR_UNARY)
 		
-		Node->Destination := this->AllocateRegister(Size)
+		Node->Destination := Destination
 		Node->Operator := Operator
 		Node->Operand := this->UseRegister(Operand)
 		Node->Size := Size
 		
-		return Node->Destination
+		return Destination
 	}
 	define i64 EmitBinary(i64 Left, i32 Operator, i64 Right, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
 		IRNode* Node := this->AppendNode(IR_BINARY)
 		
-		Node->Destination := this->AllocateRegister(Size)
+		Node->Destination := Destination
 		Node->Operator := Operator
 		Node~>Operands[0] := this->UseRegister(Left)
 		Node~>Operands[1] := this->UseRegister(Right)
 		Node->Size := Size
 		
-		return Node->Destination
+		return Destination
 	}
 	define void EmitJump(i32 TargetLabel) {
 		IRNode* Node := this->AppendNode(IR_JUMP)
@@ -1174,24 +1249,17 @@ struct IRCompilerState {
 		for (i32 Index := this->NodeCount - 1, Index >= 0, Index--) {
 			IRNode* NextNode := this->Nodes[Index]
 			
-			if (NextNode->Kind = IR_LOAD_INTEGER) {
+			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
 				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
 					NextNode->IsNotPresent := true
-				}
-			}
-			else if (NextNode->Kind = IR_UNARY || NextNode->Kind = IR_MOVE) {
-				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
-					this->DestroyRegisterReference(NextNode->Operand)
 					
-					NextNode->IsNotPresent := true
-				}
-			}
-			else if (NextNode->Kind = IR_BINARY) {
-				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
-					this->DestroyRegisterReference(NextNode~>Operands[0])
-					this->DestroyRegisterReference(NextNode~>Operands[1])
+					if (NextNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+						this->DestroyRegisterReference(NextNode->Operand)
+					}
 					
-					NextNode->IsNotPresent := true
+					if (NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+						this->DestroyRegisterReference(NextNode~>Operands[1])
+					}
 				}
 			}
 		}
@@ -1415,6 +1483,32 @@ struct IRCompilerState {
 		}
 	}
 	
+	define void CompactBlock(i32 Index) {
+		i32 Start := this->BlockOffsets[Index]
+		i32 Size := this->BlockSizes[Index]
+		
+		i32 NewNodeIndex := 0
+		
+		IRNode* Nodes := this->Nodes[Start]
+		
+		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
+			IRNode* NextNode := Nodes[NodeIndex]
+			
+			if (NextNode->IsNotPresent) {
+				continue
+			}
+			
+			MoveMemory(Nodes[NewNodeIndex++], NextNode, #IRNode)
+		}
+		
+		this->BlockSizes[Index] := NewNodeIndex
+	}
+	define void CompactBlocks() {
+		for (i32 Index := 0, Index < this->BlockCount, Index++) {
+			this->CompactBlock(Index)
+		}
+	}
+	
 	define void Generate(i32 Index) {
 		if (this->BlocksVisited[Index]) {
 			return
@@ -1448,34 +1542,34 @@ struct IRCompilerState {
 			
 			;Print("Generate {") NextNode->Print() Print("}\n")
 			
-			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
-				this->Backend->MapRegister(NextNode->Destination)
-			}
-			
-			i8 HasOneOperand  := NextNode->IsInCategory(IR_HAS_ONE_OPERAND)
-			i8 HasTwoOperands := NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)
-			
-			if (HasOneOperand) {
-				this->DestroyRegisterReference(NextNode->Operand)
-				
-				if (HasTwoOperands) {
-					this->DestroyRegisterReference(NextNode~>Operands[1])
-				}
-			}
+			;if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
+			;	this->Backend->MapRegister(NextNode->Destination)
+			;}
+			;
+			;i8 HasOneOperand  := NextNode->IsInCategory(IR_HAS_ONE_OPERAND)
+			;i8 HasTwoOperands := NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)
+			;
+			;if (HasOneOperand) {
+			;	this->DestroyRegisterReference(NextNode->Operand)
+			;	
+			;	if (HasTwoOperands) {
+			;		this->DestroyRegisterReference(NextNode~>Operands[1])
+			;	}
+			;}
 			
 			this->Backend->EmitNode(NextNode)
 			
-			if (HasOneOperand) {
-				if (this->GetRegisterReferenceCount(NextNode->Operand) = 0) {
-					this->Backend->UnMapRegister(NextNode->Operand)
-				}
-				
-				if (HasTwoOperands) {
-					if (this->GetRegisterReferenceCount(NextNode~>Operands[1]) = 0) {
-						this->Backend->UnMapRegister(NextNode~>Operands[1])
-					}
-				}
-			}
+			;if (HasOneOperand) {
+			;	if (this->GetRegisterReferenceCount(NextNode->Operand) = 0) {
+			;		this->Backend->UnMapRegister(NextNode->Operand)
+			;	}
+			;	
+			;	if (HasTwoOperands) {
+			;		if (this->GetRegisterReferenceCount(NextNode~>Operands[1]) = 0) {
+			;			this->Backend->UnMapRegister(NextNode~>Operands[1])
+			;		}
+			;	}
+			;}
 		}
 		
 		if (Size > 0) {
@@ -1506,7 +1600,7 @@ struct IRCompilerState {
 			for (i32 NodeIndex := 0, NodeIndex < NextBlockSize, NodeIndex++) {
 				IRNode* NextNode := this->Nodes[NextBlockStart + NodeIndex]
 				
-				Print(" %x %i\t", NextBlockStart + NodeIndex, NextNode->IsNotPresent)
+				Print("\t")
 				NextNode->Print()
 				Print("\n")
 			}
@@ -1649,12 +1743,12 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	; Remove entire blocks
 	IR->EliminateJumpChains()
+	
+	IR->PrintBlocks()
 	;
-	;IR->PrintBlocks()
-	;
-	;IR->Generate()
-	;x64Gen->LinkLabels()
-	;x64Gen->PrintCode()
+	IR->Generate()
+	x64Gen->LinkLabels()
+	x64Gen->PrintCode()
 	;
 	;PEBuilder* PE := BuildBuilder()
 	;
@@ -1674,9 +1768,9 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;FileWrite(OutputFileHandle, PE->Buffer, PE->BufferSize)
 	;FileClose(OutputFileHandle)
 	
-	Print("digraph CFG {\n")
-	IR->PrintControlFlowGraph()
-	Print("}\n")
+	;Print("digraph CFG {\n")
+	;IR->PrintControlFlowGraph()
+	;Print("}\n")
 	
 	
 }
