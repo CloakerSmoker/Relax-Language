@@ -263,7 +263,7 @@ struct CompilerState {
 ==========================================
 */
 
-#Require "./src/compiler/Parser/ASTOptimize.rlx"
+#Require "./src/compiler/Parser/OptimizeAST.rlx"
 #Require "./src/compiler/CodeGen.rlx"
 
 declare void CompileImportStub(CompilerState*, FunctionDefine*)

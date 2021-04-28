@@ -1,0 +1,380 @@
+struct IRVariable {
+	i8* Name
+	IRNode* LastValue
+	i32 Offset
+	i8 Size
+	i8 IsGlobal
+	i8 ReferenceCount
+	
+	static IRVariable* New(i8* Name, i32 Offset, i8 Size, i8 IsGlobal) {
+		IRVariable* this := Alloc(#IRVariable)
+		
+		this->Name := Name
+		this->Offset := Offset
+		this->Size := Size
+		this->IsGlobal := IsGlobal
+		
+		return this
+	}
+	define i64 ToRegister() {
+		TemporaryRegister Result
+		
+		Result.PointerValue := this As i64
+		Result.IsVariable := true
+		
+		return Result As i64
+	}
+}
+
+struct IRLoadIndex {
+	; Loads the IndexRegister-th element out of the array of IndexScale sized elements pointed to by SourceRegister 
+	;  into DestinationRegister
+	
+	i32 SourceRegister
+	i32 IndexRegister
+	i32 DestinationRegister
+	i8 IndexScale
+}
+struct IRLoadOffset {
+	; Loads Size bytes from *(SourceRegister + OffsetRegister) into DestinationRegister
+	
+	i32 SourceRegister
+	i32 OffsetRegister
+	i32 DestinationRegister
+	i8 Size
+}
+struct IRLoadInteger {
+	; Loads a (Size * 8) bit integer into DestinationRegister
+	
+	i64 SourceValue
+	i64 DestinationRegister
+	i8 Size
+}
+
+struct IRLoadVariableAddress {
+	; Loads the address of local variable Source into DestinationRegister
+	
+	IRVariable Source
+	i32 DestinationRegister
+}
+struct IRLoadIndexAddress {
+	; Loads the address of the IndexRegister-th element of the array of IndexScale elements pointed to by SourceRegister
+	;  into DestinationRegister
+	
+	i32 SourceRegister
+	i32 IndexRegister
+	i32 DestinationRegister
+	i8 IndexScale
+}
+struct IRLoadOffsetAddress {
+	; Loads (SourceRegister + OffsetRegister) into DestinationRegister
+	
+	i32 SourceRegister
+	i32 OffsetRegister
+	i32 DestinationRegister
+}
+struct IRLoadLabelAddress {
+	; Loads the address of the label identified by LabelNumber into DestinationRegister
+	
+	i32 LabelNumber
+	i32 DestinationRegister
+	
+	i32 Offset
+}
+
+struct IRStoreIndirect {
+	; Stores the value of SourceRegister into *DestinationRegister as a Size byte value
+	
+	i32 DestinationRegister
+	i32 SourceRegister
+	i8 Size
+}
+struct IRStoreIndex {
+	; Stores the value of SourceRegister into the IndexRegister-th element of the array of IndexScale elements pointed to 
+	;  by DestinationRegister
+	
+	i32 DestinationRegister
+	i32 IndexRegister
+	i32 SourceRegister
+	i8 IndexScale
+}
+struct IRStoreOffset {
+	; Stores the value of SourceRegister into the memory at (DestinationRegister + OffsetRegister), as a Size byte value
+	
+	i32 DestinationRegister
+	i32 OffsetRegister
+	i32 SourceRegister
+	i8 Size
+}
+
+struct IRMove {
+	i64 Destination
+	i64 Source
+	i8 Size
+}
+
+struct IRBinary {
+	; Does binary operation (LeftRegister Operator RightRegister) and stores the result into DestinationRegister
+	
+	i64 DestinationRegister
+	i64 LeftRegister
+	i32 Operator
+	i64 RightRegister
+	i8 Size
+}
+struct IRUnary {
+	; Does the unary operation (Operator OperandRegister) and stores the result into DestinationRegister
+	
+	i64 DestinationRegister
+	i32 Operator
+	i64 OperandRegister
+	i8 Size
+}
+
+struct IRCall {
+	IRFunction* TargetFunction
+	i32 ParameterCount
+	i32 Result
+	i32* Parameters
+	i8 Size
+}
+struct IRReturn {
+	i64 ReturnValueRegister
+	i8 ReturnValueSize
+}
+struct IRConditional {
+	i64 Condition
+	i32 TrueBlock
+	i32 FalseBlock
+	
+	i8 ConditionSize
+}
+
+struct IRFunction {
+	i64* Parameters
+	i32 ParameterCount
+}
+
+; Masks used to decide how a given node kind can be optimized
+;                                           15 12 9 7 5 3 1
+;                                         17 14 11 8 6 4 2
+;                                          16 13 10
+i32 IR_HAS_DESTINATION               := 0b011111100000011110
+i32 IR_HAS_TWO_OPERANDS              := 0b000000000000000010
+i32 IR_HAS_ONE_OPERAND               := 0b001111101100101110
+i8 IR_BINARY                         := 1
+i8 IR_MOVE                           := 2
+i8 IR_UNARY                          := 3
+i8 IR_LOAD_INTEGER                   := 4
+i8 IR_RETURN                         := 5
+i8 IR_CALL                           := 6
+i8 IR_JUMP                           := 7
+i8 IR_CONDITIONAL                    := 8
+i8 IR_CONDITIONAL_NOT                := 9
+i8 IR_FUNCTION                       := 10
+
+i8 IR_LOAD                           := 11
+i8 IR_LOAD_INDEX                     := 12
+i8 IR_LOAD_OFFSET                    := 13
+i8 IR_LOAD_ADDRESS                   := 14
+i8 IR_LOAD_OFFSET_ADDRESS            := 15
+i8 IR_ALLOCATE                       := 16
+i8 IR_FREE                           := 17
+
+i8 IR_LOAD_VARIABLE_ADDRESS         := 7
+i8 IR_LOAD_INDEX_ADDRESS            := 8
+i8 IR_LOAD_LABEL_ADDRESS            := 10
+
+i8 IR_STORE_INDIRECT                := 11
+i8 IR_STORE_INDEX                   := 12
+i8 IR_STORE_OFFSET                  := 13
+
+
+define i8* OperatorToString(i8 Operator) {
+	i8*[40] Operators {
+		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+		"&&", "||",
+		"=", "!=", "<", "<=", ">", ">=",
+		"as",
+		"+", "-",
+		"*", "/", "%",
+		"&", "|", "^",
+		"<<", ">>",
+		"!", "~",
+		"++", "--", "++", "--",
+		"[",
+		".", "->", "~>",
+		":", "#"
+	}
+	
+	return Operators[Operator]
+}
+
+define void IRPrint(i8* Format, ... Args) {
+	i32 Length := StringLength(Format)
+	i32 ArgIndex := 1
+	
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Next := Format[Index]
+		
+		if (Next = '%') {
+			Index += 1
+			Next := Format[Index]
+			void NextArg := Args[ArgIndex]
+			
+			if (Next = 'i') {
+				Print(NextArg As i64)
+			}
+			else if (Next = 'x') {
+				PrintHex(NextArg As i64)
+			}
+			else if (Next = 'c') {
+				PrintCharacter(NextArg As i8)
+			}
+			else if (Next = 's') {
+				PrintString(NextArg As i8*)
+			}
+			else if (Next = 'l') {
+				PrintLiteral(NextArg As i64)
+			}
+			else if (Next = 'b') {
+				PrintBinary(NextArg As i64)
+			}
+			else if (Next = 'o') {
+				Print(OperatorToString(NextArg As i8))
+			}
+			else if (Next = 't') {
+				TemporaryRegister Register := NextArg As TemporaryRegister
+				
+				if (Register.IsVariable) {
+					IRVariable* Variable := Register.PointerValue As IRVariable*
+					
+					Print("v(%s)", Variable->Name)
+				}
+				else {
+					Print("T%i", NextArg As i64)
+				}
+			}
+			
+			ArgIndex += 1
+		}
+		else if (Next = '^') {
+			Index += 2
+			i8 Fore := GetCharacterValue(Format[Index - 1])
+			i8 Back := GetCharacterValue(Format[Index])
+			
+			SetColor(Fore, Back)
+		}
+		else {
+			PrintCharacter(Next)
+		}
+	}
+}
+
+struct IRNode {
+	union {
+		;IRLoadIndex LoadIndexNode
+		;IRLoadOffset LoadOffsetNode
+		;IRLoadInteger LoadIntegerNode
+		;
+		;IRLoadVariableAddress LoadVariableAddressNode
+		;IRLoadIndexAddress LoadIndexAddressNode
+		;IRLoadOffsetAddress LoadOffsetAddressNode
+		;IRLoadLabelAddress LoadLabelAddressNode
+		;
+		;IRStoreIndirect StoreIndirectNode
+		;IRStoreIndex StoreIndexNode
+		;IRStoreOffset StoreOffsetNode
+		
+		IRFunction FunctionNode
+		
+		i64[2] Operands
+		i64 Source
+		i64 Operand
+		
+		i64 Condition
+		i64 SourceValue
+	}
+	
+	union {
+		i32 CallToBlock
+		i32 JumpToBlock
+		i32 TrueBlock
+		i32 Operator
+		i32 Offset
+		i32 AllocateSize
+	}
+	
+	i32 FalseBlock
+	
+	i64 Destination
+	
+	i8 Kind
+	i8 Size
+	i8 IsNotPresent
+	
+	define void Print() {
+		if (this->Kind = IR_MOVE) {
+			IRPrint("move.%i, %t, %t", this->Size, this->Destination, this->Source)
+		}
+		else if (this->Kind = IR_LOAD_INTEGER) {
+			IRPrint("load_integer.%i, %t, %i", this->Size, this->Destination, this->SourceValue)
+		}
+		else if (this->Kind = IR_UNARY) {
+			IRPrint("unary.%i, %t, %o, %t", this->Size, this->Destination, this->Operator, this->Operand)
+		}
+		else if (this->Kind = IR_BINARY) {
+			IRPrint("binary.%i, %t, %t, %o, %t", this->Size, this->Destination, this~>Operands[0], this->Operator, this~>Operands[1])
+		}
+		else if (this->Kind = IR_JUMP) {
+			IRPrint("jump, L%i", this->JumpToBlock)
+		}
+		else if (this->Kind = IR_CONDITIONAL) {
+			IRPrint("cond.%i, %t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
+		}
+		else if (this->Kind = IR_CONDITIONAL_NOT) {
+			IRPrint("cond.%i, !%t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
+		}
+		else if (this->Kind = IR_RETURN) {
+			IRPrint("return.%i, %t", this->Size, this->Operand)
+		}
+		else if (this->Kind = IR_FUNCTION) {
+			IRPrint("function")
+			
+			for (i32 Index := 0, Index < this~>FunctionNode->ParameterCount, Index++) {
+				i64 NextParameter := this~>FunctionNode->Parameters[Index]
+				
+				IRPrint(", %t", NextParameter)
+			}
+		}
+		else if (this->Kind = IR_LOAD) {
+			IRPrint("load.%i, %t, %t", this->Size, this->Destination, this->Operand)
+		}
+		else if (this->Kind = IR_LOAD_OFFSET) {
+			IRPrint("load_offset.%i, %t, %t + %i", this->Size, this->Destination, this->Source, this->Offset)
+		}
+		else if (this->Kind = IR_LOAD_ADDRESS) {
+			IRPrint("load_address, %t, %t", this->Destination, this->Source)
+		}
+		else if (this->Kind = IR_LOAD_OFFSET_ADDRESS) {
+			IRPrint("load_offset_address, %t, %t + %i", this->Destination, this->Source, this->Offset)
+		}
+		else if (this->Kind = IR_ALLOCATE) {
+			IRPrint("allocate, %t, %i", this->Destination, this->AllocateSize)
+		}
+		else if (this->Kind = IR_FREE) {
+			IRPrint("free, %t", this->Operand)
+		}
+	}
+	
+	define i8 Is(i8 Kind) {
+		return this->Kind = Kind
+	}
+	define i8 IsInCategory(i32 Category) {
+		return ((1 << this->Kind) & Category) != 0
+	}
+	
+	define IRNode* Next() {
+		return this + #IRNode
+	}
+}

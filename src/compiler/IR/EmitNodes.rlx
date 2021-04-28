@@ -1,0 +1,117 @@
+	define void EmitAllocate(i64 Register, i32 Size) {
+		IRNode* Node := this->AppendNode(IR_ALLOCATE)
+		
+		Node->Destination := Register
+		Node->AllocateSize := Size
+	}
+	define void EmitFree(i64 Register) {
+		IRNode* Node := this->AppendNode(IR_FREE)
+		
+		Node->Operand := Register
+	}
+	
+	define i64 EmitInteger(i64 Value, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
+		IRNode* Node := this->AppendNode(IR_LOAD_INTEGER)
+		
+		Node->Destination := Destination
+		Node->SourceValue := Value
+		Node->Size := Size
+		
+		return Destination
+	}
+	define i64 EmitUnary(i32 Operator, i64 Operand, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
+		IRNode* Node := this->AppendNode(IR_UNARY)
+		
+		Node->Destination := Destination
+		Node->Operator := Operator
+		Node->Operand := this->UseRegister(Operand)
+		Node->Size := Size
+		
+		return Destination
+	}
+	define i64 EmitBinary(i64 Left, i32 Operator, i64 Right, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
+		IRNode* Node := this->AppendNode(IR_BINARY)
+		
+		Node->Destination := Destination
+		Node->Operator := Operator
+		Node~>Operands[0] := this->UseRegister(Left)
+		Node~>Operands[1] := this->UseRegister(Right)
+		Node->Size := Size
+		
+		return Destination
+	}
+	define void EmitJump(i32 TargetLabel) {
+		IRNode* Node := this->AppendNode(IR_JUMP)
+		
+		Node->JumpToBlock := TargetLabel
+		
+		this->SetLabel()
+	}
+	define void EmitConditional(i64 Condition, i8 ConditionSize, i32 TrueBlock, i32 FalseBlock) {
+		IRNode* Node := this->AppendNode(IR_CONDITIONAL)
+		
+		Node->Condition := this->UseRegister(Condition)
+		Node->Size := ConditionSize
+		Node->TrueBlock := TrueBlock
+		Node->FalseBlock := FalseBlock
+		
+		this->SetLabel()
+	}
+	define void EmitReturn(i64 ValueRegister, i8 ValueSize) {
+		IRNode* Node := this->AppendNode(IR_RETURN)
+		
+		Node->Operand := this->UseRegister(ValueRegister)
+		Node->Size := ValueSize
+		
+		this->SetLabel()
+	}
+	define void EmitMove(i64 Destination, i64 Source, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_MOVE)
+		
+		Node->Destination := Destination
+		Node->Source := this->UseRegister(Source)
+		Node->Size := Size
+	}
+	define i64 EmitLoad(i64 Source, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_LOAD)
+		
+		Node->Destination := this->AllocateRegister(Size)
+		Node->Source := this->UseRegister(Source)
+		Node->Size := Size
+		
+		return Node->Destination
+	}
+	define i64 EmitLoadOffset(i64 Source, i32 Offset, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := this->UseRegister(Source)
+		Node->Offset := Offset
+		Node->Size := Size
+		
+		return Node->Destination
+	}
+	
+	define i64 EmitLoadAddress(i64 Source) {
+		IRNode* Node := this->AppendNode(IR_LOAD_ADDRESS)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := Source
+		
+		return Node->Destination
+	}
+	define i64 EmitLoadOffsetAddress(i64 Source, i32 Offset) {
+		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET_ADDRESS)
+		
+		Node->Destination := this->AllocateRegister()
+		Node->Source := this->UseRegister(Source)
+		Node->Offset := Offset
+		
+		return Node->Destination
+	}

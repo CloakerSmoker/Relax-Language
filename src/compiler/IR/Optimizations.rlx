@@ -1,0 +1,300 @@
+	define void EliminateJumpChainsInBlock(i32 Index) {
+		i32 Start := this->BlockOffsets[Index]
+		i32 Size := this->BlockSizes[Index]
+		
+		if (Size != 0) {
+			IRNode* Terminator := this->Nodes[Start + Size - 1]
+			
+			if (Terminator->Kind = IR_JUMP) {
+				IRNode* JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
+				
+				while (JumpToFirstNode->Kind = IR_JUMP) {
+					Terminator->JumpToBlock := JumpToFirstNode->JumpToBlock
+					JumpToFirstNode := this->GetBlockNode(Terminator->JumpToBlock, 0)
+				}
+			}
+			else if (Terminator->Kind = IR_CONDITIONAL) {
+				IRNode* TrueBlockFirstNode := this->GetBlockNode(Terminator->TrueBlock, 0)
+				
+				while (TrueBlockFirstNode->Kind = IR_JUMP) {
+					Terminator->TrueBlock := TrueBlockFirstNode->JumpToBlock
+					TrueBlockFirstNode := this->GetBlockNode(Terminator->TrueBlock, 0)
+				}
+				
+				IRNode* FalseFirstNode := this->GetBlockNode(Terminator->FalseBlock, 0)
+				
+				while (FalseFirstNode->Kind = IR_JUMP) {
+					Terminator->FalseBlock := FalseFirstNode->JumpToBlock
+					FalseFirstNode := this->GetBlockNode(Terminator->FalseBlock, 0)
+				}
+			}
+		}
+	}
+	define void EliminateJumpChains() {
+		for (i32 Index := 0, Index < this->BlockCount, Index++) {
+			this->EliminateJumpChainsInBlock(Index)
+		}
+	}
+	define void EliminateDeadCode()  {
+		for (i32 Index := this->NodeCount - 1, Index >= 0, Index--) {
+			IRNode* NextNode := this->Nodes[Index]
+			
+			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
+				if (this->GetRegisterReferenceCount(NextNode->Destination) = 0) {
+					NextNode->IsNotPresent := true
+					
+					if (NextNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+						this->DestroyRegisterReference(NextNode->Operand)
+					}
+					
+					if (NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+						this->DestroyRegisterReference(NextNode~>Operands[1])
+					}
+				}
+			}
+		}
+	}
+	
+	define IRNode* FindLastStore(i32 InBlock, i32 FromOffset, i64 ForVariable, i8 Force) {
+		; Find the last node which stores a value in the given variable
+		;  if Force, then any nodes which use the given variable as an operand will not abort the search
+		; Since this is used for locating dead stores, this is very important, since
+		;  1 store
+		;  2 use
+		;  3 store
+		; would tell us that the value stored @1 can't be eliminated, since @2 uses it
+		
+		i32 Start := this->BlockOffsets[InBlock]
+		i32 Size := this->BlockSizes[InBlock]
+		
+		for (i32 Index := FromOffset - 1, Index >= 0, Index--) {
+			IRNode* NextNode := this->Nodes[Start + Index]
+			
+			if (NextNode->IsNotPresent) {
+				continue
+			}
+			
+			if (NextNode->IsInCategory(IR_HAS_DESTINATION)) {
+				if (NextNode->Destination = ForVariable) {
+					return NextNode
+				}
+				else {
+					if (Force) {
+						continue
+					}
+					
+					if (NextNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+						if (NextNode->Operand = ForVariable) {
+							return null
+						}
+					}
+					
+					if (NextNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+						if (NextNode~>Operands[1] = ForVariable) {
+							return null
+						}
+					}
+				}
+			}
+		}
+		
+		return null
+	}
+	define IRNode* FindLastStore(i32 InBlock, i32 FromOffset, i64 ForVariable) {
+		return this->FindLastStore(InBlock, FromOffset, ForVariable, false)
+	}
+	
+	define i8 NodesAreEqual(i32 BlockIndex, i32 LeftIndex, i32 RightIndex) {
+		IRNode* Left := this->GetBlockNode(BlockIndex, LeftIndex)
+		IRNode* Right := this->GetBlockNode(BlockIndex, RightIndex)
+		
+		if (Left->Kind != Right->Kind) {
+			return false
+		}
+		
+		if (Left->Kind = IR_LOAD_INTEGER) {
+			return Left->SourceValue = Right->SourceValue
+		}
+		
+		;Print("NodesAreEqual {") Left->Print() Print("} == {") Right->Print() Print("}\n")
+		
+		i8 HasOneOperand  := Left->IsInCategory(IR_HAS_ONE_OPERAND)
+		i8 HasTwoOperands := Left->IsInCategory(IR_HAS_TWO_OPERANDS)
+		
+		if (HasOneOperand) {
+			IRNode* LeftLastStore  := this->FindLastStore(BlockIndex, LeftIndex, Left->Operand, true)
+			IRNode* RightLastStore := this->FindLastStore(BlockIndex, RightIndex, Right->Operand, true)
+			
+			if (LeftLastStore = null || RightLastStore = null) {
+				return false
+			}
+			
+			i32 LeftOperand  := this->GetNodeIndex(LeftLastStore)
+			i32 RightOperand := this->GetNodeIndex(RightLastStore)
+			
+			;Print("\tLO: %i, RO: %i\n", LeftOperand, RightOperand)
+		
+			if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
+				return false
+			}
+			
+			if (HasTwoOperands) {
+				LeftLastStore  := this->FindLastStore(BlockIndex, LeftIndex, Left~>Operands[1], true)
+				RightLastStore := this->FindLastStore(BlockIndex, RightIndex, Right~>Operands[1], true)
+				
+				if (LeftLastStore = null || RightLastStore = null) {
+					return false
+				}
+				
+				LeftOperand  := this->GetNodeIndex(LeftLastStore)
+				RightOperand := this->GetNodeIndex(RightLastStore)
+				
+				if !(this->NodesAreEqual(BlockIndex, LeftOperand, RightOperand)) {
+					return false
+				}
+			}
+		
+			if (Left->Kind = IR_UNARY || Left->Kind = IR_BINARY) {
+				if (Left->Operator != Right->Operator) {
+					return false
+				}
+			}
+			
+			return true
+		}
+		else {
+			return false
+		}
+	}
+	
+	define IRNode* FindNodeCopy(i32 BlockIndex, i32 Offset, i32 Target) {
+		for (i32 Index := Offset - 1, Index >= 0, Index--) {
+			if (this->NodesAreEqual(BlockIndex, Index, Target)) {
+				IRNode* NextNode := this->GetBlockNode(BlockIndex, Index)
+				
+				if (this->FindLastStore(BlockIndex, Offset, NextNode->Destination) > NextNode) {
+					continue
+				}
+				
+				return NextNode
+			}
+		}
+		
+		return null
+	}
+	
+	define void EliminateSomething() {
+		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+			i32 Start := this->BlockOffsets[BlockIndex]
+			i32 Size := this->BlockSizes[BlockIndex]
+			
+			for (i32 NodeIndex := Size - 1, NodeIndex >= 0, NodeIndex--) {
+				i32 CurrentNodeIndex := Start + NodeIndex
+				
+				IRNode* CurrentNode := this->Nodes[CurrentNodeIndex]
+				
+				if (CurrentNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+					IRNode* LastNode := this->FindNodeCopy(BlockIndex, NodeIndex, CurrentNodeIndex)
+					
+					if (LastNode != null) {
+						if (CurrentNode->IsInCategory(IR_HAS_ONE_OPERAND)) {
+							this->DestroyRegisterReference(CurrentNode~>Operands[0])
+						}
+						
+						if (CurrentNode->IsInCategory(IR_HAS_TWO_OPERANDS)) {
+							;IRPrint("asoidua %t\n", CurrentNode~>Operands[1])
+							this->DestroyRegisterReference(CurrentNode~>Operands[1])
+						}
+						
+						CurrentNode->Kind := IR_MOVE
+						CurrentNode->Source := this->UseRegister(LastNode->Destination)
+					}
+				}
+			}
+		}
+	}
+	
+	define void EliminateDeadStores() {
+		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+			i32 Start := this->BlockOffsets[BlockIndex]
+			i32 Size := this->BlockSizes[BlockIndex]
+			
+			for (i32 Index := 0, Index < Size, Index++) {
+				IRNode* NextNode := this->Nodes[Start + Index]
+				
+				if (NextNode->IsNotPresent || !NextNode->IsInCategory(IR_HAS_DESTINATION)) {
+					continue
+				}
+				
+				TemporaryRegister Destination := NextNode->Destination As TemporaryRegister
+				
+				;IRPrint("EDS %x (%t) @%i [%i, %i]\n", Destination, Destination, Index, Start, Size)
+				
+				if (Destination.IsVariable) {
+					;Print("Look for last\n")
+					IRNode* LastStore := this->FindLastStore(BlockIndex, Index, NextNode->Destination)
+					
+					if (LastStore != null) {
+						;Print("Found last %i\n", LastStore->Kind)
+						
+						LastStore->IsNotPresent := true
+					}
+				}
+			}
+		}
+	}
+	define void EliminateExtraMoves() {
+		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+			i32 Start := this->BlockOffsets[BlockIndex]
+			i32 Size := this->BlockSizes[BlockIndex]
+			
+			for (i32 Index := 0, Index < Size, Index++) {
+				IRNode* NextNode := this->Nodes[Start + Index]
+				
+				if (NextNode->IsNotPresent) {
+					continue
+				}
+				
+				if (NextNode->Kind = IR_MOVE) {
+					;IRPrint("Find last store for %t for ", NextNode->Operand) NextNode->Print() Print("\n")
+					
+					IRNode* MoveAssigner := this->FindLastStore(BlockIndex, Index, NextNode->Operand, true)
+					
+					if (MoveAssigner != null && this->GetRegisterReferenceCount(MoveAssigner->Destination) = 1) {
+						;Print("  = %x {", MoveAssigner) MoveAssigner->Print() Print("}\n")
+						;Print("  RC %i\n", this->GetRegisterReferenceCount(MoveAssigner->Destination))
+					
+						MoveAssigner->Destination := NextNode->Destination
+						
+						NextNode->IsNotPresent := true
+					}
+				}
+			}
+		}
+	}
+	
+	define void CompactBlock(i32 Index) {
+		i32 Start := this->BlockOffsets[Index]
+		i32 Size := this->BlockSizes[Index]
+		
+		i32 NewNodeIndex := 0
+		
+		IRNode* Nodes := this->Nodes[Start]
+		
+		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
+			IRNode* NextNode := Nodes[NodeIndex]
+			
+			if (NextNode->IsNotPresent) {
+				continue
+			}
+			
+			MoveMemory(Nodes[NewNodeIndex++], NextNode, #IRNode)
+		}
+		
+		this->BlockSizes[Index] := NewNodeIndex
+	}
+	define void CompactBlocks() {
+		for (i32 Index := 0, Index < this->BlockCount, Index++) {
+			this->CompactBlock(Index)
+		}
+	}
