@@ -244,6 +244,18 @@ struct IRCompilerState {
 		LiveRegister->ReferenceCount -= 1
 		
 		if (LiveRegister->ReferenceCount = 0) {
+			TemporaryRegister MaybeVariable := Register As TemporaryRegister
+			
+			if (MaybeVariable.IsVariable) {
+				IRVariable* Variable := MaybeVariable.PointerValue As IRVariable*
+				
+				if (Variable->ReferenceCount != Variable->MaxReferenceCount) {
+					IRPrint("Final free for %t ignored, %i out of %i references seen\n", Register, Variable->ReferenceCount, Variable->MaxReferenceCount)
+					
+					return
+				}
+			}
+			
 			LiveRegister->Key := 0
 			
 			this->EmitFree(Register)
@@ -258,6 +270,8 @@ struct IRCompilerState {
 			HashMapElement* FoundLocalElement := this~>LocalsToIRVariables->Get(ActualVariable->Name)
 			
 			if (FoundLocalElement) {
+				this->AddLiveRegisterReference((FoundLocalElement->Value As IRVariable*)->ToRegister())
+				
 				return FoundLocalElement->Value
 			}
 			else {
@@ -266,7 +280,7 @@ struct IRCompilerState {
 				
 				i8 ActualVariableSize := GetTypeSize(ActualVariable->Type) As i8
 				
-				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, ActualVariableSize, false)
+				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, ActualVariableSize, false, ActualVariable->GetCount As i8)
 				
 				this~>LocalsToIRVariables->Set(ActualVariable->Name, NewVariable)
 				
@@ -559,6 +573,8 @@ struct IRCompilerState {
 
 #Require "./src/compiler/PEBuilder.rlx"
 
+#Require "./src/compiler/Parser/OptimizeAST.rlx"
+
 define void Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
@@ -589,6 +605,8 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	ParserState* Parser := ParserState:New(Config, Lexer)
 	Parser->ParseProgram()
+	
+	CountReferences(Parser)
 	
 	IRToX64* x64Gen := IRToX64:New()
 	IRCompilerState* IR := IRCompilerState:New(x64Gen->GetTraits())
@@ -623,7 +641,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	IR->EndBlock()
 	
 	;Print("Blocks:\n")
-	;IR->PrintBlocks()
+	IR->PrintBlocks()
 	
 	; Remove instructions inside of blocks
 	IR->EliminateSomething()

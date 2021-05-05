@@ -302,6 +302,12 @@ struct X64Generator {
 		this->WriteGenericInstructionDisplacementRM(Size, 0x87, Right, LeftBase, Displacement)
 	}
 	
+	; LEA r64,m (rm)
+	; 8D /r
+	define void Lea_R64_RI64_DISPX(i8 Destination, i8 Base, i32 Displacement) {
+		this->WriteGenericInstructionDisplacementRM(8, 0x8D, Destination, Base, Displacement)
+	}
+	
 	; ADD rX, r/mX (RM)
 	; 03 /r
 	define void Add_RX_RX(i8 Size, i8 Left, i8 Right) {

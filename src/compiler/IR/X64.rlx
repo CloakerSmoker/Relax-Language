@@ -166,7 +166,13 @@ struct IRToX64 {
 		return StorageIndex >= 16
 	}
 	define i32 GetStorageStackOffset(i64 StorageIndex) {
-		return ((StorageIndex - 16) * 8) As i32
+		i32 Offset := 0
+		
+		for (i32 StackVariableIndex := 16, StackVariableIndex < StorageIndex, StackVariableIndex++) {
+			Offset += this->StorageSizes[StackVariableIndex]
+		}
+		
+		return Offset
 	}
 	
 	define i8 AllocateNewStackStorage() {
@@ -262,9 +268,11 @@ struct IRToX64 {
 	i32 CurrentFunctionPrologueEnd
 	
 	define void EndFunction() {
-		i32 StackVariables := this->StorageLocationCount - 16
+		i32 StackSize := 0
 		
-		i32 StackSize := StackVariables * 8
+		for (i32 StackVariableIndex := 16, StackVariableIndex < this->StorageLocationCount, StackVariableIndex++) {
+			StackSize += this->StorageSizes[StackVariableIndex]
+		}
 		
 		i32 OldIndex := this->Generator->CodeBufferIndex
 		i32 PrologueStart := this->CurrentFunctionPrologueStart
@@ -407,6 +415,80 @@ struct IRToX64 {
 			this->ReassignRegisterStorage(Node->Destination, MoveSource)
 			
 			;this->EmitMove(MoveDestination, MoveSource, Node->Size)
+		}
+		else if (Node->Kind = IR_LOAD) {
+			i8 LoadSource := this->FindRegisterStorage(Node->Operand)
+			i8 LoadDestination := this->FindRegisterStorage(Node->Destination)
+			
+			if (this->IsStorageOnStack(LoadSource)) {
+				if (this->IsStorageOnStack(LoadDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, LoadSource, 8)
+					this->Generator->Move_RX_RIX(Node->Size, X64_TEMP_REGISTER, X64_TEMP_REGISTER)
+					this->EmitMove(LoadDestination, X64_TEMP_REGISTER, Node->Size)
+				}
+				else {
+					this->EmitMove(LoadDestination, LoadSource, 8)
+					this->Generator->Move_RX_RIX(Node->Size, LoadDestination, LoadDestination)
+				}
+			}
+			else {
+				if (this->IsStorageOnStack(LoadDestination)) {
+					this->Generator->Move_RX_RIX(Node->Size, X64_TEMP_REGISTER, LoadSource)
+					this->EmitMove(LoadDestination, X64_TEMP_REGISTER, Node->Size)
+				}
+				else {
+					this->Generator->Move_RX_RIX(Node->Size, LoadDestination, LoadSource)
+				}
+			}
+		}
+		else if (Node->Kind = IR_LOAD_OFFSET) {
+			i8 LoadOffsetSource := this->FindRegisterStorage(Node->Operand)
+			i8 LoadOffsetDestination := this->FindRegisterStorage(Node->Destination)
+			
+			if (this->IsStorageOnStack(LoadOffsetSource)) {
+				if (this->IsStorageOnStack(LoadOffsetDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, LoadOffsetSource, 8)
+					this->Generator->Move_RX_RIX_DISPX(Node->Size, X64_TEMP_REGISTER, RBP, Node->Offset)
+					this->EmitMove(LoadOffsetDestination, X64_TEMP_REGISTER, Node->Size)
+				}
+				else {
+					this->EmitMove(LoadOffsetDestination, LoadOffsetSource, 8)
+					this->Generator->Move_RX_RIX_DISPX(Node->Size, LoadOffsetDestination, LoadOffsetDestination, Node->Offset)
+				}
+			}
+			else {
+				if (this->IsStorageOnStack(LoadOffsetDestination)) {
+					this->Generator->Move_RX_RIX_DISPX(Node->Size, X64_TEMP_REGISTER, LoadOffsetSource, Node->Offset)
+					this->EmitMove(LoadOffsetDestination, X64_TEMP_REGISTER, Node->Size)
+				}
+				else {
+					this->Generator->Move_RX_RIX_DISPX(Node->Size, LoadOffsetDestination, LoadOffsetSource, Node->Offset)
+				}
+			}
+		}
+		else if (Node->Kind = IR_LOAD_ADDRESS) {
+			i8 LoadAddressDestination := this->FindRegisterStorage(Node->Destination)
+			i8 LoadAddressSource := this->FindRegisterStorage(Node->Operand)
+			
+			if !(this->IsStorageOnStack(LoadAddressSource)) {
+				Print("FATAL: Attempt to get address of register operand")
+				Throw(0x123)
+			}
+			
+			i32 LoadAddressOffset := this->GetStorageStackOffset(LoadAddressSource)
+			
+			if (LoadAddressOffset) {
+				if (this->IsStorageOnStack(LoadAddressDestination)) {
+					this->Generator->Lea_R64_RI64_DISPX(X64_TEMP_REGISTER, RBP, LoadAddressOffset)
+					this->EmitMove(LoadAddressDestination, X64_TEMP_REGISTER, 8)
+				}
+				else {
+					this->Generator->Lea_R64_RI64_DISPX(LoadAddressDestination, RBP, LoadAddressOffset)
+				}
+			}
+			else {
+				this->EmitMove(LoadAddressDestination, RBP, 8)
+			}
 		}
 		else if (Node->Kind = IR_UNARY) {
 			i64 UnaryOperand := Node->Operand
@@ -852,6 +934,9 @@ struct IRToX64 {
 			
 			this->Generator->JZ_REL32(0)
 			this->UseLabel(Node->FalseBlock)
+		}
+		else if (Node->Kind = IR_STORE) {
+			
 		}
 		
 		Print("\n")

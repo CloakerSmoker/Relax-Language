@@ -79,39 +79,63 @@
 		Node->Size := Size
 	}
 	define i64 EmitLoad(i64 Source, i8 Size) {
+		i64 Destination := this->AllocateRegister(Size)
+		
 		IRNode* Node := this->AppendNode(IR_LOAD)
 		
-		Node->Destination := this->AllocateRegister(Size)
+		Node->Destination := Destination
 		Node->Source := this->UseRegister(Source)
 		Node->Size := Size
 		
-		return Node->Destination
+		return Destination
 	}
 	define i64 EmitLoadOffset(i64 Source, i32 Offset, i8 Size) {
+		i64 Destination := this->AllocateRegister()
+		
 		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET)
 		
-		Node->Destination := this->AllocateRegister()
+		Node->Destination := Destination
 		Node->Source := this->UseRegister(Source)
 		Node->Offset := Offset
 		Node->Size := Size
 		
-		return Node->Destination
+		return Destination
 	}
 	
 	define i64 EmitLoadAddress(i64 Source) {
+		i64 Destination := this->AllocateRegister()
+		
 		IRNode* Node := this->AppendNode(IR_LOAD_ADDRESS)
 		
-		Node->Destination := this->AllocateRegister()
-		Node->Source := Source
+		Node->Destination := Destination
+		Node->Source := this->UseRegister(Source)
 		
-		return Node->Destination
+		return Destination
 	}
 	define i64 EmitLoadOffsetAddress(i64 Source, i32 Offset) {
+		i64 Destination := this->AllocateRegister()
+		
 		IRNode* Node := this->AppendNode(IR_LOAD_OFFSET_ADDRESS)
 		
-		Node->Destination := this->AllocateRegister()
+		Node->Destination := Destination
 		Node->Source := this->UseRegister(Source)
 		Node->Offset := Offset
 		
-		return Node->Destination
+		return Destination
+	}
+	
+	define void EmitStore(i64 Destination, i64 Source, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_STORE)
+		
+		Node~>Operands[0] := this->UseRegister(Destination)
+		Node~>Operands[1] := this->UseRegister(Source)
+		Node->Size := Size
+	}
+	define void EmitStoreOffset(i64 Destination, i32 Offset, i64 Source, i8 Size) {
+		IRNode* Node := this->AppendNode(IR_STORE_OFFSET)
+		
+		Node~>Operands[0] := this->UseRegister(Destination)
+		Node->Offset := Offset
+		Node~>Operands[1] := this->UseRegister(Source)
+		Node->Size := Size
 	}

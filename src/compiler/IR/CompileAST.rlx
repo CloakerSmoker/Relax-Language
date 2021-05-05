@@ -1,12 +1,13 @@
 	declare i64 CompileExpression(ASTNode*)
 	
+	declare i64 CompileStructAccessAddress(StructAccessExpression*)
+	
 	define i64 CompileStructAccessLeft(StructAccessExpression* Access) {
 		ASTNode* Left := Access->Left
 		
 		if (Access->Operator->Value = OPERATOR_DOT) {
 			if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
-				;CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
-				;return 0
+				return this->CompileStructAccessAddress(Left->AccessNode)
 			}
 			else if (Left->NodeType = NODE_TYPE_VARIABLE) {
 				return this->EmitLoadAddress(this->FindOrAddVariable(Left->VariableValue)->ToRegister())
@@ -46,6 +47,24 @@
 		else {		
 			return this->EmitLoadOffset(LeftRegister, FieldOffset, FieldSize)
 		}
+	}
+	
+	define i64 CompileStructAccessSet(StructAccessExpression* Access, i64 ValueRegister) {
+		StructField* Field := Access->TargetField
+		
+		i8 FieldSize := GetTypeSize(Field->ValueType) As i8
+		i32 FieldOffset := Field->Offset
+		
+		i64 AccessRegister := this->CompileStructAccessLeft(Access)
+		
+		if (Field->Offset = 0) {
+			this->EmitStore(AccessRegister, ValueRegister, FieldSize)
+		}
+		else {
+			this->EmitStoreOffset(AccessRegister, FieldOffset, ValueRegister, FieldSize)
+		}
+		
+		return ValueRegister
 	}
 	
 	define i64 CompileExpression(ASTNode* Target) {
@@ -97,6 +116,11 @@
 						
 						this->EmitMove(VariableRegister, AssignmentRight, 4)
 					}
+					else if (LeftNode->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+						this->CompileStructAccessSet(LeftNode->AccessNode, AssignmentRight)
+					}
+					
+					return AssignmentRight
 				}
 				else {
 					if (BinaryOperator <= OPERATOR_PERCENT_EQUAL) {	

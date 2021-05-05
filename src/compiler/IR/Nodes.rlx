@@ -5,14 +5,16 @@ struct IRVariable {
 	i8 Size
 	i8 IsGlobal
 	i8 ReferenceCount
+	i8 MaxReferenceCount
 	
-	static IRVariable* New(i8* Name, i32 Offset, i8 Size, i8 IsGlobal) {
+	static IRVariable* New(i8* Name, i32 Offset, i8 Size, i8 IsGlobal, i8 TotalReferenceCount) {
 		IRVariable* this := Alloc(#IRVariable)
 		
 		this->Name := Name
 		this->Offset := Offset
 		this->Size := Size
 		this->IsGlobal := IsGlobal
+		this->MaxReferenceCount := (TotalReferenceCount - 1) As i8
 		
 		return this
 	}
@@ -156,12 +158,12 @@ struct IRFunction {
 }
 
 ; Masks used to decide how a given node kind can be optimized
-;                                           15 12 9 7 5 3 1
-;                                         17 14 11 8 6 4 2
-;                                          16 13 10
-i32 IR_HAS_DESTINATION               := 0b011111100000011110
-i32 IR_HAS_TWO_OPERANDS              := 0b000000000000000010
-i32 IR_HAS_ONE_OPERAND               := 0b001111101100101110
+;                                          18 15 12 9 7 5 3 1
+;                                           17 14 11 8 6 4 2
+;                                         19 16 13 10
+i32 IR_HAS_DESTINATION               := 0b00011111100000011110
+i32 IR_HAS_TWO_OPERANDS              := 0b11000000000000000010
+i32 IR_HAS_ONE_OPERAND               := 0b11001111101100101110
 i8 IR_BINARY                         := 1
 i8 IR_MOVE                           := 2
 i8 IR_UNARY                          := 3
@@ -181,13 +183,14 @@ i8 IR_LOAD_OFFSET_ADDRESS            := 15
 i8 IR_ALLOCATE                       := 16
 i8 IR_FREE                           := 17
 
+i8 IR_STORE                          := 18
+i8 IR_STORE_OFFSET                   := 19
+
 i8 IR_LOAD_VARIABLE_ADDRESS         := 7
 i8 IR_LOAD_INDEX_ADDRESS            := 8
 i8 IR_LOAD_LABEL_ADDRESS            := 10
 
-i8 IR_STORE_INDIRECT                := 11
 i8 IR_STORE_INDEX                   := 12
-i8 IR_STORE_OFFSET                  := 13
 
 
 define i8* OperatorToString(i8 Operator) {
@@ -358,6 +361,12 @@ struct IRNode {
 		}
 		else if (this->Kind = IR_LOAD_OFFSET_ADDRESS) {
 			IRPrint("load_offset_address, %t, %t + %i", this->Destination, this->Source, this->Offset)
+		}
+		else if (this->Kind = IR_STORE) {
+			IRPrint("store.%i, %t, %t", this->Size, this~>Operands[0], this~>Operands[1])
+		}
+		else if (this->Kind = IR_STORE_OFFSET) {
+			IRPrint("store_offset.%i, %t + %i, %t", this->Size, this~>Operands[0], this->Offset, this~>Operands[1])
 		}
 		else if (this->Kind = IR_ALLOCATE) {
 			IRPrint("allocate, %t, %i", this->Destination, this->AllocateSize)
