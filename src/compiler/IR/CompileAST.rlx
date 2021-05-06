@@ -89,16 +89,27 @@
 		}
 		else if (Target->NodeType = NODE_TYPE_UNARY) {
 			UnaryExpression* Unary := Target->UnaryNode
-			
-			i64 Operand := this->CompileExpression(Unary->Operand)
-			
 			i8 UnaryOperator := Unary->Operator->IntegerValue As i8
 			
-			if (UnaryOperator = OPERATOR_STAR) {
-				return this->EmitLoad(Operand, ResultSize)
+			if (UnaryOperator = OPERATOR_AND) {
+				ASTNode* UnaryRight := Unary->Operand
+				
+				if (UnaryRight->NodeType = NODE_TYPE_VARIABLE) {
+					; TODO
+				}
+				else if (UnaryRight->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+					return this->CompileStructAccessAddress(UnaryRight->AccessNode)
+				}
 			}
 			else {
-				return this->EmitUnary(UnaryOperator, Operand, ResultSize)
+				i64 Operand := this->CompileExpression(Unary->Operand)
+				
+				if (UnaryOperator = OPERATOR_STAR) {
+					return this->EmitLoad(Operand, ResultSize)
+				}
+				else {
+					return this->EmitUnary(UnaryOperator, Operand, ResultSize)
+				}
 			}
 		}
 		else if (Target->NodeType = NODE_TYPE_BINARY) {

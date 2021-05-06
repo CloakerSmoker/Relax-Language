@@ -329,6 +329,49 @@ struct X64Generator {
 		this->WriteGenericInstructionDisplacementMR(Size, 0x01, Base, Displacement, Right)
 	}
 	
+	; ADD r/m64, imm8 (MI)
+	; REX.W + 83 /0 ib
+	define void Add_R64_I8(i8 Left, i16 Right) {
+		this->WriteGenericInstructionMR(8, 0x83, MODE_RTOR, Left, 0)
+		this->WriteI8(Right)
+	}
+	define void Add_RI64_DISPX_I8(i8 LeftBase, i32 Displacement, i16 Right) {
+		this->WriteGenericInstructionDisplacementMR(8, 0x83, LeftBase, Displacement, 0)
+		this->WriteI8(Right)
+	}
+	
+	; ADD r/m32, imm32 (MI)
+	; REX.W + 81 /0 id
+	define void Add_R64_I32(i8 Left, i32 Right) {
+		this->WriteGenericInstructionMR(8, 0x81, MODE_RTOR, Left, 0)
+		this->WriteI32(Right)
+	}
+	define void Add_RI64_DISPX_I32(i8 LeftBase, i32 Displacement, i32 Right) {
+		this->WriteGenericInstructionDisplacementMR(8, 0x81, LeftBase, Displacement, 0)
+		this->WriteI32(Right)
+	}
+	
+	define void Add_R64_IX(i8 Left, i32 Right) {
+		i8 RightSize := GetNumberSize(Right)
+		
+		if (RightSize = 1) {
+			this->Add_R64_I8(Left, Right As i8)
+		}
+		else {
+			this->Add_R64_I32(Left, Right)
+		}
+	}
+	define void Add_RI64_DISPX_IX(i8 LeftBase, i32 Displacement, i32 Right) {
+		i8 RightSize := GetNumberSize(Right)
+		
+		if (RightSize = 1) {
+			this->Add_RI64_DISPX_I8(LeftBase, Displacement, Right As i8)
+		}
+		else {
+			this->Add_RI64_DISPX_I32(LeftBase, Displacement, Right)
+		}
+	}
+	
 	; SUB rX, r/mX (RM)
 	; 2B /r
 	define void Sub_RX_RX(i8 Size, i8 Left, i8 Right) {

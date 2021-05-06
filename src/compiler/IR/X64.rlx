@@ -262,6 +262,27 @@ struct IRToX64 {
 		}
 	}
 	
+	define i8 AllocateTemporaryRealRegister(i8 TemporaryStackStorage) {
+		for (i8 Result := RCX, Result < this->StorageLocationCount, Result++) {
+			if (this->StorageLocations[Result] = 0) {
+				return Result
+			}
+		}
+		
+		i32 TemporaryOffset := this->GetStorageStackOffset(TemporaryStackStorage)
+		
+		this->Generator->XChg_RX_RIX_DISPX(8, RAX, RBP, TemporaryOffset)
+		
+		return RAX
+	}
+	define void FreeTemporaryRealRegister(i8 TemporaryStackStorage, i8 TemporaryRealRegister) {
+		if (TemporaryRealRegister = RAX) {
+			i32 TemporaryOffset := this->GetStorageStackOffset(TemporaryStackStorage)
+			
+			this->Generator->XChg_RX_RIX_DISPX(8, RAX, RBP, TemporaryOffset)
+		}
+	}
+	
 	i32 CurrentFunctionLabelBase
 	i32 CurrentFunctionLabelReferenceBase
 	i32 CurrentFunctionPrologueStart
@@ -464,6 +485,29 @@ struct IRToX64 {
 				else {
 					this->Generator->Move_RX_RIX_DISPX(Node->Size, LoadOffsetDestination, LoadOffsetSource, Node->Offset)
 				}
+			}
+		}
+		else if (Node->Kind = IR_LOAD_OFFSET_ADDRESS) {
+			i8 LoadOffsetAddressSource := this->FindRegisterStorage(Node->Operand)
+			
+			if (Node->Destination != Node->Operand && !this->NextIsFreeForRegister(Node, Node->Operand)) {
+				i8 LoadOffsetAddressSourceClone := this->AssignRegisterStorage(Node->Operand, this->StorageSizes[LoadOffsetAddressSource])
+				
+				this->EmitMove(LoadOffsetAddressSourceClone, LoadOffsetAddressSource, Node->Size)
+				
+				LoadOffsetAddressSource := LoadOffsetAddressSourceClone
+			}
+			
+			this->DiscardRegisterStorage(Node->Destination)
+			this->ReassignRegisterStorage(Node->Destination, LoadOffsetAddressSource)
+			
+			if (this->IsStorageOnStack(LoadOffsetAddressSource)) {
+				i32 LoadOffsetAddressSourceStackOffset := this->GetStorageStackOffset(LoadOffsetAddressSource)
+				
+				this->Generator->Add_RI64_DISPX_IX(RBP, LoadOffsetAddressSourceStackOffset, Node->Offset)
+			}
+			else {
+				this->Generator->Add_R64_IX(LoadOffsetAddressSource, Node->Offset)
 			}
 		}
 		else if (Node->Kind = IR_LOAD_ADDRESS) {
@@ -936,7 +980,62 @@ struct IRToX64 {
 			this->UseLabel(Node->FalseBlock)
 		}
 		else if (Node->Kind = IR_STORE) {
+			i8 StoreDestination := this->FindRegisterStorage(Node~>Operands[0])
+			i8 StoreSource := this->FindRegisterStorage(Node~>Operands[1])
 			
+			if (this->IsStorageOnStack(StoreSource)) {
+				if (this->IsStorageOnStack(StoreDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, StoreDestination, 8)
+					
+					i8 StoreDestinationTemp := this->AllocateTemporaryRealRegister(LoadSource)
+					
+					this->Generator->Move_RIX_RX(Node->Size, X64_TEMP_REGISTER, StoreDestinationTemp)
+					
+					this->FreeTemporaryRealRegister(LoadSource, StoreDestinationTemp)
+				}
+				else {
+					this->EmitMove(X64_TEMP_REGISTER, StoreSource, Node->Size)
+					this->Generator->Move_RIX_RX(Node->Size, StoreDestination, X64_TEMP_REGISTER)
+				}
+			}
+			else {
+				if (this->IsStorageOnStack(StoreDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, StoreDestination, Node->Size)
+					this->Generator->Move_RIX_RX(Node->Size, X64_TEMP_REGISTER, StoreSource)
+				}
+				else {
+					this->Generator->Move_RIX_RX(Node->Size, StoreDestination, StoreSource)
+				}
+			}
+		}
+		else if (Node->Kind = IR_STORE_OFFSET) {
+			i8 StoreOffsetDestination := this->FindRegisterStorage(Node~>Operands[0])
+			i8 StoreOffsetSource := this->FindRegisterStorage(Node~>Operands[1])
+			
+			if (this->IsStorageOnStack(StoreOffsetSource)) {
+				if (this->IsStorageOnStack(StoreOffsetDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, StoreOffsetDestination, 8)
+					
+					i8 StoreOffsetDestinationTemp := this->AllocateTemporaryRealRegister(LoadSource)
+					
+					this->Generator->Move_RIX_DISPX_RX(Node->Size, X64_TEMP_REGISTER, Node->Offset, StoreOffsetDestinationTemp)
+					
+					this->FreeTemporaryRealRegister(LoadSource, StoreOffsetDestinationTemp)
+				}
+				else {
+					this->EmitMove(X64_TEMP_REGISTER, StoreOffsetSource, Node->Size)
+					this->Generator->Move_RIX_DISPX_RX(Node->Size, StoreOffsetDestination, Node->Offset, X64_TEMP_REGISTER)
+				}
+			}
+			else {
+				if (this->IsStorageOnStack(StoreOffsetDestination)) {
+					this->EmitMove(X64_TEMP_REGISTER, StoreOffsetDestination, Node->Size)
+					this->Generator->Move_RIX_DISPX_RX(Node->Size, X64_TEMP_REGISTER, Node->Offset, StoreOffsetSource)
+				}
+				else {
+					this->Generator->Move_RIX_DISPX_RX(Node->Size, StoreOffsetDestination, Node->Offset, StoreOffsetSource)
+				}
+			}
 		}
 		
 		Print("\n")
