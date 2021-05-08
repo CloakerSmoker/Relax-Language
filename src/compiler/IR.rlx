@@ -153,7 +153,7 @@ struct IRCompilerState {
 	
 	IRBackendTraits* Backend
 	
-	static IRCompilerState* New(IRBackendTraits* Backend) {
+	static IRCompilerState* New(i32 InitialLabelCount, IRBackendTraits* Backend) {
 		IRCompilerState* this := Alloc(#IRCompilerState)
 		
 		this->NextVirtualRegister := 1
@@ -165,6 +165,7 @@ struct IRCompilerState {
 		this->BlockOffsets := Alloc(this->BlockCapacity * #i32)
 		this->BlockSizes := Alloc(this->BlockCapacity * #i32)
 		this->BlocksVisited := Alloc(this->BlockCapacity * #i8)
+		this->BlockCount := InitialLabelCount
 		
 		this->CurrentBlock := -1
 		
@@ -493,7 +494,11 @@ struct IRCompilerState {
 		}
 	}
 	define void Generate() {
-		this->Generate(0)
+		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+			if (this->BlockSizes[BlockIndex] != 0 && this->GetBlockNode(BlockIndex, 0)->Kind = IR_FUNCTION) {
+				this->Generate(BlockIndex)
+			}
+		}
 	}
 	
 	define void PrintBlocks() {
@@ -608,8 +613,8 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	CountReferences(Parser)
 	
-	IRToX64* x64Gen := IRToX64:New()
-	IRCompilerState* IR := IRCompilerState:New(x64Gen->GetTraits())
+	IRToX64* x64Gen := IRToX64:New(Parser->LabelCount)
+	IRCompilerState* IR := IRCompilerState:New(Parser->LabelCount, x64Gen->GetTraits())
 	x64Gen->IR := IR
 	
 	IR->SetLabel()
@@ -619,7 +624,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 		Exit(1)
 	}
 	
-	IR->CompileFunction(Parser->MainFunction)
+	IR->CompileFunctionHashMap(Parser~>Functions)
 	
 	;i32 Left := IR->EmitInteger(20, 4)
 	;i32 Right := IR->EmitInteger(192, 4)

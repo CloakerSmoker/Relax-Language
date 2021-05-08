@@ -139,3 +139,20 @@
 		Node~>Operands[1] := this->UseRegister(Source)
 		Node->Size := Size
 	}
+	
+	define i64 EmitCall(i32 TargetLabel, i32 ParameterCount, i64* Parameters) {
+		i64 Destination := this->AllocateRegister()
+		
+		IRNode* Node := this->AppendNode(IR_CALL)
+		
+		Node->Destination := Destination
+		Node->CallToBlock := TargetLabel
+		Node->Parameters := Parameters
+		Node->ParameterCount := ParameterCount
+		
+		for (i32 Index := 0, Index < ParameterCount, Index++) {
+			this->UseRegister(Parameters[Index])
+		}
+		
+		return Destination
+	}

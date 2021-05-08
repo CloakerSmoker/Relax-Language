@@ -618,4 +618,11 @@ struct X64Generator {
 		this->WriteREXOpcode(0, 0x0F84)
 		this->WriteI32(Displacement)
 	}
+	
+	; CALL rel32
+	; E8 id
+	define void Call_REL32(i32 Displacement) {
+		this->WriteI8(0xE8)
+		this->WriteI32(Displacement)
+	}
 }

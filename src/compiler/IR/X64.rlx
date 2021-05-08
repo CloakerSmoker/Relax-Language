@@ -70,21 +70,31 @@ struct IRToX64 {
 	i32 LabelReferenceCount
 	X64LabelReference* LabelReferences
 	
-	static IRToX64* New() {
+	define void ResetStorageLocations() {
+		for (i32 Index := 0, Index < this->StorageLocationCount, Index++) {
+			this->StorageLocations[Index] := 0
+			this->StorageSizes[Index] := 0
+		}
+		
+		this->StorageLocations[X64_TEMP_REGISTER] := -1
+		this->StorageLocations[RSP] := -1
+		this->StorageLocations[RBP] := -1
+	}
+	
+	static IRToX64* New(i32 InitialLabelCount) {
 		IRToX64* this := Alloc(#IRToX64)
 		
 		this->StorageLocationCount := 16
 		this->StorageLocations := Alloc(this->StorageLocationCount * #i64)
 		this->StorageSizes := Alloc(this->StorageLocationCount * #i32)
 		
-		this->StorageLocations[X64_TEMP_REGISTER] := -1
-		this->StorageLocations[RSP] := -1
-		this->StorageLocations[RBP] := -1
+		this->ResetStorageLocations()
 		
 		this->Generator := X64Generator:New()
 		
 		this->LabelCapacity := 100
 		this->LabelPositions := Alloc(this->LabelCapacity * #i32)
+		this->LabelCount := InitialLabelCount
 		
 		this->LabelReferenceCapacity := 100
 		this->LabelReferences := Alloc(this->LabelReferenceCapacity * #X64LabelReference)
@@ -354,6 +364,8 @@ struct IRToX64 {
 			
 			this->Generator->CodeBufferIndex := OldIndex
 		}
+		
+		this->ResetStorageLocations()
 	}
 	
 	define i8 IsComparison(i32 Operator) {
@@ -1034,6 +1046,80 @@ struct IRToX64 {
 				}
 				else {
 					this->Generator->Move_RIX_DISPX_RX(Node->Size, StoreOffsetDestination, Node->Offset, StoreOffsetSource)
+				}
+			}
+		}
+		else if (Node->Kind = IR_CALL) {
+			
+			i8 ReturnValueStorage := this->FindRegisterStorage(Node->Destination)
+			
+			if (ReturnValueStorage != RAX) {
+				if (this->StorageLocations[RAX] != 0) {
+					if (this->IsStorageOnStack(ReturnValueStorage)) {
+						i32 ReturnValueStackOffset := this->GetStorageStackOffset(ReturnValueStorage)
+						
+						this->Generator->XChg_RX_RIX_DISPX(8, RAX, RBP, ReturnValueStackOffset)
+					}
+					else {
+						this->Generator->XChg_RAX_R64(ReturnValueStorage)
+					}
+				}
+				else {
+					this->DiscardRegisterStorage(ReturnValueStorage)
+					this->ReassignRegisterStorage(ReturnValueStorage, RAX)
+				}
+			}
+			
+			for (ParameterIndex := 0, ParameterIndex < Node->ParameterCount, ParameterIndex++) {
+				i8 ValueStorage := this->FindRegisterStorage(Node->Parameters[ParameterIndex])
+				ParameterStorage := this->GetSystemVParameterStorage(ParameterIndex As i8)
+				
+				i8 ParameterStorageSize := this->StorageSizes[ParameterStorage] As i8
+				
+				if (this->StorageLocations[ParameterStorage] != 0) {
+					if (this->IsStorageOnStack(ValueStorage)) {
+						i32 ValueStorageOffset := this->GetStorageStackOffset(ValueStorage)
+						
+						this->Generator->XChg_RX_RIX_DISPX(ParameterStorageSize, ParameterStorage, RBP, ValueStorageOffset)
+					}
+					else {
+						this->Generator->XChg_RX_RX(ParameterStorageSize, ParameterStorage, ValueStorage)
+					}
+				}
+				else {
+					this->EmitMove(ParameterStorage, ValueStorage, ParameterStorageSize)
+				}
+			}
+			
+			this->Generator->Call_REL32(0)
+			this->UseLabel(Node->CallToBlock)
+			
+			for (ParameterIndex := 0, ParameterIndex < Node->ParameterCount, ParameterIndex++) {
+				ValueStorage := this->FindRegisterStorage(Node->Parameters[ParameterIndex])
+				ParameterStorage := this->GetSystemVParameterStorage(ParameterIndex As i8)
+				
+				ParameterStorageSize := this->StorageSizes[ParameterStorage] As i8
+				
+				if (this->StorageLocations[ParameterStorage] != 0) {
+					if (this->IsStorageOnStack(ValueStorage)) {
+						ValueStorageOffset := this->GetStorageStackOffset(ValueStorage)
+						
+						this->Generator->XChg_RX_RIX_DISPX(ParameterStorageSize, ParameterStorage, RBP, ValueStorageOffset)
+					}
+					else {
+						this->Generator->XChg_RX_RX(ParameterStorageSize, ParameterStorage, ValueStorage)
+					}
+				}
+			}
+			
+			if (this->StorageLocations[RAX] != Node->Destination) {
+				if (this->IsStorageOnStack(ReturnValueStorage)) {
+					ReturnValueStackOffset := this->GetStorageStackOffset(ReturnValueStorage)
+					
+					this->Generator->XChg_RX_RIX_DISPX(8, RAX, RBP, ReturnValueStackOffset)
+				}
+				else {
+					this->Generator->XChg_RAX_R64(ReturnValueStorage)
 				}
 			}
 		}

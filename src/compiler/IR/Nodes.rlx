@@ -297,18 +297,27 @@ struct IRNode {
 		
 		i64 Condition
 		i64 SourceValue
+		
+		i64* Parameters
 	}
 	
 	union {
 		i32 CallToBlock
+		
 		i32 JumpToBlock
 		i32 TrueBlock
+		
 		i32 Operator
+		
 		i32 Offset
+		
 		i32 AllocateSize
 	}
 	
-	i32 FalseBlock
+	union {
+		i32 FalseBlock
+		i32 ParameterCount
+	}
 	
 	i64 Destination
 	
@@ -373,6 +382,21 @@ struct IRNode {
 		}
 		else if (this->Kind = IR_FREE) {
 			IRPrint("free, %t", this->Operand)
+		}
+		else if (this->Kind = IR_CALL) {
+			IRPrint("call, %t, L%i(", this->Destination, this->CallToBlock)
+			
+			for (Index := 0, Index < this->ParameterCount, Index++) {
+				NextParameter := this->Parameters[Index]
+				
+				IRPrint("%t", NextParameter)
+				
+				if (Index + 1 != this->ParameterCount) {
+					IRPrint(", ")
+				}
+			}
+			
+			IRPrint(")")
 		}
 	}
 	

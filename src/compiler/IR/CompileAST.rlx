@@ -67,6 +67,20 @@
 		return ValueRegister
 	}
 	
+	define i64 CompileCall(ASTNode* CallNode) {
+		CallExpression* Call := CallNode->CallNode
+		
+		FunctionDefine* Target := Call->TargetFunction
+		
+		i64* Parameters := Alloc(Call->ParameterCount * #i64)
+		
+		for (i32 Index := 0, Index < Call->ParameterCount, Index++) {
+			Parameters[Index] := this->CompileExpression(Call->Parameters[Index])
+		}
+		
+		return this->EmitCall(Target->LabelNumber, Call->ParameterCount, Parameters)
+	}
+	
 	define i64 CompileExpression(ASTNode* Target) {
 		i8 ResultSize := GetTypeSize(Target->ValueType) As i8
 		
@@ -78,6 +92,9 @@
 		}
 		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
 			return this->FindOrAddVariable(Target->VariableValue)->ToRegister()
+		}
+		else if (Target->NodeType = NODE_TYPE_CALL) {
+			return this->CompileCall(Target)
 		}
 		else if (Target->NodeType = NODE_TYPE_STRUCT_ACCESS) {
 			if (Target->AccessNode->Operator->Value = OPERATOR_TILDE_GREATER) {
@@ -334,17 +351,49 @@
 	}
 	
 	define void CompileFunction(FunctionDefine* Function) {
-		IRNode* RawNode := this->AppendNode(IR_FUNCTION)
-		IRFunction* Node  := RawNode~>FunctionNode
-		
-		Node->ParameterCount := Function->ParameterCount
-		Node->Parameters := Alloc(Node->ParameterCount * #i64)
-		
-		for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
-			i64 ParameterRegister := this->FindOrAddVariable(Function->Parameters[Index])->ToRegister()
+		if (Function->CallCount != 0) {
+			this->StartBlock(Function->LabelNumber)
 			
-			Node->Parameters[Index] := ParameterRegister
+			IRNode* RawNode := this->AppendNode(IR_FUNCTION)
+			IRFunction* Node := RawNode~>FunctionNode
+			
+			Node->ParameterCount := Function->ParameterCount
+			Node->Parameters := Alloc(Node->ParameterCount * #i64)
+			
+			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+				i64 ParameterRegister := this->FindOrAddVariable(Function->Parameters[Index])->ToRegister()
+				
+				Node->Parameters[Index] := ParameterRegister
+			}
+			
+			this->CompileBlock(Function->Body)
 		}
+	}
+	
+	define void CompileFunctionOverloads(FunctionDefine* Function) {
+		this->CompileFunction(Function)
 		
-		this->CompileBlock(Function->Body)
+		while (Function->Next) {
+			Function := Function->Next
+			
+			this->CompileFunction(Function)
+		}
+	}
+	
+	define void CompileFunctionHashMap(HashMap* Map) {
+		void* Elements := Map->Elements
+		
+		for (i32 ElementIndex := 0, ElementIndex < (Map->BufferMaxCount), ElementIndex += 1) {
+			if (Elements[ElementIndex]) {
+				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				
+				while (FoundElement) {
+					FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+					
+					this->CompileFunctionOverloads(NextFunction)
+					
+					FoundElement := FoundElement->NextElement
+				}
+			}
+		}
 	}
