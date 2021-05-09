@@ -167,6 +167,7 @@ struct BinaryExpression {
 ; Struct Access
 
 struct StructField {
+	ErrorContext* DefinedAt,
 	SafeWideString* Name,
 	i16 Offset,
 	Type ValueType,

@@ -13,6 +13,7 @@ define Type MakeType(i64 BackingType, i16 PointerDepth) {
 }
 
 struct TypeInfo {
+	ErrorContext* DefinedAt,
 	SafeWideString* Name,
 	HashMap Fields,
 	HashMap Methods,

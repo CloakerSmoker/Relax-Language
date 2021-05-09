@@ -11,6 +11,7 @@ Type TYPE_NONE := 0 As Type
 i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
 struct VariableInfo {
+	ErrorContext* DefinedAt,
 	ASTNode* LastValue,
 	SafeWideString* Name,
 	Type Type,
@@ -50,11 +51,26 @@ struct VariableHashMap {
 	}
 	
 	define void Add(VariableInfo* NewVariable, Token* SourceToken) {
-		if (this->Get(NewVariable->Name)) {
-			/* If we already have this name in the hashmap, then it's a duplicate definition */
+		VariableInfo* LastDefinition := this->Get(NewVariable->Name)
+		
+		if (LastDefinition) {
+			; If we already have this name in the hashmap, then it's a duplicate definition
 			
-			SourceToken->Error("Duplicate definition")
+			if (LastDefinition->Type = NewVariable->Type) {
+				; However, if the new definition is defining that the variable is the same type as before,
+				;  we just ignore the duplicate definition. Otherwise we're enforcing a rule for no reason which just
+				;   makes code harder to read.
+				
+				return
+			}
+			
+			SwapOutputStream()
+			PrettyError(SourceToken~>Context, "Duplicate definition", Red | Bright)
+			PrettyError(LastDefinition->DefinedAt, "Previously defined at", Red | Bright)
+			Exit(1)
 		}
+		
+		NewVariable->DefinedAt := SourceToken~>Context
 		
 		this->Map->Set(NewVariable->Name, NewVariable)
 		
@@ -145,9 +161,10 @@ struct ParserState {
 		return this
 	}
 	
-	define TypeInfo* AddType(SafeWideString* Name, i16 Size, i8 Flags) {
+	define TypeInfo* AddType(ErrorContext* BlameContext, SafeWideString* Name, i16 Size, i8 Flags) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
+		NewType->DefinedAt := BlameContext
 		NewType->Name := Name
 		NewType->Size := Size
 	
@@ -172,7 +189,7 @@ struct ParserState {
 		return NewType
 	}
 	define TypeInfo* AddType(i8* Name, i16 Size, i8 Flags) {
-		return this->AddType(AToS(Name), Size, Flags)
+		return this->AddType(null, AToS(Name), Size, Flags)
 	}
 	
 	declare Token* GetCurrentToken()
@@ -191,7 +208,7 @@ struct ParserState {
 				return TYPE_NONE
 			}
 			else {
-				FoundTypeInfo := this->AddType(TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+				FoundTypeInfo := this->AddType(null, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
 			}
 		}
 		
@@ -281,18 +298,44 @@ struct ParserState {
 		return FoundVariable
 	}
 	define void AddGlobal(VariableInfo* NewGlobal, Token* BlameToken) {
-		if (this~>Types->Get(NewGlobal->Name) != null) {
-			BlameToken->Error("Name is already reserved by a type")
+		HashMapElement* DefinedTypeElement := this~>Types->Get(NewGlobal->Name)
+		
+		if (DefinedTypeElement) {
+			TypeInfo* DefinedType := DefinedTypeElement->Value
+			
+			SwapOutputStream()
+			PrettyError(BlameToken~>Context, "Name is already used by a type", Red | Bright)
+			
+			if (DefinedType->DefinedAt) {
+				PrettyError(DefinedType->DefinedAt, "Previously defined here", Red | Bright)
+			}
+			
+			Exit(1)
 		}
 		
 		this~>Globals->Add(NewGlobal, BlameToken)
 	}
 	define void AddLocal(VariableInfo* NewLocal, Token* BlameToken) {
-		if (this~>Types->Get(NewLocal->Name) != null) {
-			BlameToken->Error("Name is already reserved by a type")
+		HashMapElement* DefinedTypeElement := this~>Types->Get(NewLocal->Name)
+		VariableInfo* DefinedGlobal := this~>Globals->Get(NewLocal->Name)
+		
+		if (DefinedTypeElement) {
+			TypeInfo* DefinedType := DefinedTypeElement->Value
+			
+			SwapOutputStream()
+			PrettyError(BlameToken~>Context, "Name is already used by a type", Red | Bright)
+			
+			if (DefinedType->DefinedAt) {
+				PrettyError(DefinedType->DefinedAt, "Previously defined here", Red | Bright)
+			}
+			
+			Exit(1)
 		}
-		else if (this~>Globals->Get(NewLocal->Name)) {
-			BlameToken->Error("Local variable will shadow global variable")
+		else if (DefinedGlobal) {
+			SwapOutputStream()
+			PrettyError(BlameToken~>Context, "Local variable will shadow global variable", Red | Bright)
+			PrettyError(DefinedGlobal->DefinedAt, "Global variable was defined here", Red | Bright)
+			Exit(1)
 		}
 		
 		this->CurrentFunction~>Locals->Add(NewLocal, BlameToken)
@@ -863,7 +906,10 @@ struct ParserState {
 						; Allow redefining a declared overload
 						
 						if (NextFunction->HasFullDefinition) {
-							NameToken->Error("Duplicate function definition")
+							SwapOutputStream()
+							PrettyError(NameToken~>Context, "Duplicate function definition", Red | Bright)
+							PrettyError(NextFunction~>Context, "Previously defined here", Red | Bright)
+							Exit(1)
 						}
 						
 						NewDefine := NextFunction
@@ -1011,7 +1057,14 @@ struct ParserState {
 			if !(NewType->IsIncomplete) {
 				; If the type we found isn't incomplete, then error out
 				
-				NameToken->Error("Duplicate struct definition")
+				SwapOutputStream()
+				PrettyError(NameToken~>Context, "Duplicate type definition", Red | Bright)
+				
+				if (NewType->DefinedAt) {
+					PrettyError(NewType->DefinedAt, "Previously definition here", Red | Bright)
+				}
+				
+				Exit(1)
 			}
 			
 			NewType->IsIncomplete := false
@@ -1019,7 +1072,7 @@ struct ParserState {
 		else {
 			; We didn't find a type by this name, so we can add it like normal
 			
-			NewType := this->AddType(Name, 0, Flags)
+			NewType := this->AddType(NameToken~>Context, Name, 0, Flags)
 		}
 		
 		return NewType
@@ -1097,9 +1150,17 @@ struct ParserState {
 			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
 			SafeWideString* FieldName := FieldNameToken->StringValue
 			NextField->Name := FieldName
+			NextField->DefinedAt := FieldNameToken~>Context
 			
-			if (Fields->Get(FieldName)) {
-				FieldNameToken->Error("Duplicate definition")
+			HashMapElement* LastDefinitionElement := Fields->Get(FieldName)
+			
+			if (LastDefinitionElement) {
+				StructField* LastDefinition := LastDefinitionElement->Value
+				
+				SwapOutputStream()
+				PrettyError(FieldNameToken~>Context, "Duplicate field definition", Red | Bright)
+				PrettyError(LastDefinition->DefinedAt, "Previously defined here", Red | Bright)
+				Exit(1)
 			}
 			
 			Fields->Set(FieldName, NextField)
