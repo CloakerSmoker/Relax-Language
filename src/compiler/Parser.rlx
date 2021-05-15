@@ -856,6 +856,7 @@ struct ParserState {
 					
 					NextParameter->Type := this->void->AsPointer(1)
 					NextParameter->IsParameter := true
+					NextParameter->IsVariadic := true
 				}
 				else {
 					NextParameter->Type := this->ParseType()

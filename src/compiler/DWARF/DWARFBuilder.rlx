@@ -26,6 +26,7 @@ struct DWARFBuilder {
 	i32 FunctionParameterTag
 	i32 BitsTypeTag
 	i32 BitsFieldTag
+	i32 ArrayTypeTag
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -110,6 +111,13 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_BIT_SIZE, DWARF_FORM_DATA_1)
 		A->EndAbbreviation()
 
+		this->ArrayTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_ARRAY, false)
+			;A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_ORDERING, DWARF_FORM_DATA_1)
+		A->EndAbbreviation()
+	
 		A->End()
 	}
 	
@@ -155,6 +163,15 @@ struct DWARFBuilder {
 		this->DIEStream->EndEntry()
 		
 		return PointerOffset
+	}
+	define i32 AddArrayType(i32 ElementTypeOffset, i16 Size) {
+		i32 ArrayOffset := this->DIEStream->StartEntry(this->ArrayTypeTag)
+			this->DIEStream->AppendI32(ElementTypeOffset)
+			this->DIEStream->AppendI16(Size)
+			this->DIEStream->AppendI8(0)
+		this->DIEStream->EndEntry()
+		
+		return ArrayOffset
 	}
 	
 	define i32 StartStruct(i8* Name, i16 Size) {
@@ -350,10 +367,17 @@ struct DWARFBuilder {
 		
 		i32 TypeOffset := BaseTypeOffset
 		
-		i32 PointerDepth := GetPointerDepth(T)
-		
-		for (i32 Index := 0, Index < PointerDepth, Index++) {
-			TypeOffset := this->AddPointerType(TypeOffset)
+		if (T.IsArray) {
+			ArrayTypeInfo* ArrayType := GetArrayType(T)
+			
+			TypeOffset := this->AddArrayType(TypeOffset, BaseType->Size * ArrayType->Length)
+		}
+		else {
+			i32 PointerDepth := GetPointerDepth(T)
+			
+			for (i32 Index := 0, Index < PointerDepth, Index++) {
+				TypeOffset := this->AddPointerType(TypeOffset)
+			}
 		}
 		
 		return TypeOffset
