@@ -1012,7 +1012,7 @@ struct ParserState {
 				
 				if (this->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
 					Length := NewDefine->GetStringLength()
-					Buffer := ReAlloc(Buffer, Length)
+					Buffer := ReAlloc(Buffer, Length + 1)
 					
 					NewDefine->StringifyInto(Buffer)
 					
