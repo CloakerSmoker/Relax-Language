@@ -7,6 +7,8 @@
 #Require "./src/compiler/DWARF/Lines.rlx"
 ;#Require "./src/compiler/DWARF/FakeTypes.rlx"
 
+#Require "./src/lib/SafeString.rlx"
+
 struct DWARFBuilder {
 	DWARFDebuggingEntryStreamBuilder* DIEStream
 	DWARFAbbreviationTableBuilder* Abbreviations
@@ -18,10 +20,12 @@ struct DWARFBuilder {
 	i32 BaseTypeTag
 	i32 PointerTypeTag
 	i32 StructTypeTag
-	i32 MemberTypeTag
+	i32 StructFieldTag
 	i32 VariableTag
 	i32 FunctionDefinitionTag
 	i32 FunctionParameterTag
+	i32 BitsTypeTag
+	i32 BitsFieldTag
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -66,7 +70,7 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 		A->EndAbbreviation()
 		
-		this->MemberTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
+		this->StructFieldTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_MEMBER_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
@@ -94,6 +98,18 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_VARIABLE_PARAMETER, DWARF_FORM_FLAG_PRESENT)
 		A->EndAbbreviation()
 		
+		this->BitsTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+		A->EndAbbreviation()
+		
+		this->BitsFieldTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_DATA_BIT_OFFSET, DWARF_FORM_DATA_1)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BIT_SIZE, DWARF_FORM_DATA_1)
+		A->EndAbbreviation()
+
 		A->End()
 	}
 	
@@ -150,7 +166,7 @@ struct DWARFBuilder {
 		return StructOffset
 	}
 	define i32 AddStructField(i8* Name, i32 TypeOffset, i32 Offset) {
-		i32 FieldOffset := this->DIEStream->StartEntry(this->MemberTypeTag)
+		i32 FieldOffset := this->DIEStream->StartEntry(this->StructFieldTag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
 			
@@ -164,6 +180,28 @@ struct DWARFBuilder {
 		return FieldOffset
 	}
 	define void EndStruct() {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define i32 StartBits(i8* Name, i16 Size) {
+		i32 BitsOffset := this->DIEStream->StartEntry(this->BitsTypeTag)
+			this->DIEStream->AppendI16(Size)
+			this->DIEStream->AppendString(Name)
+		this->DIEStream->EndEntry()
+		
+		return BitsOffset
+	}
+	define i32 AddBitsField(i8* Name, i32 TypeOffset, i8 BitOffset, i8 BitSize) {
+		i32 FieldOffset := this->DIEStream->StartEntry(this->BitsFieldTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(TypeOffset)
+			this->DIEStream->AppendI8(BitOffset)
+			this->DIEStream->AppendI8(BitSize)
+		this->DIEStream->EndEntry()
+		
+		return FieldOffset
+	}
+	define void EndBits() {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
@@ -237,8 +275,11 @@ struct DWARFBuilder {
 	declare i32 FindOrTranslateType(Type)
 	
 	define i32 TranslateTypeInfo(TypeInfo* T) {
+		i32 Offset := 0
+		
 		if (T->IsStructType) {
-			i32 Offset := this->StartStruct(T->Name->Buffer, T->Size)
+			Offset := this->StartStruct(T->Name->Buffer, T->Size)
+			this~>Types->Set(T->Name, Offset)
 			
 			void* Elements := T~>Fields->Elements
 			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
@@ -261,12 +302,36 @@ struct DWARFBuilder {
 			}
 			
 			this->EndStruct()
+		}
+		else if (T->IsBits) {
+			Offset := this->StartBits(T->Name->Buffer, T->Size)
+			this~>Types->Set(T->Name, Offset)
 			
-			return Offset
+			void* Elements := T~>Fields->Elements
+			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						i32 TypeOffset := this->FindOrTranslateType(NextField->ValueType)
+						
+						i8 BitSize := NextField->BitEndIndex - NextField->BitStartIndex
+						
+						this->AddBitsField(NextField->Name->Buffer, TypeOffset, NextField->BitStartIndex, BitSize)
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+			
+			this->EndBits()
 		}
 		
-		return 0
-		
+		return Offset
 	}
 	
 	define i32 FindOrTranslateType(Type T) {
@@ -281,8 +346,6 @@ struct DWARFBuilder {
 		}
 		else {
 			BaseTypeOffset := this->TranslateTypeInfo(BaseType)
-			
-			this~>Types->Set(BaseType->Name, BaseTypeOffset)
 		}
 		
 		i32 TypeOffset := BaseTypeOffset

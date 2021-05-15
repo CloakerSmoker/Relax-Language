@@ -45,6 +45,8 @@ struct DWARFLineProgramBuilder {
 	i32 CurrentFileIndex
 	i32 CurrentOffset
 	
+	i64 ImageBase
+	
 	static DWARFLineProgramBuilder* New() {
 		DWARFLineProgramBuilder* this := Alloc(#DWARFLineProgramBuilder)
 		
@@ -63,6 +65,10 @@ struct DWARFLineProgramBuilder {
 		this->CurrentLine := 1
 		
 		return this
+	}
+	
+	define void SetImageBase(i64 ImageBase) {
+		this->ImageBase := ImageBase
 	}
 	
 	define i32 AddDirectory(i8* Path) {
@@ -88,7 +94,7 @@ struct DWARFLineProgramBuilder {
 	define i32 FindOrAddFile(i8* Path) {
 		HashMapElement* FileElement := this~>Files->Get(Path)
 		
-		if (FileElement != 0) {
+		if (FileElement != null) {
 			return FileElement->Value As i32
 		}
 		else {
@@ -103,28 +109,24 @@ struct DWARFLineProgramBuilder {
 		this->LineProgram->WriteLEB128(Value)
 	}
 	
-	define void AddLine(i32 Offset, i32 LineNumber, i8* File) {
-		i32 FileIndex := this->FindOrAddFile(File)
+	define i8 SeekTo(i32 Offset, i32 LineNumber, i32 FileIndex, i8 IgnoreLineNumber) {
+		; Returns true if a DWARF_LINE_PROGRAM_OPCODE_COPY should be emitted after
 		
 		i32 OffsetAdvance := Offset - this->CurrentOffset
 		i32 LineAdvance := LineNumber - this->CurrentLine
 		
-		;Print("%x : %s:%i  +(%i)\n", this->LineProgram->Tell() + 0xb1, File, LineNumber, LineAdvance)
-		
 		if (FileIndex != this->CurrentFileIndex) {
 			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_FILE)
-			this->EmitLEB128(FileIndex)
+			this->EmitLEB128(FileIndex + 1)
 			
 			this->CurrentFileIndex := FileIndex
 		}
 		
 		if (OffsetAdvance + LineAdvance = 0) {
-			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_COPY)
-			
-			return
+			return true
 		}
-		else if (LineAdvance = 0) {
-			return
+		else if (LineAdvance = 0 && LineNumber != 1 && !IgnoreLineNumber) {
+			return false
 		}
 		
 		
@@ -140,7 +142,7 @@ struct DWARFLineProgramBuilder {
 			if (Opcode < 0xFF) {
 				this->EmitOpcode(Opcode)
 				
-				return
+				return false
 			}
 		}
 		
@@ -150,8 +152,14 @@ struct DWARFLineProgramBuilder {
 		this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_ADVANCE_LINE)
 		this->LineProgram->WriteLEB128(LineAdvance)
 		
-		this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_COPY)
+		return true
 	}
+	define void AddLine(i32 Offset, i32 LineNumber, i8* File) {
+		if (this->SeekTo(Offset, LineNumber, this->FindOrAddFile(File), false)) {
+			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_COPY)
+		}
+	}
+	
 	define void EmitSetAddress(i64 Address) {
 		this->EmitOpcode(0)
 		this->LineProgram->WriteLEB128(9)
@@ -159,11 +167,21 @@ struct DWARFLineProgramBuilder {
 		this->LineProgram->WriteI64(Address)
 	}
 	
-	define void Serialize(DWARFStream* Stream) {
-		;this->EmitOpcode(0)
-		;this->LineProgram->WriteLEB128(1)
-		;this->LineProgram->WriteI8(DWARF_LINE_PROGRAM_EXTENDED_OPCODE_END_SEQUENCE)
+	define void EmitEndSequence(i32 Offset) {
+		this->SeekTo(Offset, this->CurrentLine, this->CurrentFileIndex, true)
 		
+		this->EmitOpcode(0)
+		this->LineProgram->WriteLEB128(1)
+		this->LineProgram->WriteI8(DWARF_LINE_PROGRAM_EXTENDED_OPCODE_END_SEQUENCE)
+		
+		this->CurrentLine := 1
+		this->CurrentFileIndex := 0
+		this->CurrentOffset := 0
+		
+		this->EmitSetAddress(this->ImageBase)
+	}
+	
+	define void Serialize(DWARFStream* Stream) {
 		i32 BeforeUnitLength := Stream->Tell()
 		Stream->WriteI32(0)
 		i32 AfterUnitLength := Stream->Tell()

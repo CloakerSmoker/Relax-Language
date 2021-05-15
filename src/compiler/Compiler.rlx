@@ -125,6 +125,7 @@ struct CompilerState {
 			this->DWARF->LineInfo->AddDirectory(".")
 			this->DWARF->LineInfo->AddFile(Config->SourceFile)
 			
+			this->DWARF->LineInfo->SetImageBase(Config->ImageBase)
 			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
 		}
 	}
@@ -166,7 +167,14 @@ struct CompilerState {
 			i64 FunctionAddress := this->Config->ImageBase + this->CodeBase + this->Index
 			i8 IsMain := Function->Name->Equals("Main")
 			
-			Result := this->DWARF->StartFunction(Function->Name->Buffer, ReturnTypeOffset, FunctionAddress, IsMain)
+			i32 NameLength := Function->GetStringLength()
+			i8* NameBuffer := Alloc(NameLength + 1)
+			
+			Function->StringifyInto(NameBuffer)
+			
+			Result := this->DWARF->StartFunction(NameBuffer, ReturnTypeOffset, FunctionAddress, IsMain)
+			
+			Free(NameBuffer)
 			
 			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
 				VariableInfo* NextParameter := Function->Parameters[Index]
@@ -227,18 +235,21 @@ struct CompilerState {
 	}
 	define void AfterPrologueEnd() {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
-			;this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_PROLOGUE_END)
+			this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_PROLOGUE_END)
 		}
 	}
 	define void BeforeEpilogueBegin() {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
-			;this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN)
+			this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN)
 		}
 	}
 	
-	define void AfterCompileFunction(FunctionDefine* Function, i32 Data) {
+	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
-			i32 FunctionSize := this->Index - Function->CodeOffset
+			i32 FunctionSize := this->Index - FunctionOffset
+			i32 Offset := this->CodeBase + this->Index
+			
+			this->DWARF->LineInfo->EmitEndSequence(Offset)
 			
 			this->DWARF->EndFunction(Data, FunctionSize)
 		}
@@ -1022,7 +1033,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	Compiler->CurrentFunction := null
 	
-	Compiler->AfterCompileFunction(FunctionToCompile, DebugData)
+	Compiler->AfterCompileFunction(FunctionToCompile, DebugData, FunctionOffset)
 	
 	return FunctionOffset
 }

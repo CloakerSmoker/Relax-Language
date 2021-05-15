@@ -14,6 +14,18 @@ struct SafeString {
 	static SafeString* New(i32 Length, i8* Buffer, i8 BufferIsSelfOwned) {
 		SafeString* this := Alloc(#SafeString)
 		
+		if (Buffer[Length] != 0) {
+			i8* NewBuffer := CloneMemory(Buffer, Length + 1)
+			NewBuffer[Length] := 0
+			
+			if (BufferIsSelfOwned) {
+				Free(Buffer)
+			}
+			
+			Buffer := NewBuffer
+			BufferIsSelfOwned := true
+		}
+		
 		this->Length := Length
 		this->Buffer := Buffer
 		this->BufferIsSelfOwned := BufferIsSelfOwned
