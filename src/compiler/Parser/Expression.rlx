@@ -50,7 +50,7 @@
 			
 			Result := ASTNode:New(NODE_TYPE_INTEGER, 0, MakeType(this->i32, 0))
 			
-			SafeWideString* StringValue := TokenToTranslate->StringValue
+			SafeString* StringValue := TokenToTranslate->StringValue
 			
 			if (StringValue->Equals("true")) {
 				Result->IntegerValue := 1
@@ -277,7 +277,7 @@
 		CallExpression* Result := null
 		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, FirstTokenContext, this->GetCurrentTokenContext())
 		
-		SafeWideString* Name := NameToken->StringValue
+		SafeString* Name := NameToken->StringValue
 		
 		if (HasFollowingColon) {
 			; If we've matched the `name:` format, but not `name:other`, then we need to convert `name`
@@ -411,9 +411,7 @@
 							
 							this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing `]` after `#File` directive")
 							
-							i8* RawFilePath := FilePathToken->StringValue->PackToString()
-							
-							i64 File := FileOpen(RawFilePath, FILE_READ)
+							i64 File := FileOpen(FilePathToken->StringValue->Buffer, FILE_READ)
 							
 							if (File < 0) {
 								ManualErrorMessagePrelude()
@@ -431,8 +429,6 @@
 							FileRead(File, FileBuffer, FileSize)
 							
 							FileClose(File)
-							
-							FilePathToken->StringValue->UnpackFromString()
 						}
 						else {
 							if (GetBaseType(TargetType)->IsBuiltin = false || GetPointerDepth(TargetType) != 0) {
@@ -555,7 +551,7 @@
 			;   Aka 1 for TOKEN_TYPE_STRING and 2 for TOKEN_TYPE_WIDE_STRING
 			
 			i32 CharacterSize := (NextToken->Type - TOKEN_TYPE_STRING) + 1
-			SafeWideString* StringText := NextToken->StringValue
+			SafeString* StringText := NextToken->StringValue
 			
 			if (Offset % CharacterSize) {
 				Offset += 1
@@ -822,9 +818,8 @@
 				
 				; Read the specified file, write its data into the constant buffer, and remember the offset
 				;  of the data, and increment the size of the constant buffer
-				RawFilePath := FilePathToken->StringValue->ToString()
 				
-				File := FileOpen(RawFilePath, FILE_READ)
+				File := FileOpen(FilePathToken->StringValue->Buffer, FILE_READ)
 				
 				if (File < 0) {
 					ManualErrorMessagePrelude()
@@ -842,7 +837,6 @@
 				FileRead(File, FileBuffer, FileSize)
 				
 				FileClose(File)
-				Free(RawFilePath)
 			}
 			else {
 				; Else, this fits the `{Type`

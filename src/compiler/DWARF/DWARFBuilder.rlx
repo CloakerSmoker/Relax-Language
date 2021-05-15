@@ -237,9 +237,8 @@ struct DWARFBuilder {
 	declare i32 FindOrTranslateType(Type)
 	
 	define i32 TranslateTypeInfo(TypeInfo* T) {
-		
 		if (T->IsStructType) {
-			i32 Offset := this->StartStruct(T->Name->PackToString(), T->Size)
+			i32 Offset := this->StartStruct(T->Name->Buffer, T->Size)
 			
 			void* Elements := T~>Fields->Elements
 			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
@@ -251,13 +250,10 @@ struct DWARFBuilder {
 					while (FoundElement) {
 						StructField* NextField := FoundElement->Value
 						
-						i8* Name := NextField->Name->PackToString()
 						i32 TypeOffset := this->FindOrTranslateType(NextField->ValueType)
 						i32 FieldOffset := NextField->Offset
 						
-						this->AddStructField(Name, TypeOffset, FieldOffset)
-						
-						NextField->Name->UnpackFromString()
+						this->AddStructField(NextField->Name->Buffer, TypeOffset, FieldOffset)
 						
 						FoundElement := FoundElement->NextElement
 					}
@@ -265,8 +261,6 @@ struct DWARFBuilder {
 			}
 			
 			this->EndStruct()
-			
-			T->Name->UnpackFromString()
 			
 			return Offset
 		}

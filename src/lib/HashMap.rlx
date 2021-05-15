@@ -42,12 +42,8 @@ struct HashMap {
 		
 		return HashLow
 	}
-	define i64 HashString(SafeWideString* StringToHash) {
-		i64 Hash := this->HashString(StringToHash->PackToString(), StringToHash->Length)
-		
-		StringToHash->UnpackFromString()
-		
-		return Hash
+	define i64 HashString(SafeString* StringToHash) {
+		return this->HashString(StringToHash->Buffer, StringToHash->Length)
 	}
 	define i64 HashString(i8* StringToHash) {
 		return this->HashString(StringToHash, StringLength(StringToHash))
@@ -126,13 +122,13 @@ struct HashMap {
 		NewElement->Value := Value
 	}
 	
-	define HashMapElement* Get(SafeWideString* Key) {
+	define HashMapElement* Get(SafeString* Key) {
 		return this->GetElement(this->HashString(Key))
 	}
-	define void Set(SafeWideString* Key, void Value) {
+	define void Set(SafeString* Key, void Value) {
 		this->Upsert(this->HashString(Key), Value As void*)
 	}
-	define void Set(SafeWideString* Key, void* Value) {
+	define void Set(SafeString* Key, void* Value) {
 		this->Upsert(this->HashString(Key), Value)
 	}
 	

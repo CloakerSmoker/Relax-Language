@@ -14,7 +14,7 @@ define Type MakeType(i64 BackingType, i16 PointerDepth) {
 
 struct TypeInfo {
 	ErrorContext* DefinedAt,
-	SafeWideString* Name,
+	SafeString* Name,
 	HashMap Fields,
 	HashMap Methods,
 	HashMap StaticMethods,
@@ -101,7 +101,7 @@ define i32 GetTypeStringLength(Type T) {
 define void StringifyType(void* RawBuffer, Type T) {
 	i8* Buffer := RawBuffer
 	
-	SafeWideString* Name := GetBaseType(T)->Name
+	SafeString* Name := GetBaseType(T)->Name
 	
 	for (i32 Index := 0, Index < Name->Length, Index += 1) {
 		Buffer[Index] := Name->ASCIICharacterAt(Index)

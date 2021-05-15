@@ -144,7 +144,7 @@ struct Token {
 	union {
 		void* Value
 		i64 IntegerValue
-		SafeWideString* StringValue
+		SafeString* StringValue
 	}
 	
 	union {
@@ -165,7 +165,7 @@ struct Token {
 		}
 		
 		if (Type = TOKEN_TYPE_IDENTIFIER || Type = TOKEN_TYPE_STRING || Type = TOKEN_TYPE_INTEGER) {
-			/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeWideString* and worthless in a comparison */
+			/* Special case for tokens containing strings, since TokenToTest->Value	is a SafeString* and worthless in a comparison */
 			
 			return true
 		} 
@@ -179,14 +179,14 @@ struct Token {
 
 struct LexerState {
 	BuildConfig* Config,
-	SafeWideString* SourceFilePath,
+	SafeString* SourceFilePath,
 	
 	HashMap* IncludedFiles,
 	HashMap Keywords,
 	
 	union {
-		i16* Source,
-		i16* SourceText
+		i8* Source,
+		i8* SourceText
 	}
 	
 	i32 SourceIndex,
@@ -208,7 +208,7 @@ struct LexerState {
 	
 	i32 CurrentTokenStart
 	
-	static LexerState* New(BuildConfig* Config, LexerState* Parent, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+	static LexerState* New(BuildConfig* Config, LexerState* Parent, i8* Source, i32 SourceLength, SafeString* SourceFilePath) {
 		LexerState* this := Alloc(#LexerState)
 		
 		this->Config := Config
@@ -260,15 +260,15 @@ struct LexerState {
 		
 		return this
 	}
-	static LexerState* New(BuildConfig* Config, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+	static LexerState* New(BuildConfig* Config, i8* Source, i32 SourceLength, SafeString* SourceFilePath) {
 		return LexerState:New(Config, null, Source, SourceLength, SourceFilePath)
 	}
-	static LexerState* New(LexerState* Parent, i16* Source, i32 SourceLength, SafeWideString* SourceFilePath) {
+	static LexerState* New(LexerState* Parent, i8* Source, i32 SourceLength, SafeString* SourceFilePath) {
 		return LexerState:New(Parent->Config, Parent, Source, SourceLength, SourceFilePath)
 	}
 	
 	define i8 PeekNextCharacter() {
-		return Lower(this->Source[this->SourceIndex] As i8)
+		return Lower(this->Source[this->SourceIndex])
 	}
 	define i8 GetNextCharacter() {
 		i8 Result := this->PeekNextCharacter()
@@ -282,7 +282,7 @@ struct LexerState {
 		return Result
 	}
 	define i8 GetNextCharacterRaw() {
-		i8 Result := this->Source[this->SourceIndex] As i8
+		i8 Result := this->Source[this->SourceIndex]
 		
 		this->GetNextCharacter()
 		
@@ -319,7 +319,7 @@ struct LexerState {
 		return this->Tokens[TokenIndex]
 	}
 	
-	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i16 Length, i16* SourceText, SafeWideString* SourceFilePath) {
+	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i16 Length, i8* SourceText, SafeString* SourceFilePath) {
 		if (this->Parent != null) {
 			return this->Parent->AppendToken(TokenType, TokenValue, LineNumber, Position, Length, SourceText, SourceFilePath)
 		}
@@ -366,10 +366,10 @@ struct LexerState {
 		return this->AppendToken(TOKEN_TYPE_PUNCTUATION, PunctuationValue)
 	}
 	
-	define SafeWideString* GetString(i32 StartIndex, i32 EndIndex) {
-		return SafeWideString:New(EndIndex - StartIndex, this->SourceText + StartIndex * 2)
+	define SafeString* GetString(i32 StartIndex, i32 EndIndex) {
+		return SafeString:New(EndIndex - StartIndex, this->SourceText + StartIndex)
 	}
-	define SafeWideString* GetString(i32 StartIndex) {
+	define SafeString* GetString(i32 StartIndex) {
 		return this->GetString(StartIndex, this->SourceIndex)
 	}
 	
@@ -395,9 +395,9 @@ struct LexerState {
 			}
 		}
 		
-		SafeWideString* RawNumericLiteral := this->GetString(StartIndex + (Base != 10) * 2)
+		SafeString* RawNumericLiteral := this->GetString(StartIndex + (Base != 10) * 2)
 		
-		SafeWideString* NumericLiteral := RawNumericLiteral->Clone()
+		SafeString* NumericLiteral := RawNumericLiteral->Clone()
 		
 		RawNumericLiteral->Free()
 		
@@ -407,7 +407,7 @@ struct LexerState {
 			}	
 		}
 		
-		i64 Result := WToI(NumericLiteral->Buffer, NumericLiteral->Length, Base, null)
+		i64 Result := NumericLiteral->ParseInteger(Base)
 		
 		NumericLiteral->Free()
 		
@@ -689,7 +689,7 @@ struct LexerState {
 			; Since `GetString` returns a sort-of slice out of the original source string
 			;  we need to clone it before actually replacing any escape sequences, otherwise
 			;   error printouts would show strings after they are escaped
-			SafeWideString* ConstantStringLiteral := this->GetString(StartingIndex + 1)
+			SafeString* ConstantStringLiteral := this->GetString(StartingIndex + 1)
 			
 			; Since `this->SourceIndex` is used in `GetString` to determine the length of the
 			;  string, we need to correct the length to not include the closing quote, and any suffixes
@@ -697,7 +697,7 @@ struct LexerState {
 			
 			ConstantStringLiteral->Length -= 1 + SkipEscapes + WideCharacters
 			
-			SafeWideString* StringLiteral := ConstantStringLiteral->Clone()
+			SafeString* StringLiteral := ConstantStringLiteral->Clone()
 			
 			ConstantStringLiteral->Free()
 			
@@ -770,7 +770,7 @@ struct LexerState {
 			
 			/* Gather all alphanumeric characters in a row */
 			
-			SafeWideString* TokenText := this->GetString(StartingIndex)
+			SafeString* TokenText := this->GetString(StartingIndex)
 			
 			HashMapElement* FoundKeyword := this~>Keywords->Get(TokenText)
 			
@@ -796,7 +796,7 @@ struct LexerState {
 				this->Backtrack()
 			}
 			
-			SafeWideString* DirectiveText := this->GetString(StartingIndex + 1)
+			SafeString* DirectiveText := this->GetString(StartingIndex + 1)
 			
 			i8 IsRequire := DirectiveText->Equals("require")
 			
@@ -824,7 +824,7 @@ struct LexerState {
 					this->Backtrack()
 				}
 				
-				SafeWideString* IncludePath := this->GetString(StartingIndex)
+				SafeString* IncludePath := this->GetString(StartingIndex)
 				
 				if (ExpectCloseQuote) {
 					if !(this->NextCharacterMatches('"')) {
@@ -847,12 +847,12 @@ struct LexerState {
 				Print("'\n")
 				
 				i32 EndIndex := IncludePath->Length
-				i16 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
+				i8 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
 				
 				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 				
 				i32 IncludeFileSize := 0
-				i16* IncludeFileText := OpenAndRead(WToA(IncludePath->Buffer), &IncludeFileSize)
+				i8* IncludeFileText := OpenAndRead(IncludePath->Buffer, &IncludeFileSize)
 				
 				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				

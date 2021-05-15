@@ -13,7 +13,7 @@ i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 struct VariableInfo {
 	ErrorContext* DefinedAt,
 	ASTNode* LastValue,
-	SafeWideString* Name,
+	SafeString* Name,
 	Type Type,
 	i32 StackOffset,
 	i16 GetCount,
@@ -40,7 +40,7 @@ struct VariableHashMap {
 		this->NextOffset := 0
 	}
 	
-	define VariableInfo* Get(SafeWideString* VariableName) {
+	define VariableInfo* Get(SafeString* VariableName) {
 		HashMapElement* FoundElement := this->Map->Get(VariableName)
 		
 		if (FoundElement) {
@@ -161,7 +161,7 @@ struct ParserState {
 		return this
 	}
 	
-	define TypeInfo* AddType(ErrorContext* BlameContext, SafeWideString* Name, i16 Size, i8 Flags) {
+	define TypeInfo* AddType(ErrorContext* BlameContext, SafeString* Name, i16 Size, i8 Flags) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
 		NewType->DefinedAt := BlameContext
@@ -194,7 +194,7 @@ struct ParserState {
 	
 	declare Token* GetCurrentToken()
 	
-	define Type TryFindType(SafeWideString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
+	define Type TryFindType(SafeString* TypeName, i16 PointerDepth, i8** ErrorMessage) {
 		HashMapElement* FoundTypeInfoElement := this~>Types->Get(TypeName)
 		TypeInfo* FoundTypeInfo := null
 		
@@ -214,7 +214,7 @@ struct ParserState {
 		
 		return FoundTypeInfo->AsPointer(PointerDepth)
 	}
-	define Type FindType(SafeWideString* TypeName, i16 PointerDepth) {
+	define Type FindType(SafeString* TypeName, i16 PointerDepth) {
 		i8* ErrorMessage := null
 		
 		Type Result := this->TryFindType(TypeName, PointerDepth, &ErrorMessage)
@@ -268,7 +268,7 @@ struct ParserState {
 	define VariableInfo* FindVariable(Token* NameToken) {
 		; Finds a variable, prioritizing locals over globals
 		
-		SafeWideString* VariableName := NameToken->StringValue
+		SafeString* VariableName := NameToken->StringValue
 		
 		FunctionDefine* CurrentFunction := this->CurrentFunction
 		VariableInfo* FoundVariable := null
@@ -977,7 +977,7 @@ struct ParserState {
 		if (ForImport) {
 			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Import source must have a prior '{'")
 			
-			SafeWideString* FileName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file name expected")->StringValue
+			SafeString* FileName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file name expected")->StringValue
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
 				this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source file extension expected")
@@ -985,7 +985,7 @@ struct ParserState {
 			
 			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA, "Comma expected between import source file and function names")
 			
-			SafeWideString* FunctionName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source function name expected")->StringValue
+			SafeString* FunctionName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Import source function name expected")->StringValue
 			
 			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE, "Expected closing '}'")
 			
@@ -1044,7 +1044,7 @@ struct ParserState {
 	}
 	
 	define TypeInfo* ParseCustomTypeName(Token* NameToken, i8 Flags) {
-		SafeWideString* Name := NameToken->StringValue
+		SafeString* Name := NameToken->StringValue
 		
 		TypeInfo* NewType := null
 		HashMapElement* FoundTypeElement := this~>Types->Get(Name)
@@ -1148,7 +1148,7 @@ struct ParserState {
 			NextField->ValueType := this->ParseType(true)
 			
 			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
-			SafeWideString* FieldName := FieldNameToken->StringValue
+			SafeString* FieldName := FieldNameToken->StringValue
 			NextField->Name := FieldName
 			NextField->DefinedAt := FieldNameToken~>Context
 			
@@ -1270,7 +1270,7 @@ struct ParserState {
 				OpenBracket->Error("Field size can not be negative, or bigger than the backing type.")
 			}
 			
-			SafeWideString* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected bit field name.")->StringValue
+			SafeString* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected bit field name.")->StringValue
 			
 			NextField->Name := FieldName
 			NextField->Offset := BackingTypeSize

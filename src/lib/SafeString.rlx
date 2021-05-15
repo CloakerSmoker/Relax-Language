@@ -2,13 +2,17 @@
 #Require ./src/lib/String.rlx
 #Require ./src/lib/Console.rlx
 
-struct SafeWideString {
-	i16* Buffer,
+#Require "./src/lib/Exception.rlx"
+
+i64 SAFE_STRING_PARSE_INTEGER_FAIL := 'SSPIF'
+
+struct SafeString {
+	i8* Buffer,
 	i32 Length,
 	i8 BufferIsSelfOwned
 	
-	static SafeWideString* New(i32 Length, i16* Buffer, i8 BufferIsSelfOwned) {
-		SafeWideString* this := Alloc(#SafeWideString)
+	static SafeString* New(i32 Length, i8* Buffer, i8 BufferIsSelfOwned) {
+		SafeString* this := Alloc(#SafeString)
 		
 		this->Length := Length
 		this->Buffer := Buffer
@@ -16,17 +20,19 @@ struct SafeWideString {
 		
 		return this
 	}
-	static SafeWideString* New(i32 Length, i16* Buffer) {
-		return SafeWideString:New(Length, Buffer, false) 
+	static SafeString* New(i32 Length, i8* Buffer) {
+		return SafeString:New(Length, Buffer, false) 
 	}
-	static SafeWideString* Adopt(i32 Length, i16* Buffer) {
-		return SafeWideString:New(Length, Buffer, true)
+	static SafeString* Adopt(i32 Length, i8* Buffer) {
+		return SafeString:New(Length, Buffer, true)
 	}
 	
-	define SafeWideString* Clone() {
-		i16* NewBuffer := CloneMemory(this->Buffer, this->Length * 2)
+	define SafeString* Clone() {
+		i8* NewBuffer := CloneMemory(this->Buffer, this->Length + 1)
 		
-		return SafeWideString:Adopt(this->Length, NewBuffer)
+		NewBuffer[this->Length] := 0
+		
+		return SafeString:Adopt(this->Length, NewBuffer)
 	}
 	
 	define void Free() {
@@ -38,7 +44,7 @@ struct SafeWideString {
 	}
 	
 	define i8 ASCIICharacterAt(i32 Index) {
-		return this->Buffer[Index] As i8
+		return this->Buffer[Index]
 	}
 	define i8 ASCIICharacterAt(i32 Index, i8 Default) {
 		if (Index >= this->Length) {
@@ -49,15 +55,15 @@ struct SafeWideString {
 	}
 	
 	define void ShiftLeft(i32 Index, i32 Length) {
-		i32 StartOffset := Index * 2
-		i32 EndOffset := Length * 2
+		i32 StartOffset := Index 
+		i32 EndOffset := Length
 		
-		i16* Start := this->Buffer + StartOffset
-		i16* End := Start + EndOffset
+		i8* Start := this->Buffer + StartOffset
+		i8* End := Start + EndOffset
 		
 		i32 ShiftCharacterCount := this->Length - Index - Length
 		
-		MoveMemory(Start, End, ShiftCharacterCount * 2)
+		MoveMemory(Start, End, ShiftCharacterCount)
 		
 		this->Length -= Length
 	}
@@ -72,7 +78,7 @@ struct SafeWideString {
 		}
 		
 		for (i32 ReplacementIndex := 0, ReplacementIndex < ReplacementLength, ReplacementIndex += 1) {
-			this->Buffer[Index + ReplacementIndex] := Replacement[ReplacementIndex] As i16
+			this->Buffer[Index + ReplacementIndex] := Replacement[ReplacementIndex] As i8
 		}
 	}
 	
@@ -86,7 +92,7 @@ struct SafeWideString {
 		Print("\n")
 	}
 	
-	define i8 Equals(SafeWideString* Other) {
+	define i8 Equals(SafeString* Other) {
 		return false
 	}
 	define i8 Equals(i8* Other) {
@@ -105,52 +111,56 @@ struct SafeWideString {
 		return true
 	}
 	
-	define i8* ToString() {
-		return WToA(this->Buffer, this->Length)
+	define i64 ParseInteger(i64 Base) {
+		i64 Result := 0
+		i64 Sign := 1
+		
+		i32 Offset := 0
+		
+		if (this->ASCIICharacterAt(0, 0) = '-') {
+			Sign := -1
+			Offset += 1
+		}
+		
+		if !(IsNumeric(this->ASCIICharacterAt(Offset, 0), Base)) {
+			Throw(SAFE_STRING_PARSE_INTEGER_FAIL)
+		}
+		
+		for (i32 Index := Offset, Index < this->Length, Index++) {
+			i8 Next := this->ASCIICharacterAt(Index)
+			
+			if !(IsNumeric(Next, Base)) {
+				Throw(SAFE_STRING_PARSE_INTEGER_FAIL)
+			}
+			
+			Result *= Base
+			Result += GetCharacterValue(Next)
+		}
+		
+		return Result * Sign
+	}
+	define i64 ParseInteger() {
+		return this->ParseInteger(10)
 	}
 	
-	define i8* PackToString() {
-		i8* Buffer := this->Buffer As i8*
-		
-		for (i32 Index := 0, Index < this->Length, Index += 1) {
-			Buffer[Index] := this->Buffer[Index] As i8
-		}
-		
-		Buffer[Index] := 0
-		
-		return Buffer
-	}
-	define void UnpackFromString() {
-		i8* Buffer := this->Buffer As i8*
-		
-		for (i32 Index := this->Length - 1, Index >= 0, Index -= 1) {
-			this->Buffer[Index] := Buffer[Index] As i16
-		}
+	define i8* Raw() {
+		return this->Buffer
 	}
 }
 
-define SafeWideString* AllocateNewSafeString() {
-	return Alloc(#SafeWideString) As SafeWideString*
+define SafeString* AllocateNewSafeString() {
+	return Alloc(#SafeString) As SafeString*
 }
-define void FreeSafeString(SafeWideString* StringToFree) {
+define void FreeSafeString(SafeString* StringToFree) {
 	Free(StringToFree As void*)
 }
 
-define SafeWideString* AToS(i8* SourceString) {
-	/* Converts an ASCII string to a SafeWideString (without freeing anything ever) */
-	
-	
-	i32 Length := StringLength(SourceString)
-	i16* Buffer := AToW(SourceString, Length)
-	
-	SafeWideString* NewString := SafeWideString:New(Length, Buffer)
-	NewString->BufferIsSelfOwned := true
-	
-	return NewString
+define SafeString* AToS(i8* SourceString) {
+	return SafeString:New(StringLength(SourceString), SourceString)
 }
 
-define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
-	/* Compares a SafeWideString and i8* ASCII string */
+define i8 SafeStringEqualsAString(SafeString* StringOne, i8* StringTwo) {
+	/* Compares a SafeString and i8* ASCII string */
 
 	i32 Index := 0
 	
@@ -171,7 +181,7 @@ define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
 			}
 		}
 		else if (Right = 0) {
-			/* If the AString ends before the SafeWideString, then they are not equal */
+			/* If the AString ends before the SafeString, then they are not equal */
 			return false
 		}
 		
@@ -185,7 +195,7 @@ define i8 SafeStringEqualsAString(SafeWideString* StringOne, i8* StringTwo) {
 	return false
 }
 
-define void PrintSafeString(SafeWideString* StringToPrint) {
+define void PrintSafeString(SafeString* StringToPrint) {
 	/* Prints a safe string (safely) by using the string's length */
 	
 	for (i32 Index := 0, Index < (StringToPrint->Length), Index += 1) {

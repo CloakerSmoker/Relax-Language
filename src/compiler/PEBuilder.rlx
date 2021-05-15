@@ -700,7 +700,7 @@ i16 RELOCATION_DIR64 := (10 * 0x1000) As i16
 ==========================================
 */
 
-define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeWideString* EntryText) {
+define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeString* EntryText) {
 	/* Writes EntryText as an ASCII string into ToBuilder->HintNameTable, and expands ToBuilder->HintNameTable */
 	
 	i32 Offset := ToBuilder->HintNameTableSize
@@ -733,7 +733,7 @@ define i32 AddHintNameTableEntry(PEBuilder* ToBuilder, SafeWideString* EntryText
 
 i32 HINT_NAME_ENTRY_NOT_FOUND := 0x0FFFFFFF
 
-define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToFind) {
+define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeString* EntryToFind) {
 	i32 Run := 0
 	
 	/* Scan InBuilder->HintNameTable for EntryToFind as an ASCII string */
@@ -760,7 +760,7 @@ define i32 FindHintNameTableEntry(PEBuilder* InBuilder, SafeWideString* EntryToF
 ==========================================
 */
 
-define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
+define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeString* DllName) {
 	/* Gets the index into ToBuilder->ImportSourceNameRVAs and ToBuilder->ImportHelpers for a given dll name */
 	
 	i32 TargetRVA := FindHintNameTableEntry(ToBuilder, DllName)
@@ -811,7 +811,7 @@ define i32 FindOrAddImportDll(PEBuilder* ToBuilder, SafeWideString* DllName) {
 	return 0
 }
 
-define void AddImport(PEBuilder* ToBuilder, SafeWideString* ToDll, SafeWideString* FunctionName, i64 WriteAddressToOffset) {
+define void AddImport(PEBuilder* ToBuilder, SafeString* ToDll, SafeString* FunctionName, i64 WriteAddressToOffset) {
 	/* Higher-level function to easily add an import */
 	
 	/* Find the index of the dll (or add it if it isn't found) */

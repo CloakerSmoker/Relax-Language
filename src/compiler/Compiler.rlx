@@ -134,21 +134,18 @@ struct CompilerState {
 		Free(this->Labels)
 	}
 	
-	SafeWideString* CurrentSourceFile
+	SafeString* CurrentSourceFile
 	i32 LineNumberHighWaterMark
 	
 	define void MarkLineNumber(ErrorContext* Context) {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			i32 Offset := this->CodeBase + this->Index
-			i8* SourceFile := Context->SourceFilePath->PackToString()
 			
-			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, SourceFile)
-			
-			Context->SourceFilePath->UnpackFromString()
+			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, Context->SourceFilePath->Buffer)
 		}
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {
-			SafeWideString* SourceFilePath := Context->SourceFilePath
+			SafeString* SourceFilePath := Context->SourceFilePath
 			
 			if (SourceFilePath != null && SourceFilePath = this->CurrentSourceFile) {
 				if (Context->LineNumber > this->LineNumberHighWaterMark) {
@@ -165,25 +162,19 @@ struct CompilerState {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			this->MarkLineNumber(Function~>Context)
 			
-			i8* FunctionName := Function->Name->PackToString()
 			i32 ReturnTypeOffset := this->DWARF->FindOrTranslateType(Function->ReturnType)
 			i64 FunctionAddress := this->Config->ImageBase + this->CodeBase + this->Index
 			i8 IsMain := Function->Name->Equals("Main")
 			
-			Result := this->DWARF->StartFunction(FunctionName, ReturnTypeOffset, FunctionAddress, IsMain)
-			
-			Function->Name->UnpackFromString()
+			Result := this->DWARF->StartFunction(Function->Name->Buffer, ReturnTypeOffset, FunctionAddress, IsMain)
 			
 			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
 				VariableInfo* NextParameter := Function->Parameters[Index]
 				
-				i8* Name := NextParameter->Name->PackToString()
 				i32 TypeOffset := this->DWARF->FindOrTranslateType(NextParameter->Type)
 				i32 StackOffset := GetVariableOffset(this, NextParameter, null)
 				
-				this->DWARF->AddLocalVariable(Name, TypeOffset, StackOffset)
-				
-				NextParameter->Name->UnpackFromString()
+				this->DWARF->AddLocalVariable(NextParameter->Name->Buffer, TypeOffset, StackOffset)
 			}
 			
 			HashMap* Locals := Function~>Locals~>BackingMap
@@ -204,13 +195,10 @@ struct CompilerState {
 							continue
 						}
 						
-						Name := NextLocal->Name->PackToString()
 						TypeOffset := this->DWARF->FindOrTranslateType(NextLocal->Type)
 						StackOffset := GetVariableOffset(this, NextLocal, null)
 						
-						this->DWARF->AddLocalVariable(Name, TypeOffset, StackOffset)
-						
-						NextLocal->Name->UnpackFromString()
+						this->DWARF->AddLocalVariable(NextLocal->Name->Buffer, TypeOffset, StackOffset)
 						
 						FoundElement := FoundElement->NextElement
 					}

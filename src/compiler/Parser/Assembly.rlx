@@ -28,7 +28,7 @@
 		}
 	}
 	
-	define Instruction* LookupInstruction(SafeWideString* Name, i32 EncodedOperands) {
+	define Instruction* LookupInstruction(SafeString* Name, i32 EncodedOperands) {
 		HashMapElement* ListHeadElement := this~>Instructions->Get(Name)
 		
 		if !(ListHeadElement) {
@@ -59,7 +59,7 @@
 		i32 RegisterSize := 0
 		i32 RegisterNumber := 0
 		
-		SafeWideString* NameString := NameToken->StringValue
+		SafeString* NameString := NameToken->StringValue
 		
 		; Any one register name is maximum four characters long
 		
@@ -324,7 +324,7 @@
 			
 			Next~>Context->Clone(NextToken~>Context)->Merge(PointerStar~>Context)
 			
-			SafeWideString* TypeName := TypeNameToken->StringValue
+			SafeString* TypeName := TypeNameToken->StringValue
 			
 			if (TypeName->Equals("i8")) {
 				Next->Type := OP_M8
@@ -352,7 +352,7 @@
 			if (ErrorMessage != null) {
 				Next->Type := O_L
 				
-				SafeWideString* LabelName := NextToken->StringValue
+				SafeString* LabelName := NextToken->StringValue
 				
 				HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(LabelName)
 				InstructionNode* FoundLabel := null
@@ -396,7 +396,7 @@
 			Next->ReferencesFunction := true
 			
 			Token* FunctionNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
-			SafeWideString* FunctionName := FunctionNameToken->StringValue
+			SafeString* FunctionName := FunctionNameToken->StringValue
 			
 			HashMapElement* FoundFunction := this~>Functions->Get(FunctionName)
 			
@@ -419,7 +419,7 @@
 	
 	define InstructionNode* ParseInstruction(AssemblyBlock* ThisBlock) {
 		Token* InstructionToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected instruction name")
-		SafeWideString* InstructionName := InstructionToken->StringValue
+		SafeString* InstructionName := InstructionToken->StringValue
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 			HashMapElement* FoundLabelElement := ThisBlock~>Labels->Get(InstructionName)

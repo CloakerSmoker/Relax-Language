@@ -168,7 +168,7 @@ struct BinaryExpression {
 
 struct StructField {
 	ErrorContext* DefinedAt,
-	SafeWideString* Name,
+	SafeString* Name,
 	i16 Offset,
 	Type ValueType,
 	i8 BitStartIndex,
@@ -364,7 +364,7 @@ struct InstructionNode {
 	
 	union {
 		Instruction* Base,
-		SafeWideString* LabelName
+		SafeString* LabelName
 	},
 	
 	union {
@@ -395,7 +395,7 @@ struct FunctionDefine {
 	ErrorContext Context,
 	
 	FunctionDefine* Next,
-	SafeWideString* Name,
+	SafeString* Name,
 	
 	i16 ParameterCount,
 	VariableInfo** Parameters,
@@ -408,15 +408,15 @@ struct FunctionDefine {
 	union {
 		Block* Body,
 		AssemblyBlock* AssemblyBody,
-		SafeWideString* ImportFileName
+		SafeString* ImportFileName
 	},
 	union {
 		i8* StringBuffer,
 		void* ConstantsBuffer,
-		SafeWideString* ImportFunctionName
+		SafeString* ImportFunctionName
 	},
 	
-	SafeWideString* MethodOfTypeName,
+	SafeString* MethodOfTypeName,
 	
 	i8 Attribute,
 	i8 HasFullDefinition,
@@ -563,7 +563,7 @@ struct ASTNode {
 		
 		ASTNode* ExpressionStatement,
 		
-		SafeWideString* StringValue,
+		SafeString* StringValue,
 		VariableInfo* VariableValue,
 		i64 IntegerValue,
 		Type TypeValue,

@@ -10,12 +10,13 @@ define void Exit(i32 ExitCode) {
 	}
 }
 
-define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
+define i8* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	i64 FileHandle := FileOpen(FilePath, FILE_READ)
 	
 	if (FileHandle < 0) {
 		SwapOutputStream()
 		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		
 		Exit(1)
 	}
 	
@@ -31,17 +32,14 @@ define i16* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	
 	if (ReadResult < 0) {
 		SwapOutputStream()
-		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		Print("Could not read file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(ReadResult))
 		
 		Exit(1)
 	}
 	
-	i16* Source := AToW(FileBuffer As i8*, FileSize)
-	
-	Free(FileBuffer)
 	FileClose(FileHandle)
 	
-	return Source
+	return FileBuffer
 }
 
 i8 OUTPUT_PE := 0
@@ -78,9 +76,9 @@ struct BuildConfig {
 declare void PrettyError(ErrorContext*, i8*, i8)
 
 struct ErrorContext {
-	SafeWideString* SourceFilePath,
+	SafeString* SourceFilePath,
 	i32 LineNumber,
-	i16* Source,
+	i8* Source,
 	i32 PositionInSource,
 	i16 LengthInSource
 	
@@ -156,17 +154,17 @@ define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext*
 	}
 }
 
-define i16* FindLastLine(i16* Base, i32 Offset) {
+define i8* FindLastLine(i8* Base, i32 Offset) {
 	i32 Index := 0
-	i16* WString := Base + Offset
+	i8* Needle := Base + Offset
 	
 	loop {
-		i16 NextCharacter := (WString - Index)[0]
+		i16 NextCharacter := (Needle - Index)[0]
 		
 		if (NextCharacter = 13 || NextCharacter = 10) {
-			return (WString - Index) + 2
+			return (Needle - Index) + 2
 		}
-		else if ((WString - Index) <= Base) {
+		else if ((Needle - Index) <= Base) {
 			break
 		}
 		
@@ -206,22 +204,22 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	
 	Print(" ^F0]\n %s | ", LineNumberString)
 	
-	i32 OffsetInSource := At->PositionInSource * 2
+	i32 OffsetInSource := At->PositionInSource
 	
-	i16* SourceLine := FindLastLine(At->Source, OffsetInSource)
-	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Source As i32)) / 2
+	i8* SourceLine := FindLastLine(At->Source, OffsetInSource)
+	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Source As i32))
 	
 	i32 DashCount := 0
 	
 	for (i32 LeftIndex := 0, LeftIndex < PositionInLine, LeftIndex += 1) {
-		i16 NextLeftCharacter := SourceLine[LeftIndex]
+		i8 NextLeftCharacter := SourceLine[LeftIndex]
 		
 		if (NextLeftCharacter = '	') {
 			PrintSpaces(4)
 			DashCount += 4
 		}
 		else {
-			PrintCharacter(NextLeftCharacter As i8)
+			PrintCharacter(NextLeftCharacter)
 			DashCount += 1
 		}
 	}
@@ -229,13 +227,13 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	i32 RightIndex := LeftIndex
 	
 	loop {
-		i16 NextCharacter := SourceLine[RightIndex]
+		i8 NextCharacter := SourceLine[RightIndex]
 		
 		if (NextCharacter = 10 || NextCharacter = 13 || NextCharacter = 0) {
 			break
 		}
 		
-		PrintCharacter(NextCharacter As i8)
+		PrintCharacter(NextCharacter)
 		RightIndex += 1
 	}
 	
