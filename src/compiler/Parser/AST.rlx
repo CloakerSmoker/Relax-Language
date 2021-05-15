@@ -466,7 +466,7 @@ struct FunctionDefine {
 		
 		return Length
 	}
-	define void StringifyInto(void* IntoRawBuffer) {
+	define void StringifyInto(void* IntoRawBuffer, i8 StaticMethodSeperatorCharacter) {
 		i8* Buffer := IntoRawBuffer
 		i32 Offset := 0
 		
@@ -482,7 +482,7 @@ struct FunctionDefine {
 		
 		if (this->IsMethod) {
 			if (this->IsMethod = FUNCTION_IS_STATIC_METHOD) {
-				Buffer[Offset] := ':'
+				Buffer[Offset] := StaticMethodSeperatorCharacter
 			}
 			else {
 				Buffer[Offset] := '.'
@@ -503,8 +503,8 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
-			if (ParameterIndex = 0 && this->IsMethod) {
-				; Skip the `this` parameter
+			if (ParameterIndex = 0 && this->IsMethod != FUNCTION_IS_STATIC_METHOD) {
+				; Skip the `this` parameter (but only if we're dealing with a plain method)
 				
 				continue
 			}
@@ -533,6 +533,9 @@ struct FunctionDefine {
 		Offset += 1
 		
 		;Print("%s\n", Buffer)
+	}
+	define void StringifyInto(void* IntoRawBuffer) {
+		this->StringifyInto(IntoRawBuffer, ':')
 	}
 }
 
