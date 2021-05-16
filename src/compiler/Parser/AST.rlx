@@ -169,8 +169,14 @@ struct BinaryExpression {
 struct StructField {
 	ErrorContext* DefinedAt,
 	SafeString* Name,
-	i16 Offset,
 	Type ValueType,
+	
+	union {
+		i32 Extra
+		i32 DWARFTypeOffset
+	}
+	
+	i16 Offset,
 	i8 BitStartIndex,
 	i8 BitEndIndex
 }
@@ -444,7 +450,7 @@ struct FunctionDefine {
 		}
 		
 		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
-			if (Index = 0 && this->IsMethod != FUNCTION_IS_STATIC_METHOD) {
+			if (Index = 0 && this->IsMethod = FUNCTION_IS_METHOD) {
 				; Skip the `this` parameter
 				
 				continue
@@ -503,7 +509,7 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
-			if (ParameterIndex = 0 && this->IsMethod != FUNCTION_IS_STATIC_METHOD) {
+			if (ParameterIndex = 0 && this->IsMethod = FUNCTION_IS_METHOD) {
 				; Skip the `this` parameter (but only if we're dealing with a plain method)
 				
 				continue

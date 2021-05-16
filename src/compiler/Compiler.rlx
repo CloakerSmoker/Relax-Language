@@ -109,6 +109,10 @@ struct CompilerState {
 		this->TotalTryDepth := 0
 		
 		this->FunctionCount := 0
+	}
+	
+	define void InitializeDebugInfo() {
+		BuildConfig* Config := this->Config
 		
 		if (Config->DebugMode & DEBUG_EMIT_DWARF) {
 			this->DWARF := DWARFBuilder:New()
@@ -127,8 +131,37 @@ struct CompilerState {
 			
 			this->DWARF->LineInfo->SetImageBase(Config->ImageBase)
 			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
+			
+			VariableHashMap* Globals := this->Parser~>Globals
+			HashMap* RawGlobals := Globals->Map
+			
+			void* Elements := RawGlobals->Elements
+			
+			i32 MaxOffset := Globals->NextOffset
+			i32 Base := this->GlobalBase
+			
+			i32 MaxIndex := RawGlobals->BufferMaxCount As i32
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						VariableInfo* NextGlobal := FoundElement->Value
+						
+						if (NextGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+							i32 TypeOffset := this->DWARF->FindOrTranslateType(NextGlobal->Type)
+							
+							this->DWARF->AddGlobalVariable(NextGlobal->Name->Buffer, TypeOffset, this->GlobalBase + NextGlobal->StackOffset)
+						}
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
 		}
 	}
+	
 	define void Free() {
 		Free(this->CodeBuffer)
 		Free(this->CodeRelocations)
@@ -139,6 +172,10 @@ struct CompilerState {
 	i32 LineNumberHighWaterMark
 	
 	define void MarkLineNumber(ErrorContext* Context) {
+		if (Context->SourceFilePath = null) {
+			return
+		}
+		
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			i32 Offset := this->CodeBase + this->Index
 			
@@ -146,9 +183,7 @@ struct CompilerState {
 		}
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {
-			SafeString* SourceFilePath := Context->SourceFilePath
-			
-			if (SourceFilePath != null && SourceFilePath = this->CurrentSourceFile) {
+			if (Context->SourceFilePath = this->CurrentSourceFile) {
 				if (Context->LineNumber > this->LineNumberHighWaterMark) {
 					Print("\t%i:	%x\n", Context->LineNumber, this->CodeBase + this->Index)
 					this->LineNumberHighWaterMark := Context->LineNumber
@@ -410,9 +445,9 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	
 	CompilerState* Compiler := Alloc(#CompilerState)
 	
-	Compiler->Initialize(Config, Parser)
-	
 	; Todo: Fix all of the random constants for section offsets
+	
+	Compiler->Initialize(Config, Parser)
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
 		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
@@ -426,7 +461,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
 		Compiler->CodeBase := (0x231a) As i32
 		
-		Compiler->DistanceBetweenGlobalsAndCode := 0x1000
+		Compiler->DistanceBetweenGlobalsAndCode := 0x131a
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder()
@@ -439,6 +474,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		Compiler->DistanceBetweenGlobalsAndCode := 0x2000
 	}
+	
+	Compiler->InitializeDebugInfo()
 	
 	Compiler->GlobalStringsLabel := NextLabel(Compiler)
 
@@ -814,6 +851,9 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
 		CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
+		
+		Compiler->AfterCompileFunction(FunctionToCompile, DebugData, FunctionOffset)
+		
 		return FunctionOffset
 	}
 	
@@ -821,6 +861,9 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		/* Empty functions don't deserve any prelude code. */
 		
 		EmitReturn(Compiler)
+		
+		Compiler->AfterCompileFunction(FunctionToCompile, DebugData, FunctionOffset)
+		
 		return FunctionOffset
 	}
 	
@@ -948,8 +991,6 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		CompileSetVariableValue(Compiler, NextStackParameter, RAX)
 	}
 	
-	Compiler->AfterPrologueEnd()
-	
 	if (IsMain) {
 		Compiler->CurrentFunctionStringsLabel := Compiler->GlobalStringsLabel
 		
@@ -963,13 +1004,21 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 				VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 				
 				if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
+					;Print("CMLN1 %s\n", TargetGlobal->Name->Buffer)
+					
 					Compiler->MarkLineNumber(NextGlobalDefault~>Context)
+					
+					;Print("CMLN2 %s\n", TargetGlobal->Name->Buffer)
 					
 					CompileExpression(Compiler, RAX, NextGlobalDefault)
 				}
 			}
 			else {
+				;Print("CMLN3\n")
+				
 				Compiler->MarkLineNumber(NextGlobalDefault~>Context)
+				
+				;Print("CMLN4\n")
 				
 				CompileExpression(Compiler, RAX, NextGlobalDefault)
 			}
@@ -977,6 +1026,9 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		Compiler->CurrentFunctionStringsLabel := StringsLabel
 	}
+	
+	Compiler->MarkLineNumber(FunctionToCompile~>Context)
+	Compiler->AfterPrologueEnd()
 	
 	/* Compile the body of the function */
 	

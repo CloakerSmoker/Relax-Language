@@ -15,11 +15,14 @@ struct DWARFBuilder {
 	DWARFLineProgramBuilder* LineInfo
 	
 	HashMap Types
+	HashMap IncompleteTypes
 	
 	i32 CompilationUnitTag
 	i32 BaseTypeTag
 	i32 PointerTypeTag
 	i32 StructTypeTag
+	i32 IncompleteStructTypeTag
+	i32 StructCompletionTypeTag
 	i32 StructFieldTag
 	i32 VariableTag
 	i32 FunctionDefinitionTag
@@ -36,6 +39,7 @@ struct DWARFBuilder {
 		this->LineInfo := DWARFLineProgramBuilder:New()
 		
 		this~>Types->Initialize()
+		this~>IncompleteTypes->Initialize()
 		
 		return this
 	}
@@ -69,6 +73,16 @@ struct DWARFBuilder {
 		this->StructTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, true)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+		A->EndAbbreviation()
+		
+		this->IncompleteStructTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_DECLARATION, DWARF_FORM_FLAG_PRESENT)
+		A->EndAbbreviation()
+		
+		this->StructCompletionTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_SPECIFICATION, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
 		A->EndAbbreviation()
 		
 		this->StructFieldTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
@@ -182,6 +196,23 @@ struct DWARFBuilder {
 		
 		return StructOffset
 	}
+	
+	define i32 AddIncompleteStruct(i8* Name) {
+		i32 IncompleteStructOffset := this->DIEStream->StartEntry(this->IncompleteStructTypeTag)
+			this->DIEStream->AppendString(Name)
+		this->DIEStream->EndEntry()
+		
+		return IncompleteStructOffset
+	}
+	define i32 StartStructCompletion(i32 IncompleteDefinitionOffset, i16 Size) {
+		i32 StructCompletionOffset := this->DIEStream->StartEntry(this->StructCompletionTypeTag)
+			this->DIEStream->AppendI32(IncompleteDefinitionOffset)
+			this->DIEStream->AppendI16(Size)
+		this->DIEStream->EndEntry()
+		
+		return StructCompletionOffset
+	}
+	
 	define i32 AddStructField(i8* Name, i32 TypeOffset, i32 Offset) {
 		i32 FieldOffset := this->DIEStream->StartEntry(this->StructFieldTag)
 			this->DIEStream->AppendString(Name)
@@ -289,29 +320,55 @@ struct DWARFBuilder {
 		return GlobalOffset
 	}
 	
-	declare i32 FindOrTranslateType(Type)
+	declare i32 FindOrTranslateType(Type, i8)
 	
-	define i32 TranslateTypeInfo(TypeInfo* T) {
+	define i32 FindOrTranslateType(Type T) {
+		return this->FindOrTranslateType(T, false)
+	}
+	
+	define i32 TranslateTypeInfo(TypeInfo* T, i8 MustBeIncomplete) {
 		i32 Offset := 0
 		
 		if (T->IsStructType) {
-			Offset := this->StartStruct(T->Name->Buffer, T->Size)
+			Offset := this->AddIncompleteStruct(T->Name->Buffer)
 			this~>Types->Set(T->Name, Offset)
+			
+			if (MustBeIncomplete) {
+				return Offset
+			}
 			
 			void* Elements := T~>Fields->Elements
 			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
 			
 			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				; Ensure full definitions for any array/pointer/bits types, but only incomplete definitions
+				;  for nested struct types
+				
 				if (Elements[ElementIndex]) {
 					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
 					
 					while (FoundElement) {
 						StructField* NextField := FoundElement->Value
 						
-						i32 TypeOffset := this->FindOrTranslateType(NextField->ValueType)
-						i32 FieldOffset := NextField->Offset
+						NextField->DWARFTypeOffset := this->FindOrTranslateType(NextField->ValueType)
 						
-						this->AddStructField(NextField->Name->Buffer, TypeOffset, FieldOffset)
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+			
+			Offset := this->StartStructCompletion(Offset, T->Size)
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				; Complete our earlier definition, filling in the actual size/fields
+				
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						this->AddStructField(NextField->Name->Buffer, NextField->DWARFTypeOffset, NextField->Offset)
 						
 						FoundElement := FoundElement->NextElement
 					}
@@ -351,7 +408,7 @@ struct DWARFBuilder {
 		return Offset
 	}
 	
-	define i32 FindOrTranslateType(Type T) {
+	define i32 FindOrTranslateType(Type T, i8 MustBeIncomplete) {
 		TypeInfo* BaseType := GetBaseType(T)
 		
 		HashMapElement* BaseTypeElement := this~>Types->Get(BaseType->Name)
@@ -362,7 +419,7 @@ struct DWARFBuilder {
 			BaseTypeOffset := BaseTypeElement->Value As i32
 		}
 		else {
-			BaseTypeOffset := this->TranslateTypeInfo(BaseType)
+			BaseTypeOffset := this->TranslateTypeInfo(BaseType, MustBeIncomplete)
 		}
 		
 		i32 TypeOffset := BaseTypeOffset

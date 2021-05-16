@@ -274,7 +274,7 @@ struct SigAction {
 
 define void SigRestorer() asm {
 	mov, rax, 15
-	syscl
+	syscall
 }
 
 define void SigHandler(i32 SignalNumber, SigInfo* Info, SigUserContext* UserContext) {
@@ -294,7 +294,11 @@ define void SigHandler(i32 SignalNumber, SigInfo* Info, SigUserContext* UserCont
 	}
 }
 
-SigAction SignalToExceptionHandler {Handler: &SigHandler, Restorer: &SigRestorer, Flags: SA_RESTORER | SA_SIGINFO}
+SigAction SignalToExceptionHandler {
+	Handler: &SigHandler, 
+	Restorer: &SigRestorer, 
+	Flags: SA_RESTORER | SA_SIGINFO
+}
 
 i32 SIGILL  := 4
 i32 SIGBUS  := 7
