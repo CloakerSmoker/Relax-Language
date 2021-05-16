@@ -276,12 +276,9 @@ struct IRCompilerState {
 				return FoundLocalElement->Value
 			}
 			else {
-				i8* Name := CloneMemory(ActualVariable->Name->PackToString(), ActualVariable->Name->Length)
-				ActualVariable->Name->UnpackFromString()
-				
 				i8 ActualVariableSize := GetTypeSize(ActualVariable->Type) As i8
 				
-				IRVariable* NewVariable := IRVariable:New(Name, ActualVariable->StackOffset, ActualVariableSize, false, ActualVariable->GetCount As i8)
+				IRVariable* NewVariable := IRVariable:New(ActualVariable->Name->Buffer, ActualVariable->StackOffset, ActualVariableSize, false, ActualVariable->GetCount As i8)
 				
 				this~>LocalsToIRVariables->Set(ActualVariable->Name, NewVariable)
 				
@@ -603,7 +600,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	i8* InputFilePath := ArgV[1]
 	
 	i32 SourceLength := 0
-	i16* Source := OpenAndRead(InputFilePath, &SourceLength)
+	i8* Source := OpenAndRead(InputFilePath, &SourceLength)
 	
 	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
 	Config->Lexer := Lexer

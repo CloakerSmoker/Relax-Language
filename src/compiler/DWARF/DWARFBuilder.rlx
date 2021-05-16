@@ -18,18 +18,24 @@ struct DWARFBuilder {
 	HashMap IncompleteTypes
 	
 	i32 CompilationUnitTag
+	
 	i32 BaseTypeTag
 	i32 PointerTypeTag
+	i32 ArrayTypeTag
+	
 	i32 StructTypeTag
-	i32 IncompleteStructTypeTag
+	i32 StructTypeAliasTag
 	i32 StructCompletionTypeTag
 	i32 StructFieldTag
-	i32 VariableTag
-	i32 FunctionDefinitionTag
-	i32 FunctionParameterTag
+	
 	i32 BitsTypeTag
 	i32 BitsFieldTag
-	i32 ArrayTypeTag
+	
+	i32 FunctionDefinitionTag
+	i32 FunctionParameterTag
+	
+	i32 VariableTag
+	
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -75,13 +81,19 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 		A->EndAbbreviation()
 		
-		this->IncompleteStructTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, false)
+		; Structs are written in a slightly funky way. First, we write a `typedef %Name% 0` entry which we can
+		;  point to if the struct refers to itself. Then, when writing the actual definition of the struct, we go back
+		;   and rewrite it to `typedef %Name% %Definition%`
+		
+		; This avoids problems with infinitely recursive structure pointers and such. I don't remember how, so just trust
+		;  me on it
+		
+		this->StructTypeAliasTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_TYPE_ALIAS, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
-			A->AppendAttributePair(DWARF_ATTRIBUTE_DECLARATION, DWARF_FORM_FLAG_PRESENT)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 		A->EndAbbreviation()
 		
 		this->StructCompletionTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_STRUCTURE, true)
-			A->AppendAttributePair(DWARF_ATTRIBUTE_SPECIFICATION, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
 		A->EndAbbreviation()
 		
@@ -197,18 +209,24 @@ struct DWARFBuilder {
 		return StructOffset
 	}
 	
-	define i32 AddIncompleteStruct(i8* Name) {
-		i32 IncompleteStructOffset := this->DIEStream->StartEntry(this->IncompleteStructTypeTag)
+	define i32 AddIncompleteStruct(i32* TargetTypeOffset, i8* Name) {
+		i32 IncompleteStructOffset := this->DIEStream->StartEntry(this->StructTypeAliasTag)
 			this->DIEStream->AppendString(Name)
+			*TargetTypeOffset := this->DIEStream->Stream->Tell()
+			this->DIEStream->AppendI32(0)
 		this->DIEStream->EndEntry()
 		
 		return IncompleteStructOffset
 	}
-	define i32 StartStructCompletion(i32 IncompleteDefinitionOffset, i16 Size) {
+	define i32 StartStructCompletion(i32 AliasOffset, i16 Size) {
 		i32 StructCompletionOffset := this->DIEStream->StartEntry(this->StructCompletionTypeTag)
-			this->DIEStream->AppendI32(IncompleteDefinitionOffset)
 			this->DIEStream->AppendI16(Size)
 		this->DIEStream->EndEntry()
+		
+		i32 Offset := this->DIEStream->Stream->Tell()
+		this->DIEStream->Stream->Seek(AliasOffset)
+		this->DIEStream->AppendI32(StructCompletionOffset)
+		this->DIEStream->Stream->Seek(Offset)
 		
 		return StructCompletionOffset
 	}
@@ -330,7 +348,9 @@ struct DWARFBuilder {
 		i32 Offset := 0
 		
 		if (T->IsStructType) {
-			Offset := this->AddIncompleteStruct(T->Name->Buffer)
+			i32 AliasOffset := 0
+			
+			Offset := this->AddIncompleteStruct(&AliasOffset, T->Name->Buffer)
 			this~>Types->Set(T->Name, Offset)
 			
 			if (MustBeIncomplete) {
@@ -357,7 +377,7 @@ struct DWARFBuilder {
 				}
 			}
 			
-			Offset := this->StartStructCompletion(Offset, T->Size)
+			Offset := this->StartStructCompletion(AliasOffset, T->Size)
 			
 			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 				; Complete our earlier definition, filling in the actual size/fields
