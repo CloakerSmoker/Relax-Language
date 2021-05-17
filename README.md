@@ -20,12 +20,8 @@ For more info, see the [docs](https://cloakersmoker.github.io/Relax-Language/#).
 #Include ./src/lib/String.rlx
 #Include ./src/lib/Console.rlx
 
-/* 
-	A simple calculator, which works when compiled for both Windows and Linux.
-*/
-
 define i32 Main(i64 ArgC, i8** ArgV) {
-	GetArgs(&ArgC, &ArgV) /* Ensures that ArgC/ArgV are set on Windows, does nothing on Linux */
+	GetArgs(&ArgC, &ArgV) ; Ensures that ArgC/ArgV are set on Windows, does nothing on Linux
 	
 	i64 Left := AToI(ArgV[1])
 	i64 Right := AToI(ArgV[3])

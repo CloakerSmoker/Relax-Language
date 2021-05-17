@@ -39,8 +39,66 @@ define void CompilerUnhandledExceptionHandler(i64 Code) {
 	}
 }
 
+i8* ProgramName := "[compiler]"
+
+define void Help() {	
+	Print("Usage: %s [INPUT_FILE] [OUTPUT_FILE]\n", ProgramName)
+	Print("       %s [OPTIONS] -i [INPUT_FILE] -o [OUTPUT_FILE]\n", ProgramName)
+	Print("Compiles the given program, and writes an executable in the provided output format.\n")
+	Print("If no output format is given, it is assumed based on the current OS.\n")
+	Print(" (On Windows, PE/exe files are the default. On Linux, ELF files are the default)\n\n")
+
+	Print(" Input/output file paths (one of each is required)\n")
+	Print("   -i \t\t\t set [INPUT_FILE] to the following path\n")
+	Print("   -o \t\t\t set [OUTPUT_FILE] to the following path\n")
+
+	Print(" Output file format options (only one can be specified):\n")
+	Print("   --elf \t\t write the compiled code into an ELF (Linux) executable\n")
+	Print("   --pe \t\t write the compiled code into a PE/exe (Windows) executable\n")
+	Print("   --bin \t\t write the compiled code into a raw bin file, with no format\n") 
+	Print("         \t\t  which can be loaded into any RWX memory and executed\n")
+
+	Print(" Line ending options (only one can be specified):\n")
+	Print("   --cr \t\t replace \"\\n\" inside of strings with CR (Unix line endings)\n")
+	Print("   --crlf \t\t replace \"\\n\" inside of strings with CRLF (Windows line endings)\n")
+
+	Print(" Debug info options (any/all can be specified):\n")
+	Print("   --debug \t\t emit very basic debug info which can be used to provide function names in stack traces\n")
+	Print("   --dwarf \t\t emit DWARF debugging info for use with GDB or any other DWARF compatible debugger\n")
+	Print("           \t\t  (only valid when the output file format is ELF)\n")
+
+	Print(" Info dump options (any/all can be specified):\n")
+	Print("   --functions \t\t print a dump of function names/addressed after compilation\n")
+	Print("   --globals \t\t print a dump of global variable sizes/addresses after compilation\n")
+	Print("   --lines \t\t print a dump of line numbers/addresses after compilation\n")
+
+	Print(" Other:\n")
+	Print("   -h \t\t\t print this help message\n")
+	Print("   --help\n")
+	Print("   --no-colors \t\t disables writing ANSI escapes to prettify output\n")
+
+	windows {
+		i8 SuccessStatus := 1
+	}
+	linux {
+		i8 SuccessStatus := 0
+	}
+	
+	Print("\nThe compiler will exit with code %i when the program is successfully compiled, printing any warnings/errors to stderr.\n", SuccessStatus)
+	Print("Note: For legacy reasons, the compiler considers 1 as a \"success\" exit code on Windows, and 0 as a \"success\" code on Linux.\n")
+	Print("The first line of this message contains the correct \"success\" code for this compiler binary (\"%s\").\n", ProgramName)
+	
+	Print("\nOccasionally, the compiler will exit with a failing status code, but without printing an error to stdout.\n")
+	Print("Or, instead of printing a \"pretty\" error, it will print a raw stack dump, along with some extra debugging info.\n\n")
+	Print("This is a compiler bug, and it should be reported. Thankfully, this kind of bug is getting rarer and rarer.\n")
+
+	Exit(SuccessStatus)
+}
+
 define i32 Main(i64 ArgC, i8** ArgV) {	
 	GetArgs(&ArgC, &ArgV) /* NOP on Linux */
+	
+	ProgramName := Argv[0]
 	
 	BuildConfig* Config := Alloc(#BuildConfig)
 	
@@ -90,6 +148,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			OutputFilePath := ArgV[Index]
 			
 			Print("Output File: '%s'\n", OutputFilePath)
+		}
+		else if (StringEquals(NextOption, "-h") || StringEquals(NextOption, "--help")) {
+			Help()
 		}
 	}
 
