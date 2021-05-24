@@ -807,7 +807,14 @@ struct ParserState {
 	
 			VariableInfo* ThisParameter := Alloc(#VariableInfo)
 			ThisParameter->Name := AToS("this")
-			ThisParameter->Type := ThisType->AsPointer(1)
+			
+			if (ThisType->IsBits) {
+				ThisParameter->Type := ThisType->AsNonPointer()
+			}
+			else {
+				ThisParameter->Type := ThisType->AsPointer(1)
+			}
+			
 			ThisParameter->IsParameter := true
 			ThisParameter->IsThis := true
 			
@@ -1104,8 +1111,6 @@ struct ParserState {
 		i16 MaxUnionSize := 0
 		
 		loop {
-			StructField* NextField := Alloc(#StructField) As StructField*
-			
 			if !(InUnion) {
 				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
@@ -1145,6 +1150,8 @@ struct ParserState {
 					}
 				}
 			}
+			
+			StructField* NextField := Alloc(#StructField) As StructField*
 			
 			NextField->ValueType := this->ParseType(true)
 			
@@ -1225,8 +1232,12 @@ struct ParserState {
 		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_BITS)
 		
 		HashMap* Fields := NewType~>Fields
+		HashMap* Methods := NewType~>Methods
+		HashMap* StaticMethods := NewType~>StaticMethods
 		
 		Fields->Initialize()
+		Methods->Initialize()
+		StaticMethods->Initialize()
 		
 		this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
 		
@@ -1250,6 +1261,37 @@ struct ParserState {
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
 		
 		loop {
+			i8 IsMethod := false
+			i8 IsStaticMethod := false
+			Token* MethodKeyword := this->PeekNextToken()
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
+				i8 KeywordValue := MethodKeyword->Value As i8
+				
+				IsStaticMethod := KeywordValue = KEYWORD_STATIC
+				IsMethod := IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
+			}
+			
+			if (IsMethod) {
+				HashMap* MethodNamespace := Methods
+				TypeInfo* ThisType := NewType
+				
+				if (IsStaticMethod) {
+					MethodNamespace := StaticMethods
+				}
+				
+				this->ParseFunctionDefinition(MethodNamespace, MethodKeyword, ThisType, !IsStaticMethod)
+				
+				; Ignore commas after methods, they aren't actually needed for parsing
+				this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+				
+				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					break
+				}
+				
+				continue
+			}
+		
 			StructField* NextField := Alloc(#StructField) As StructField*
 			
 			Type FieldType := TYPE_NONE

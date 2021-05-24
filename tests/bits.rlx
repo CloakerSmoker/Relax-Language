@@ -13,6 +13,14 @@ bits Example2 As i64 {
 bits Example3 As i64 {
 	i64* [0:47] a_pointer,
 	[48:63] a_tag
+	
+	define i64 Deref() {
+		return *this.a_pointer
+	}
+	
+	static i8 Test() {
+		return 20
+	}
 }
 
 define i32 Main() {
@@ -42,7 +50,10 @@ define i32 Main() {
 	
 	Test := 9000
 	
-	Print(*E3.a_pointer = Test)
+	;Print(*E3.a_pointer = Test)
+	Print(E3.Deref() = Test)
+	
+	Print(Example3:Test() = 20)
 	
 	return E As i32
 }

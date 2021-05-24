@@ -1056,7 +1056,7 @@
 					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a 
 					;  method call
 					
-					if (LeftDepth = 0) {
+					if (LeftDepth = 0 && !LeftBase->IsBits) {
 						; If `this` is a local struct, we change it to a `ThisType*` so the parameter type 
 						;  matches and the compiler will make sure to pass the address of `this` instead of 
 						;   the value.
