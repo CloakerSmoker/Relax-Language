@@ -104,7 +104,15 @@ define i32 Main() {
 	
 	Print("%i", Result)
 	
-	Print(" \"\\ %i%i%i", 0b1_1_0_1, 0xd, 13)
+	Print(" \"\\ %i%i%i ", 0b1_1_0_1, 0xd, 13)
+	
+	ExtraText T
+	
+	T.Text[0] := 'h'
+	T.Text[1] := 'i'
+	T.Text[2] := 0
+	
+	Print("%s", T.Text)
 	
 	return 0
 }

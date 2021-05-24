@@ -1094,9 +1094,6 @@
 					if (Operator = OPERATOR_TILDE_GREATER && !FieldType.IsArray) {
 						FieldType := this->PointerToType(FieldType)
 					}
-					else if (Operator != OPERATOR_TILDE_GREATER && FieldType.IsArray) {
-						OperatorToken->Error("Array fields can only be accessed with the `~>` operator")
-					}
 					
 					Result := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, FieldType)
 					
