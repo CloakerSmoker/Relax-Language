@@ -1043,10 +1043,11 @@
 				; If a local struct is accessed using `->`, it is an error. 
 				; Or If a pointed-to structure is accessed via `.`, it is an error
 				
-				if ((LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER)) {
-					OperatorToken->Error("Wrong operator for left side pointer depth")
-				}
-				else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
+				;if ((LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER)) {
+				;	OperatorToken->Error("Wrong operator for left side pointer depth")
+				;}
+				;else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
+				if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")

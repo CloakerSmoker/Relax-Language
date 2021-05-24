@@ -29,18 +29,18 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	Test* T := Alloc(#Test)
 	
-	T->C := AToI(ArgV[1])
+	T.C := AToI(ArgV[1])
 	
-	T->A := AToI(ArgV[2]) As i8
+	T.A := AToI(ArgV[2]) As i8
 	
 	i64 Dummy := 64
 	
-	Print("%i %i,", T->C, T->A)
+	Print("%i %i,", T->C, T.A)
 	
 	Test A
 	
 	A.B := T->A
-	A.D := T->C As i32
+	A.D := T.C As i32
 	
 	i64 DummyTwo := 90
 	

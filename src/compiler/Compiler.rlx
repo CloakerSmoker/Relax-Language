@@ -1729,7 +1729,8 @@ declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpre
 define i32 CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	ASTNode* Left := TargetAccess->Left
 	
-	if (TargetAccess->Operator->Value = OPERATOR_DOT) {
+	;if (TargetAccess->Operator->Value = OPERATOR_DOT) {
+	if (GetPointerDepth(Left->ValueType) = 0) {
 		if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
 			CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
 			return 0
