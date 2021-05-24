@@ -1252,6 +1252,18 @@ struct ParserState {
 		loop {
 			StructField* NextField := Alloc(#StructField) As StructField*
 			
+			Type FieldType := TYPE_NONE
+			
+			if !(this->PeekNextToken()->Is(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
+				ASTNode* FieldTypeNode := this->ParseTypeNode()
+				
+				FieldType := FieldTypeNode->TypeValue
+				
+				if (GetPointerDepth(FieldType) = 0 && GetBaseType(FieldType)->IsStructType) {
+					FieldTypeNode->Error("Structures cannot be contained in `bits` types")
+				}
+			}
+			
 			Token* OpenBracket := this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET, "Expected open bracket for bit field range.")
 			
 			i8 StartIndex := this->Consume(TOKEN_TYPE_INTEGER, "Expected integer for bit field start index.")->Value As i8
@@ -1278,17 +1290,22 @@ struct ParserState {
 			NextField->BitStartIndex := StartIndex
 			NextField->BitEndIndex := EndIndex
 			
-			if (FieldSize <= 8) {
-				NextField->ValueType := this->i8->AsNonPointer()
-			}
-			else if (FieldSize <= 16) {
-				NextField->ValueType := this->i16->AsNonPointer()
-			}
-			else if (FieldSize <= 32) {
-				NextField->ValueType := this->i32->AsNonPointer()
+			if (FieldType != TYPE_NONE) {
+				NextField->ValueType := FieldType
 			}
 			else {
-				NextField->ValueType := this->i64->AsNonPointer()
+				if (FieldSize <= 8) {
+					NextField->ValueType := this->i8->AsNonPointer()
+				}
+				else if (FieldSize <= 16) {
+					NextField->ValueType := this->i16->AsNonPointer()
+				}
+				else if (FieldSize <= 32) {
+					NextField->ValueType := this->i32->AsNonPointer()
+				}
+				else {
+					NextField->ValueType := this->i64->AsNonPointer()
+				}
 			}
 			
 			Fields->Set(FieldName, NextField)

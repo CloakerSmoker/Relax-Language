@@ -11,7 +11,7 @@ bits Example2 As i64 {
 	[32:63] high_32
 }
 bits Example3 As i64 {
-	[0:47] a_pointer,
+	i64* [0:47] a_pointer,
 	[48:63] a_tag
 }
 
@@ -34,7 +34,7 @@ define i32 Main() {
 	Example3 E3 := 0 As Example3
 	i64 Test := 52893
 	
-	E3.a_pointer := &Test As i64
+	E3.a_pointer := &Test
 	E3.a_tag := 30
 	
 	PrintCharacter(',')
@@ -42,7 +42,7 @@ define i32 Main() {
 	
 	Test := 9000
 	
-	Print(*(E3.a_pointer As i64*) = Test)
+	Print(*E3.a_pointer = Test)
 	
 	return E As i32
 }
