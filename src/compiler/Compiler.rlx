@@ -205,7 +205,7 @@ struct CompilerState {
 			i32 NameLength := Function->GetStringLength()
 			i8* NameBuffer := Alloc(NameLength + 1)
 			
-			Function->StringifyInto(NameBuffer, ';')
+			Function->StringifyInto(NameBuffer, '.')
 			
 			Result := this->DWARF->StartFunction(NameBuffer, ReturnTypeOffset, FunctionAddress, IsMain)
 			

@@ -43,13 +43,13 @@ struct BadIdea {
 define i32 Main() {
 	Test* T := Test:New()
 	
-	Print(T->GetValue())
+	Print(T.GetValue())
 	
 	T->SetValue(20059)
 	
 	PrintCharacter(',')
 	
-	Print(T->GetValue())
+	Print(T.GetValue())
 	
 	PrintCharacter(' ')
 	
