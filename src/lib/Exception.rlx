@@ -302,6 +302,7 @@ SigAction SignalToExceptionHandler {
 
 i32 SIGILL  := 4
 i32 SIGBUS  := 7
+i32 SIGFPE  := 8
 i32 SIGSEGV := 11
 
 DllImport i8 SetErrorMode(i32) {Kernel32.dll, SetErrorMode}
@@ -318,6 +319,7 @@ define void* SetupExceptionTranslation() {
 	linux {
 		syscall:(13, SIGILL, &SignalToExceptionHandler, null, 8)
 		syscall:(13, SIGBUS, &SignalToExceptionHandler, null, 8)
+		syscall:(13, SIGFPE, &SignalToExceptionHandler, null, 8)
 		syscall:(13, SIGSEGV, &SignalToExceptionHandler, null, 8)
 	}
 	

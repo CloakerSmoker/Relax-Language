@@ -60,6 +60,11 @@ define void* DebugInsertUnhandledExceptionHandler() {
 		Print("^60Warning: Debug library included without '--debug' compiler flag, stack traces will only contain raw addresses.^F0\n")
 	}
 	
+	; Only included so you can call `SetWorkingDirectory` from GDB when it refuses to `cd` to the correct place.
+	;  (even if the actual program doesn't call SetWorkingDirectory)
+	
+	SetWorkingDirectory(".")
+	
 	return null
 }
 

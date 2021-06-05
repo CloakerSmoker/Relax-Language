@@ -227,3 +227,14 @@ define i8* GetAbsolutePath(i8* ForPath) {
 define i8* GetWorkingDirectory() {
 	return GetAbsolutePath(".")
 }
+
+DllImport i32 SetCurrentDirectory(i8*) {Kernel32.dll, SetCurrentDirectoryA}
+
+define void SetWorkingDirectory(i8* Path) {
+	windows {
+		SetCurrentDirectory(Path)
+	}
+	linux {
+		syscall:(80, Path)
+	}
+}
