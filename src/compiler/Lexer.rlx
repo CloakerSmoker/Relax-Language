@@ -104,7 +104,7 @@ define i8* OperatorToString(i8 Operator) {
 		"&", "|", "^",
 		"<<", ">>",
 		"!", "~",
-		"++", "--", "++", "--",
+		"++l", "--l", "++r", "--r",
 		"[",
 		".", "->", "~>",
 		":", "#"
@@ -114,12 +114,19 @@ define i8* OperatorToString(i8 Operator) {
 }
 
 ; Indexes are labeled, sort-of. Just follow the first digit of an index down vertically to find the bit representing it
-;                            41  38 35  32  30  27 24  21  18  15 12  9   6   3  0
-;                           42 39  36  33  31 28  25  22  19 16  13  10  7  4   1
-;                             40  37  34 32  29  26  23 20  17  14  11 8   5   2
-i64 OVERLOAD_OPERATORS := 0b0000_0000_0000_0011_1111_1111_1101_1111_1110_0000_0000
-i64 OVERLOAD_UNARY     := 0b0000_0000_0000_0011_0000_0000_0000_0000_0000_0000_0000
-i64 OVERLOAD_BINARY    := 0b0000_0000_0000_0000_1111_1111_1101_1111_1110_0000_0000
+;                            42  39 36  33  30  27 24  21  18  15 12  9   6   3  0
+;                           43 40  37  34  31 28  25  22  19 16  13  10  7  4   1
+;                             41  38  35 32  29  26  23 20  17  14  11 8   5   2
+i64 OVERLOAD_UNARY     := 0b0000_0000_0000_1111_0000_0001_1000_0000_0000_0000_0000
+i64 OVERLOAD_POSTFIX   := 0b0000_0000_0011_0000_0000_0000_0000_0000_0000_0000_0000
+i64 OVERLOAD_BINARY    := 0b0000_0000_0100_0000_1111_1111_1101_1111_1110_0000_0000
+i64 OVERLOAD_OPERATORS := OVERLOAD_UNARY | OVERLOAD_POSTFIX | OVERLOAD_BINARY
+
+i64[3] OVERLOAD_MASKS {OVERLOAD_UNARY, OVERLOAD_POSTFIX, OVERLOAD_BINARY}
+
+i8 OVERLOAD_KIND_UNARY   := 0
+i8 OVERLOAD_KIND_POSTFIX := 1
+i8 OVERLOAD_KIND_BINARY  := 2
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1

@@ -783,6 +783,24 @@ struct ParserState {
 		i32 RequiredParameterCount := -1
 		
 		if (ForOverload) {
+			Token* OperatorKindToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected operator kind")
+			SafeString* OperatorKindString := OperatorKindToken->StringValue
+			
+			i8 OperatorKind := OVERLOAD_KIND_UNARY
+			
+			if (OperatorKindString->Equals("unary") || OperatorKindString->Equals("prefix")) {
+				; Dummmy branch
+			}
+			else if (OperatorKindString->Equals("postfix")) {
+				OperatorKind := OVERLOAD_KIND_POSTFIX
+			}
+			else if (OperatorKindString->Equals("binary")) {
+				OperatorKind := OVERLOAD_KIND_BINARY
+			}
+			else {
+				OperatorKindToken->Error("Unknown operator kind")
+			}
+			
 			NameToken := this->GetNextToken()
 			
 			if !(NameToken->Is(TOKEN_TYPE_OPERATOR)) {
@@ -791,16 +809,31 @@ struct ParserState {
 			
 			i8 OverloadOperator := i8{NameToken->Value}
 			
+			if (OperatorKind = OVERLOAD_KIND_POSTFIX) {
+				OverloadOperator += 2
+			}
+			
+			if (OverloadOperator = OPERATOR_OPEN_BRACKET) {
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing `]` for `[` in operator overload")
+			}
+			
 			i64 OverloadOperatorMask := (i64{1} << OverloadOperator)
+			
+			Print("%b\n%b\n", OVERLOAD_OPERATORS, OverloadOperatorMask)
 			
 			if !(OVERLOAD_OPERATORS & OverloadOperatorMask) {
 				NameToken->Error("Operator cannot be overloaded")
 			}
 			
-			if (OVERLOAD_UNARY & OverloadOperatorMask) {
-				RequiredParameterCount := 1
+			i64 OperatorKindMask := OVERLOAD_MASKS[OperatorKind]
+			
+			if !(OperatorKindMask & OverloadOperatorMask) {
+				NameToken->Error("Operator cannot be overloaded as specified operator kind")
 			}
-			else {
+			
+			i32 RequiredParameterCount := 1
+			
+			if (OperatorKind = OVERLOAD_KIND_BINARY) {
 				RequiredParameterCount := 2
 			}
 			
