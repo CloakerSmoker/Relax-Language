@@ -772,12 +772,47 @@ struct ParserState {
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Namespace, Token* FirstToken, TypeInfo* ThisType, i8 ForMethod) {
 		i8 Mode := FirstToken->Value As i8
 		
-		i8 ForStatic := Mode = KEYWORD_STATIC
-		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
-		i8 ForImport := Mode = KEYWORD_DLLIMPORT
+		i8 ForStatic   := Mode = KEYWORD_STATIC
+		i8 ForOverload := Mode = KEYWORD_OVERLOAD
+		i8 ForDefine   := Mode = KEYWORD_DEFINE || ForStatic || ForOverload
+		i8 ForImport   := Mode = KEYWORD_DLLIMPORT
 		
-		Type ReturnType := this->ParseType()		
-		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
+		Type ReturnType := this->ParseType()
+		Token* NameToken := null
+		
+		i32 RequiredParameterCount := -1
+		
+		if (ForOverload) {
+			NameToken := this->GetNextToken()
+			
+			if !(NameToken->Is(TOKEN_TYPE_OPERATOR)) {
+				NameToken->Error("Expected operator to overload")
+			}
+			
+			i8 OverloadOperator := i8{NameToken->Value}
+			
+			i64 OverloadOperatorMask := (i64{1} << OverloadOperator)
+			
+			if !(OVERLOAD_OPERATORS & OverloadOperatorMask) {
+				NameToken->Error("Operator cannot be overloaded")
+			}
+			
+			if (OVERLOAD_UNARY & OverloadOperatorMask) {
+				RequiredParameterCount := 1
+			}
+			else {
+				RequiredParameterCount := 2
+			}
+			
+			i8* OperatorString := OperatorToString(OverloadOperator)
+			
+			NameToken->Type := TOKEN_TYPE_IDENTIFIER
+			NameToken->StringValue := SafeString:New(StringLength(OperatorString), OperatorString)
+		}
+		else {
+			NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
+		}
+		
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for function parameter list")
 		
 		if (!ForMethod && this~>Types->Get(NameToken->StringValue) != null) {
@@ -979,6 +1014,10 @@ struct ParserState {
 		
 		NewDefine~>Context->Clone(FirstToken~>Context)->Merge(this->GetCurrentTokenContext())
 		
+		if (ForOverload && ParameterCount != RequiredParameterCount) {
+			NewDefine~>Context->Error("Incorrect number of parameters for operator overload")
+		}
+		
 		; We are done parsing the function's name, return type, and parameters. Now to just handle all of
 		;  the different function body types.
 		
@@ -1120,13 +1159,16 @@ struct ParserState {
 				else {
 					i8 IsMethod := false
 					i8 IsStaticMethod := false
+					i8 IsOverload := false
+					
 					Token* MethodKeyword := this->PeekNextToken()
 					
 					if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
 						i8 KeywordValue := MethodKeyword->Value As i8
 						
+						IsOverload := KeywordValue = KEYWORD_OVERLOAD
 						IsStaticMethod := KeywordValue = KEYWORD_STATIC
-						IsMethod := IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
+						IsMethod := IsOverload || IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
 					}
 					
 					if (IsMethod) {

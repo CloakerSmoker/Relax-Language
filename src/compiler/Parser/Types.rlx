@@ -33,6 +33,22 @@ struct TypeInfo {
 	define i8 Is(TypeInfo* Other) {
 		return this->Name = Other->Name
 	}
+	
+	define FunctionDefine* GetOverload(i8 Operator) {
+		i64 OperatorMask := (1 As i64) << Operator
+		
+		if !(this->IsStructType && (OVERLOAD_OPERATORS & OperatorMask)) {
+			return null
+		}
+		
+		HashMapElement* OverloadElement := this~>Methods->Get(OperatorToString(Operator))
+		
+		if (OverloadElement) {
+			return OverloadElement->Value As FunctionDefine*
+		}
+		
+		return null
+	}
 }
 struct ArrayTypeInfo {
 	TypeInfo* BaseType

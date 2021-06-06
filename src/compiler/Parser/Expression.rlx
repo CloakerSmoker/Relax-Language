@@ -1039,6 +1039,8 @@
 			
 			ASTNode* Result := null
 			
+			FunctionDefine* OperatorOverload := LeftBase->GetOverload(Operator)
+			
 			if (IsStructAccess) {
 				; If a local struct is accessed using `->`, it is an error. 
 				; Or If a pointed-to structure is accessed via `.`, it is an error
@@ -1099,6 +1101,22 @@
 					
 					Result~>Context->Clone(Left~>Context)->Merge(RightToken~>Context)
 				}
+			}
+			else if (OperatorOverload) {
+				ASTNode** OverloadParameters := Alloc(2 * #ASTNode*)
+				
+				OverloadParameters[0] := Left
+				OverloadParameters[1] := Right
+				
+				OperatorToken~>Context->Clone(Left~>Context)->Merge(Right~>Context)
+				
+				FunctionDefine* MatchedOverload := this->MatchFunctionCall(OperatorOverload, OverloadParameters, 2, OperatorToken~>Context)
+				
+				CallExpression* CallOverload := null
+				Result := ASTNode:NewCallNode(OverloadParameters, 2, &CallOverload, Left~>Context, Right~>Context)
+				
+				CallOverload->TargetFunction := MatchedOverload
+				Result->ValueType := MatchedOverload->ReturnType
 			}
 			else {
 				Type RightType := Right->ValueType

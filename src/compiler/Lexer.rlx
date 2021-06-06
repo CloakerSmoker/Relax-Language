@@ -91,6 +91,35 @@ i8 OPERATOR_TILDE_GREATER := 37
 i8 OPERATOR_COLON := 38
 i8 OPERATOR_POUND := 39
 
+; WARNING: OperatorToString *and* all OVERLOAD_ variables depend on the value of each operator in the above "enum"
+
+define i8* OperatorToString(i8 Operator) {
+	i8*[40] Operators {
+		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+		"&&", "||",
+		"=", "!=", "<", "<=", ">", ">=",
+		"as",
+		"+", "-",
+		"*", "/", "%",
+		"&", "|", "^",
+		"<<", ">>",
+		"!", "~",
+		"++", "--", "++", "--",
+		"[",
+		".", "->", "~>",
+		":", "#"
+	}
+	
+	return Operators[Operator]
+}
+
+; Indexes are labeled, sort-of. Just follow the first digit of an index down vertically to find the bit representing it
+;                            41  38 35  32  30  27 24  21  18  15 12  9   6   3  0
+;                           42 39  36  33  31 28  25  22  19 16  13  10  7  4   1
+;                             40  37  34 32  29  26  23 20  17  14  11 8   5   2
+i64 OVERLOAD_OPERATORS := 0b0000_0000_0000_0011_1111_1111_1101_1111_1110_0000_0000
+i64 OVERLOAD_UNARY     := 0b0000_0000_0000_0011_0000_0000_0000_0000_0000_0000_0000
+i64 OVERLOAD_BINARY    := 0b0000_0000_0000_0000_1111_1111_1101_1111_1110_0000_0000
 
 i8 PUNCTUATION_OPEN_PAREN := 0
 i8 PUNCTUATION_CLOSE_PAREN := 1
@@ -137,6 +166,8 @@ i8 KEYWORD_CATCH := 19
 
 i8 KEYWORD_X64 := 20
 i8 KEYWORD_STATIC := 21
+
+i8 KEYWORD_OVERLOAD := 22
 
 struct Token {
 	ErrorContext Context
@@ -257,6 +288,7 @@ struct LexerState {
 		Keywords->Set("catch", 		KEYWORD_CATCH)
 		Keywords->Set("x64", 		KEYWORD_X64)
 		Keywords->Set("static", 	KEYWORD_STATIC)
+		Keywords->Set("overload", 	KEYWORD_OVERLOAD)
 		
 		return this
 	}

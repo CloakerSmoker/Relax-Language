@@ -38,7 +38,7 @@
 			loop {
 				; Loop until we hit a `}`
 				
-				if (StatementCount <= StatementCapacity) {
+				if (StatementCount + 1 >= StatementCapacity) {
 					; If the buffer needs to be expanded, expand it
 					
 					StatementCapacity += 20
