@@ -31,7 +31,6 @@ expected_returncode = 1
 if running_on == 'Linux':
     compile_command_format = f'{compile_command_format} --elf'
     platform_extension = 'elf'
-    #python = '/usr/bin/python3.8'
     expected_returncode = 0
 elif running_on != 'Windows':
     print('Unsupported platform.', file=sys.stderr)
@@ -39,22 +38,24 @@ elif running_on != 'Windows':
 
 recursion_count = 3
 
-if len(sys.argv) == 2:
+if len(sys.argv) >= 2:
     recursion_count = int(sys.argv[1])
+
+compile_command_format += ' ' + ' '.join(sys.argv[2:])
 
 safe_compiler = path_join(bin_dir, f'compiler.{platform_extension}')
 
 for i in range(0, recursion_count):
     compiler_output = path_join(bin_dir, f'testing{i}.{platform_extension}')
     compile_command = compile_command_format.format(safe_compiler, compiler_output)
-    #f'{safe_compiler} -i Bain.rlx -o testing{i}.exe'
-    
+	
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
 
     stderr_text = compile_result.stderr.decode('UTF-8')
     stdout_text = compile_result.stdout.decode('UTF-8')
 
     if compile_result.returncode != expected_returncode or len(stderr_text) != 0:
+        print(f'{Fore.LIGHTRED_EX}When running: {Fore.LIGHTWHITE_EX}{compile_command}')
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stdout_text}\n\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
