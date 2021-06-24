@@ -392,7 +392,6 @@ struct InstructionNode {
 
 i8 FUNCTION_IS_METHOD := 1
 i8 FUNCTION_IS_STATIC_METHOD := 2
-i8 FUNCTION_IS_OVERLOAD := 3
 
 declare i32 GetTypeStringLength(Type)
 declare void StringifyType(void*, Type)

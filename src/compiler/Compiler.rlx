@@ -1494,9 +1494,6 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 			CompileExpression(Compiler, RAX, ExpressionBlock->Statements[Index])
 		}
 	}
-	else if (ExpressionType = NODE_TYPE_CAST) {
-		CompileExpression(Compiler, ResultRegister, ExpressionToCompile->CastFromValue)
-	}
 }
 
 

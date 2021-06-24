@@ -752,50 +752,31 @@
 				Type ResultType := Operand->ValueType
 				i8 Operator := NextToken->Value As i8
 				
-				FunctionDefine* OperatorOverload := GetBaseType(ResultType)->GetOverload(Operator)
+				if (Operator = OPERATOR_BANG) {
+					ResultType := this->i8->AsNonPointer()
+				}
+				else if (Operator = OPERATOR_AND) {
+					if !(Operand->IsStorageValue() || Operand->NodeType = NODE_TYPE_DEFINE) {
+						Operand->Error("Operand of the '&' operator must be a storage value.")
+					}
+					
+					ResultType := this->PointerToType(ResultType)
+				}
+				else if (Operator = OPERATOR_STAR) {
+					ResultType := this->DereferencePointerType(ResultType, Operand~>Context)
+				}
+				else if (Operator = OPERATOR_MINUS_MINUS || Operator = OPERATOR_PLUS_PLUS) {
+					if !(Operand->IsStorageValue()) {
+						Operand->Error("Right side operand of `++` and `--` must be a storage value")
+					}
+				}
 				
-				if (OperatorOverload) {
-					ASTNode** OverloadParameter := Alloc(#ASTNode*)
-					
-					OverloadParameter[0] := Operand
-					
-					NextToken~>Context->Merge(Operand~>Context)
-					
-					FunctionDefine* MatchedOverload := this->MatchFunctionCall(OperatorOverload, OverloadParameter, 1, NextToken~>Context)
-					
-					CallExpression* CallOverload := null
-					Result := ASTNode:NewCallNode(OverloadParameter, 1, &CallOverload, NextToken~>Context, Operand~>Context)
-					
-					CallOverload->TargetFunction := MatchedOverload
-					Result->ValueType := MatchedOverload->ReturnType
-				}
-				else {
-					if (Operator = OPERATOR_BANG) {
-						ResultType := this->i8->AsNonPointer()
-					}
-					else if (Operator = OPERATOR_AND) {
-						if !(Operand->IsStorageValue() || Operand->NodeType = NODE_TYPE_DEFINE) {
-							Operand->Error("Operand of the '&' operator must be a storage value.")
-						}
-						
-						ResultType := this->PointerToType(ResultType)
-					}
-					else if (Operator = OPERATOR_STAR) {
-						ResultType := this->DereferencePointerType(ResultType, Operand~>Context)
-					}
-					else if (Operator = OPERATOR_MINUS_MINUS || Operator = OPERATOR_PLUS_PLUS) {
-						if !(Operand->IsStorageValue()) {
-							Operand->Error("Right side operand of `++` and `--` must be a storage value")
-						}
-					}
-					
-					Result := ASTNode:New(NODE_TYPE_UNARY, Alloc(#UnaryExpression), ResultType)
-					
-					Result->UnaryNode->Operand := Operand
-					Result->UnaryNode->Operator := NextToken
-					
-					Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
-				}
+				Result := ASTNode:New(NODE_TYPE_UNARY, Alloc(#UnaryExpression), ResultType)
+				
+				Result->UnaryNode->Operand := Operand
+				Result->UnaryNode->Operator := NextToken
+				
+				Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
 			}
 		}
 		else if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
@@ -983,35 +964,16 @@
 					Left->Error("Operand of `++` and `--` must be a storage value")
 				}
 				
-				FunctionDefine* UnaryOverload := GetBaseType(Left->ValueType)->GetOverload(OperatorToken->IntegerValue As i8)
+				UnaryExpression* IncrementDecrement := Alloc(#UnaryExpression)
 				
-				if (UnaryOverload) {
-					ASTNode** OverloadParameter := Alloc(#ASTNode*)
-					
-					OverloadParameter[0] := Left
-					
-					OperatorToken~>Context->Merge(Left~>Context)
-					
-					FunctionDefine* MatchedOverload := this->MatchFunctionCall(UnaryOverload, OverloadParameter, 1, OperatorToken~>Context)
-					
-					CallExpression* CallOverload := null
-					Left := ASTNode:NewCallNode(OverloadParameter, 1, &CallOverload, Left~>Context, OperatorToken~>Context)
-					
-					CallOverload->TargetFunction := MatchedOverload
-					Left->ValueType := MatchedOverload->ReturnType
-				}
-				else {
-					UnaryExpression* IncrementDecrement := Alloc(#UnaryExpression)
-					
-					IncrementDecrement->Operand := Left
-					IncrementDecrement->Operator := OperatorToken
-					
-					ASTNode* IncrementDecrementNode := ASTNode:New(NODE_TYPE_UNARY, IncrementDecrement, Left->ValueType)
-					
-					IncrementDecrementNode~>Context->Clone(Left~>Context)->Merge(OperatorToken~>Context)
-					
-					Left := IncrementDecrementNode
-				}
+				IncrementDecrement->Operand := Left
+				IncrementDecrement->Operator := OperatorToken
+				
+				ASTNode* IncrementDecrementNode := ASTNode:New(NODE_TYPE_UNARY, IncrementDecrement, Left->ValueType)
+				
+				IncrementDecrementNode~>Context->Clone(Left~>Context)->Merge(OperatorToken~>Context)
+				
+				Left := IncrementDecrementNode
 				
 				BeforeOperator := this->Freeze()
 				OperatorToken := this->GetNextToken()
@@ -1077,8 +1039,6 @@
 			
 			ASTNode* Result := null
 			
-			FunctionDefine* BinaryOverload := LeftBase->GetOverload(Operator)
-			
 			if (IsStructAccess) {
 				; If a local struct is accessed using `->`, it is an error. 
 				; Or If a pointed-to structure is accessed via `.`, it is an error
@@ -1139,22 +1099,6 @@
 					
 					Result~>Context->Clone(Left~>Context)->Merge(RightToken~>Context)
 				}
-			}
-			else if (BinaryOverload) {
-				ASTNode** OverloadParameters := Alloc(2 * #ASTNode*)
-				
-				OverloadParameters[0] := Left
-				OverloadParameters[1] := Right
-				
-				OperatorToken~>Context->Clone(Left~>Context)->Merge(Right~>Context)
-				
-				FunctionDefine* MatchedOverload := this->MatchFunctionCall(BinaryOverload, OverloadParameters, 2, OperatorToken~>Context)
-				
-				CallExpression* CallOverload := null
-				Result := ASTNode:NewCallNode(OverloadParameters, 2, &CallOverload, Left~>Context, Right~>Context)
-				
-				CallOverload->TargetFunction := MatchedOverload
-				Result->ValueType := MatchedOverload->ReturnType
 			}
 			else {
 				Type RightType := Right->ValueType
