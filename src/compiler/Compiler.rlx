@@ -914,7 +914,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	EmitPush_R64(Compiler, RBP)
 	EmitMove_R64_R64(Compiler, RBP, RSP)
 	
-	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF  && ParameterCount <= 2) {
+	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF && ParameterCount <= 2) {
 		/* When compiling main for SystemV, load the first two parameter registers (if they exist) 
 			With ArgC and ArgV loaded from the stack since:
 				RBP + 0 = ArgC

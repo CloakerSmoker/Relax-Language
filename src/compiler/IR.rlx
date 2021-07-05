@@ -56,11 +56,6 @@
 ; Fun()		 => IR_CALL
 ; return	 => IR_RETURN
 
-bits TemporaryRegister As i64 {
-	[0:61] PointerValue
-	[62:63] IsVariable
-}
-
 #Require "./src/compiler/IR/Nodes.rlx"
 
 bits LoopLables As i64 {
@@ -182,7 +177,7 @@ struct IRCompilerState {
 		i64 FirstIndex := Register % 100
 		i64 BestFreeIndex := 100
 		
-		IRPrint("FindOrAddLiveRegister(%t), %i\n", Register, FirstIndex)
+		;IRPrint("FindOrAddLiveRegister(%t), %i\n", Register, FirstIndex)
 		
 		for (i64 Index := FirstIndex, Index < 100, Index++) {
 			IRLiveRegister* Next := this~>LiveRegisters[Index]
@@ -226,14 +221,14 @@ struct IRCompilerState {
 	declare void EmitFree(i64)
 	
 	define void AddLiveRegisterReference(i64 Register) {
-		Print("AddRef: ")
+		;Print("AddRef: ")
 		
 		auto LiveRegister := this->FindOrAddLiveRegister(Register)
 		
 		LiveRegister->ReferenceCount += 1
 	}
 	define void DestroyLiveRegisterReference(i64 Register) {
-		Print("Destroy: ")
+		;Print("Destroy: ")
 		
 		auto LiveRegister := this->FindOrAddLiveRegister(Register)
 		
@@ -251,7 +246,7 @@ struct IRCompilerState {
 				IRVariable* Variable := MaybeVariable.PointerValue As IRVariable*
 				
 				if (Variable->ReferenceCount != Variable->MaxReferenceCount) {
-					IRPrint("Final free for %t ignored, %i out of %i references seen\n", Register, Variable->ReferenceCount, Variable->MaxReferenceCount)
+					;IRPrint("Final free for %t ignored, %i out of %i references seen\n", Register, Variable->ReferenceCount, Variable->MaxReferenceCount)
 					
 					return
 				}
@@ -531,6 +526,10 @@ struct IRCompilerState {
 		i32 Start := this->BlockOffsets[Index]
 		i32 Size := this->BlockSizes[Index]
 		
+		if (Size = 0) {
+			return
+		}
+		
 		Print("\tL%i [shape=box label=\"L%i:\\l", Index, Index)
 		
 		for (i32 NodeIndex := 0, NodeIndex < Size, NodeIndex++) {
@@ -565,7 +564,21 @@ struct IRCompilerState {
 		}
 	}
 	define void PrintControlFlowGraph() {
-		this->PrintControlFlowGraph(0)
+		Print("digraph CFG {\n")
+		
+		for (i32 BlockIndex := 0, BlockIndex < this->BlockCount, BlockIndex++) {
+			this->PrintControlFlowGraph(BlockIndex)
+			
+			for (i32 NodeIndex := 0, NodeIndex < this->BlockSizes[BlockIndex], NodeIndex++) {
+				IRNode* NextNode := this->GetBlockNode(BlockIndex, NodeIndex)
+				
+				if (NextNode->Kind = IR_CALL) {
+					Print("\tL%i -> L%i [color=blue,arrowtail=inv,dir=back];\n", BlockIndex, NextNode->CallToBlock)
+				}
+			}
+		}
+		
+		Print("}\n")
 	}
 }
 
@@ -643,7 +656,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	IR->EndBlock()
 	
 	;Print("Blocks:\n")
-	IR->PrintBlocks()
+	;IR->PrintBlocks()
 	
 	; Remove instructions inside of blocks
 	IR->EliminateSomething()
@@ -656,11 +669,12 @@ define void Main(i64 ArgC, i8** ArgV) {
 	; Remove entire blocks
 	IR->EliminateJumpChains()
 	
-	IR->PrintBlocks()
+	;IR->PrintBlocks()
+	IR->PrintControlFlowGraph()
 	;
-	IR->Generate()
-	x64Gen->LinkLabels()
-	x64Gen->PrintCode()
+	;IR->Generate()
+	;x64Gen->LinkLabels()
+	;x64Gen->PrintCode()
 	;
 	;PEBuilder* PE := BuildBuilder()
 	;

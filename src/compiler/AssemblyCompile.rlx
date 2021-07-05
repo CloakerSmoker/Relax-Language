@@ -165,9 +165,14 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 	if (ToCompile->Type = INSTRUCTION_LABEL) {
 		SetLabel(Compiler, ToCompile->LabelNumber)
 	}
-	else {
+	else {		
 		InstructionOperand* OperandOne := ToCompile->Operands[0]
 		InstructionOperand* OperandTwo := ToCompile->Operands[1]
+		
+		if (ToCompile->Base->PackedOpcode = 0x6) {
+			PushByte(Compiler, OperandOne->IntegerValue As i16)
+			return
+		}
 		
 		ResolveOperandFunctionReference(OperandOne)
 		ResolveOperandFunctionReference(OperandTwo)

@@ -9,7 +9,7 @@
 
 struct SerializedInstruction {
 	union {
-		i8{2} Opcode
+		i8[2] Opcode
 		i16 PackedOpcode
 	}
 	
@@ -19,7 +19,7 @@ struct SerializedInstruction {
 	i16 Extra
 	
 	i8 NameLength
-	i8{0} Name
+	i8[0] Name
 }
 
 ;ret c3 - no_rm -
@@ -132,7 +132,7 @@ struct InstructionSerializer {
 		SerializedInstruction* Instruction := Alloc(#SerializedInstruction + 127)
 		
 		while !(this->Lexer->AtEnd()) {
-			SafeWideString* Name := Lexer->GetNextToken()->StringValue
+			SafeString* Name := Lexer->GetNextToken()->StringValue
 			
 			if (this->Lexer->AtEnd()) {
 				break
@@ -220,7 +220,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	}
 	
 	i32 SourceLength := 0
-	i16* SourceText := OpenAndRead(ArgV[1], &SourceLength)
+	i8* SourceText := OpenAndRead(ArgV[1], &SourceLength)
 	
 	LexerState* Lexer := LexerState:New(null, SourceText, SourceLength, AToS(ArgV[1]))
 	

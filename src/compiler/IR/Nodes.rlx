@@ -1,3 +1,12 @@
+bits TemporaryRegister As i64 {
+	[0:61] PointerValue
+	[62:63] IsVariable
+	
+	define IRVariable* ToVariable() {
+		return this.PointerValue As IRVariable*
+	}
+}
+
 struct IRVariable {
 	i8* Name
 	IRNode* LastValue
@@ -252,10 +261,10 @@ define void IRPrint(i8* Format, ... Args) {
 				if (Register.IsVariable) {
 					IRVariable* Variable := Register.PointerValue As IRVariable*
 					
-					Print("v(%s)", Variable->Name)
+					Print("%s", Variable->Name)
 				}
 				else {
-					Print("T%i", NextArg As i64)
+					Print("#T%i", NextArg As i64)
 				}
 			}
 			
@@ -327,64 +336,70 @@ struct IRNode {
 	
 	define void Print() {
 		if (this->Kind = IR_MOVE) {
-			IRPrint("move.%i, %t, %t", this->Size, this->Destination, this->Source)
+			IRPrint("%t := %t as i%i", this->Destination, this->Source, this->Size * 8)
 		}
 		else if (this->Kind = IR_LOAD_INTEGER) {
-			IRPrint("load_integer.%i, %t, %i", this->Size, this->Destination, this->SourceValue)
+			IRPrint("%t := %i as i%i", this->Destination, this->SourceValue, this->Size * 8)
 		}
 		else if (this->Kind = IR_UNARY) {
-			IRPrint("unary.%i, %t, %o, %t", this->Size, this->Destination, this->Operator, this->Operand)
+			IRPrint("%t := %o%t as i%i", this->Destination, this->Operator, this->Operand, this->Size * 8)
 		}
 		else if (this->Kind = IR_BINARY) {
-			IRPrint("binary.%i, %t, %t, %o, %t", this->Size, this->Destination, this~>Operands[0], this->Operator, this~>Operands[1])
+			IRPrint("%t := (%t %o %t) as i%i", this->Destination, this~>Operands[0], this->Operator, this~>Operands[1], this->Size * 8)
 		}
 		else if (this->Kind = IR_JUMP) {
-			IRPrint("jump, L%i", this->JumpToBlock)
+			IRPrint("jump L%i", this->JumpToBlock)
 		}
 		else if (this->Kind = IR_CONDITIONAL) {
-			IRPrint("cond.%i, %t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
+			IRPrint("if %t as i%i goto L%i else goto L%i", this->Condition, this->Size * 8, this->TrueBlock, this->FalseBlock)
 		}
 		else if (this->Kind = IR_CONDITIONAL_NOT) {
-			IRPrint("cond.%i, !%t, L%i, L%i", this->Size, this->Condition, this->TrueBlock, this->FalseBlock)
+			IRPrint("if %t as i%i goto L%i else goto L%i", this->Condition, this->Size * 8, this->FalseBlock, this->TrueBlock)
 		}
 		else if (this->Kind = IR_RETURN) {
-			IRPrint("return.%i, %t", this->Size, this->Operand)
+			IRPrint("return %t as i%i", this->Operand, this->Size * 8)
 		}
 		else if (this->Kind = IR_FUNCTION) {
-			IRPrint("function")
+			IRPrint("function(")
 			
 			for (i32 Index := 0, Index < this~>FunctionNode->ParameterCount, Index++) {
 				i64 NextParameter := this~>FunctionNode->Parameters[Index]
 				
-				IRPrint(", %t", NextParameter)
+				IRPrint("%t", NextParameter)
+				
+				if (Index + 1 < this~>FunctionNode->ParameterCount) {
+					IRPrint(", ")
+				}
 			}
+			
+			IRPrint(")")
 		}
 		else if (this->Kind = IR_LOAD) {
-			IRPrint("load.%i, %t, %t", this->Size, this->Destination, this->Operand)
+			IRPrint("%t := *(%t as i%i*)", this->Destination, this->Operand, this->Size * 8)
 		}
 		else if (this->Kind = IR_LOAD_OFFSET) {
-			IRPrint("load_offset.%i, %t, %t + %i", this->Size, this->Destination, this->Source, this->Offset)
+			IRPrint("%t := *((%t + %i) as i%i*)", this->Destination, this->Source, this->Offset, this->Size * 8)
 		}
 		else if (this->Kind = IR_LOAD_ADDRESS) {
-			IRPrint("load_address, %t, %t", this->Destination, this->Source)
+			IRPrint("%t := &%t", this->Destination, this->Source)
 		}
 		else if (this->Kind = IR_LOAD_OFFSET_ADDRESS) {
-			IRPrint("load_offset_address, %t, %t + %i", this->Destination, this->Source, this->Offset)
+			IRPrint("%t := %t + %i", this->Destination, this->Source, this->Offset)
 		}
 		else if (this->Kind = IR_STORE) {
-			IRPrint("store.%i, %t, %t", this->Size, this~>Operands[0], this~>Operands[1])
+			IRPrint("*(%t as i%i*) := %t", this~>Operands[0], this->Size * 8, this~>Operands[1])
 		}
 		else if (this->Kind = IR_STORE_OFFSET) {
-			IRPrint("store_offset.%i, %t + %i, %t", this->Size, this~>Operands[0], this->Offset, this~>Operands[1])
+			IRPrint("*((%t + %i) as i%i*) := %t", this~>Operands[0], this->Offset, this->Size * 8, this~>Operands[1])
 		}
 		else if (this->Kind = IR_ALLOCATE) {
-			IRPrint("allocate, %t, %i", this->Destination, this->AllocateSize)
+			IRPrint("[%i] %t", this->AllocateSize, this->Destination)
 		}
 		else if (this->Kind = IR_FREE) {
-			IRPrint("free, %t", this->Operand)
+			IRPrint("free %t", this->Operand)
 		}
 		else if (this->Kind = IR_CALL) {
-			IRPrint("call, %t, L%i(", this->Destination, this->CallToBlock)
+			IRPrint("%t := L%i(", this->Destination, this->CallToBlock)
 			
 			for (Index := 0, Index < this->ParameterCount, Index++) {
 				NextParameter := this->Parameters[Index]
