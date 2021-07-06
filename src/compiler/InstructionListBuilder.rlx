@@ -55,6 +55,7 @@ define void BuildSymbolMap(HashMap* M) {
 	
 	M->Set("I8", 0x100)
 	M->Set("I16", 0x200)
+	M->Set("BYTE", 0x300)
 	M->Set("I32", 0x400)
 	M->Set("I64", 0x800)
 	

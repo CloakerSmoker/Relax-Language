@@ -36,7 +36,7 @@
 ; COND_JUMP
 
 ; fake instruction (which maps to an invalid opcode) used for emitting a literal byte
-emit	0x06	i16		NO_RM						_
+emit	0x06	BYTE	NO_RM						_
 
 not		0xF7 	m 		OP_EXT|RM_OP1 				2
 ret		0xC3 	_ 		NO_RM 						_

@@ -2065,7 +2065,7 @@ define void CompileBinaryOperator(CompilerState* Compiler, i8 Operator, i8 Resul
 			EmitMove_R64_R64(Compiler, RBX, RAX)
 			EmitMove_R64_R64(Compiler, RAX, LeftRegister)
 		}
-		if (Compiler->NoClobberCD89) {
+		if (Compiler->NoClobberCD89 && LeftRegister != RDX) {
 			EmitPush_R64(Compiler, RDX)
 		}
 		
@@ -2088,7 +2088,7 @@ define void CompileBinaryOperator(CompilerState* Compiler, i8 Operator, i8 Resul
 			EmitMove_RX_RX(Compiler, ResultRegister, RDX, ResultSize)
 		}
 		
-		if (Compiler->NoClobberCD89) {
+		if (Compiler->NoClobberCD89 && LeftRegister != RDX) {
 			EmitPop_R64(Compiler, RDX)
 		}
 		if (LeftRegister != RAX) {
