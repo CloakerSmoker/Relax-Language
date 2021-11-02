@@ -3,9 +3,9 @@ DllImport i8 SetConsoleTextAttribute(i64, i16) {Kernel32.dll, SetConsoleTextAttr
 DllImport i8 SetConsoleMode(i64, i32) {Kernel32.dll, SetConsoleMode}
 DllImport i8 GetConsoleMode(i64) {Kernel32.dll, SetConsoleMode}
 
-#Require ./src/lib/Memory.rlx
-#Require ./src/lib/String.rlx
-#Require ./src/lib/File.rlx
+#Require $/Memory.rlx
+#Require $/String.rlx
+#Require $/File.rlx
 
 define i64 GetStdHandle(i32 HandleNumber) {
 	windows {

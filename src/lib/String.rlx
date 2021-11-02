@@ -1,4 +1,4 @@
-#Require ./src/lib/Memory.rlx
+#Require $/Memory.rlx
 
 /* generics when? */
 define i32 StringLength(i8* String) {

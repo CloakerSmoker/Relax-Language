@@ -1,8 +1,8 @@
-#Require ./src/lib/Memory.rlx
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
+#Require $/Memory.rlx
+#Require $/String.rlx
+#Require $/Console.rlx
 
-#Require "./src/lib/Exception.rlx"
+#Require "$/Exception.rlx"
 
 i64 SAFE_STRING_PARSE_INTEGER_FAIL := 'SSPIF'
 

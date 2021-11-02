@@ -1,6 +1,6 @@
-#Require "./src/lib/String.rlx"
-#Require "./src/lib/SafeString.rlx"
-#Require "./src/lib/MD5.rlx"
+#Require "$/String.rlx"
+#Require "$/SafeString.rlx"
+#Require "$/MD5.rlx"
 
 struct HashMapElement {
 	i64 Hash,

@@ -16,7 +16,7 @@ DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
 
 DllImport i8 DeleteFile(i8*) {Kernel32.dll, DeleteFileA}
 
-#Require "./src/lib/Memory.rlx"
+#Require "$/Memory.rlx"
 
 define i64 FileOpen(i8* FilePath, i8 Mode) {
 	windows {
@@ -171,7 +171,7 @@ DllImport i8 FindClose(i64) {Kernel32.dll, FindClose}
 
 declare void Print(i8*, ...)
 
-#Require "./src/lib/String.rlx"
+#Require "$/String.rlx"
 
 define i8 DirectoryWalk(i8* DirectoryPath, void* VisitFunction) {
 	windows {
