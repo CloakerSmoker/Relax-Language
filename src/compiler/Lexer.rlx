@@ -841,20 +841,6 @@ struct LexerState {
 					}
 				}
 				
-				if (IsRequire) {
-					HashMapElement* FoundFile := this->IncludedFiles->Get(IncludePath)
-					
-					if (FoundFile) {
-						return this->GetNextToken(false)
-					}
-				}
-				
-				this->IncludedFiles->Set(IncludePath, IncludePath)
-				
-				Print("Including file: '")
-				IncludePath->Print()
-				Print("'\n")
-				
 				i32 EndIndex := IncludePath->Length
 				i8 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
 				
@@ -869,12 +855,33 @@ struct LexerState {
 					
 					i32 LibraryDirectoryPathLength := StringLength(this->Config->LibraryDirectory)
 					
-					IncludePathBuffer := Alloc(LibraryDirectoryPathLength + 1 + IncludePath->Length)
+					IncludePathBuffer := Alloc(LibraryDirectoryPathLength + IncludePath->Length)
 					
 					MoveMemory(IncludePathBuffer, this->Config->LibraryDirectory, LibraryDirectoryPathLength)
-					IncludePathBuffer[LibraryDirectoryPathLength] := '/'
-					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1, IncludePath->Buffer + 1, IncludePath->Length - 1)
+					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength, IncludePath->Buffer + 1, IncludePath->Length - 1)
 				}
+				
+				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
+				
+				if (IsRequire) {
+					HashMapElement* FoundFile := this->IncludedFiles->Get(AbsoluteIncludePath)
+					
+					if (FoundFile) {
+						if (IsLibraryInclude) {
+							Free(IncludePathBuffer)
+						}
+						
+						return this->GetNextToken(false)
+					}
+				}
+				
+				this->IncludedFiles->Set(AbsoluteIncludePath, 1)
+				
+				Free(AbsoluteIncludePath)
+				
+				Print("Including file: '")
+				IncludePath->Print()
+				Print("'\n")
 				
 				i32 IncludeFileSize := 0
 				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize)

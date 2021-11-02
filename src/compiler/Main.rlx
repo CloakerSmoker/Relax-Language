@@ -104,7 +104,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	BuildConfig* Config := Alloc(#BuildConfig)
 	
-	Config->LibraryDirectory := Concatenate(ProgramDirectory, "src/lib/")
+	Config->LibraryDirectory := Concatenate(ProgramDirectory, "src/lib")
 	
 	Config->DumpInfo := 0
 	Config->LineEnding := LINE_ENDING_DEFAULT
