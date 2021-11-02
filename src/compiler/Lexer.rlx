@@ -816,6 +816,15 @@ struct LexerState {
 					StartingIndex += ExpectCloseQuote := true
 				}
 				
+				if (NextCharacter = '$') {
+					; Allow a single $ before a file name as a way to include files
+					;  from the compiler's `src/lib/` directory instead of shipping
+					;   a copy of the standard library with every project.
+					
+					this->GetNextCharacter()
+					NextCharacter := this->PeekNextCharacter()
+				}
+				
 				while (IsPath(NextCharacter, ExpectCloseQuote) && !this->AtEnd()) {
 					NextCharacter := this->GetNextCharacter()
 				}
@@ -851,8 +860,28 @@ struct LexerState {
 				
 				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 				
+				i8* IncludePathBuffer := IncludePath->Buffer
+				
+				i8 IsLibraryInclude := IncludePath->ASCIICharacterAt(0) = '$'
+				
+				if (IsLibraryInclude) {
+					; $Path => $COMPILER_DIR/src/lib/Path
+					
+					i32 LibraryDirectoryPathLength := StringLength(this->Config->LibraryDirectory)
+					
+					IncludePathBuffer := Alloc(LibraryDirectoryPathLength + 1 + IncludePath->Length)
+					
+					MoveMemory(IncludePathBuffer, this->Config->LibraryDirectory, LibraryDirectoryPathLength)
+					IncludePathBuffer[LibraryDirectoryPathLength] := '/'
+					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1, IncludePath->Buffer + 1, IncludePath->Length - 1)
+				}
+				
 				i32 IncludeFileSize := 0
-				i8* IncludeFileText := OpenAndRead(IncludePath->Buffer, &IncludeFileSize)
+				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize)
+				
+				if (IsLibraryInclude) {
+					Free(IncludePathBuffer)
+				}
 				
 				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
 				

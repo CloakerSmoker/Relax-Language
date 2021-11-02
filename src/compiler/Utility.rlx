@@ -64,6 +64,7 @@ i8 LINE_ENDING_CRLF := 2
 struct BuildConfig {
 	LexerState* Lexer
 	i8* SourceFile
+	i8* LibraryDirectory
 	
 	i64 ImageBase
 	i8 OutputFormat
