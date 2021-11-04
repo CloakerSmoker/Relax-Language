@@ -98,13 +98,14 @@ define void Help() {
 define i32 Main(i64 ArgC, i8** ArgV) {	
 	GetArgs(&ArgC, &ArgV) /* NOP on Linux */
 	
-	ProgramName := Argv[0]
+	ProgramName := ArgV[0]
 	
 	i8* ProgramDirectory := GetAbsolutePath(Concatenate(ArgV[0], "/../../"))
 	
 	BuildConfig* Config := Alloc(#BuildConfig)
 	
 	Config->LibraryDirectory := Concatenate(ProgramDirectory, "src/lib")
+	Config->IncludedFiles := HashMap:New()
 	
 	Config->DumpInfo := 0
 	Config->LineEnding := LINE_ENDING_DEFAULT
@@ -189,6 +190,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	Config->SourceFile := InputFilePath
 	Config->TargetABI := ABI_SYSTEMV
 	Config->ImageBase := DEFAULT_IMAGE_BASE
+	
+	Config->IncludedFiles->Set(InputFilePath, GetAbsolutePath(InputFilePath))
 	
 	i32 SourceLength := 0
 	i8* Source := OpenAndRead(InputFilePath, &SourceLength)

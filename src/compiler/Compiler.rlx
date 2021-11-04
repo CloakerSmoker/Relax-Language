@@ -111,6 +111,12 @@ struct CompilerState {
 		this->FunctionCount := 0
 	}
 	
+	define i8* SourcePathToAbsolutePath(i8* Path) {
+		HashMapElement* AbsolutePathElement := this->Config->IncludedFiles->Get(Path)
+		
+		return AbsolutePathElement->Value
+	}
+	
 	define void InitializeDebugInfo() {
 		BuildConfig* Config := this->Config
 		
@@ -118,7 +124,9 @@ struct CompilerState {
 			this->DWARF := DWARFBuilder:New()
 			this->DWARF->CreateAbbreviations()
 			
-			this->DWARFCompilationUnitOffset := this->DWARF->StartCompilationUnit(Config->SourceFile, ".", Config->ImageBase, 0)
+			i8* AbsoluteSourceFile := this->SourcePathToAbsolutePath(Config->SourceFile)
+			
+			this->DWARFCompilationUnitOffset := this->DWARF->StartCompilationUnit(AbsoluteSourceFile, "", Config->ImageBase, 0)
 			
 			this->DWARF->AddBaseType("i8", 1)
 			this->DWARF->AddBaseType("i16", 2)
@@ -126,8 +134,8 @@ struct CompilerState {
 			this->DWARF->AddBaseType("i64", 8)
 			this->DWARF->AddBaseType("void", 8)
 			
-			this->DWARF->LineInfo->AddDirectory(".")
-			this->DWARF->LineInfo->AddFile(Config->SourceFile)
+			;this->DWARF->LineInfo->AddDirectory("/")
+			this->DWARF->LineInfo->AddFile(AbsoluteSourceFile)
 			
 			this->DWARF->LineInfo->SetImageBase(Config->ImageBase)
 			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
@@ -179,7 +187,9 @@ struct CompilerState {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			i32 Offset := this->CodeBase + this->Index
 			
-			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, Context->SourceFilePath->Buffer)
+			i8* AbsoluteSourceFile := this->SourcePathToAbsolutePath(Context->SourceFilePath->Buffer)
+			
+			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, AbsoluteSourceFile)
 		}
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {

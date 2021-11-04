@@ -65,6 +65,7 @@ struct BuildConfig {
 	LexerState* Lexer
 	i8* SourceFile
 	i8* LibraryDirectory
+	HashMap* IncludedFiles
 	
 	i64 ImageBase
 	i8 OutputFormat

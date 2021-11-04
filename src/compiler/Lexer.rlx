@@ -181,7 +181,6 @@ struct LexerState {
 	BuildConfig* Config,
 	SafeString* SourceFilePath,
 	
-	HashMap* IncludedFiles,
 	HashMap Keywords,
 	
 	union {
@@ -219,13 +218,8 @@ struct LexerState {
 		this->SourceFilePath := SourceFilePath
 		
 		if (Parent = null) {
-			this->IncludedFiles := HashMap:New()
-			
 			this->TokenCapacity := 300
 			this->Buffer := Alloc(this->TokenCapacity * 8)
-		}
-		else {
-			this->IncludedFiles := Parent->IncludedFiles
 		}
 		
 		this->CurrentLineNumber := 1
@@ -864,7 +858,7 @@ struct LexerState {
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
 				
 				if (IsRequire) {
-					HashMapElement* FoundFile := this->IncludedFiles->Get(AbsoluteIncludePath)
+					HashMapElement* FoundFile := this->Config->IncludedFiles->Get(AbsoluteIncludePath)
 					
 					if (FoundFile) {
 						if (IsLibraryInclude) {
@@ -875,7 +869,8 @@ struct LexerState {
 					}
 				}
 				
-				this->IncludedFiles->Set(AbsoluteIncludePath, 1)
+				this->Config->IncludedFiles->Set(AbsoluteIncludePath, AbsoluteIncludePath)
+				this->Config->IncludedFiles->Set(IncludePath, AbsoluteIncludePath)
 				
 				Free(AbsoluteIncludePath)
 				
