@@ -46,6 +46,24 @@ define i32 Main() {
 	PrintCharacter(',')
 	Print(Abc(1))
 	
+	; Ensure that the unsigned displacement isn't encoded into a signed type
+	;  which will be incorrect.
+	
+	i8[0x200] Test
+	
+	for (i32 Index := 0, Index < 0x100, Index++) {
+		Test[Index] := 0
+	}
+	
+	asm (rax := &Test[0x100]) {
+		; Writes to 0x180 if the displacement is encoded correct
+		; Writes to 0x80 otherwise
+		
+		mov, {rax + 0x80} As i8*, 1
+	}
+	
+	Print(",%i%i", Test[0x80], Test[0x180])
+	
 	asm {mov, rax, 0}
 	
 	return 0

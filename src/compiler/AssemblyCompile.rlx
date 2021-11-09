@@ -21,7 +21,7 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 	i8 REX := REX_BASE
 	i8 SIB := 0
 	i8 DispSize := 0
-	i8 DispValue := 0
+	i32 DispValue := 0
 	i8 OperationSize := 0
 	
 	if (ForOperand->Type & OP_R) {
@@ -72,7 +72,7 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 			}
 			
 			DispSize := ForOperand->DispSize
-			DispValue := (ForOperand->DispValue) As i8
+			DispValue := ForOperand->DispValue
 		}
 	}
 	
