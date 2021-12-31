@@ -164,7 +164,9 @@ define i8* FindLastLine(i8* Base, i32 Offset) {
 		i16 NextCharacter := (Needle - Index)[0]
 		
 		if (NextCharacter = 13 || NextCharacter = 10) {
-			return (Needle - Index) + 2
+			i32 LineEndLength := (NextCharacter = 13) + 1
+			
+			return (Needle - Index) + LineEndLength
 		}
 		else if ((Needle - Index) <= Base) {
 			break
