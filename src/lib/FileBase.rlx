@@ -1,0 +1,142 @@
+i8 FILE_READ := 1
+i8 FILE_WRITE := 2
+i8 FILE_READ_WRITE := 3
+
+i8 FILE_CREATE_NEW := 0x40
+
+DllImport i32 GetLastError() {Kernel32.dll, GetLastError}
+DllImport i8 CloseHandle(i64) {Kernel32.dll, CloseHandle}
+DllImport i64 CreateFile(i8*, i64, i32, void, i32, i32, i64) {Kernel32.dll, CreateFileA}
+
+DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
+DllImport i32 SetFilePointer(i64, i32, void, i32) {Kernel32.dll, SetFilePointer}
+
+DllImport i32 GetFileSize(i64, void) {Kernel32.dll, GetFileSize}
+DllImport i8 ReadFile(i64, void*, i32, i32*, void) {Kernel32.dll, ReadFile}
+
+DllImport i8 DeleteFile(i8*) {Kernel32.dll, DeleteFileA}
+
+define i64 FileOpen(i8* FilePath, i8 Mode) {
+	windows {
+		i8 FILE_SHARE_READ := 1
+		i8 FILE_SHARE_WRITE := 2
+		
+		i8 OPEN_EXISTING := 3
+		i8 OPEN_ALWAYS := 4
+		
+		i16 FILE_ATTRIBUTE_NORMAL := 128
+		
+		i64 AccessMask := 0
+		i8 OpenMode := Mode & 0x03
+		
+		if (OpenMode = FILE_READ) {AccessMask := 0x80000000}
+		else if (OpenMode = FILE_WRITE) {AccessMask := 0x40000000}
+		else if (OpenMode = FILE_READ_WRITE) {AccessMask := 0xC0000000}
+		
+		i32 CreationMode := OPEN_EXISTING
+		
+		if (Mode & FILE_CREATE_NEW) {
+			CreationMode := OPEN_ALWAYS
+		}
+		
+		return CreateFile(FilePath, AccessMask, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CreationMode, FILE_ATTRIBUTE_NORMAL, 0)
+	}
+	linux {
+		return syscall:(2, FilePath, Mode - 1, 0x1C0)
+	}
+}
+
+i32 SEEK_SET := 0
+i32 SEEK_RELATIVE := 1
+i32 SEEK_END := 2
+
+define i32 FileSeek(i64 File, i32 Offset, i32 Mode) {
+	windows {
+		return SetFilePointer(File, Offset, 0, Mode)
+	}
+	linux {
+		return syscall:(8, File, Offset, Mode) As i32
+	}
+}
+define i32 FileTell(i64 File) {
+	return FileSeek(File, 0, SEEK_RELATIVE)
+}
+
+define i32 FileGetSize(i64 File) {
+	windows {
+		return GetFileSize(File, 0)
+	}
+	linux {
+		i32 OldOffset := FileTell(File)
+		i32 End := FileSeek(File, 0, SEEK_END)
+		FileSeek(File, OldOffset, SEEK_SET)
+		
+		return End
+	}
+}
+define void FileRead(i64 File, void* Buffer, i32 BytesToRead) {
+	windows {
+		i32 BytesRead := 0
+		ReadFile(File, Buffer, BytesToRead, &BytesRead, 0)
+	}
+	linux {
+		syscall:(0, File, Buffer, BytesToRead)
+	}
+}
+
+define i32 FileWrite(i64 File, void* Buffer, i32 BufferSize) {
+	windows {
+		i32 BytesWritten := 0
+		return WriteFile(File, Buffer, BufferSize, &BytesWritten, 0)
+	}
+	linux {
+		return syscall:(1, File, Buffer, BufferSize) As i32
+	}
+}
+define void FileClose(i64 File) {
+	windows {
+		CloseHandle(File)
+	}
+	linux {
+		syscall:(3, File)
+	}
+}
+define i64 FileGetError(i64 Result) {
+	if (Result > 0) {
+		return 0
+	}
+	
+	windows {
+		return GetLastError()
+	}
+	linux {
+		return -Result + 1
+	}
+}
+define i32 FileDelete(i8* FilePath) {
+	windows {
+		return DeleteFile(FilePath)
+	}
+	linux {
+		return syscall:(87, FilePath) As i32
+	}
+}
+
+define i32 FileGetSizeByPath(i8* FilePath) {
+	i64 File := FileOpen(FilePath, FILE_READ)
+	i32 Result := FileGetSize(File)
+	FileClose(File)
+	
+	return Result
+}
+
+DllImport i32 SetCurrentDirectory(i8*) {Kernel32.dll, SetCurrentDirectoryA}
+
+define void SetWorkingDirectory(i8* Path) {
+	windows {
+		SetCurrentDirectory(Path)
+	}
+	linux {
+		syscall:(80, Path)
+	}
+}

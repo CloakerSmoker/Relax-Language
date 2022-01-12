@@ -1,0 +1,253 @@
+/* generics when? */
+define i32 StringLength(i8* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+define i32 StringLength(i16* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+
+define i32 WLen(i16* String) {
+	for (i32 Length := 0, String[Length] != 0, Length += 1) {}
+	
+	return Length
+}
+
+define i8 Lower(i8 Character) {
+	; Converts A-Z to a-z
+	
+	if ('A' <= Character && Character <= 'Z') {
+		Character += 32
+	}
+	
+	return Character
+}
+define i16 Lower(i16 Character) {
+	return Lower(Character As i8) As i16
+}
+
+define i8 IsAlpha(i16 Character) {
+	if ('a' <= Character && Character <= 'z') {
+		return true
+	}
+	else if ('A' <= Character && Character <= 'Z') {
+		return true
+	}
+
+	return false
+}
+define i8 IsNumeric(i16 Character) {
+	return (Character >= '0') && (Character <= '9')
+}
+define i8 IsNumber(i16 Character) {
+	return IsNumeric(Character)
+}
+
+define i8 IsAlphaNumeric(i16 Character) {
+	return IsAlpha(Character) || IsNumeric(Character) || Character = '_'
+}
+
+define i8 IsPath(i16 Character, i16 AllowExtra) {
+	if (IsAlphaNumeric(Character)) {
+		return true
+	}
+	else if (Character = '/' || Character = '\') {
+		return true
+	}
+	else if (Character = '.' || Character = '-') {
+		return true
+	}
+	else if (AllowExtra) {
+		if (Character = ' ') {
+			return true
+		}
+	}
+	
+	return false
+}
+
+define i8 _IsHex(i16 Character) {
+	if ((Character >= 'a') && (Character <= 'f')) {
+		return true
+	}
+	else if ((Character >= 'A') && (Character <= 'F')) {
+		return true
+	}
+	
+	return false
+}
+define i8 IsHex(i16 Character) {
+	return IsNumeric(Character) || _IsHex(Character)
+}
+
+define i8 IsWhiteSpace(i16 Character) {
+	if (Character = ' ' || Character = '	') {
+		; Space and tab
+		
+		return true
+	}
+	else if (Character = 10 || Character = 13) {
+		; Line endings
+		
+		return true
+	}
+
+	return false
+}
+
+define i8 NumberToCharacter(i8 Number) {
+	if (Number < 10) {
+		return (Number + '0') As i8
+	}
+	else {
+		return (Number - 10 + 'A') As i8
+	}
+}
+define i8 GetCharacterValue(i8 Character) {
+	Character := Lower(Character)
+	
+	if (Character >= 'a') {
+		return ((Character - 'a') + 10) As i8
+	}
+	
+	return (Character - '0') As i8
+}
+
+define i8 IsNumeric(i8 Character, i64 Base) {
+	Character := Lower(Character)
+	Base -= 1
+	
+	if (Base > 9) {
+		if (Character >= 'a' && Character <= ('a' + Base)) {
+			return true
+		}
+	}
+	
+	return (Character >= '0') && (Character <= ('0' + Base))
+}
+
+define i64 WToI(i16* WString, i32 Length, i64 Base, i8* Success) {
+	i64 Result := 0
+	i64 Negative := 0
+	
+	i8 FirstCharacter := WString[0] As i8
+	
+	if (FirstCharacter = '-') {
+		Negative := 1
+		WString += 2
+		FirstCharacter := WString[0] As i8
+	}
+	
+	if !(IsNumeric(FirstCharacter, Base)) {
+		return 0
+	}
+		
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 NextCharacter := WString[Index] As i8
+		
+		if !(IsNumeric(NextCharacter, Base)) {
+			Break
+		}
+		
+		Result *= Base
+		Result += GetCharacterValue(NextCharacter)
+	}
+	
+	if (Negative) {
+		Result := -Result
+	}
+	
+	if (Success != null) {
+		Success[0] := Index = Length
+	}
+	
+	return Result
+}
+define i64 WToI(i16* WString) {
+	return WToI(WString, WLen(WString), 10, null)
+}
+
+define i8 StringEquals(i8* Left, i8* Right) {
+	i32 Index := 0
+	
+	loop {
+		i8 LeftCharacter := Left[Index]
+		i8 RightCharacter := Right[Index]
+		
+		if (LeftCharacter = 0 && RightCharacter = 0) {
+			return true
+		}
+		else if (LeftCharacter != RightCharacter || LeftCharacter = 0 || RightCharacter = 0) {
+			return false
+		}
+		
+		Index += 1
+	}
+	
+	return false
+}
+
+define void MemoryReverse(i8* Buffer, i32 Length) {
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 Temp := Buffer[Index]
+		Buffer[Index] := Buffer[Length - 1]
+		Buffer[Length - 1] := Temp
+		
+		Length -= 1
+	}
+}
+
+define i8* IToA(i64 Number, i64 Base, i8* Buffer, i8 PrintExtra) {
+	i8 Sign := 0
+	
+	if (Number < 0) {
+		Sign := true
+		
+		if (Base = 10) {
+			Number := -Number
+		}
+		else if (Base = 16 || Base = 2) {
+			/* Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string */
+			
+			Number := Number & 0x7FFFFFFFFFFFFFFF
+		}
+	}
+	
+	for (i32 Index := 0, Number != 0, Index += 1) {
+		Buffer[Index] := NumberToCharacter((Number % Base) As i8)
+		Number := Number / Base
+	}
+	
+	if (Index = 0) {
+		Buffer[0] := '0'
+		Index := 1
+	}
+	
+	if (Sign) {
+		if (Base = 10) {
+			Buffer[Index] := '-'
+			Index += 1
+		}
+		else if (Base = 16) {
+			i8 Last := GetCharacterValue(Buffer[Index - 1])
+			Last := Last | 0x8
+			Buffer[Index - 1] := NumberToCharacter(Last)
+		}
+	}
+	
+	if (Base = 16 && PrintExtra) {
+		Buffer[Index] := 'x'
+		Buffer[Index + 1] := '0'
+		Index += 2
+	}
+	
+	MemoryReverse(Buffer, Index)
+	
+	return Buffer
+}
+define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
+	return IToA(Number, Base, Buffer, true)
+}
