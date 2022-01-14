@@ -878,8 +878,16 @@ struct LexerState {
 				IncludePath->Print()
 				Print("'\n")
 				
+				ErrorContext IncludePathBlame {
+					SourceFilePath: this->SourceFilePath,
+					Source: this->SourceText,
+					LineNumber: this->CurrentLineNumber,
+					PositionInSource: StartingIndex,
+					LengthInSource: EndIndex As i16
+				}
+				
 				i32 IncludeFileSize := 0
-				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize)
+				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize, &IncludePathBlame)
 				
 				if (IsLibraryInclude) {
 					Free(IncludePathBuffer)

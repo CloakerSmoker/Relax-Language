@@ -10,12 +10,22 @@ define void Exit(i32 ExitCode) {
 	}
 }
 
-define i8* OpenAndRead(i8* FilePath, i32* OutFileSize) {
+declare void PrettyError(ErrorContext*, i8*, i8)
+
+define i8* OpenAndRead(i8* FilePath, i32* OutFileSize, ErrorContext* Blame) {
 	i64 FileHandle := FileOpen(FilePath, FILE_READ)
 	
 	if (FileHandle < 0) {
 		SwapOutputStream()
-		Print("Could not open file: '%s'\nError code: %i\nAborting", FilePath, FileGetError(FileHandle))
+		
+		if (Blame) {
+			PrettyError(Blame, "Could not open file", Red | Bright)
+		}
+		else {
+			Print("Could not open file: '%s'\n", FilePath)
+		}
+		
+		Print("Error code: %i\nAborting", FileGetError(FileHandle))
 		
 		Exit(1)
 	}
@@ -40,6 +50,9 @@ define i8* OpenAndRead(i8* FilePath, i32* OutFileSize) {
 	FileClose(FileHandle)
 	
 	return FileBuffer
+}
+define i8* OpenAndRead(i8* FilePath, i32* OutFileSize) {
+	return OpenAndRead(FilePath, OutFileSize, null)
 }
 
 i8 OUTPUT_PE := 0
