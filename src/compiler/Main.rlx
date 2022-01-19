@@ -109,6 +109,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	Config->DumpInfo := 0
 	Config->LineEnding := LINE_ENDING_DEFAULT
+	Config->PESubsystem := IMAGE_SUBSYSTEM_WINDOWS_CUI
 	
 	windows {
 		Config->OutputFormat := OUTPUT_PE
@@ -127,6 +128,15 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		if      (StringEquals(NextOption, "--elf")) { Config->OutputFormat := OUTPUT_ELF }
 		else if (StringEquals(NextOption, "--pe" )) { Config->OutputFormat := OUTPUT_PE  }
 		else if (StringEquals(NextOption, "--bin")) { Config->OutputFormat := OUTPUT_BIN }
+		
+		else if (StringEquals(NextOption, "--pe-reloc")) { Config->DebugMode |= DEBUG_EMIT_RELOC }
+		else if (StringEquals(NextOption, "--pe-subsystem")) { 
+			Index += 1
+			
+			Config->PESubsystem := AToI(ArgV[Index]) As i16
+			
+			Print("Using PE subsystem %i\n", Config->PESubsystem)
+		}
 		
 		else if (StringEquals(NextOption, "--functions")) { Config->DumpInfo |= DUMP_FUNCTIONS }
 		else if (StringEquals(NextOption, "--globals"  )) { Config->DumpInfo |= DUMP_GLOBALS   }

@@ -69,6 +69,7 @@ i8 DUMP_LINES := 4
 i8 DEBUG_NONE := 0
 i8 DEBUG_EMIT_FUNCTION_NAMES := 1
 i8 DEBUG_EMIT_DWARF := 2
+i8 DEBUG_EMIT_RELOC := 4
 
 i8 LINE_ENDING_DEFAULT := 0
 i8 LINE_ENDING_CR := 1
@@ -86,6 +87,7 @@ struct BuildConfig {
 	i8 DumpInfo
 	i8 DebugMode
 	i8 LineEnding
+	i16 PESubsystem
 }
 
 declare void PrettyError(ErrorContext*, i8*, i8)

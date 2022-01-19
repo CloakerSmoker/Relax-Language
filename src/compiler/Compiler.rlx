@@ -474,7 +474,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->DistanceBetweenGlobalsAndCode := 0x131a
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
-		Compiler->PE := BuildBuilder()
+		Compiler->PE := BuildBuilder(Config->PESubsystem, Config->DebugMode & DEBUG_EMIT_RELOC)
 		
 		Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
 		Compiler->PE->PE->ImageBase := Config->ImageBase
@@ -588,18 +588,20 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		i64 TextRVA := AddCode(Compiler->PE, Compiler->CodeBuffer, Compiler->Index, MainOffset)
 		
-		; for (i32 RelocationIndex := 0, RelocationIndex < (Compiler->CodeRelocationCount), RelocationIndex += 1) {
-		; 	i32 NextRelocationOffset := (Compiler->CodeRelocations)[RelocationIndex]
-		; 	
-		; 	i32 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
-		; 	i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
-		; 	
-		; 	/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
-		; 	
-		; 	AddRelocation(Compiler->PE, PageRVA, OffsetInPage, false)
-		; }
+		if (Config->DebugMode & DEBUG_EMIT_RELOC) {
+			for (i32 RelocationIndex := 0, RelocationIndex < (Compiler->CodeRelocationCount), RelocationIndex += 1) {
+				i32 NextRelocationOffset := (Compiler->CodeRelocations)[RelocationIndex]
+				
+				i64 PageRVA := TextRVA + (NextRelocationOffset / 0x1000)
+				i16 OffsetInPage := (NextRelocationOffset % 0x1000) As i16
+				
+				/* Todo: Decide if a 32 bit relocation is correct or not. As long as imagebase is 32 bits, this is fine for now */
+				
+				AddRelocation(Compiler->PE, PageRVA As i32, OffsetInPage, false)
+			}
+		}
 		
-		FinalizeBuilder(Compiler->PE)
+		FinalizeBuilder(Compiler->PE, Config->DebugMode & DEBUG_EMIT_RELOC)
 		
 		Result := FileWrite(OutputFileHandle, Compiler->PE->Buffer, Compiler->PE->BufferSize)
 		BytesWritten := Compiler->PE->BufferSize

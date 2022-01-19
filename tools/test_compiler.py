@@ -30,7 +30,7 @@ if running_on == 'Linux':
     run_command_format = f'{run_command_format}'
     expected_exitcode = 0
 elif running_on == 'Windows':
-    compile_command_format += '.exe" --debug'
+    compile_command_format += '.exe" --pe --debug'
 else:
     print('Unsupported platform.', file=sys.stderr)
     sys.exit(1)
