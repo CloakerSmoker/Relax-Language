@@ -67,6 +67,19 @@ define void* CloneMemory(void* Memory, i32 Size) {
 	return NewBuffer
 }
 
+define i8 CompareMemory(void* RawLeft, void* RawRight, i32 Size) {
+	i8* Left := RawLeft
+	i8* Right := RawRight
+	
+	for (i32 Index := 0, Index < Size, Index++) {
+		if (Left[Index] != Right[Index]) {
+			return false
+		}
+	}
+	
+	return true
+}
+
 struct ExpandArray {
 	i32 ElementSize,
 	i32 Capacity	

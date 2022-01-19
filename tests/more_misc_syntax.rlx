@@ -22,6 +22,10 @@ define i32 Main() {
 		Print(" 1")
 	}
 	
+	i16* Wide := "abc"w
+	i8* Short := Wide As i8*
+	
+	Print(" %i%i", Short[0] = 'a', Short[1] = 0)
 	
 	return 0
 }

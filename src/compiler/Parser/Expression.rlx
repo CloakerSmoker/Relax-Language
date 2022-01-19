@@ -572,13 +572,16 @@
 			TypeInfo* BaseType := this->i8
 			
 			if (CharacterSize = 1) {
-				for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
-					Buffer[Offset + Index] := StringText->Buffer[Index] As i8
-				}
+				MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length)
 			}
 			else {
 				BaseType := this->i16
-				MoveMemory(&Buffer[Offset], StringText->Buffer, StringText->Length * 2)
+				
+				i16* WideBuffer := &Buffer[Offset] As i16*
+				
+				for (i32 Index := 0, Index < (StringText->Length), Index += 1) {
+					WideBuffer[Index] := StringText->Buffer[Index]
+				}
 			}
 			
 			Result := ASTNode:New(NODE_TYPE_STRING, Offset, BaseType->AsPointer(1))
