@@ -829,7 +829,7 @@ struct ParserState {
 			ParameterCount += 1
 		}
 		
-		i8 Attribute := 0
+		i8 Attributes := 0
 		
 		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 			; Only bother parsing parameters if we actually have any
@@ -859,7 +859,7 @@ struct ParserState {
 						Start->Error("Only >4 regular paremeters can be passed with a variable argument.")
 					}
 					
-					Attribute := OPERATOR_DOT
+					Attributes |= FUNCTION_ATTRIBUTE_VARIADIC
 					
 					NextParameter->Type := this->void->AsPointer(1)
 					NextParameter->IsParameter := true
@@ -958,7 +958,7 @@ struct ParserState {
 		
 		NewDefine->Name := NameToken->StringValue
 		NewDefine->ReturnType := ReturnType
-		NewDefine->Attribute := Attribute
+		NewDefine->Attributes := Attributes
 		NewDefine->Parameters := ParameterList
 		NewDefine->ParameterCount := ParameterCount
 		
@@ -1004,16 +1004,16 @@ struct ParserState {
 		else if (ForDefine) {
 			this->CurrentFunction := NewDefine
 			
+			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
+				NewDefine->Attributes |= FUNCTION_ATTRIBUTE_USE_X64
+			}
+			
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
-				NewDefine->Attribute := KEYWORD_ASSEMBLY
+				NewDefine->Attributes |= FUNCTION_ATTRIBUTE_ASSEMBY
 				
 				NewDefine->AssemblyBody := this->ParseAssembly(false)->AssemblyValue
 			}
 			else {
-				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
-					NewDefine->Attribute := KEYWORD_X64
-				}
-				
 				i32 Length := 4
 				i8* Buffer := Alloc(Length)
 				

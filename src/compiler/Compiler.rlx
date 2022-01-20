@@ -859,7 +859,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i32 DebugData := Compiler->BeforeCompileFunction(FunctionToCompile)
 	
-	if (FunctionToCompile->Attribute = KEYWORD_ASSEMBLY) {
+	if (FunctionToCompile->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 		/* Assembly functions should have no extra code generated, just whatever the asm block contains. */
 		
 		CompileAssembly(Compiler, FunctionToCompile->AssemblyBody)
@@ -885,7 +885,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i8 USE_SYSTEMV := true /* Compiler->OutputELF */
 	
-	if (FunctionToCompile->Attribute = KEYWORD_X64) {
+	if (FunctionToCompile->Attributes & FUNCTION_ATTRIBUTE_USE_X64) {
 		; Force a function to be compiled using the x64 ABI
 		USE_SYSTEMV := false
 	}
@@ -1549,7 +1549,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	
 	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (Compiler->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
 	
-	if (TargetFunction && TargetFunction->Attribute = KEYWORD_X64) {
+	if (TargetFunction && TargetFunction->Attributes & FUNCTION_ATTRIBUTE_USE_X64) {
 		USE_SYSTEMV := false
 	}
 	
@@ -1590,7 +1590,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	Compiler->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
-	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attribute = OPERATOR_DOT)
+	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attributes & FUNCTION_ATTRIBUTE_VARIADIC)
 	
 	if (ParameterCount != 0) {		
 		if (IS_VARIADIC) {
@@ -1688,7 +1688,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	if (IS_SYSCALL) {
 		EmitSysCall(Compiler)
 	}
-	else if (USE_SYSTEMV || !TargetFunction->IsImported) {
+	else if (USE_SYSTEMV) {
 		EmitCall_Label(Compiler, TargetFunction->LabelNumber)
 	}
 	else {

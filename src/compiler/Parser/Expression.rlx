@@ -113,7 +113,7 @@
 			
 			i8 IsVariadic := false
 			
-			if (Next->Attribute = OPERATOR_DOT) {
+			if (Next->Attributes & FUNCTION_ATTRIBUTE_VARIADIC) {
 				; Variadic functions automatically get rated much worse than regular functions, as
 				;  they are the most general version of a function.
 				

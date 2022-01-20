@@ -21,7 +21,7 @@ define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Ta
 	Target->CallCount += 1
 	
 	if (Target->IsImported = false) {
-		if (Target->Attribute = KEYWORD_ASSEMBLY) {
+		if (Target->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
 		}
 		else {
@@ -109,7 +109,7 @@ define void CountReferences(ParserState* Parser) {
 	Visitor->AllowType(NODE_TYPE_VARIABLE)
 	Visitor->AllowType(NODE_TYPE_ASSEMBLY)
 	
-	if (Parser->MainFunction->Attribute = KEYWORD_ASSEMBLY) {
+	if (Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 		CountReferencesVisitAssembly(Visitor, Parser->MainFunction->AssemblyBody)
 	}
 	else {
@@ -342,7 +342,7 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 		if (CallNode->BuiltinID = BUILTIN_NONE) {
 			FunctionDefine* TargetFunction := CallNode->TargetFunction
 			
-			if (TargetFunction->IsImported = false && TargetFunction->Attribute != KEYWORD_ASSEMBLY) {
+			if (TargetFunction->IsImported = false && !(TargetFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY)) {
 				Visitor->VisitBlocks(TargetFunction->Body)
 			}
 			
@@ -479,7 +479,7 @@ define void FoldConstants(ParserState* Parser) {
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_IF)
 	
-	if (Parser->MainFunction->Attribute != KEYWORD_ASSEMBLY) {
+	if !(Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 		Visitor->VisitBlocks(Parser->MainFunction->Body)
 	}
 	

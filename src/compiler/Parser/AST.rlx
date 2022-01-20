@@ -393,6 +393,10 @@ struct InstructionNode {
 i8 FUNCTION_IS_METHOD := 1
 i8 FUNCTION_IS_STATIC_METHOD := 2
 
+i8 FUNCTION_ATTRIBUTE_USE_X64 := 1
+i8 FUNCTION_ATTRIBUTE_ASSEMBY := 2
+i8 FUNCTION_ATTRIBUTE_VARIADIC := 4 
+
 declare i32 GetTypeStringLength(Type)
 declare void StringifyType(void*, Type)
 declare void PrintType(Type)
@@ -424,7 +428,7 @@ struct FunctionDefine {
 	
 	SafeString* MethodOfTypeName,
 	
-	i8 Attribute,
+	i8 Attributes,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
 	
