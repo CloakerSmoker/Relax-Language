@@ -41,23 +41,7 @@ define void Free(void* Memory) {
 	}
 }
 
-define void MoveMemory(void* RawTo, void* RawFrom, i32 Size) {
-	i8* To := RawTo As i8*
-	i8* From := RawFrom As i8*
-	
-	i32 Index := 0
-	
-	if (To < From) {
-		for (Index := 0, Index < Size, Index += 1) {
-			To[Index] := From[Index]
-		}
-	}
-	else {
-		for (Index := Size, Index != 0, Index -= 1) {
-			To[Index - 1] := From[Index - 1]
-		}
-	}
-}
+#Require "$/MemoryBase.rlx"
 
 define void* CloneMemory(void* Memory, i32 Size) {
 	void* NewBuffer := Alloc(Size)
@@ -65,19 +49,6 @@ define void* CloneMemory(void* Memory, i32 Size) {
 	MoveMemory(NewBuffer, Memory, Size)
 	
 	return NewBuffer
-}
-
-define i8 CompareMemory(void* RawLeft, void* RawRight, i32 Size) {
-	i8* Left := RawLeft
-	i8* Right := RawRight
-	
-	for (i32 Index := 0, Index < Size, Index++) {
-		if (Left[Index] != Right[Index]) {
-			return false
-		}
-	}
-	
-	return true
 }
 
 struct ExpandArray {

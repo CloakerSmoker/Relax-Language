@@ -1,0 +1,59 @@
+define void MoveMemory(void* RawTo, void* RawFrom, i32 Size) {
+	i8* To := RawTo As i8*
+	i8* From := RawFrom As i8*
+	
+	i32 Index := 0
+	
+	if (To < From) {
+		for (Index := 0, Index < Size, Index += 1) {
+			To[Index] := From[Index]
+		}
+	}
+	else {
+		for (Index := Size, Index != 0, Index -= 1) {
+			To[Index - 1] := From[Index - 1]
+		}
+	}
+}
+
+define i8 CompareMemory(void* RawLeft, void* RawRight, i32 Size) {
+	i8* Left := RawLeft
+	i8* Right := RawRight
+	
+	for (i32 Index := 0, Index < Size, Index++) {
+		if (Left[Index] != Right[Index]) {
+			return false
+		}
+	}
+	
+	return true
+}
+
+define void SetMemory(void* RawTarget, i32 Count, i8 Value) {
+	i8* Target := RawTarget As i8*
+	
+	for (i32 Index := 0, Index < Count, Index++) {
+		Target[Index] := Value
+	}
+}
+define void SetMemory(void* RawTarget, i32 Count, i16 Value) {
+	i16* Target := RawTarget As i16*
+	
+	for (i32 Index := 0, Index < Count, Index++) {
+		Target[Index] := Value
+	}
+}
+define void SetMemory(void* RawTarget, i32 Count, i32 Value) {
+	i32* Target := RawTarget As i32*
+	
+	for (i32 Index := 0, Index < Count, Index++) {
+		Target[Index] := Value
+	}
+}
+define void SetMemory(void* RawTarget, i32 Count, i64 Value) {
+	i64* Target := RawTarget As i64*
+	
+	for (i32 Index := 0, Index < Count, Index++) {
+		Target[Index] := Value
+	}
+}
