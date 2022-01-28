@@ -1012,7 +1012,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		for (i32 GlobalDefaultIndex := 0, GlobalDefaultIndex < Length, GlobalDefaultIndex += 1) {
 			ASTNode* NextGlobalDefault := GlobalDefaults[GlobalDefaultIndex]
 			
-			if (NextGlobalDefault->BinaryNode->Left->NodeType = NODE_TYPE_VARIABLE) {
+			if (NextGlobalDefault->NodeType = NODE_TYPE_BINARY && NextGlobalDefault->BinaryNode->Left->NodeType = NODE_TYPE_VARIABLE) {
 				VariableInfo* TargetGlobal := NextGlobalDefault->BinaryNode->Left->VariableValue
 				
 				if (TargetGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
