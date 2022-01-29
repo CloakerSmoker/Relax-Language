@@ -24,6 +24,9 @@ define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Ta
 		if (Target->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
 		}
+		else if !(Target->HasFullDefinition) {
+			Target~>Context->Error("Function is declared but never defined")
+		}
 		else {
 			Visitor->VisitBlocks(Target->Body)
 		}
