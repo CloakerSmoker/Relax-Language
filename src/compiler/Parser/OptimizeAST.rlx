@@ -154,6 +154,9 @@ define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 	else if (NodeType = NODE_TYPE_STRING) {
 		Visitor->SetState(true)
 	}
+	else if (NodeType = NODE_TYPE_VARIABLE && !Node->VariableValue->IsGlobal) {
+		Visitor->SetState(true)
+	}
 }
 
 define i8 NodeHasSideEffects(ASTNode* Node) {
@@ -164,6 +167,7 @@ define i8 NodeHasSideEffects(ASTNode* Node) {
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_STRUCT_ACCESS)
 	Visitor->AllowType(NODE_TYPE_STRING)
+	Visitor->AllowType(NODE_TYPE_VARIABLE)
 	
 	Visitor->VisitNodes(Node)
 	
