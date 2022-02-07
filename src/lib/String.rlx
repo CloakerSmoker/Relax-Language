@@ -54,16 +54,6 @@ define i16* IToWH(i64 Number) {
 	return WString
 }
 
-define i64 AToI(i8* AString) {
-	i16* WString := AToW(AString, StringLength(AString))
-	
-	i64 Result := WToI(WString)
-	
-	Free(WString)
-	
-	return Result	
-}
-
 define i8* Concatenate(i8* Left, i8* Right) {
 	i32 LeftLength := StringLength(Left)
 	i32 RightLength := StringLength(Right)

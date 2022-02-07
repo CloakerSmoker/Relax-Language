@@ -251,3 +251,33 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer, i8 PrintExtra) {
 define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 	return IToA(Number, Base, Buffer, true)
 }
+
+define i64 AToI(i8* String, i32 Length, i64 Base) {
+	i64 Result := 0
+	i64 Negative := 0
+	
+	i8 FirstCharacter := String[0] As i8
+	
+	if !(IsNumeric(FirstCharacter, Base)) {
+		return 0
+	}
+		
+	for (i32 Index := 0, Index < Length, Index += 1) {
+		i8 NextCharacter := String[Index] As i8
+		
+		if !(IsNumeric(NextCharacter, Base)) {
+			Break
+		}
+		
+		Result *= Base
+		Result += GetCharacterValue(NextCharacter)
+	}
+	
+	return Result
+}
+define i64 AToI(i8* String, i64 Base) {
+	return AToI(String, StringLength(String), Base)
+}
+define i64 AToI(i8* String) {
+	return AToI(String, StringLength(String), 10)
+}
