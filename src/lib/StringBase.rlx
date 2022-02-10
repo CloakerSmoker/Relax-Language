@@ -254,16 +254,20 @@ define i8* IToA(i64 Number, i64 Base, i8* Buffer) {
 
 define i64 AToI(i8* String, i32 Length, i64 Base) {
 	i64 Result := 0
-	i64 Negative := 0
+	i64 Sign := 1
+	i32 Start := 0
 	
-	i8 FirstCharacter := String[0] As i8
+	if (String[Start] = '-') {
+		Sign := -1
+		Start++
+	}
 	
-	if !(IsNumeric(FirstCharacter, Base)) {
+	if !(IsNumeric(String[Start], Base)) {
 		return 0
 	}
 		
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		i8 NextCharacter := String[Index] As i8
+	for (i32 Index := Start, Index < Length, Index += 1) {
+		i8 NextCharacter := String[Index]
 		
 		if !(IsNumeric(NextCharacter, Base)) {
 			Break
@@ -273,7 +277,7 @@ define i64 AToI(i8* String, i32 Length, i64 Base) {
 		Result += GetCharacterValue(NextCharacter)
 	}
 	
-	return Result
+	return Result * Sign
 }
 define i64 AToI(i8* String, i64 Base) {
 	return AToI(String, StringLength(String), Base)

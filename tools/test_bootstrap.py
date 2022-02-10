@@ -101,3 +101,16 @@ if platform_extension == 'exe':
         sys.exit(1)
     
     print(f'{Fore.LIGHTGREEN_EX}ELF Compile complete.')
+if platform_extension == 'elf':
+    exe_compile_output = path_join(bin_dir, 'new_compiler.exe')
+    exe_compile_command = compile_command_format.format(safe_compiler, exe_compile_output) + ' --elf --debug'
+
+    exe_compile_result = subprocess.run(exe_compile_command, cwd=cwd, shell=True, capture_output=True)
+
+    exe_stderr_text = exe_compile_result.stderr.decode('UTF-8')
+
+    if exe_compile_result.returncode != 0 or len(exe_stderr_text) != 0:
+        print(f'{Fore.LIGHTRED_EX}PE Compile error ({hex(exe_compile_result.returncode)}):\n{exe_stderr_text}', file=sys.stderr)
+        sys.exit(1)
+    
+    print(f'{Fore.LIGHTGREEN_EX}PE Compile complete.')
