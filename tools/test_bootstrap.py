@@ -29,7 +29,6 @@ python = sys.executable
 expected_returncode = 1
 
 if running_on == 'Linux':
-    compile_command_format = f'{compile_command_format} --elf'
     platform_extension = 'elf'
     expected_returncode = 0
 elif running_on != 'Windows':
@@ -103,8 +102,8 @@ if platform_extension == 'exe':
     print(f'{Fore.LIGHTGREEN_EX}ELF Compile complete.')
 if platform_extension == 'elf':
     exe_compile_output = path_join(bin_dir, 'new_compiler.exe')
-    exe_compile_command = compile_command_format.format(safe_compiler, exe_compile_output) + ' --elf --debug'
-
+    exe_compile_command = compile_command_format.format(safe_compiler, exe_compile_output) + ' --pe'
+    
     exe_compile_result = subprocess.run(exe_compile_command, cwd=cwd, shell=True, capture_output=True)
 
     exe_stderr_text = exe_compile_result.stderr.decode('UTF-8')
