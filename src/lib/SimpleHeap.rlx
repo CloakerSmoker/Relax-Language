@@ -5,7 +5,7 @@ struct SimpleHeap {
 	void* End
 }
 
-i32 DEFAULT_HEAP_SIZE := 0x100000
+i32 DEFAULT_HEAP_SIZE := 0x10000
 
 define SimpleHeap* SimpleHeapInit() {
 	linux {

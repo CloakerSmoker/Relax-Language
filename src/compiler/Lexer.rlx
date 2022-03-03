@@ -373,6 +373,9 @@ struct LexerState {
 		if (this->NextCharacterMatches('x')) {
 			Base := 16
 		}
+		else if (this->NextCharacterMatches('o')) {
+			Base := 8
+		}
 		else if (this->NextCharacterMatches('b')) {
 			Base := 2
 		}
