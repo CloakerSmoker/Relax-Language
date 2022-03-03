@@ -341,9 +341,13 @@ struct ELFBuilder {
 		
 		; Copy the bytes of all the program/section headers into the ELF buffer after the ELF header
 		;  (Which will line up with the offsets written into the header above)
-
-		i8* StringBufferBytes := this->StringBuffer
-		i8* CodeBufferBytes := this->CodeBuffer
+		
+		i64 GlobalBytes := this->DataProgramHeader->MemorySize
+		i64 GlobalPages := GlobalBytes / 0x1000
+		
+		if (GlobalBytes % 0x1000) {
+			GlobalPages += 1
+		}
 		
 		if (this->DataProgramHeader) {
 			; Update the data segment/section. Todo: If 1kb of globals are used, push the code segment back
@@ -359,7 +363,7 @@ struct ELFBuilder {
 		; Update the code segment+section with the code file offset, and entry-point
 		; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
 		;  and virtual address to be equal modulo 1024
-		i64 CodeBase := ImageBase + 0x2000 + CodeOffset
+		i64 CodeBase := ImageBase + 0x1000 + (GlobalPages * 0x1000) + CodeOffset
 		
 		i64 EntryPoint := CodeBase + MainOffset
 		

@@ -468,10 +468,17 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF := ELFBuilder:New()
 		
-		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
-		Compiler->CodeBase := (0x231a) As i32
+		i64 GlobalBytes := Parser~>Globals->NextOffset
+		i64 GlobalPages := GlobalBytes / 0x1000
 		
-		Compiler->DistanceBetweenGlobalsAndCode := 0x131a
+		if (GlobalBytes % 0x1000) {
+			GlobalPages += 1
+		}
+		
+		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
+		Compiler->CodeBase := (0x131a + (GlobalPages * 0x1000)) As i32
+		
+		Compiler->DistanceBetweenGlobalsAndCode := 0x31a + (GlobalPages * 0x1000) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder(Config->PESubsystem, Config->DebugMode & DEBUG_EMIT_RELOC)
