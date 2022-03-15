@@ -1,0 +1,30 @@
+
+enum animal_kind {
+	cat
+	dog
+	frog
+	fish
+}
+
+enum starts_from_10 {
+	first := 10
+	second
+	third
+}
+
+#Require "$/Console.rlx"
+
+define void PrintAnimalType(animal_kind kind) {
+	i8*[4] Names {"cat", "dog", "frog", "fish"}
+	
+	Print("%s", Names[kind As i32])
+}
+
+define i32 Main() {
+	PrintAnimalType(animal_kind:dog)
+	PrintAnimalType(animal_kind:cat)
+	
+	Print("%i", starts_from_10:second)
+	
+	return 0
+}
