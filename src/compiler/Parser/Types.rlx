@@ -22,7 +22,8 @@ struct TypeInfo {
 	i8 IsStructType,
 	i8 IsIncomplete,
 	i8 IsBits,
-	i8 IsBuiltin
+	i8 IsBuiltin,
+	i8 IsEnum
 	
 	define Type AsNonPointer() {
 		return MakeType(this, 0)

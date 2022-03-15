@@ -355,30 +355,37 @@
 				TypeInfo* StaticBase := TypeElement->Value
 				
 				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
-					Token* StaticMethodNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
+					Token* StaticMethodNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static field name")
 					
-					if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-						this->GetCurrentTokenContext()->Error("Expected opening `(` for static method call")
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+						i8 ParameterCount := 0
+						ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+						
+						CallExpression* ResultCall := null
+						Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultCall, NextToken~>Context, this->GetCurrentTokenContext())
+						
+						HashMapElement* FirstFunctionElement := StaticBase~>StaticMethods->Get(StaticMethodNameToken->StringValue)
+						
+						if !(FirstFunctionElement) {
+							StaticMethodNameToken->Error("Undefined static method")
+						}
+						
+						FunctionDefine* FirstFunction := FirstFunctionElement->Value
+						
+						FunctionDefine* TargetFunction := this->MatchFunctionCall(FirstFunction, Parameters, ParameterCount, Result~>Context)
+						
+						ResultCall->TargetFunction := TargetFunction
+						Result->ValueType := TargetFunction->ReturnType
 					}
-					
-					i8 ParameterCount := 0
-					ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
-					
-					CallExpression* ResultCall := null
-					Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultCall, NextToken~>Context, this->GetCurrentTokenContext())
-					
-					HashMapElement* FirstFunctionElement := StaticBase~>StaticMethods->Get(StaticMethodNameToken->StringValue)
-					
-					if !(FirstFunctionElement) {
-						StaticMethodNameToken->Error("Undefined static method")
+					else {
+						HashMapElement* StaticFieldElement := StaticBase~>Fields->Get(StaticMethodNameToken->StringValue)
+						
+						if !(StaticFieldElement) {
+							StaticMethodNameToken->Error("Undefined static field")
+						}
+						
+						Result := StaticFieldElement->Value
 					}
-					
-					FunctionDefine* FirstFunction := FirstFunctionElement->Value
-					
-					FunctionDefine* TargetFunction := this->MatchFunctionCall(FirstFunction, Parameters, ParameterCount, Result~>Context)
-					
-					ResultCall->TargetFunction := TargetFunction
-					Result->ValueType := TargetFunction->ReturnType
 				}
 				else {
 					i16 PointerDepth := 0

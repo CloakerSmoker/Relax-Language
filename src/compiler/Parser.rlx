@@ -99,6 +99,7 @@ i8 TYPE_STRUCT := 2
 i8 TYPE_INCOMPLETE := 4
 i8 TYPE_BITS := 8
 i8 TYPE_ARRAY := 16
+i8 TYPE_ENUM := 32
 
 ; Holds the entire state of the parser
 
@@ -115,6 +116,8 @@ struct ParserState {
 	HashMap Instructions,
 	
 	HashMap Types,
+	
+	HashMap NameReplacements,
 	
 	/* Builtin types, actually added to the type list in CreateDefaultTypes */
 	
@@ -146,6 +149,7 @@ struct ParserState {
 		this~>Globals->Initialize()
 		this~>Functions->Initialize()
 		this~>Types->Initialize()
+		this~>NameReplacements->Initialize()
 		
 		this->GlobalDefaults := AllocArray(8, 0)
 		this->GlobalConstantsBuffer := Alloc(4)
@@ -182,6 +186,10 @@ struct ParserState {
 		
 		if (Flags & TYPE_REGULAR) {
 			NewType->IsBuiltin := true
+		}
+		
+		if (Flags & TYPE_ENUM) {
+			NewType->IsEnum := true
 		}
 		
 		this~>Types->Set(Name, NewType)
@@ -250,6 +258,9 @@ struct ParserState {
 	
 	define ASTNode* DowncastIntegerNode(ASTNode* Target) {
 		if (Target->NodeType != NODE_TYPE_INTEGER) {
+			return Target
+		}
+		else if (GetPointerDepth(Target->ValueType) = 0 && GetBaseType(Target->ValueType)->IsEnum) {
 			return Target
 		}
 		
@@ -1360,6 +1371,55 @@ struct ParserState {
 		}
 	}
 	
+	define void ParseEnumDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for enum name")
+		
+		TypeInfo* BaseEnumType := this->ParseCustomTypeName(NameToken, TYPE_ENUM)
+		BaseEnumType->Size := 4
+		HashMap* Fields := BaseEnumType~>Fields
+		Fields->Initialize()
+		
+		Type EnumType := MakeType(BaseEnumType, 0)
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for enum type body")
+		
+		i32 NextValue := 0
+		
+		loop {
+			Token* EnumVariableName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for enum field name")
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+				NextValue := this->Consume(TOKEN_TYPE_INTEGER, "Expected enum field value")->IntegerValue As i32
+			}
+			
+			if (Fields->Get(EnumVariableName->StringValue)) {
+				EnumVariableName->Error("Duplicate definition")
+			}
+			
+			ASTNode* EnumValueNode := ASTNode:New(NODE_TYPE_INTEGER, (NextValue++) As void*, EnumType)
+			
+			;VariableInfo* EnumVariable := Alloc(#VariableInfo)
+			;
+			;EnumVariable->Name := EnumVariableName->StringValue
+			;EnumVariable->Type := EnumType
+			;EnumVariable->LastValue := EnumValueNode
+			;EnumVariable->SetCount := 1
+			;EnumVariable->IsGlobal := true
+			;
+			;this->AddGlobal(EnumVariable, EnumVariableName)
+			
+			Fields->Set(EnumVariableName->StringValue, EnumValueNode)
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+				continue
+			}
+			else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				break
+			}
+		}
+		
+	}
+	
 	define i8 ParseProgramStatement() {
 		Token* NextToken := this->PeekNextToken()
 		i8 NextTokenValue := NextToken->Value As i8
@@ -1376,6 +1436,9 @@ struct ParserState {
 			}
 			else if (NextTokenValue = KEYWORD_BITS) {
 				this->ParseBitsDefinition()
+			}
+			else if (NextTokenValue = KEYWORD_ENUM) {
+				this->ParseEnumDefinition()
 			}
 			else if (NextTokenValue = KEYWORD_LINUX || NextTokenValue = KEYWORD_WINDOWS) {
 				i8 IgnoreBlock := true
