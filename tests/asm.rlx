@@ -1,9 +1,9 @@
 #Require ./src/lib/Console.rlx
 
 define i64 ReturnParam(i64 A, i64* B) asm {
-	mov, {rsi} as i8*, di
+	mov, {p2} as i8*, p1b
 	
-	mov, rax, rdi
+	mov, rax, p1
 	mov, ax, 90
 	
 	mov, si, di
@@ -12,7 +12,7 @@ define i64 ReturnParam(i64 A, i64* B) asm {
 }
 
 define i32 Abc(i64 a) asm {
-	mov, rax, rdi
+	mov, rax, p1
 	start:
 	dec, rax
 	test, rax, rax

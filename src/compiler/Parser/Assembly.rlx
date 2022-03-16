@@ -55,6 +55,19 @@
 		return 0 As Instruction*
 	}
 	
+	define i32 GetSystemVRegister(i32 Index) {
+		/* Translates a parameter number into which register (should) contain said parameter according to the SystemV ABI */
+		
+		if (Index = 5) {return 9}
+		else if (Index = 4) {return 8}
+		else if (Index = 3) {return 1}
+		else if (Index = 2) {return 2}
+		else if (Index = 1) {return 6}
+		else if (Index = 0) {return 7}
+		
+		return 0
+	}
+	
 	define i32 TryParseRegisterName(Token* NameToken, i8 RequiredSize, i8** ErrorMessage) {
 		i32 RegisterSize := 0
 		i32 RegisterNumber := 0
@@ -111,6 +124,32 @@
 		FirstCharacter := NameString->ASCIICharacterAt(Offset, ' ')
 		SecondCharacter := NameString->ASCIICharacterAt(Offset + 1, ' ')
 		
+		if (FirstCharacter = 'p') {
+			; Parameter registers
+			
+			i32 ParameterNumber := SecondCharacter - '0'
+			
+			RegisterNumber := this->GetSystemVRegister(ParameterNumber - 1)
+			
+			i8 SizeSuffix := NameString->ASCIICharacterAt(Offset + 2, ' ')
+			
+			if (SizeSuffix = 'b') {
+				RegisterSize := 1
+			}
+			else if (SizeSuffix = 'w') {
+				RegisterSize := 2
+			}
+			else if (SizeSuffix = 'd') {
+				RegisterSize := 4
+			}
+			else {
+				RegisterSize := 8
+			}
+			
+			Print("%c %i %i %i\n", SecondCharacter, ParameterNumber, RegisterNumber, RegisterSize)
+			
+			return RegisterNumber | (RegisterSize << 8)
+		}
 		if (IsNumber(FirstCharacter)) {
 			; For `R10-R15`, the check above will have us past the `R1` portion, so we just need to check
 			;  what FirstCharacter is (should be 0-5) to get our actual register number
