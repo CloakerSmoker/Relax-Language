@@ -56,11 +56,12 @@ struct DWARFBuilder {
 		
 		this->CompilationUnitTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_COMPILATION_UNIT, true)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_PRODUCER, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_COMPILATION_DIRECTORY, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_FLAG_PRESENT)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
-			A->AppendAttributePair(DWARF_ATTRIBUTE_STATEMENT_LIST, DWARF_FORM_DATA_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_STATEMENT_LIST, DWARF_FORM_SECTION_OFFSET)
 		A->EndAbbreviation()
 		
 		this->BaseTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_BASE_TYPE, false)
@@ -150,6 +151,7 @@ struct DWARFBuilder {
 	define i32 StartCompilationUnit(i8* BaseFile, i8* Directory, i64 ImageBase, i32 LineNumberInfoOffset) {
 		this->DIEStream->StartEntry(this->CompilationUnitTag)
 			this->DIEStream->AppendString(BaseFile)
+			this->DIEStream->AppendString("DWARFBuilder.rlx")
 			this->DIEStream->AppendString(Directory)
 			this->DIEStream->AppendI64(ImageBase)
 			

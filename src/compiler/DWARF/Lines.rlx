@@ -22,6 +22,11 @@ i32 DWARF_LINE_PROGARM_MAXIMUM_SHORT_OPCODE := 255
 i32 DWARF_LINE_PROGRAM_RESERVED_SHORT_OPCODES := 13
 i32 DWARF_LINE_PROGRAM_SPECIAL_OPCODE_COUNT := DWARF_LINE_PROGARM_MAXIMUM_SHORT_OPCODE - DWARF_LINE_PROGRAM_RESERVED_SHORT_OPCODES
 
+; IF EDITING: REREAD THIS PAGE AGAIN http://wiki.dwarfstd.org/index.php?title=DWARF5_Line_Table_File_Numbers
+; This is the least sane part of DWARF5, and basically never does what you want.
+; Initial VM state sets the file index to 1. The file list is 0 indexed.
+; Some parts of the spec are convinced that file index 0 is the "null file", which is totally not right.
+; File 0 is actually just the first file, don't fall for their lies.
 
 struct DWARFLineProgramBuilder {
 	DWARFStream* LineProgram
@@ -63,6 +68,7 @@ struct DWARFLineProgramBuilder {
 		this->MaxOffsetAdvance := DWARF_LINE_PROGRAM_SPECIAL_OPCODE_COUNT / this->LineRange
 		
 		this->CurrentLine := 1
+		this->CurrentFileIndex := 1
 		
 		return this
 	}
@@ -84,10 +90,8 @@ struct DWARFLineProgramBuilder {
 		i32 FileEntryIndex := this->FileEntryCount
 		
 		this->FileEntries->WriteString(Path)
-		
-		this->FileEntryCount += 1
-		
 		this~>Files->Set(Path, FileEntryIndex)
+		this->FileEntryCount += 1
 		
 		return FileEntryIndex
 	}
@@ -117,7 +121,7 @@ struct DWARFLineProgramBuilder {
 		
 		if (FileIndex != this->CurrentFileIndex) {
 			this->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_FILE)
-			this->EmitLEB128(FileIndex + 1)
+			this->EmitLEB128(FileIndex)
 			
 			this->CurrentFileIndex := FileIndex
 		}
@@ -175,7 +179,7 @@ struct DWARFLineProgramBuilder {
 		this->LineProgram->WriteI8(DWARF_LINE_PROGRAM_EXTENDED_OPCODE_END_SEQUENCE)
 		
 		this->CurrentLine := 1
-		this->CurrentFileIndex := 0
+		this->CurrentFileIndex := 1
 		this->CurrentOffset := 0
 		
 		this->EmitSetAddress(this->ImageBase)
