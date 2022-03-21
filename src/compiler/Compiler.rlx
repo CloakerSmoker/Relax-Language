@@ -212,6 +212,12 @@ struct CompilerState {
 			i64 FunctionAddress := this->Config->ImageBase + this->CodeBase + this->Index
 			i8 IsMain := Function->Name->Equals("Main")
 			
+			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+				VariableInfo* NextParameter := Function->Parameters[Index]
+				
+				this->DWARF->FindOrTranslateType(NextParameter->Type)
+			}
+			
 			i32 NameLength := Function->GetStringLength()
 			i8* NameBuffer := Alloc(NameLength + 1)
 			

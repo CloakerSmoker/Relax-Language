@@ -1396,7 +1396,12 @@ struct ParserState {
 				EnumVariableName->Error("Duplicate definition")
 			}
 			
-			ASTNode* EnumValueNode := ASTNode:New(NODE_TYPE_INTEGER, (NextValue++) As void*, EnumType)
+			StructField* MemberField := Alloc(#StructField)
+			
+			MemberField->DefinedAt := EnumVariableName~>Context
+			MemberField->Name := EnumVariableName->StringValue
+			MemberField->ValueType := EnumType
+			MemberField->EnumValue := NextValue++
 			
 			;VariableInfo* EnumVariable := Alloc(#VariableInfo)
 			;
@@ -1408,7 +1413,7 @@ struct ParserState {
 			;
 			;this->AddGlobal(EnumVariable, EnumVariableName)
 			
-			Fields->Set(EnumVariableName->StringValue, EnumValueNode)
+			Fields->Set(EnumVariableName->StringValue, MemberField)
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				continue

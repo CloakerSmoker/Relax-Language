@@ -36,6 +36,10 @@ struct DWARFBuilder {
 	
 	i32 VariableTag
 	
+	i32 EnumTypeTag
+	i32 EnumMemberTag
+	
+	i32 ConstantTag
 	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
@@ -143,6 +147,22 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_2)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_ORDERING, DWARF_FORM_DATA_1)
+		A->EndAbbreviation()
+		
+		this->EnumTypeTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_ENUM_TYPE, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_REFERENCE_4)
+		A->EndAbbreviation()
+		
+		this->EnumMemberTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_ENUM_MEMBER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_CONSTANT_VALUE, DWARF_FORM_DATA_4)
+		A->EndAbbreviation()
+		
+		this->ConstantTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_VARIABLE, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_CONSTANT_VALUE, DWARF_FORM_DATA_8)
 		A->EndAbbreviation()
 	
 		A->End()
@@ -271,6 +291,34 @@ struct DWARFBuilder {
 	}
 	define void EndBits() {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define i32 StartEnum(i8* Name) {
+		i32 EnumOffset := this->DIEStream->StartEntry(this->EnumTypeTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(4) ; TODO: If an enum holds flags it might need to be bigger than 4 bytes
+		this->DIEStream->EndEntry()
+		
+		return EnumOffset
+	}
+	define i32 AddEnumMember(i8* Name, i32 Value) {
+		i32 MemberOffset := this->DIEStream->StartEntry(this->EnumMemberTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(Value)
+		this->DIEStream->EndEntry()
+		
+		return MemberOffset
+	}
+	define void EndEnum() {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define void AddConstant(i8* Name, i32 TypeOffset, i64 Value) {
+		this->DIEStream->StartEntry(this->ConstantTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(TypeOffset)
+			this->DIEStream->AppendI64(Value)
+		this->DIEStream->EndEntry()
 	}
 	
 	define i32 StartFunction(i8* Name, i32 ReturnTypeOffset, i64 StartAddress, i8 IsMain) {
@@ -425,6 +473,59 @@ struct DWARFBuilder {
 			}
 			
 			this->EndBits()
+		}
+		else if (T->IsEnum) {
+			Offset := this->StartEnum(T->Name->Buffer)
+			this~>Types->Set(T->Name, Offset)
+			
+			DWARFStream* NameStream := DWARFStream:Tiny()
+			
+			NameStream->WriteString(T->Name->Buffer)
+			NameStream->Seek(NameStream->Tell() - 1) ; Seek back over null terminator
+			NameStream->WriteI8(':')
+			
+			i32 BeforeMemberName := NameStream->Tell()
+			
+			void* Elements := T~>Fields->Elements
+			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						NameStream->Seek(BeforeMemberName)
+						NameStream->WriteString(NextField->Name->Buffer)
+						
+						this->AddEnumMember(NameStream->Buffer, NextField->EnumValue)
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+			
+			this->EndEnum()
+			
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						NameStream->Seek(BeforeMemberName)
+						NameStream->WriteString(NextField->Name->Buffer)
+						
+						this->AddConstant(NameStream->Buffer, Offset, NextField->EnumValue)
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
+			
+			NameStream->Free()
 		}
 		
 		return Offset

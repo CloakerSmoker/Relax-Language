@@ -384,7 +384,9 @@
 							StaticMethodNameToken->Error("Undefined static field")
 						}
 						
-						Result := StaticFieldElement->Value
+						StructField* StaticField := StaticFieldElement->Value
+						
+						Result := ASTNode:New(NODE_TYPE_INTEGER, StaticField->EnumValue, StaticField->ValueType)
 					}
 				}
 				else {

@@ -176,7 +176,11 @@ struct StructField {
 		i32 DWARFTypeOffset
 	}
 	
-	i16 Offset,
+	union {
+		i16 Offset,
+		i32 EnumValue
+	}
+	
 	i8 BitStartIndex,
 	i8 BitEndIndex
 }
