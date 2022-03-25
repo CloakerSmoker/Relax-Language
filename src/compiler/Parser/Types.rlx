@@ -236,6 +236,30 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 			}
 		}
 		
+		if (SourceBase->IsFunctionPointer && TargetBase->IsFunctionPointer) {
+			FunctionPointerInfo* SourceFunctionPointer := SourceBase~>FunctionPointer
+			FunctionPointerInfo* TargetFunctionPointer := TargetBase~>FunctionPointer
+			
+			if (CheckTypes(VoidType, SourceFunctionPointer->ReturnType, TargetFunctionPointer->ReturnType, null)) {
+				return TypeError(SourceNode, Target, "Incompatible function pointer return types")
+			}
+			
+			if (SourceFunctionPointer->ParameterCount != TargetFunctionPointer->ParameterCount) {
+				return TypeError(SourceNode, Target, "Incompatible function pointer parameter counts")
+			}
+			
+			for (i32 Index := 0, Index < SourceFunctionPointer->ParameterCount, Index++) {
+				Type SourceParameterType := SourceFunctionPointer->ParameterTypes[Index]
+				Type TargetParameterType := TargetFunctionPointer->ParameterTypes[Index]
+				
+				if (CheckTypes(VoidType, SourceParameterType, TargetParameterType, null)) {
+					return TypeError(SourceNode, Target, "Incompatible function pointer parameter types")
+				}
+			}
+			
+			return 0
+		}
+		
 		return TypeError(SourceNode, Target, "Incompatible types")
 	}
 	else if (SourceDepth && TargetIsVoid && TargetDepth = 1) {

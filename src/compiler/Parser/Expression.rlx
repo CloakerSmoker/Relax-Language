@@ -734,23 +734,23 @@
 								;  no value. This is enough to trick `this->MatchFunctionCall()` into doing the overload matching
 								;   for us, and just returning a result.
 								
-								ASTNode** ParameterTypes := Alloc(15 * #ASTNode*)
+								ASTNode** FakeParameters := Alloc(15 * #ASTNode*)
 								i8 ParameterTypeCount := 0
 								
 								if (ThisType != TYPE_NONE) {
 									; If we had `&Type.Method`, then we need to insert the `this` parameter to make sure
 									;  we match methods (which already expect the `this` parameter)
 									
-									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, ThisType)
+									FakeParameters[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, ThisType)
 								}
 								
 								if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
-									ParameterTypes[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
+									FakeParameters[ParameterTypeCount++] := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
 									
 									while (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 										ASTNode* DummyNode := ASTNode:New(NODE_TYPE_NONE, 0, this->ParseType())
 										
-										ParameterTypes[ParameterTypeCount++] := DummyNode
+										FakeParameters[ParameterTypeCount++] := DummyNode
 									}
 									
 									this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected ')' for parameter type list")
@@ -758,15 +758,15 @@
 								
 								NextToken~>Context->Merge(this->GetCurrentTokenContext())
 								
-								FoundDefine := this->MatchFunctionCall(FoundDefine, ParameterTypes, ParameterTypeCount, NextToken~>Context)
+								FoundDefine := this->MatchFunctionCall(FoundDefine, FakeParameters, ParameterTypeCount, NextToken~>Context)
 								
 								; We've matched our "call" to a function, now we just clean up a bit.
 								
 								for (i32 ParameterTypeIndex := 0, ParameterTypeIndex < ParameterTypeCount, ParameterTypeIndex++) {
-									Free(ParameterTypes[ParameterTypeIndex])
+									Free(FakeParameters[ParameterTypeIndex])
 								}
 								
-								Free(ParameterTypes)
+								Free(FakeParameters)
 							}
 							else if (FoundDefine->Next != null) {
 								; `&Fn` without a `(` after, but `Fn` is overloaded. Nothing we can do, there's no way
@@ -775,7 +775,23 @@
 								NextToken->Error("Getting the address of an overloaded function is not possible without using the `&Fn(Type, ...)` syntax")
 							}
 							
-							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, this->void->AsNonPointer())
+							TypeInfo* ResultBaseType := Alloc(#TypeInfo)
+			
+							ResultBaseType->Name := AToS("(function pointer)")
+							ResultBaseType->Size := 8
+							ResultBaseType->IsFunctionPointer := true
+
+							ResultBaseType~>FunctionPointer->ReturnType := FoundDefine->ReturnType
+							ResultBaseType~>FunctionPointer->ParameterCount := FoundDefine->ParameterCount
+							
+							Type* ParameterTypes := Alloc(FoundDefine->ParameterCount * #Type)
+							ResultBaseType~>FunctionPointer->ParameterTypes := ParameterTypes
+							
+							for (i32 ParameterIndex := 0, ParameterIndex < FoundDefine->ParameterCount, ParameterIndex++) {
+								ParameterTypes[ParameterIndex] := FoundDefine->Parameters[ParameterIndex]->Type
+							}
+							
+							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, ResultBaseType->AsPointer(-1 As i16))
 							
 							Result~>Context->Clone(MaybeFunctionName~>Context)->Merge(this->GetCurrentTokenContext())
 						}
