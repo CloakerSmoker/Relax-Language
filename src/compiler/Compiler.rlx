@@ -1530,9 +1530,12 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	
 	i8 BuiltinID := CallNode->BuiltinID
 	i8 IS_SYSCALL := BuiltinID = BUILTIN_SYSCALL /* Used later to decide which set of registers are for parameters */
+	i8 IsFunctionPointerCall := BuiltinID = BUILTIN_FUNCTION_POINTER
 	
-	if (IS_SYSCALL) {
+	if (IS_SYSCALL || IsFunctionPointerCall) {
 		/* Dummy branch to stop TargetFunction (a null pointer for `syscall(X, ...)`) from being accessed */
+		
+		TargetFunction := null
 	}
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
 		EmitInt3(Compiler)
@@ -1556,6 +1559,12 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		HasSavedRAX := true
 		
 		Compiler->NoClobberA := false
+	}
+	
+	if (IsFunctionPointerCall) {
+		CompileExpression(Compiler, RAX, CallNode->CallToFunctionPointer)
+		
+		Compiler->NoClobberA := true
 	}
 	
 	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
@@ -1603,7 +1612,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	Compiler->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
-	i8 IS_VARIADIC := (TargetFunction != 0) && (TargetFunction->Attributes & FUNCTION_ATTRIBUTE_VARIADIC)
+	i8 IS_VARIADIC := (TargetFunction != null) && (TargetFunction->Attributes & FUNCTION_ATTRIBUTE_VARIADIC)
 	
 	if (ParameterCount != 0) {		
 		if (IS_VARIADIC) {
@@ -1635,8 +1644,16 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 			i16 ExpectedSize := 8
 			
 			if !(IS_SYSCALL) {
-				VariableInfo* NextParameter := (TargetFunction->Parameters)[ParameterIndex]
-				ExpectedSize := GetTypeSize(NextParameter->Type)
+				Type NextParameterType := TYPE_NONE
+				
+				if (IsFunctionPointerCall) {
+					NextParameterType := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer->ParameterTypes[ParameterIndex]
+				}
+				else {
+					NextParameterType := TargetFunction->Parameters[ParameterIndex]->Type
+				}
+				
+				ExpectedSize := GetTypeSize(NextParameterType)
 			}
 			
 			ASTNode* NextParameterValue := (CallNode->Parameters)[ParameterIndex]
@@ -1702,11 +1719,23 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		EmitSysCall(Compiler)
 	}
 	else if (USE_SYSTEMV) {
-		EmitCall_Label(Compiler, TargetFunction->LabelNumber)
+		if (IsFunctionPointerCall) {
+			EmitCall_R64(Compiler, RAX)
+		}
+		else {
+			EmitCall_Label(Compiler, TargetFunction->LabelNumber)
+		}
 	}
 	else {
 		EmitSub_R64_I8(Compiler, RSP, 0x20) /* Shadown space */
-		EmitCall_Label(Compiler, TargetFunction->LabelNumber)
+		
+		if (IsFunctionPointerCall) {
+			EmitCall_R64(Compiler, RAX)
+		}
+		else {
+			EmitCall_Label(Compiler, TargetFunction->LabelNumber)
+		}
+		
 		EmitAdd_R64_I8(Compiler, RSP, 0x20)
 	}
 	

@@ -720,6 +720,9 @@ define void EmitCall_Label(CompilerState* Compiler, i32 LabelNumber) {
 	PushByte(Compiler, 0xE8)
 	UseLabel(Compiler, LabelNumber)
 }
+define void EmitCall_R64(CompilerState* Compiler, i8 RegisterNumber) {
+	EmitBasicInstruction(Compiler, 0xFF, MODE_RTOR, 4, 2, RegisterNumber)
+}
 
 define void EmitSysCall(CompilerState* Compiler) {
 	PushByte(Compiler, 0x0F)
