@@ -1763,7 +1763,16 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	}
 	
 	if (ResultRegister != RAX) {
-		EmitMove_R64_RX(Compiler, ResultRegister, RAX, GetTypeSize(TargetFunction->ReturnType) As i8)
+		Type ReturnType := TYPE_NONE
+		
+		if (IsFunctionPointerCall) { 
+			ReturnType := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer->ReturnType
+		}
+		else {
+			ReturnType := TargetFunction->ReturnType
+		}
+		
+		EmitMove_R64_RX(Compiler, ResultRegister, RAX, GetTypeSize(ReturnType) As i8)
 	}
 	
 	if (HasSavedRAX) {

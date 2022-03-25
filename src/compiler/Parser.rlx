@@ -281,7 +281,7 @@ struct ParserState {
 		return Target
 	}
 	
-	define VariableInfo* FindVariable(Token* NameToken) {
+	define VariableInfo* TryFindVariable(Token* NameToken) {
 		; Finds a variable, prioritizing locals over globals
 		
 		SafeString* VariableName := NameToken->StringValue
@@ -302,6 +302,12 @@ struct ParserState {
 				CurrentFunction->UsesGlobals := true
 			}
 		}
+		
+		return FoundVariable
+	}
+	
+	define VariableInfo* FindVariable(Token* NameToken) {
+		VariableInfo* FoundVariable := this->TryFindVariable(NameToken)
 		
 		if !(FoundVariable) {
 			; If we still haven't found the variable, then it is undefined

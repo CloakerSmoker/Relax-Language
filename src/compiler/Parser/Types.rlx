@@ -156,6 +156,10 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 	return Index
 }
 
+define i8 TypeIsCallable(Type T) {
+	return GetPointerDepth(T) = 0 && GetBaseType(T)->IsFunctionPointer
+}
+
 i8[100] PrintTypeBuffer
 
 define void PrintType(Type TypeToPrint) {

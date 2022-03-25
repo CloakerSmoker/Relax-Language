@@ -142,7 +142,7 @@ struct SigContext {
 	i64 RAX
 	i64 RCX
 	i64* RSP
-	i64* RIP
+	void* RIP
 	i64 RFlags
 }
 

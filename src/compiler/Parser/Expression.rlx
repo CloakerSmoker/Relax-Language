@@ -325,6 +325,51 @@
 		return this->TryParseFunctionCall(NameToken, this~>Functions, null, ErrorMessage)
 	}
 	
+	define ASTNode* ParseFunctionPointerCall(ASTNode* CallToFunctionPointer) {
+		Type FunctionPointerType := CallToFunctionPointer->ValueType
+		
+		if !(TypeIsCallable(FunctionPointerType)) {
+			ManualErrorMessagePrelude()
+			Print("Should be of a function pointer type, got ")
+			PrintType(FunctionPointerType)
+			Print(" instead\n")
+			
+			CallToFunctionPointer->Error(null)
+		}
+		
+		TypeInfo* FunctionPointerBaseType := GetBaseType(FunctionPointerType)
+		FunctionPointerInfo* FunctionPointer := FunctionPointerBaseType~>FunctionPointer
+		
+		i8 ParameterCount := 0
+		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+		
+		CallExpression* ResultNode := null
+		ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultNode, CallToFunctionPointer~>Context, this->GetCurrentTokenContext())
+		
+		if (ParameterCount < FunctionPointer->ParameterCount) {
+			Result->Error("Is missing required parameters for pointed-to function type")
+		}
+		else if (ParameterCount > FunctionPointer->ParameterCount) {
+			Result->Error("Has too many parameters for pointed-to function type")
+		}
+		else {
+			for (i32 Index := 0, Index < ParameterCount, Index++) {
+				ASTNode* ParameterNode := this->DowncastIntegerNode(ResultNode->Parameters[Index])
+				
+				CheckTypes(this->void, ParameterNode->ValueType, FunctionPointer->ParameterTypes[Index], ParameterNode)
+			}
+		}
+		
+		ResultNode->BuiltinID := BUILTIN_FUNCTION_POINTER
+		ResultNode->CallToFunctionPointer := CallToFunctionPointer
+		
+		Result->ValueType := FunctionPointer->ReturnType
+		
+		Result~>Context->Clone(CallToFunctionPointer~>Context)->Merge(this->GetCurrentTokenContext())
+		
+		return Result
+	}
+	
 	define ASTNode* ParseExpressionOperand() {
 		; Parses and returns a single operand of an expression
 		
@@ -344,43 +389,7 @@
 			Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-				ASTNode* CallToFunctionPointer := Result
-				
-				Type FunctionPointerType := CallToFunctionPointer->ValueType
-				TypeInfo* FunctionPointerBaseType := GetBaseType(FunctionPointerType)
-				
-				if (GetPointerDepth(FunctionPointerType) != 0 || !FunctionPointerBaseType->IsFunctionPointer) {
-					CallToFunctionPointer->Error("Should be of a function pointer type")
-				}
-				
-				FunctionPointerInfo* FunctionPointer := FunctionPointerBaseType~>FunctionPointer
-				
-				i8 ParameterCount := 0
-				ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
-				
-				CallExpression* ResultNode := null
-				ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultNode, CallToFunctionPointer~>Context, this->GetCurrentTokenContext())
-				
-				if (ParameterCount < FunctionPointer->ParameterCount) {
-					Result->Error("Is missing required parameters for pointed-to function type")
-				}
-				else if (ParameterCount > FunctionPointer->ParameterCount) {
-					Result->Error("Has too many parameters for pointed-to function type")
-				}
-				else {
-					for (i32 Index := 0, Index < ParameterCount, Index++) {
-						ASTNode* ParameterNode := this->DowncastIntegerNode(ResultNode->Parameters[Index])
-						
-						CheckTypes(this->void, ParameterNode->ValueType, FunctionPointer->ParameterTypes[Index], ParameterNode)
-					}
-				}
-				
-				ResultNode->BuiltinID := BUILTIN_FUNCTION_POINTER
-				ResultNode->CallToFunctionPointer := CallToFunctionPointer
-				
-				Result->ValueType := FunctionPointer->ReturnType
-				
-				Result~>Context->Clone(CallToFunctionPointer~>Context)->Merge(this->GetCurrentTokenContext())
+				Result := this->ParseFunctionPointerCall(Result)
 			}
 		}
 		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
@@ -570,6 +579,14 @@
 				}
 			}
 			else {
+				VariableInfo* MaybeFunctionPointer := this->TryFindVariable(NextToken)
+				
+				if (MaybeFunctionPointer && TypeIsCallable(MaybeFunctionPointer->Type)) {
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+						return this->ParseFunctionPointerCall(this->TranslateTokenToNode(NextToken))
+					}
+				}
+				
 				Result := this->TryParseFunctionCall(NextToken, &ErrorMessage)
 				
 				if (Result && ErrorMessage = null) {
@@ -790,6 +807,9 @@
 							for (i32 ParameterIndex := 0, ParameterIndex < FoundDefine->ParameterCount, ParameterIndex++) {
 								ParameterTypes[ParameterIndex] := FoundDefine->Parameters[ParameterIndex]->Type
 							}
+							
+							; Terrible hack below, `&` implicity adds a level of pointer depth to the operand's type
+							;  but function pointers are technically not actual pointers so we make an anti-pointer
 							
 							Result := ASTNode:New(NODE_TYPE_DEFINE, FoundDefine, ResultBaseType->AsPointer(-1 As i16))
 							
@@ -1121,7 +1141,12 @@
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")
 				}
 				
-				if (this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				HashMapElement* MaybeFieldElement := LeftBase~>Fields->Get(RightToken->StringValue)
+				HashMapElement* MaybeMethodElement := LeftBase~>Methods->Get(RightToken->StringValue)
+				
+				i8 MustBeMethodCall := MaybeMethodElement && !MaybeFieldElement
+				
+				if (this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN) && MustBeMethodCall) {
 					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a 
 					;  method call
 					
@@ -1143,7 +1168,7 @@
 					}
 				}
 				else {
-					HashMapElement* FieldElement := LeftBase~>Fields->Get(RightToken->StringValue)
+					HashMapElement* FieldElement := MaybeFieldElement
 					
 					if (FieldElement = null) {
 						RightToken->Error("Unknown struct field")
@@ -1166,6 +1191,10 @@
 					Result := ASTNode:New(NODE_TYPE_STRUCT_ACCESS, Access, FieldType)
 					
 					Result~>Context->Clone(Left~>Context)->Merge(RightToken~>Context)
+					
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+						Result := this->ParseFunctionPointerCall(Result)
+					}
 				}
 			}
 			else {
