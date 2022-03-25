@@ -196,9 +196,13 @@ struct StructAccessExpression {
 i8 BUILTIN_NONE := 0
 i8 BUILTIN_SYSCALL := 1
 i8 BUILTIN_BREAKPOINT := 2
+i8 BUILTIN_FUNCTION_POINTER := 3
 
 struct CallExpression {
-	FunctionDefine* TargetFunction,
+	union {
+		FunctionDefine* TargetFunction,
+		ASTNode* CallToFunctionPointer
+	}
 	ASTNode** Parameters,
 	i32 ParameterCount,
 	i8 BuiltinID

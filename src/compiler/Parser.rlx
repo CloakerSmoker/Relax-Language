@@ -233,6 +233,11 @@ struct ParserState {
 		
 		return Result
 	}
+	define i8 IsTypeName(Token* NameToken) {
+		if !(NameToken->Is(TOKEN_TYPE_IDENTIFIER)) { return false }
+		
+		return this~>Types->Get(NameToken->StringValue) != null
+	}
 	
 	define Type DereferencePointerType(Type TypeToDecrement, ErrorContext* BlameContext) {
 		i16 PointerDepth := GetPointerDepth(TypeToDecrement)
@@ -432,20 +437,137 @@ struct ParserState {
 		return this->Consume(TokenType, 0, Reason)
 	}
 	
-	define Type TryParseType(i8 AllowArrayType, i8** ErrorMessage) {
-		Token* NameToken := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Type names must be identifiers", ErrorMessage)
+	define Token* ThrowConsume(i8 TokenType, i64 TokenValue, i8* Reason) {
+		;Print("TC %i %i %s\n", TokenType, TokenValue, Reason)
+		
+		i8* ErrorMessage := null
+		Token* Result := this->TryConsume(TokenType, TokenValue, Reason, &ErrorMessage)
+		
+		if (ErrorMessage) {
+			Throw(ErrorMessage As i64)
+		}
+		
+		return Result
+	}
+	define Token* ThrowConsume(i8 TokenType, i8* Reason) {
+		return this->ThrowConsume(TokenType, 0, Reason)
+	}
+	
+	declare Type TryParseType(i8, i8, i8**)
+	declare Type TryParseType(i8, i8**)
+	
+	define TypeInfo* TryParseFunctionPointer(i8 RequireParenthesis, i8** ErrorMessage) {
+		;Print("TPFP, %i\n", RequireParenthesis)
+		
+		try {
+			if (RequireParenthesis) {
+				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected open `(` for function pointer type")
+			}
+			;else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+			;	RequireParenthesis := true
+			;}
+			
+			;this->PeekNextToken()->Warn("AAAA")
+			
+			if !(this->IsTypeName(this->PeekNextToken())) { 
+				*ErrorMessage := "Expected return type for function pointer type"
+				return null
+			}
+			
+			Type ReturnType := this->TryParseType(true, false, ErrorMessage)
+			if *(ErrorMessage) { return null }
+			
+			this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected open `(` for function pointer parameter types")
+			if *(ErrorMessage) { return null }
+			
+			Type[10] ParameterTypes
+			i32 ParameterCount := 0
+			
+			if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+				loop {
+					;this->GetCurrentTokenContext()->Warn("Before")
+					Type ParameterType := this->TryParseType(false, ErrorMessage)
+					
+					ParameterTypes[ParameterCount++] := ParameterType
+					
+					;this->GetCurrentTokenContext()->Warn("After")
+					
+					if *(ErrorMessage) { return null }
+					
+					if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+						continue
+					}
+					else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
+						break
+					}
+					else {
+						Throw("Expected comma between function pointer parameter types, or closing `)` for parameter type list" As i64)
+					}
+				}
+			}
+			
+			if (RequireParenthesis) {
+				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected open `)` for function pointer type")
+			}
+			
+			Type* RealParameterTypes := Alloc(ParameterCount * #Type)
+			MoveMemory(RealParameterTypes, ParameterTypes, ParameterCount * #Type)
+			
+			TypeInfo* Result := Alloc(#TypeInfo)
+			
+			Result->Name := AToS("(function pointer)")
+			Result->Size := 8
+			Result->IsFunctionPointer := true
+
+			Result~>FunctionPointer->ReturnType := ReturnType
+			Result~>FunctionPointer->ParameterCount := ParameterCount
+			Result~>FunctionPointer->ParameterTypes := RealParameterTypes
+			
+			return Result
+		}
+		catch (i8* RawErrorMessage) {
+			*ErrorMessage := RawErrorMessage
+		}
+		
+		return null
+	}
+	
+	define Type TryParseType(i8 RequireFunctionPointerParenthesis, i8 AllowArrayType, i8** ErrorMessage) {
+		i32 BeforeFunctionPointer := this->Freeze()
+		TypeInfo* Base := this->TryParseFunctionPointer(RequireFunctionPointerParenthesis, ErrorMessage)
+		Type Result := TYPE_NONE
 		
 		if *(ErrorMessage) {
-			return TYPE_NONE
+			this->Unfreeze(BeforeFunctionPointer)
+			*ErrorMessage := null
+			
+			Token* NameToken := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Type names must be identifiers", ErrorMessage)
+			
+			if *(ErrorMessage) {
+				return TYPE_NONE
+			}
+			
+			i8 PointerDepth := 0
+		
+			while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+				PointerDepth += 1
+			}
+			
+			Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
+			
+			if *(ErrorMessage) {
+				return TYPE_NONE
+			}
 		}
+		else {
+			i8 PointerDepth := 0
 		
-		i8 PointerDepth := 0
-		
-		while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
-			PointerDepth += 1
+			while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
+				PointerDepth += 1
+			}
+			
+			Type Result := MakeType(Base, PointerDepth)
 		}
-		
-		Type Result := this->TryFindType(NameToken->StringValue, PointerDepth, ErrorMessage)
 		
 		if (AllowArrayType && this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_OPEN_BRACKET)) {
 			Token* SizeToken := this->TryConsume(TOKEN_TYPE_INTEGER, "Expected array type size", ErrorMessage)
@@ -466,6 +588,9 @@ struct ParserState {
 		
 		return Result
 	}
+	define Type TryParseType(i8 AllowArrayType, i8** ErrorMessage) {
+		return this->TryParseType(false, AllowArrayType, ErrorMessage)
+	}
 	define Type ParseType(i8 AllowArrayType) {
 		i8* ErrorMessage := null
 		Token* BlameToken := this->PeekNextToken()
@@ -473,7 +598,7 @@ struct ParserState {
 		Type Result := this->TryParseType(AllowArrayType, &ErrorMessage)
 		
 		if (ErrorMessage) {
-			BlameToken->Error(ErrorMessage)
+			this->GetCurrentTokenContext()->Error(ErrorMessage)
 		}
 		
 		return Result

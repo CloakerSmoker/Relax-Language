@@ -342,6 +342,46 @@
 			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing paren")
 			
 			Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
+			
+			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
+				ASTNode* CallToFunctionPointer := Result
+				
+				Type FunctionPointerType := CallToFunctionPointer->ValueType
+				TypeInfo* FunctionPointerBaseType := GetBaseType(FunctionPointerType)
+				
+				if (GetPointerDepth(FunctionPointerType) != 0 || !FunctionPointerBaseType->IsFunctionPointer) {
+					CallToFunctionPointer->Error("Should be of a function pointer type")
+				}
+				
+				FunctionPointerInfo* FunctionPointer := FunctionPointerBaseType~>FunctionPointer
+				
+				i8 ParameterCount := 0
+				ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+				
+				CallExpression* ResultNode := null
+				ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultNode, CallToFunctionPointer~>Context, this->GetCurrentTokenContext())
+				
+				if (ParameterCount < FunctionPointer->ParameterCount) {
+					Result->Error("Is missing required parameters for pointed-to function type")
+				}
+				else if (ParameterCount > FunctionPointer->ParameterCount) {
+					Result->Error("Has too many parameters for pointed-to function type")
+				}
+				else {
+					for (i32 Index := 0, Index < ParameterCount, Index++) {
+						ASTNode* ParameterNode := this->DowncastIntegerNode(ResultNode->Parameters[Index])
+						
+						CheckTypes(this->void, ParameterNode->ValueType, FunctionPointer->ParameterTypes[Index], ParameterNode)
+					}
+				}
+				
+				ResultNode->BuiltinID := BUILTIN_FUNCTION_POINTER
+				ResultNode->CallToFunctionPointer := CallToFunctionPointer
+				
+				Result->ValueType := FunctionPointer->ReturnType
+				
+				Result~>Context->Clone(CallToFunctionPointer~>Context)->Merge(this->GetCurrentTokenContext())
+			}
 		}
 		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
 			; Else if the next token is an identifier.

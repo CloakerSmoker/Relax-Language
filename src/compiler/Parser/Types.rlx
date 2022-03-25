@@ -12,18 +12,32 @@ define Type MakeType(i64 BackingType, i16 PointerDepth) {
 	return MakeType(BackingType As TypeInfo*, PointerDepth)
 }
 
+struct FunctionPointerInfo {
+	Type ReturnType
+	Type* ParameterTypes
+	i32 ParameterCount
+	i8 IsVariadic
+}
+
 struct TypeInfo {
 	ErrorContext* DefinedAt,
 	SafeString* Name,
-	HashMap Fields,
+	
+	union {
+		HashMap Fields,
+		FunctionPointerInfo FunctionPointer
+	}
+	
 	HashMap Methods,
 	HashMap StaticMethods,
+	
 	i16 Size,
 	i8 IsStructType,
 	i8 IsIncomplete,
 	i8 IsBits,
 	i8 IsBuiltin,
-	i8 IsEnum
+	i8 IsEnum,
+	i8 IsFunctionPointer
 	
 	define Type AsNonPointer() {
 		return MakeType(this, 0)
@@ -99,20 +113,47 @@ define i16 GetPointerDepth(Type T) {
 define i32 GetTypeStringLength(Type T) {
 	return GetBaseType(T)->Name->Length + GetPointerDepth(T)
 }
-define void StringifyType(void* RawBuffer, Type T) {
+define i32 StringifyType(void* RawBuffer, Type T) {
 	i8* Buffer := RawBuffer
+	i32 Index := 0
 	
-	SafeString* Name := GetBaseType(T)->Name
+	TypeInfo* Base := GetBaseType(T)
 	
-	for (i32 Index := 0, Index < Name->Length, Index += 1) {
-		Buffer[Index] := Name->ASCIICharacterAt(Index)
+	if (Base->IsFunctionPointer) {
+		FunctionPointerInfo* FunctionPointer := Base~>FunctionPointer
+		
+		Index := StringifyType(Buffer, FunctionPointer->ReturnType)
+		Buffer[Index++] := '('
+		
+		for (i32 ParameterIndex := 0, ParameterIndex < FunctionPointer->ParameterCount, ParameterIndex++) {
+			Type NextParameter := FunctionPointer->ParameterTypes[ParameterIndex]
+			
+			Index += StringifyType(&Buffer[Index], NextParameter)
+			Buffer[Index++] := ','
+			Buffer[Index++] := ' '
+		}
+		
+		if (ParameterIndex != 0) {
+			Index -= 2 ; Seek back over the trailing `, ` to overwrite it with `)\0`
+		}
+		
+		Buffer[Index++] := ')'
+	}
+	else {
+		SafeString* Name := Base->Name
+		
+		for (Index := 0, Index < Name->Length, Index += 1) {
+			Buffer[Index] := Name->ASCIICharacterAt(Index)
+		}
 	}
 	
 	for (i32 Depth := 0, Depth < GetPointerDepth(T), Depth += 1) {
-		Buffer[Index + Depth] := '*'
+		Buffer[Index++] := '*'
 	}
 	
-	Buffer[Index + Depth] := 0
+	Buffer[Index] := 0
+	
+	return Index
 }
 
 i8[100] PrintTypeBuffer
@@ -201,6 +242,15 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 		return 0
 	}
 	else if (SourceDepth || TargetDepth) {
+		; Allow casting void* <> any function pointer
+		
+		if (SourceBase->IsFunctionPointer && TargetIsVoid && SourceDepth = 0 && TargetDepth = 1) {
+			return 0
+		}
+		else if (TargetBase->IsFunctionPointer && SourceIsVoid && TargetDepth = 0 && SourceDepth = 1) {
+			return 0
+		}
+		
 		return TypeError(SourceNode, Target, "Incompatible pointer depths")
 	}
 	else if (SourceBase->IsStructType || TargetBase->IsStructType) {
