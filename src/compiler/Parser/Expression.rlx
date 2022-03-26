@@ -346,13 +346,20 @@
 		CallExpression* ResultNode := null
 		ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultNode, CallToFunctionPointer~>Context, this->GetCurrentTokenContext())
 		
+		i8 IsVariadic := FunctionPointer->Attributes & FUNCTION_ATTRIBUTE_VARIADIC
+		i8 IsNotVariadic := !IsVariadic
+		
 		if (ParameterCount < FunctionPointer->ParameterCount) {
 			Result->Error("Is missing required parameters for pointed-to function type")
 		}
-		else if (ParameterCount > FunctionPointer->ParameterCount) {
+		else if (IsNotVariadic && ParameterCount > FunctionPointer->ParameterCount) {
 			Result->Error("Has too many parameters for pointed-to function type")
 		}
 		else {
+			if (IsVariadic) {
+				ParameterCount := (FunctionPointer->ParameterCount - 1) As i8
+			}
+			
 			for (i32 Index := 0, Index < ParameterCount, Index++) {
 				ASTNode* ParameterNode := this->DowncastIntegerNode(ResultNode->Parameters[Index])
 				

@@ -469,16 +469,6 @@ struct ParserState {
 			if (RequireParenthesis) {
 				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected open `(` for function pointer type")
 			}
-			;else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
-			;	RequireParenthesis := true
-			;}
-			
-			;this->PeekNextToken()->Warn("AAAA")
-			
-			if !(this->IsTypeName(this->PeekNextToken())) { 
-				*ErrorMessage := "Expected return type for function pointer type"
-				return null
-			}
 			
 			Type ReturnType := this->TryParseType(true, false, ErrorMessage)
 			if *(ErrorMessage) { return null }
@@ -489,14 +479,26 @@ struct ParserState {
 			Type[10] ParameterTypes
 			i32 ParameterCount := 0
 			
+			i8 Attributes := 0
+			
 			if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN)) {
 				loop {
-					;this->GetCurrentTokenContext()->Warn("Before")
+					if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+						this->ThrowConsume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected `...` for variadic parameter marker")
+						this->ThrowConsume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected `...` for variadic parameter marker")
+						
+						Attributes |= FUNCTION_ATTRIBUTE_VARIADIC
+						
+						ParameterTypes[ParameterCount++] := MakeType(this->void, 1)
+						
+						this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Variadic marker must be the last parameter")
+						
+						break
+					}
+					
 					Type ParameterType := this->TryParseType(false, ErrorMessage)
 					
 					ParameterTypes[ParameterCount++] := ParameterType
-					
-					;this->GetCurrentTokenContext()->Warn("After")
 					
 					if *(ErrorMessage) { return null }
 					
@@ -512,8 +514,12 @@ struct ParserState {
 				}
 			}
 			
+			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
+				Attributes |= FUNCTION_ATTRIBUTE_USE_X64
+			}
+			
 			if (RequireParenthesis) {
-				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected open `)` for function pointer type")
+				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing `)` for function pointer type")
 			}
 			
 			Type* RealParameterTypes := Alloc(ParameterCount * #Type)
@@ -528,6 +534,7 @@ struct ParserState {
 			Result~>FunctionPointer->ReturnType := ReturnType
 			Result~>FunctionPointer->ParameterCount := ParameterCount
 			Result~>FunctionPointer->ParameterTypes := RealParameterTypes
+			Result~>FunctionPointer->Attributes := Attributes
 			
 			return Result
 		}

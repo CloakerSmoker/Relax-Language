@@ -1532,10 +1532,21 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	i8 IS_SYSCALL := BuiltinID = BUILTIN_SYSCALL /* Used later to decide which set of registers are for parameters */
 	i8 IsFunctionPointerCall := BuiltinID = BUILTIN_FUNCTION_POINTER
 	
-	if (IS_SYSCALL || IsFunctionPointerCall) {
+	FunctionPointerInfo* FunctionPointer := null
+	
+	i32 TargetParameterCount := CallNode->ParameterCount
+	i8 TargetAttributes := 0
+	
+	if (IS_SYSCALL) {
 		/* Dummy branch to stop TargetFunction (a null pointer for `syscall(X, ...)`) from being accessed */
 		
 		TargetFunction := null
+	}
+	else if (IsFunctionPointerCall) {
+		FunctionPointer := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer
+		
+		TargetParameterCount := FunctionPointer->ParameterCount
+		TargetAttributes := FunctionPointer->Attributes
 	}
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
 		EmitInt3(Compiler)
@@ -1547,6 +1558,10 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	}
 	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
 		Node->Error("Called function is only declared, and never defined")
+	}
+	else {
+		TargetParameterCount := TargetFunction->ParameterCount
+		TargetAttributes := TargetFunction->Attributes
 	}
 	
 	i32 ParameterCount := CallNode->ParameterCount
@@ -1571,7 +1586,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	
 	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (Compiler->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
 	
-	if (TargetFunction && TargetFunction->Attributes & FUNCTION_ATTRIBUTE_USE_X64) {
+	if (TargetAttributes & FUNCTION_ATTRIBUTE_USE_X64) {
 		USE_SYSTEMV := false
 	}
 	
@@ -1612,14 +1627,14 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	Compiler->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
-	i8 IS_VARIADIC := (TargetFunction != null) && (TargetFunction->Attributes & FUNCTION_ATTRIBUTE_VARIADIC)
+	i8 IS_VARIADIC := TargetAttributes & FUNCTION_ATTRIBUTE_VARIADIC
 	
 	if (ParameterCount != 0) {		
 		if (IS_VARIADIC) {
-			ParameterCount := TargetFunction->ParameterCount - 1
+			ParameterCount := TargetParameterCount - 1
 			
-			i8 VariadicCount := (((CallNode->ParameterCount) - (TargetFunction->ParameterCount)) + 1) As i8
-			i8 VariadicBase := ParameterCount As i8
+			i32 VariadicCount := (CallNode->ParameterCount - TargetParameterCount) + 1
+			i32 VariadicBase := ParameterCount
 			
 			for (i32 VariadicIndex := (VariadicCount - 1), VariadicIndex >= 0, VariadicIndex -= 1) {
 				ASTNode* NextVariadic := (CallNode->Parameters)[VariadicBase + VariadicIndex]
@@ -1647,7 +1662,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 				Type NextParameterType := TYPE_NONE
 				
 				if (IsFunctionPointerCall) {
-					NextParameterType := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer->ParameterTypes[ParameterIndex]
+					NextParameterType := FunctionPointer->ParameterTypes[ParameterIndex]
 				}
 				else {
 					NextParameterType := TargetFunction->Parameters[ParameterIndex]->Type
@@ -1766,7 +1781,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		Type ReturnType := TYPE_NONE
 		
 		if (IsFunctionPointerCall) { 
-			ReturnType := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer->ReturnType
+			ReturnType := FunctionPointer->ReturnType
 		}
 		else {
 			ReturnType := TargetFunction->ReturnType
