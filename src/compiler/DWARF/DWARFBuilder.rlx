@@ -41,6 +41,9 @@ struct DWARFBuilder {
 	
 	i32 ConstantTag
 	
+	i32 FunctionPointerTag
+	i32 FunctionPointerParameterTag
+	
 	static DWARFBuilder* New() {
 		DWARFBuilder* this := Alloc(#DWARFBuilder)
 		
@@ -163,6 +166,15 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_CONSTANT_VALUE, DWARF_FORM_DATA_8)
+		A->EndAbbreviation()
+		
+		this->FunctionPointerTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_FUNCTION_POINTER, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+		A->EndAbbreviation()
+		
+		this->FunctionPointerParameterTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_PARAMETER, false)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 		A->EndAbbreviation()
 	
 		A->End()
@@ -310,6 +322,25 @@ struct DWARFBuilder {
 		return MemberOffset
 	}
 	define void EndEnum() {
+		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
+	}
+	
+	define i32 StartFunctionPointer(i8* Name, i32 ReturnTypeOffset) {
+		i32 TypeOffset := this->DIEStream->StartEntry(this->FunctionPointerTag)
+			this->DIEStream->AppendString(Name)
+			this->DIEStream->AppendI32(ReturnTypeOffset)
+		this->DIEStream->EndEntry()
+		
+		return TypeOffset
+	}
+	define i32 AddFunctionPointerParameter(i32 TypeOffset) {
+		i32 ParameterOffset := this->DIEStream->StartEntry(this->FunctionPointerParameterTag)
+			this->DIEStream->AppendI32(TypeOffset)
+		this->DIEStream->EndEntry()
+		
+		return ParameterOffset
+	}
+	define void EndFunctionPointer() {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
@@ -527,6 +558,24 @@ struct DWARFBuilder {
 			
 			NameStream->Free()
 		}
+		else if (T->IsFunctionPointer) {
+			FunctionPointerInfo* FunctionPointer := T~>FunctionPointer
+			
+			i32 ReturnTypeOffset := this->FindOrTranslateType(FunctionPointer->ReturnType)
+			
+			i8[100] NameBuffer
+			StringifyType(NameBuffer, MakeType(T, 0))
+			
+			Offset := this->StartFunctionPointer(NameBuffer, ReturnTypeOffset)
+			
+			for (i32 Index := 0, Index < FunctionPointer->ParameterCount, Index++) {
+				i32 ParameterTypeOffset := this->FindOrTranslateType(FunctionPointer->ParameterTypes[Index])
+				
+				this->AddFunctionPointerParameter(ParameterTypeOffset)
+			}
+			
+			this->EndFunctionPointer()
+		}
 		
 		return Offset
 	}
@@ -554,6 +603,17 @@ struct DWARFBuilder {
 		}
 		else {
 			i32 PointerDepth := GetPointerDepth(T)
+			
+			if (BaseType->IsFunctionPointer) {
+				; Our function pointers aren't actually pointers to function types, since
+				;  that would ask the question of "what happens if I dereference a function
+				;   pointer?" which I don't want to answer. 
+				; However, gdb/DWARF expect a function pointer to be a pointer to a function
+				;  type, which means we need to add a fake level of pointer depth to function
+				;   pointers
+				
+				PointerDepth += 1
+			}
 			
 			for (i32 Index := 0, Index < PointerDepth, Index++) {
 				TypeOffset := this->AddPointerType(TypeOffset)
