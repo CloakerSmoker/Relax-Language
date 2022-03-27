@@ -516,7 +516,7 @@ struct ParserState {
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
 				Attributes |= FUNCTION_ATTRIBUTE_USE_X64
-			}
+			}  
 			
 			if (RequireParenthesis) {
 				this->ThrowConsume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing `)` for function pointer type")

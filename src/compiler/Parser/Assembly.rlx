@@ -285,6 +285,45 @@
 		return Result
 	}
 	
+	define i32 ParseDisplacement() {
+		Token* FirstToken := this->GetNextToken()
+		
+		if (FirstToken->Is(TOKEN_TYPE_INTEGER)) {
+			return FirstToken->IntegerValue As i32
+		}
+		else if (FirstToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+			HashMapElement* TypeElement := this~>Types->Get(FirstToken->StringValue)
+			
+			if !(TypeElement) {
+				FirstToken->Error("Unexpected token in displacement")
+			}
+			
+			TypeInfo* BaseType := TypeElement->Value
+			
+			if !(BaseType->IsStructType) {
+				FirstToken->Error("Must be the name of a structure type")
+			}
+			
+			this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected `.` between struct name and field name")
+			
+			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected field name")
+			
+			HashMapElement* FieldElement := BaseType~>Fields->Get(FieldNameToken->StringValue)
+			
+			if !(FieldElement) {
+				FieldNameToken->Error("Unknown field name")
+			}
+			
+			StructField* Field := FieldElement->Value
+			
+			return Field->Offset
+		}
+		
+		FirstToken->Error("Unexpected token")
+		
+		return 0
+	}
+	
 	define InstructionOperand* ParseAssemblyOperand(AssemblyBlock* ThisBlock) {
 		InstructionOperand* Next := Alloc(#InstructionOperand)
 		
@@ -335,20 +374,16 @@
 			; If the next token is `+` or `-`, then parse a displacement
 			
 			if (IsPlus || IsMinus) {
-				Token* DispToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected displacement value")
-				i8 DispSize := GetNumberSize(DispToken->IntegerValue)
+				i64 Displacement := this->ParseDisplacement()
+				i8 DispSize := GetNumberSize(Displacement)
 				
-				if (DispSize > 4) {
-					/* 64 bit displacements are invalid */
-					DispToken->Error("Displacement too big, must be 1-4 bytes")
-				}
-				else if (DispSize = 2) {
+				if (DispSize = 2) {
 					/* 16 bit displacements are just 32 bit displacements with some padding */
 					DispSize := 4
 				}
 				
 				Next->DispSize := DispSize
-				Next->DispValue := DispToken->IntegerValue As i32
+				Next->DispValue := Displacement As i32
 				
 				if (IsMinus) {
 					Next->DispValue := 0 - (Next->DispValue)

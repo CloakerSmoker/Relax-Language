@@ -29,6 +29,20 @@ define i32 IncRAX() asm {
 	ret
 }
 
+struct example {
+	i64 first
+	i32 second
+	i32 third
+	i8 fourth
+	i8 fifth
+}
+
+define i32 do_example() asm {
+	xor, eax, eax
+	lea, rax, {rax + example.fifth} As i64*
+	ret
+}
+
 define i32 Main() {
 	i64 B := 0
 	
@@ -63,6 +77,8 @@ define i32 Main() {
 	}
 	
 	Print(",%i%i", Test[0x80], Test[0x180])
+	
+	Print(" %i", do_example())
 	
 	asm {mov, rax, 0}
 	
