@@ -68,7 +68,7 @@ define i64 main() {
 	
 	; Test assignment and "dumb" calling with `()` around the expression
 	
-	i64(i64, i64) Op := Adder.DoOperation
+	i64(i64, i64) Op := &Add
 	
 	Print("%i ", (Op)(4, 4))
 	Print("%i ", Op(4, 4))

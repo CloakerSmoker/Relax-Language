@@ -146,8 +146,6 @@
 				RegisterSize := 8
 			}
 			
-			Print("%c %i %i %i\n", SecondCharacter, ParameterNumber, RegisterNumber, RegisterSize)
-			
 			return RegisterNumber | (RegisterSize << 8)
 		}
 		if (IsNumber(FirstCharacter)) {

@@ -6,7 +6,7 @@
 		;   for magic parameters like `this`
 		
 		i8 ParameterIndex := *OutParameterCount
-		ASTNode** Parameters := Alloc(8 * 10) As ASTNode**
+		ASTNode** Parameters := Alloc(8 * 15) As ASTNode**
 		
 		; If the next token is not a `)`, then parse a parameter list (if it is a `)` then there are 0 parameters)
 		

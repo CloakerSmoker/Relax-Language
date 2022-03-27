@@ -1526,7 +1526,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 ;  functions which return 'void'
 define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
-	FunctionDefine* TargetFunction := CallNode->TargetFunction
+	FunctionDefine* TargetFunction := null
 	
 	i8 BuiltinID := CallNode->BuiltinID
 	i8 IS_SYSCALL := BuiltinID = BUILTIN_SYSCALL /* Used later to decide which set of registers are for parameters */
@@ -1537,12 +1537,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	i32 TargetParameterCount := CallNode->ParameterCount
 	i8 TargetAttributes := 0
 	
-	if (IS_SYSCALL) {
-		/* Dummy branch to stop TargetFunction (a null pointer for `syscall(X, ...)`) from being accessed */
-		
-		TargetFunction := null
-	}
-	else if (IsFunctionPointerCall) {
+	if (IsFunctionPointerCall) {
 		FunctionPointer := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer
 		
 		TargetParameterCount := FunctionPointer->ParameterCount
@@ -1553,13 +1548,16 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 		
 		return 0
 	}
-	else if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
-		Node->Error("Calls to DllImported functions are not allowed when the target output format is not PE.")
-	}
-	else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
-		Node->Error("Called function is only declared, and never defined")
-	}
-	else {
+	else if !(IS_SYSCALL) {
+		TargetFunction := CallNode->TargetFunction
+		
+		if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
+			Node->Error("Calls to DllImported functions are not allowed when the target output format is not PE.")
+		}
+		else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
+			Node->Error("Called function is only declared, and never defined")
+		}
+		
 		TargetParameterCount := TargetFunction->ParameterCount
 		TargetAttributes := TargetFunction->Attributes
 	}
