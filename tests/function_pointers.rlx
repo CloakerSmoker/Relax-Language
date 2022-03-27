@@ -1,0 +1,155 @@
+#Require "$/Console.rlx"
+
+define i8 real_function(i8 value) {
+    return (value + 1) As i8
+}
+
+struct vftbl {
+	i64(i64, i64) DoOperation
+}
+
+define i64 Add(i64 Left, i64 Right) {
+	return Left + Right
+}
+define i64 Subtract(i64 Left, i64 Right) {
+	return Left - Right
+}
+
+vftbl Adder { DoOperation: &Add }
+vftbl Subber { DoOperation: &Subtract }
+
+define i64 asm_op(i64 na) asm {
+	not, p1
+	inc, p1
+	mov, rax, p1
+	ret
+}
+
+struct method_pointers {
+	define i32 do_op(i32 a) {
+		return 3 * a
+	}
+	
+	static i32 static_do_op(i32 a) {
+		return 5 * a
+	}
+}
+
+define i64 global_op() {
+	return 30
+}
+
+i64() p_global_op := &global_op
+
+define i64 x64_asm_op(i64 one) x64 asm {
+	mov, rax, rcx
+	ret
+}
+
+define i64 variadic_op(i64 first, ... rest) {
+	i64 Count := rest[0] As i64
+	
+	return first + Count
+}
+
+define i64(i64)x64 ReturnsOp(i64 a) {
+	return &x64_asm_op
+}
+
+struct method_pointer_holder {
+	i32(method_pointer_holder*, i32) the_method
+	
+	define i32 example_the_method(i32 value) {
+		return value + 500
+	}
+}
+
+define i64 main() {
+	
+	; Test assignment and "dumb" calling with `()` around the expression
+	
+	i64(i64, i64) Op := Adder.DoOperation
+	
+	Print("%i ", (Op)(4, 4))
+	Print("%i ", Op(4, 4))
+	
+	; "Smart" calling with `()` around the expression
+	;  (terrible expression to avoid it getting optimized away, boils down to `-(-(op))`)
+	
+	Print("%i ", ((-((~(Op As i64)) + 1)) As i64(i64, i64))(4, 4))
+	
+	; Test assignment and calling through a struct
+	
+	Print("%i ", Adder.DoOperation(4, 8))
+	
+	; Test calling through a struct pointer
+	
+	vftbl* pAdder := &Adder
+	
+	Print("%i ", pAdder->DoOperation(8, 8))
+	
+	; Test nested calls through the same pointer
+	
+	Print("%i ", Op(1, Op(2, Op(3, Op(4, Op(5, 6))))))
+	
+	; Test calling an assembly function
+	
+	i64(i64) p_asm_op := &asm_op
+	
+	Print("%i ", p_asm_op(3))
+	
+	; Test calling a method
+	
+	i32(method_pointers*, i32) mptr := &method_pointers.do_op
+	
+	Print("%i ", mptr(null, 3))
+	
+	; Test calling a static method
+	
+	i32(i32) static_mptr := &method_pointers:static_do_op
+	
+	Print("%i ", static_mptr(4))
+	
+	; Test calling through a global
+	
+	Print("%i ", p_global_op())
+	
+	; Test calling an x64 function
+	
+	i64(i64)x64 X64Op := &x64_asm_op
+	
+	Print("%i ", X64Op(234))
+	
+	; Test calling a variadic function
+	
+	i64(i64, ...) Variadic := &variadic_op
+	
+	Print("%i ", Variadic(300, 0))
+	Print("%i ", Variadic(300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+	
+	; Test calling a function which returns a function pointer
+	;  This syntax isn't... great. But I don't think it is totally unreadable
+	
+	(i64(i64)x64)(i64) Confusion := &ReturnsOp
+	
+	Print("%i ", (Confusion(0))(400))
+	
+	; Test implicitly adding the `this` parameter to method pointer calls where
+	;  the pointer is contained in a structure of the same type as the first parameter
+	
+	method_pointer_holder holder {
+		the_method: &method_pointer_holder.example_the_method
+	}
+	
+	i32 i := #method_pointer_holder
+	
+	Print("%i ", holder.the_method(1))
+	
+	; Test the same as above, but through a pointer to the struct
+	
+	method_pointer_holder* pholder := &holder
+	
+	Print("%i", pholder->the_method(2))
+	
+    return 0
+}

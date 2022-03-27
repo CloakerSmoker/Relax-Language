@@ -340,8 +340,37 @@
 		TypeInfo* FunctionPointerBaseType := GetBaseType(FunctionPointerType)
 		FunctionPointerInfo* FunctionPointer := FunctionPointerBaseType~>FunctionPointer
 		
-		i8 ParameterCount := 0
+		i8 TargetIsMethod := false
+		i8 ShouldUpdateLeftType := false
+		
+		if (CallToFunctionPointer->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			Type AccessLeftType := CallToFunctionPointer->AccessNode->Left->ValueType
+			Type FirstParameterType := FunctionPointer->ParameterTypes[0]
+			
+			if (GetPointerDepth(AccessLeftType) = 0 && GetBaseType(AccessLeftType)->IsStructType) {
+				AccessLeftType := this->PointerToType(AccessLeftType)
+				ShouldUpdateLeftType := true
+			}
+			
+			if !(CheckTypes(this->void, AccessLeftType, FirstParameterType, null)) {
+				TargetIsMethod := true
+			}
+		}
+		
+		i8 ParameterCount := 1
 		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+		
+		if (TargetIsMethod && ParameterCount = FunctionPointer->ParameterCount) {
+			Parameters[0] := CallToFunctionPointer->AccessNode->Left
+			
+			if (ShouldUpdateLeftType) {
+				Parameters[0]->ValueType := AccessLeftType
+			}
+		}
+		else {
+			ParameterCount -= 1
+			Parameters += 8
+		}
 		
 		CallExpression* ResultNode := null
 		ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &ResultNode, CallToFunctionPointer~>Context, this->GetCurrentTokenContext())
