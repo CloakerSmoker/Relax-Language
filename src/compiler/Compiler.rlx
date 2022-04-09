@@ -955,8 +955,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	if (Compiler->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
-		EmitMove_R32_I32(Compiler, RAX, 0x12345678)
-		EmitPush_R64(Compiler, RAX)
+		EmitPush_I32(Compiler, 0x12345678)
 		EmitLea_R64_Label(Compiler, RAX, StringsLabel)
 		EmitPush_R64(Compiler, RAX)
 		
@@ -966,7 +965,21 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	if (LocalSpace) {
 		/* Only emit an instruction to allocate space for locals when we have locals */
-		EmitSub_R64_IX(Compiler, RSP, LocalSpace)
+		
+		i32 LocalSlots := LocalSpace / 8
+		
+		if (LocalSpace % 8) {
+			LocalSlots += 1
+		}
+		
+		if (LocalSlots < 4) {
+			for (i32 Index := 0, Index < LocalSlots, Index++) {
+				EmitPush_R64(Compiler, RAX)
+			}
+		}
+		else {
+			EmitSub_R64_IX(Compiler, RSP, LocalSpace)
+		}
 	}
 	
 	for (i8 RegisterParameterIndex := 0, RegisterParameterIndex < RegisterParameterCount, RegisterParameterIndex += 1) {
@@ -1069,8 +1082,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
 		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
-			;ReturnExpression := LastStatement->ReturnExpression
-			;Body->StatementCount -= 1
+			ReturnExpression := LastStatement->ReturnExpression
+			Body->StatementCount -= 1
 		}
 	}
 	
@@ -1761,7 +1774,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	;}
 	
 	if (StackAdd) {
-		EmitAdd_R64_I32(Compiler, RSP, StackAdd * 8)
+		EmitAdd_R64_IX(Compiler, RSP, StackAdd * 8)
 	}
 	
 	if (ShouldSaveRegisters) {

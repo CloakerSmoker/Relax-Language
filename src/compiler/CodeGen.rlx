@@ -222,7 +222,7 @@ define void EmitREX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRe
 		Prefix := Prefix | REX_R
 	}
 	
-	if !(Prefix = REX_BASE && ExtraREX = 0) {
+	if (Prefix != REX_BASE || ExtraREX != 0) {
 		PushByte(Compiler, Prefix)
 	}
 }
@@ -330,7 +330,21 @@ define void EmitBasicInstruction(CompilerState* Compiler, i16 Opcode, i8 Mode, i
 	
 	EmitInstruction(Compiler, &Info, DestinationRegister, SourceRegister)
 }
+
+define i8 GetDisplacementSize(i32 Displacement) {
+	i32 Sign := (Displacement >> 7) & 0x1_FF_FF_FF
+	
+	if (Sign = 0 || Sign = 0x1_FF_FF_FF) {
+		return 1
+	}
+	else {
+		return 4
+	}
+}
+
 define void EmitBasicInstructionDisplacement(CompilerState* Compiler, i16 Opcode, i8 Size, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 DisplacementSize) {
+	DisplacementSize := GetDisplacementSize(Displacement)
+	
 	if (DisplacementSize = 1) {
 		EmitBasicInstruction(Compiler, Opcode, MODE_PTOR_DISP8, Size, DestinationRegister, SourceRegister)
 		PushByte(Compiler, Displacement As i8)
@@ -700,6 +714,11 @@ define void EmitPush_R64_DISP8(CompilerState* Compiler, i8 RegisterNumber, i8 Di
 define void EmitPop_R64_DISP8(CompilerState* Compiler, i8 RegisterNumber, i8 Displacement) {
 	EmitBasicInstruction(Compiler, 0x8F, MODE_PTOR_DISP8, 4, 0, RegisterNumber)
 	PushByte(Compiler, Displacement)
+}
+
+define void EmitPush_I32(CompilerState* Compiler, i32 Immediate) {
+	PushByte(Compiler, 0x68)
+	PushI32(Compiler, Immediate)
 }
 
 /*
