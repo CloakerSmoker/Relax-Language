@@ -467,20 +467,52 @@
 			Next->Type := O_L
 			Next->ReferencesFunction := true
 			
-			Token* FunctionNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
-			SafeString* FunctionName := FunctionNameToken->StringValue
+			Token* MaybeFunctionName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function or type name")
+			FunctionDefine* FoundDefine := null
 			
-			HashMapElement* FoundFunction := this~>Functions->Get(FunctionName)
-			
-			if !(FoundFunction) {
-				FunctionNameToken->Error("Function definition/declaration not found")
+			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+				; We have `&Name:OtherName`, which means we need to lookup a static method for our result
+				
+				Token* StaticMethodTypeName := MaybeFunctionName
+				Token* StaticMethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
+				
+				FoundDefine := this->LookupStaticMethod(StaticMethodTypeName, StaticMethodName)
 			}
-			
-			FunctionDefine* FoundDefine := FoundFunction->Value As FunctionDefine*
+			else if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
+				; We've got `&Name.Whatever`, which is either getting the address of a method
+				;  (aka `Name` is a type), or getting the address of a field (aka `Name` is a variable name)
+				
+				Token* MethodTypeName := MaybeFunctionName
+				Token* MethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected method name")
+				
+				HashMapElement* MethodBaseElement := this~>Types->Get(MethodTypeName->StringValue)
+				
+				if (MethodBaseElement) {
+					TypeInfo* MethodBase := MethodBaseElement->Value
+					
+					HashMapElement* MethodElement := MethodBase~>Methods->Get(MethodName->StringValue)
+					
+					if (MethodElement) {
+						FoundDefine := MethodElement->Value
+					}
+				}
+			}
+			else {
+				; Else, we've just got `&Name`, so we check for `Name` as a function
+				
+				HashMapElement* FoundFunction := this~>Functions->Get(MaybeFunctionName->StringValue)
+				
+				if (FoundFunction) {
+					FoundDefine := FoundFunction->Value As FunctionDefine*
+				}
+				else {
+					MaybeFunctionName->Error("Undefined function")
+				}
+			}
 			
 			Next->FunctionReference := FoundDefine
 			
-			Next~>Context->Clone(NextToken~>Context)->Merge(FunctionNameToken~>Context)
+			Next~>Context->Clone(NextToken~>Context)->Merge(MaybeFunctionName~>Context)
 		}
 		else {
 			NextToken->Error("Unexpected token")
