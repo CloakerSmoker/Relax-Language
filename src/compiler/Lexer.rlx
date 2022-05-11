@@ -734,6 +734,9 @@ struct LexerState {
 							Replacement := NewLineString
 							ReplacementLength := NewLineLength
 						}
+						else if (EscapeCharacter = 'e') {
+							Replacement := i8[0x1B]
+						}
 						else if (EscapeCharacter = 't') {
 							Replacement := "	"
 						}
