@@ -1,0 +1,285 @@
+
+i32 BETTER_HEAP_BLOCK_IS_ALLOCATED := 1
+i32 BETTER_HEAP_BLOCK_IS_END := 2
+
+struct BetterHeapBlock {
+	i32 Size
+	i32 Flags
+	void[0] Data
+	
+	static BetterHeapBlock* FromData(void* Data) {
+		return Data - #BetterHeapBlock
+	}
+
+	define i8 IsAllocated() {
+		return this->Flags & BETTER_HEAP_BLOCK_IS_ALLOCATED != 0
+	}
+	define i8 IsFree() {
+		return this->Flags & BETTER_HEAP_BLOCK_IS_ALLOCATED = 0
+	}
+	define i8 IsEnd() {
+		return this->Flags & BETTER_HEAP_BLOCK_IS_END != 0
+	}
+	define i8 IsNotEnd() {
+		return this->Flags & BETTER_HEAP_BLOCK_IS_END = 0
+	}
+	
+	define void* Body() {
+		return this~>Data
+	}
+	define BetterHeapBlock* Next() {
+		if (this->IsEnd()) {
+			return null
+		}
+		
+		return this + this->Size
+	}
+	define void MergeContigousFreeBlocks() {
+		if (this->IsEnd()) {
+			return
+		}
+		
+		BetterHeapBlock* Current := this->Next()
+		
+		while !(Current->IsAllocated()) {
+			this->Size += Current->Size
+			
+			if (Current->IsEnd()) {
+				this->Flags |= BETTER_HEAP_BLOCK_IS_END
+				
+				break
+			}
+			
+			Current := Current->Next()
+		}
+	}
+	define BetterHeapBlock* SetSize(i32 SizeNeeded) {
+		i32 TailSpace := this->Size - SizeNeeded
+		
+		if (TailSpace >= (0x20 + #BetterHeapBlock)) {
+			this->Size := SizeNeeded
+			
+			i8 WasEnd := this->IsEnd()
+			this->Flags := BETTER_HEAP_BLOCK_IS_ALLOCATED
+			
+			BetterHeapBlock* Tail := this->Next()
+			Tail->Size := TailSpace
+			
+			if (WasEnd) {
+				Tail->Flags |= BETTER_HEAP_BLOCK_IS_END
+			}
+			
+			return Tail
+		}
+		else {
+			this->Flags |= BETTER_HEAP_BLOCK_IS_ALLOCATED
+			
+			return null
+		}
+	}
+	define void Free() {
+		this->Flags &= ~BETTER_HEAP_BLOCK_IS_ALLOCATED
+		this->MergeContigousFreeBlocks()
+	}
+
+	static i32 SizeNeeded(i32 BodySize) {
+		return BodySize + #BetterHeapBlock
+	}
+}
+
+declare void Print(i8*, ...)
+
+struct BetterHeapPool {
+	BetterHeapPool* Next
+	BetterHeapBlock* LowWaterMark
+	i32 Size
+	i32 FreeSize
+	BetterHeapBlock FirstBlock
+	
+	define i8 CouldFit(i32 Size) {
+		return this->FreeSize >= BetterHeapBlock:SizeNeeded(Size)
+	}
+	
+	define BetterHeapBlock* SetBlockSize(BetterHeapBlock* Block, i32 Size) {
+		this->FreeSize += Block->Size
+		
+		BetterHeapBlock* MaybeTail := Block->SetSize(Size)
+		
+		this->FreeSize -= Block->Size
+		
+		if (MaybeTail) {
+			if (MaybeTail < this->LowWaterMark || this->LowWaterMark->IsAllocated()) {
+				this->LowWaterMark := MaybeTail
+			}
+		}
+		
+		return Block
+	}
+	
+	define BetterHeapBlock* TryAllocateBlock(i32 Size) {
+		i32 SizeNeeded := BetterHeapBlock:SizeNeeded(Size)
+		
+		if (this->FreeSize <= SizeNeeded) {
+			return null
+		}
+		
+		BetterHeapBlock* Current := this->LowWaterMark
+		
+		loop {
+			if (Current->IsFree()) {
+				Current->MergeContigousFreeBlocks()
+				
+				if (Current->Size >= SizeNeeded) {
+					return this->SetBlockSize(Current, SizeNeeded)
+				}
+			}
+			
+			if (Current->IsEnd()) {
+				break
+			}
+			
+			Current := Current->Next()
+		}
+		
+		return null
+	}
+	
+	define void FreeBlock(BetterHeapBlock* Target) {
+		
+	}
+}
+
+i32 DEFAULT_HEAP_POOL_SIZE := 0x10000
+
+i32 LINUX_PROT_READ := 0x1
+i32 LINUX_PROT_WRITE := 0x2
+
+i32 LINUX_MAP_SHARED := 0x1
+i32 LINUX_MAP_ANONYMOUS := 0x20
+
+define BetterHeapPool* AllocateHeapPool(BetterHeapPool** Result, i32 Size) {
+	BetterHeapPool* Pool := syscall:(9, null, Size, LINUX_PROT_READ | LINUX_PROT_WRITE, LINUX_MAP_SHARED | LINUX_MAP_ANONYMOUS, null, 0) As void*
+	
+	if (Result) {
+		Result[0] := Pool
+	}
+	
+	Pool->Next := null
+	Pool->LowWaterMark := Pool~>FirstBlock
+	Pool->Size := Size
+	Pool->FreeSize := Size - #BetterHeapPool
+	Pool~>FirstBlock->Size := Size - #BetterHeapPool
+	Pool~>FirstBlock->Flags |= BETTER_HEAP_BLOCK_IS_END
+	
+	return Pool
+}
+
+define BetterHeapPool* BetterHeapInitialize() {
+	linux {
+		return AllocateHeapPool(null As BetterHeapPool**, DEFAULT_HEAP_POOL_SIZE)
+	}
+	windows {
+		return null
+	}
+}
+
+BetterHeapPool* FirstPool := BetterHeapInitialize()
+
+define void SimpleHeapGrow() {	
+	linux {
+	}
+}
+
+define void* SimpleHeapAlloc(i32 Size) {
+	linux {
+		BetterHeapPool** pCurrent := &FirstPool
+		BetterHeapPool* Current := FirstPool
+		
+		while (Current) {
+			if (Current->CouldFit(Size)) {
+				return Current->TryAllocateBlock(Size)->Body()
+			}
+			
+			pCurrent := Current~>Next
+			Current := *pCurrent
+		}
+		
+		Print("Oh no\n")
+		
+		i32 NextPoolSize := DEFAULT_HEAP_POOL_SIZE
+		
+		if (Size >= DEFAULT_HEAP_POOL_SIZE) {
+			NextPoolSize := ((Size / DEFAULT_HEAP_POOL_SIZE) + 2) * DEFAULT_HEAP_POOL_SIZE
+		}
+		
+		return AllocateHeapPool(pCurrent, NextPoolSize)->TryAllocateBlock(Size)->Body()
+	}
+	windows {
+		return null
+	}
+}
+
+define void BetterHeapPrint() {
+	Print("Heap [%x - %x, +%x bytes] {\n", FirstPool, (FirstPool As i64) + FirstPool->Size, FirstPool->Size)
+	
+	i32 TotalSize := 0
+	
+	for (BetterHeapBlock* Block := FirstPool~>FirstBlock, Block != null, Block := Block->Next()) {
+		TotalSize += Block->Size
+		
+		if (Block = FirstPool->LowWaterMark) {
+			Print("\t=\t============================\n")
+		}
+		
+		Print("\t%x\tBlock { Size %x, Free? %i, IsEnd? %i }\n", Block, Block->Size, Block->IsFree(), Block->IsEnd())
+		
+		if (Block->IsEnd()) {
+			break
+		}
+	}
+	
+	Print("} %x bytes\n", TotalSize)
+}
+
+define void SimpleHeapCopyClear(i8* From, i8* To, i64 Size) {
+	linux {
+		for (i64 Index := 0, Index < Size, Index += 1) {
+			To[Index] := From[Index]
+			/* Todo: Put this back in, once you figure out who's using ReAlloc'd memory
+			From[Index] := 'R' */
+		}
+	}
+}
+
+define void* SimpleHeapReAlloc(void* Memory, i64 NewSize) {
+	linux {
+		BetterHeapBlock* Existing := BetterHeapBlock:FromData(Memory)
+		i32 OriginalExistingSize := Existing->Size
+		
+		if (Existing->Size >= NewSize) {
+			return Memory
+		}
+		
+		Existing->MergeContigousFreeBlocks()
+		
+		if (Existing->Size >= NewSize) {
+			; Good job
+			
+			FirstPool->SetBlockSize(Existing, NewSize)
+			
+			return Memory
+		}
+		else {
+			; Even merged, this block isn't enough
+			
+			void* Result := SimpleHeapAlloc(NewSize As i32)
+			SimpleHeapCopyClear(Memory, Result, OriginalExistingSize)
+			Existing->Free()
+		
+			return Result
+		}
+	}
+	windows {
+		return null
+	}
+}

@@ -74,24 +74,30 @@ define i32 FileGetSize(i64 File) {
 		return End
 	}
 }
-define void FileRead(i64 File, void* Buffer, i32 BytesToRead) {
+define i32 FileRead(i64 File, void* Buffer, i32 BytesToRead) {
+	i32 BytesRead := 0
+	
 	windows {
-		i32 BytesRead := 0
 		ReadFile(File, Buffer, BytesToRead, &BytesRead, 0)
 	}
 	linux {
-		syscall:(0, File, Buffer, BytesToRead)
+		BytesRead := syscall:(0, File, Buffer, BytesToRead) As i32
 	}
+	
+	return BytesRead
 }
 
 define i32 FileWrite(i64 File, void* Buffer, i32 BufferSize) {
+	i32 BytesWritten := 0
+	
 	windows {
-		i32 BytesWritten := 0
-		return WriteFile(File, Buffer, BufferSize, &BytesWritten, 0)
+		WriteFile(File, Buffer, BufferSize, &BytesWritten, 0)
 	}
 	linux {
-		return syscall:(1, File, Buffer, BufferSize) As i32
+		BytesWritten := syscall:(1, File, Buffer, BufferSize) As i32
 	}
+	
+	return BytesWritten
 }
 define void FileClose(i64 File) {
 	windows {

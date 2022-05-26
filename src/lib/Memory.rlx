@@ -15,14 +15,22 @@ i64 hProcessHeap := GetProcessHeap()
 i32 HEAP_ZERO_MEMORY := 0x00000008
 i32 HEAP_REALLOC_IN_PLACE_ONLY := 0x00000010
 
-#Include $/SimpleHeap.rlx
+#Require "$/BetterHeap.rlx"
 
 define void* Alloc(i64 Size) {
 	windows {
 		return HeapAlloc(hProcessHeap, HEAP_ZERO_MEMORY, Size)
 	}
 	linux {
-		return SimpleHeapAlloc(Size)
+		Print("Alloc(%x)    First %x / %x\n", Size, FirstPool->FreeSize, FirstPool->Size)
+		
+		void* R := SimpleHeapAlloc(Size As i32)
+		
+		Print(" = %x\n", R)
+		
+		BetterHeapPrint()
+		
+		return R
 	}
 }
 
