@@ -203,12 +203,12 @@ struct MD5Hasher {
 	}
 	
 	define void PrintDigest(void* Result) {
-		PrintLiteral('0x')
+		Print("0x")
 		
 		i8* Bytes := Result As i8*
 		
 		for (i32 Index := 0, Index < 16, Index += 1) {
-			PrintHex(Bytes[Index] As i64 & 0xFF, false)
+			Print("%B", Bytes[Index] As i64 & 0xFF, false)
 		}
 	}
 }

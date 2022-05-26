@@ -45,99 +45,15 @@ define void PrintNewLine() {
 		FileWrite(STDOUT, &NewLine As void*, 1)
 	}
 }
+
+define void PrintCharacter(i8 Character) {
+	FileWrite(STDOUT, &Character, 1)
+}
 define void PrintCharacters(i8* Characters, i32 Count) {
 	FileWrite(STDOUT, Characters, Count)
 }
 
-define void PrintLiteral(i64 PackedCharacters) {
-	i8* Characters := (&PackedCharacters) As i8*
-	
-	for (i32 Length := 0, (Length < 8) && (Characters[Length] != 0), Length += 1) {}
-	
-	PrintCharacters(Characters, Length)
-}
-define void PrintCharacter(i8 Character) {
-	PrintCharacters(&Character, 1)
-}
-
-
-i8[96] PrintBuffer
-
-define void PrintString(i8* AString) {
-	PrintCharacters(AString, StringLength(AString))
-}
-
-define void ClearPrintBuffer() {
-	for (i32 Index := 0, Index < 12, Index += 1) {
-		(PrintBuffer As i64*)[Index] := 0
-	}
-}
-define void Print(i64 Number) {
-	ClearPrintBuffer()
-	PrintString(IToA(Number, 10, PrintBuffer))
-}
-define void PrintHex(i64 Number, i8 WithZeroX) {
-	ClearPrintBuffer()
-	PrintString(IToA(Number, 16, PrintBuffer, WithZeroX))
-}
-define void PrintHex(i64 Number) {
-	PrintHex(Number, true)
-}
-define void PrintBinary(i64 Number) {
-	ClearPrintBuffer()
-	PrintString(IToA(Number, 2, PrintBuffer))
-}
-
-declare void SetColor(i8, i8)
-declare void ResetColors()
-
-define void Print(i8* Format, ... Args) {
-	i32 Length := StringLength(Format)
-	i32 ArgIndex := 1
-	
-	for (i32 Index := 0, Index < Length, Index += 1) {
-		i8 Next := Format[Index]
-		
-		if (Next = '%') {
-			Index += 1
-			Next := Format[Index]
-			void NextArg := Args[ArgIndex]
-			
-			if (Next = 'i') {
-				Print(NextArg As i64)
-			}
-			else if (Next = 'x') {
-				PrintHex(NextArg As i64)
-			}
-			else if (Next = 'c') {
-				PrintCharacter(NextArg As i8)
-			}
-			else if (Next = 's') {
-				PrintString(NextArg As i8*)
-			}
-			else if (Next = 'l') {
-				PrintLiteral(NextArg As i64)
-			}
-			else if (Next = 'b') {
-				PrintBinary(NextArg As i64)
-			}
-			
-			ArgIndex += 1
-		}
-		else if (Next = '^') {
-			Index += 2
-			i8 Fore := GetCharacterValue(Format[Index - 1])
-			i8 Back := GetCharacterValue(Format[Index])
-			
-			SetColor(Fore, Back)
-		}
-		else {
-			PrintCharacter(Next)
-		}
-	}
-}
-
-
+#Include "$/Print.rlx"
 
 i8 Bright := 0x08
 i8 Red := 0x04
@@ -163,15 +79,8 @@ define i8 TranslateWindowsColor(i8 Color) {
 define void PrintANSIEscape(i8 Foreground, i8 Background) {
 	/* Writes a pair of ANSI escape sequences to change the terminal colors to Foreground/Background */
 	
-	PrintCharacter(0x1B)
-	PrintCharacter('[')
-	Print(TranslateWindowsColor(Foreground))
-	PrintCharacter('m')
-	
-	PrintCharacter(0x1B)
-	PrintCharacter('[')
-	Print(TranslateWindowsColor(Background) + 10)
-	PrintCharacter('m')
+	Print("\e[%im", TranslateWindowsColor(Foreground))
+	Print("\e[%im", TranslateWindowsColor(Background) + 10)
 }
 
 i8 NO_COLORS := false
