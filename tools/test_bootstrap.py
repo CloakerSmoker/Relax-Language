@@ -25,7 +25,7 @@ running_on = platform.system()
 
 compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug'
 platform_extension = 'exe'
-python = sys.executable
+python = sys.executable if running_on == 'Linux' else '"' + sys.executable + '"'
 expected_returncode = 1
 
 if running_on == 'Linux':

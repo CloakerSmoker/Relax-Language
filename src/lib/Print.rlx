@@ -188,7 +188,7 @@ struct PrintOutputAdapterPrototype {
 				}
 				
 				Next := *FormatName
-				void NextParameter := Parameters[ParameterIndex++]
+				i64 NextParameter := Parameters[ParameterIndex++]
 				
 				if (Next = 'i') {
 					this->PrintInteger(NextParameter As i64)
@@ -291,6 +291,19 @@ PrintOutputAdapterPrototype* Printer := &DefaultPrinter
 define void Print(i8* Format, ... Parameters) {
 	Printer->RawPrint(Format, Parameters)
 }
+define void Print(i32 Number) {
+	Print("%i", Number)
+}
+define void Print(i64 Number) {
+	Print("%i", Number)
+}
+define void PrintHex(i64 Number) {
+	Print("%x", Number)
+}
+define void PrintLiteral(i64 Literal) {
+	Print("%l", Literal)
+}
+
 define void RawPrint(i8* Format, void* Parameters) {
 	Printer->RawPrint(Format, Parameters)
 }
