@@ -1,0 +1,70 @@
+
+
+struct GarbageHeap {
+	void* Base
+	void* Next
+	void* End
+}
+
+GarbageHeap _Heap
+GarbageHeap* Heap := &_Heap
+
+i32 LINUX_PROT_READ := 0x1
+i32 LINUX_PROT_WRITE := 0x2
+
+i32 LINUX_MAP_SHARED := 0x1
+i32 LINUX_MAP_FIXED := 0x10
+i32 LINUX_MAP_ANONYMOUS := 0x20
+i32 LINUX_MAP_NO_RESERVE := 0x4000
+
+i32 GARBAGE_HEAP_SIZE := 0x100_0000
+
+define void* GarbageHeapInitialize() {
+	linux {
+		Heap->Base := syscall:(9, null, GARBAGE_HEAP_SIZE, LINUX_PROT_READ | LINUX_PROT_WRITE, LINUX_MAP_NO_RESERVE | LINUX_MAP_SHARED | LINUX_MAP_ANONYMOUS, null, 0) As void*
+		Heap->Next := Heap->Base
+		Heap->End := Heap->Base + GARBAGE_HEAP_SIZE
+	}
+	
+	return null
+}
+
+void* ThisSucks := GarbageHeapInitialize()
+
+define void* GarbageHeapAlloc(i32 Size) {
+	linux {
+		void* Result := Heap->Next
+		
+		if (Result + Size + 8 >= Heap->End) {
+			syscall:(9, Heap->End, GARBAGE_HEAP_SIZE, LINUX_PROT_READ | LINUX_PROT_WRITE, LINUX_MAP_NO_RESERVE | LINUX_MAP_SHARED | LINUX_MAP_ANONYMOUS | LINUX_MAP_FIXED, null, 0) As void*
+			
+			Heap->End += GARBAGE_HEAP_SIZE
+		}
+		
+		*Result := Size
+		
+		Heap->Next += Size + 8
+		
+		return Result + 8
+	}
+	
+	return null
+}
+
+define void* GarbageHeapReAlloc(void* Memory, i32 Size) {
+	linux {
+		i32 OldSize := *(Memory - 8) As i32
+		
+		if (Size <= OldSize) {
+			return Memory
+		}
+		
+		void* New := GarbageHeapAlloc(Size)
+		FastMoveMemory(New, Memory, OldSize)
+		FastSetMemory8(New + OldSize, 0, Size - OldSize)
+		
+		return New
+	}
+
+	return null
+}

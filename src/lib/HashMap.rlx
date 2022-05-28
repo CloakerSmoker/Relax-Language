@@ -19,9 +19,9 @@ struct HashMap {
 	i8 IgnoreCase
 	
 	define void Initialize() {
-		if (this->BufferMaxCount = 0) {
+		;if (this->BufferMaxCount = 0) {
 			this->BufferMaxCount := 100
-		}
+		;}
 		
 		this->Elements := Alloc(this->BufferMaxCount * #HashMapElement*)
 	}

@@ -37,6 +37,7 @@ define void CompilerUnhandledExceptionHandler(i64 Code) {
 		
 		Child := Child->Child
 	}
+	
 }
 
 i8* ProgramName := "[compiler]"
@@ -213,6 +214,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	Parser->ParseProgram()
 	
 	CompilerStart(Config, Parser, OutputFilePath)
+	
+	;Print("%x\n", Heap->End - Heap->Base)
 	
 	; Todo: Make the exit code consistent
 	
