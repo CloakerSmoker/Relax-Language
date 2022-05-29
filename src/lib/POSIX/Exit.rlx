@@ -1,0 +1,3 @@
+define void Exit(i32 ExitCode) {
+    syscall:(SYSCALL_EXIT, ExitCode)
+}

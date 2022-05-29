@@ -1,0 +1,3 @@
+i32 SYSCALL_EXIT := 60
+
+#Require "$/POSIX/Exit.rlx"

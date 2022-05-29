@@ -1,0 +1,28 @@
+#Require "$/Memory.rlx"
+#Require "$/String.rlx"
+
+define i8* GetWorkingDirectory() {
+	i8* Buffer := Alloc(256)
+
+    syscall:(SYSCALL_GETCWD, Buffer, 255)
+
+	return Buffer
+}
+
+define i8* GetAbsolutePath(i8* ForPath) {
+    i8* Buffer := Alloc(260)
+
+    MoveMemory(Buffer, ForPath, StringLength(ForPath)) ; Technically a bug
+
+    i8* Absolute := MakeAbsolute(Buffer)
+
+    if (Absolute != Buffer) {
+        Free(Buffer)
+    }
+
+    i8* Expanded := ExpandPath(Absolute)
+
+    Free(Absolute)
+
+    return Expanded
+}

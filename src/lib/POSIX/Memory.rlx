@@ -1,0 +1,13 @@
+#Require "$/HeapOfGarbage.rlx"
+
+define void* Alloc(i64 Size) {
+    return GarbageHeapAlloc(Size As i32)
+}
+
+define void* ReAlloc(void* Memory, i64 NewSize) {
+    return GarbageHeapReAlloc(Memory, NewSize As i32)
+}
+
+define void Free(void* Memory) {
+
+}

@@ -1,0 +1,11 @@
+define void* MapMemory(void* Where, i64 Size, i32 Protection, i32 Flags, i32 File, i64 Offset) {
+    return syscall:(SYSCALL_MMAP, Where, Size, Protection, Flags, File, Offset) As void*
+}
+
+define void* MapMemory(void* Where, i64 Size, i32 Protection, i32 Flags) {
+    return MapMemory(Where, Size, Protection, Flags, -1, 0)
+}
+
+define void* MapMemory(i64 Size, i32 Protection, i32 Flags) {
+    return MapMemory(null, Size, Protection, Flags | MMAP_FLAG_ANONYMOUS, -1, 0)
+}

@@ -57,3 +57,51 @@ define void SetMemory(void* RawTarget, i32 Count, i64 Value) {
 		Target[Index] := Value
 	}
 }
+
+define void FastSetMemory8(void* Memory, i64 Value, i64 Count) asm {
+	mov, rax, rsi
+	mov, rcx, rdx
+
+	cld
+	rep stosb
+
+	ret
+}
+define void FastSetMemory64(void* Memory, i64 Value, i64 Count) asm {
+	mov, rax, rsi
+	mov, rcx, rdx
+
+	cld
+	rep stosq
+
+	ret
+}
+define void FastZeroMemory(void* Memory, i64 Size) {
+	i64 Offset := Size & ~0x7
+	i64 Eights := Offset >> 3
+	i64 Ones := Size & 0x7
+
+	FastSetMemory64(Memory, 0, Eights)
+	FastSetMemory8(Memory + Offset, 0, Ones)
+}
+define void FastMoveMemory(void* To, void* From, i64 Size) asm {
+	mov, rcx, rdx
+
+	cmp, rdi, rsi
+	jlt, MoveDown
+
+	dec, rdx
+	add, rdi, rdx
+	add, rsi, rdx
+
+	std
+	rep movsb
+
+	ret
+
+MoveDown:
+	cld
+	rep movsb
+
+	ret
+}

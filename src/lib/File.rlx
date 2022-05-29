@@ -1,94 +1,17 @@
 #Require "$/FileBase.rlx"
 #Require "$/Memory.rlx"
 
+declare i8* MakeAbsolute(i8*)
+declare i8* ExpandPath(i8*)
+
+#Require "@/File.rlx"
+
 define void* FileReadAll(i64 File) {
 	i32 Size := FileGetSize(File)
 	void* Buffer := Alloc(Size + 1)
-	
+
 	FileRead(File, Buffer, Size)
-	
-	return Buffer
-}
 
-define i8 CallDirectoryVisitor(i8 IsDirectory, i8* FilePath, void* Function) asm {
-	jmp, rdx
-}
-
-struct WindowsDirectory unaligned {
-	i32 Attributes
-	
-	i64 CreationTime
-	i64 LastAccessTime
-	i64 LastWriteTime
-	
-	i32 FileSizeHigh
-	i32 FileSizeLow
-	
-	i64 Reserved
-	
-	i8[260] Name
-	i8[14] ShortName
-	
-	i32 FileType
-	i32 CreatorType
-	i16 Flags
-}
-
-DllImport i64 FindFirstFile(i8*, WindowsDirectory*) {Kernel32.dll, FindFirstFileA} 
-DllImport i8 FindNextFile(i64, WindowsDirectory*) {Kernel32.dll, FindNextFileA} 
-DllImport i8 FindClose(i64) {Kernel32.dll, FindClose}
-
-#Require "$/String.rlx"
-
-define i8 DirectoryWalk(i8* DirectoryPath, void* VisitFunction) {
-	windows {
-		i32 DirectoryLength := StringLength(DirectoryPath)
-		i8* FixedDirectoryPath := Concatenate(DirectoryPath, "\*")
-		
-		WindowsDirectory Directory
-		WindowsDirectory* pDirectory := &Directory 
-		
-		i64 FindHandle := FindFirstFile(FixedDirectoryPath, pDirectory)
-		
-		FixedDirectoryPath[DirectoryLength + 1] := 0
-		
-		if (FindHandle = -1) {
-			Free(FixedDirectoryPath)
-			
-			return 1
-		}
-		
-		loop {
-			i8* FullPath := Concatenate(FixedDirectoryPath, pDirectory~>Name)
-			
-			CallDirectoryVisitor(!!(pDirectory->Attributes & 0x10), FullPath, VisitFunction)
-			
-			Free(FullPath)
-			
-			if !(FindNextFile(FindHandle, pDirectory)) {
-				break
-			}
-		}
-		
-		Free(FixedDirectoryPath)
-		FindClose(FindHandle)	
-	}
-	
-	return 0
-}
-
-DllImport i32 GetCurrentDirectory(i32, i8*) {Kernel32.dll, GetCurrentDirectoryA}
-
-define i8* GetWorkingDirectory() {
-	i8* Buffer := Alloc(256)
-
-	windows {
-		GetCurrentDirectory(255, Buffer)
-	}
-	linux {
-		syscall:(79, Buffer, 255)
-	}
-	
 	return Buffer
 }
 
@@ -162,35 +85,4 @@ define i8* ExpandPath(i8* Path) {
 	}
 	
 	return Result + 1
-}
-
-DllImport i32 GetFullPathName(i8*, i32, i8*, i8*) {Kernel32.dll, GetFullPathNameA}
-
-define i8* GetAbsolutePath(i8* ForPath) {
-	windows {
-		i8* Buffer := Alloc(260)
-		
-		GetFullPathName(ForPath, 260, Buffer, null)
-		
-		return Buffer
-	}
-	linux {
-		i8* Buffer := Alloc(260)
-		
-		MoveMemory(Buffer, ForPath, StringLength(ForPath)) ; Technically a bug
-		
-		i8* Absolute := MakeAbsolute(Buffer)
-		
-		if (Absolute != Buffer) {
-			Free(Buffer)
-		}
-		
-		i8* Expanded := ExpandPath(Absolute)
-		
-		Free(Absolute)
-		
-		return Expanded
-	}
-	
-	return null
 }
