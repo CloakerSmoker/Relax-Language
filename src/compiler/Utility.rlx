@@ -80,6 +80,8 @@ struct BuildConfig {
 	i8* SourceFile
 	i8* LibraryDirectory
 	HashMap* IncludedFiles
+
+	i8* PlatformName
 	
 	i64 ImageBase
 	i8 OutputFormat

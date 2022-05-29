@@ -1,11 +1,11 @@
-#Require "./src/lib/Memory.rlx"
-#Require "./src/lib/File.rlx"
+#Require "$/Memory.rlx"
+#Require "$/File.rlx"
 
-#Require "./src/lib/String.rlx"
-#Require "./src/lib/Console.rlx"
-#Require "./src/lib/SafeString.rlx"
-#Require "./src/lib/HashMap.rlx"
-#Require "./src/lib/Debug.rlx"
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
+#Require "$/SafeString.rlx"
+#Require "$/HashMap.rlx"
+#Require "$/Debug.rlx"
 
 declare i16* OpenAndRead(i8*, i32*)
 
@@ -148,6 +148,37 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			
 		else if (StringEquals(NextOption, "--cr"  )) { Config->LineEnding := LINE_ENDING_CR   }
 		else if (StringEquals(NextOption, "--crlf")) { Config->LineEnding := LINE_ENDING_CRLF }
+
+		else if (StringEquals(NextOption, "--windows")) {
+			Config->PlatformName := "windows"
+			Config->OutputFormat := OUTPUT_PE
+			Config->LineEnding   := LINE_ENDING_CRLF
+			Config->PESubsystem  := IMAGE_SUBSYSTEM_WINDOWS_CUI
+		}
+		else if (StringEquals(NextOption, "--efi")) {
+			Config->PlatformName := "efi"
+			Config->OutputFormat := OUTPUT_PE
+			Config->LineEnding   := LINE_ENDING_CRLF
+			Config->PESubsystem  := IMAGE_SUBSYSTEM_EFI_APPLICATION
+		}
+		else if (StringEquals(NextOption, "--linux")) {
+			Config->PlatformName := "linux"
+			Config->OutputFormat := OUTPUT_ELF
+			Config->ELFABI       := ELF_ABI_LINUX
+			Config->LineEnding   := LINE_ENDING_CR
+		}
+		else if (StringEquals(NextOption, "--freebsd")) {
+			Config->PlatformName := "freebsd"
+			Config->OutputFormat := OUTPUT_ELF
+			Config->ELFABI       := ELF_ABI_FREEBSD
+			Config->LineEnding   := LINE_ENDING_CR
+		}
+		else if (StringEquals(NextOption, "--standalone-elf")) {
+			Config->OutputFormat := OUTPUT_ELF
+			Config->ELFABI       := ELF_ABI_SYSTEMV
+			Config->LineEnding   := LINE_ENDING_CR
+		}
+
 		
 		else if (StringEquals(NextOption, "--no-colors")) {
 			NO_COLORS := true

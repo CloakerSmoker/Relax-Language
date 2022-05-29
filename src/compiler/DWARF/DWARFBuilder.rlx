@@ -1,13 +1,13 @@
 
 
-#Require "./src/lib/Memory.rlx"
+#Require "$/Memory.rlx"
 #Require "./src/compiler/DWARF/Stream.rlx"
 #Require "./src/compiler/DWARF/Expression.rlx"
 #Require "./src/compiler/DWARF/DIE.rlx"
 #Require "./src/compiler/DWARF/Lines.rlx"
 ;#Require "./src/compiler/DWARF/FakeTypes.rlx"
 
-#Require "./src/lib/SafeString.rlx"
+#Require "$/SafeString.rlx"
 
 struct DWARFBuilder {
 	DWARFDebuggingEntryStreamBuilder* DIEStream

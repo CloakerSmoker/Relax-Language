@@ -850,10 +850,19 @@ struct LexerState {
 				i8 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
 				
 				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
+
+				ErrorContext IncludePathBlame {
+					SourceFilePath: this->SourceFilePath,
+					Source: this->SourceText,
+					LineNumber: this->CurrentLineNumber,
+					PositionInSource: StartingIndex,
+					LengthInSource: EndIndex As i16
+				}
 				
 				i8* IncludePathBuffer := IncludePath->Buffer
 				
 				i8 IsLibraryInclude := IncludePath->ASCIICharacterAt(0) = '$'
+				i8 IsPlatformInclude := IncludePath->ASCIICharacterAt(0) = '@'
 				
 				if (IsLibraryInclude) {
 					; $Path => $COMPILER_DIR/src/lib/Path
@@ -864,6 +873,23 @@ struct LexerState {
 					
 					MoveMemory(IncludePathBuffer, this->Config->LibraryDirectory, LibraryDirectoryPathLength)
 					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength, IncludePath->Buffer + 1, IncludePath->Length - 1)
+				}
+				else if (IsPlatformInclude) {
+					; $Path => $COMPILER_DIR/src/lib/$PLATFORM/Path
+
+					if !(this->Config->PlatformName) {
+						IncludePathBlame.Error("Can't use platform relative include without specifying a platform")
+					}
+
+					i32 LibraryDirectoryPathLength := StringLength(this->Config->LibraryDirectory)
+					i32 PlatformNameLength := StringLength(this->Config->PlatformName)
+
+					IncludePathBuffer := Alloc(LibraryDirectoryPathLength + 1 + PlatformNameLength + IncludePath->Length) ; One extra for the path delimeter
+
+					MoveMemory(IncludePathBuffer, this->Config->LibraryDirectory, LibraryDirectoryPathLength)
+					IncludePathBuffer[LibraryDirectoryPathLength] := '/'
+					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1, this->Config->PlatformName, PlatformNameLength)
+					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1 + PlatformNameLength, IncludePath->Buffer + 1, IncludePath->Length - 1)
 				}
 				
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
@@ -888,14 +914,6 @@ struct LexerState {
 				Print("Including file: '")
 				IncludePath->Print()
 				Print("'\n")
-				
-				ErrorContext IncludePathBlame {
-					SourceFilePath: this->SourceFilePath,
-					Source: this->SourceText,
-					LineNumber: this->CurrentLineNumber,
-					PositionInSource: StartingIndex,
-					LengthInSource: EndIndex As i16
-				}
 				
 				i32 IncludeFileSize := 0
 				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize, &IncludePathBlame)

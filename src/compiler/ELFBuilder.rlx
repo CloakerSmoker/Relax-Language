@@ -1,8 +1,16 @@
 i32 ELF_MAGIC               := 0x464C457F ; 0x7f 'ELF' magic
 i8  ELF_BITNESS_64          := 2          ; 1 = 32 bit, 2 = 64 bit
 i8  ELF_ENDIAN_LITTLE       := 1          ; 1 = Little endian
+
 i8  ELF_ABI_SYSTEMV         := 0          ; 0 = SystemV
 i8  ELF_ABI_VERSION_SYSTEMV := 0
+
+i8 ELF_ABI_LINUX := 3
+i8 ELF_ABI_VERSION_LINUX := 0
+
+i8 ELF_ABI_FREEBSD := 9
+i8 ELF_ABI_VERSION_FREEBSD := 0
+
 i16 ELF_FILETYPE_EXECUTABLE := 0x02
 i16 ELF_MACHINE_AMD64       := 0x3E
 i32 ELF_VERSION             := 1
@@ -54,6 +62,20 @@ struct ELFSectionHeader {
 	i64 EntrySize
 }
 
+i32 ELF_NOTE_TYPE_FREEBSD_ABI_TAG := 1
+i32 ELF_NOTE_DATA_FREEBSD_ABI_TAG_13_1 :=  1301000
+
+struct ELFNoteSection {
+	i32 NameLength
+	i32 DescriptionLength
+	i32 Type
+	i8[0] Name
+	
+	define void* Body() {
+		return this~>Name +this->NameLength 
+	}
+}
+
 struct ELFHeader unaligned {
 	i32 Magic
 	i8 Bitness
@@ -87,15 +109,15 @@ struct ELFHeader unaligned {
 
 	i16 SectionNameSectionIndex
 
-	define void WriteDefaults() {
-		; Default values for a statically linked little endian 64 bit x86-64 executable using the SystemV ABI
+	define void Populate(i8 ABI, i8 ABIVersion) {
+		; Default values for a statically linked little endian 64 bit x86-64 executable using the specified ABI
 		
 		this->Magic             := ELF_MAGIC
 		this->Bitness           := ELF_BITNESS_64
 		this->Endianness        := ELF_ENDIAN_LITTLE
 		this->UseCurrentVersion := true
-		this->ABI               := ELF_ABI_SYSTEMV
-		this->ABIVersion        := ELF_ABI_VERSION_SYSTEMV
+		this->ABI               := ABI
+		this->ABIVersion        := ABIVersion
 		this->FileType          := ELF_FILETYPE_EXECUTABLE
 		this->MachineType       := ELF_MACHINE_AMD64
 		this->ELFVersion        := ELF_VERSION
@@ -238,7 +260,7 @@ struct ELFBuilder {
 		DataSection->FileSize       := Size
 	}
 
-	static ELFBuilder* New() {
+	static ELFBuilder* New(i8 ABI, i8 ABIVersion) {
 		ELFBuilder* this := Alloc(#ELFBuilder)
 
 		this->BufferSize := #ELFHeader
@@ -247,7 +269,7 @@ struct ELFBuilder {
 		this->ProgramHeaders := Alloc(8)
 		this->SectionHeaders := Alloc(8)
 		
-		this->Header->WriteDefaults()
+		this->Header->Populate(ABI, ABIVersion)
 		
 		ELFProgramHeader* PHDR := this->AppendProgramHeader()
 		this->PHDR := PHDR
