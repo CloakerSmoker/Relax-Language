@@ -1,7 +1,7 @@
 
 
 #Require "./src/compiler/DWARF/Stream.rlx"
-#Require "./src/lib/HashMap.rlx"
+#Require "$/HashMap.rlx"
 
 i8 DWARF_AMD64_MINIMUM_INSTRUCTION_LENGTH := 1
 i8 DWARF_AMD64_MAXIMUM_OPERATIONS_PER_INSTRUCTION := 1

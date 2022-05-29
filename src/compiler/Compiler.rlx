@@ -1108,9 +1108,19 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	EmitLeave(Compiler)
 	
-	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF) {
+	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF && Compiler->Config->ELFABI != ELF_ABI_SYSTEMV) {
 		EmitMove_R64_R64(Compiler, RDI, RAX)
-		EmitMove_R32_I32(Compiler, RAX, 60)
+
+		i32 LINUX_SYSCALL_EXIT := 60
+		i32 FREEBSD_13_1_SYSCALL_EXIT := 1
+
+		if (Compiler->Config->ELFABI = ELF_ABI_LINUX) {
+			EmitMove_R32_I32(Compiler, RAX, LINUX_SYSCALL_EXIT)
+		}
+		else if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
+			EmitMove_R32_I32(Compiler, RAX, FREEBSD_13_1_SYSCALL_EXIT)
+		}
+
 		EmitSysCall(Compiler)
 	}
 	else {

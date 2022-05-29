@@ -1,14 +1,4 @@
-DllImport i64 GetCurrentProcess() {Kernel32.dll, GetCurrentProcess}
-DllImport void TerminateProcess(i64, i32) {Kernel32.dll, TerminateProcess}
-
-define void Exit(i32 ExitCode) {
-	windows {
-		TerminateProcess(GetCurrentProcess(), ExitCode)
-	}
-	linux {
-		syscall:(60, ExitCode)
-	}
-}
+#Require "$/Exit.rlx"
 
 declare void PrettyError(ErrorContext*, i8*, i8)
 
@@ -19,7 +9,11 @@ define i8* OpenAndRead(i8* FilePath, i32* OutFileSize, ErrorContext* Blame) {
 		SwapOutputStream()
 		
 		if (Blame) {
-			PrettyError(Blame, "Could not open file", Red | Bright)
+			i8[200] Message
+			i32 Length := FormatString(Message, 200, "Could not open '%s'", FilePath)
+			Message[Length] := 0
+
+			PrettyError(Blame, Message, Red | Bright)
 		}
 		else {
 			Print("Could not open file: '%s'\n", FilePath)
@@ -89,7 +83,11 @@ struct BuildConfig {
 	i8 DumpInfo
 	i8 DebugMode
 	i8 LineEnding
-	i16 PESubsystem
+
+	union {
+		i16 PESubsystem
+		i8 ELFABI
+	}
 }
 
 declare void PrettyError(ErrorContext*, i8*, i8)

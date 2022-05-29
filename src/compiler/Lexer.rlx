@@ -829,6 +829,12 @@ struct LexerState {
 					this->GetNextCharacter()
 					NextCharacter := this->PeekNextCharacter()
 				}
+				else if (NextCharacter = '@') {
+					; Same as above, but to do a platform-relative include
+
+					this->GetNextCharacter()
+					NextCharacter := this->PeekNextCharacter()
+				}
 				
 				while (IsPath(NextCharacter, ExpectCloseQuote) && !this->AtEnd()) {
 					NextCharacter := this->GetNextCharacter()

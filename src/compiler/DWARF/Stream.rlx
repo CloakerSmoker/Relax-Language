@@ -1,5 +1,5 @@
-#Require "./src/lib/Memory.rlx"
-#Require "./src/lib/Console.rlx"
+#Require "$/Memory.rlx"
+#Require "$/Console.rlx"
 
 struct DWARFStream {
 	union {
