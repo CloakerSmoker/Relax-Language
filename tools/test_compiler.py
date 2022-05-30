@@ -24,8 +24,8 @@ platform_extension = 'exe'
 run_command_format = '{}.{} {}'
 expected_exitcode = 1
 
-if running_on == 'Linux':
-    compile_command_format = f'{compile_command_format}.elf" --elf --debug'
+if running_on == 'Linux' or running_on == 'FreeBSD':
+    compile_command_format = f'{compile_command_format}.elf" --elf --debug --' + running_on.lower()
     platform_extension = 'elf'
     run_command_format = f'{run_command_format}'
     expected_exitcode = 0

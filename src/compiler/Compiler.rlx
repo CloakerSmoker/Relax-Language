@@ -947,11 +947,19 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 			so mov rdi, [rsp+8] will get argc, and
 			lea rsi, [rsp+16] will get argv
 			which are then moved into the local ArgC/ArgV variables by the default parameter saving behavior
+
+			NOTE: FreeBSD aligns the stack before calling the entrypoint, which is super annoying to deal with here.
+				However, the CRT startup code assumes that RDI points to argc, so that's what we do too.
 		*/
 		
-		;EmitMove_RX_RIX_DISP8(Compiler, RDI, RBP, 8, 8)
-		EmitMove_RX_RIX_DISPX(Compiler, RDI, RBP, 8, true, 8)
-		EmitLea_R64_R64_DISP8(Compiler, RSI, RBP, 16)
+		if (Compiler->Config->ELFABI = ELF_ABI_LINUX) {
+			EmitMove_RX_RIX_DISPX(Compiler, RDI, RBP, 0x8, true, 8)
+			EmitLea_R64_R64_DISP8(Compiler, RSI, RBP, 0x10)
+		}
+		else if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
+			EmitLea_R64_R64_DISP8(Compiler, RSI, RDI, 0x8)
+			EmitMove_RX_RIX(Compiler, RDI, RDI, 8)
+		}
 	}
 	
 	if (Compiler->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
@@ -1234,10 +1242,20 @@ define void CompileReturn(CompilerState* Compiler, ASTNode* ReturnExpression) {
 	EmitLeave(Compiler)
 	
 	if (Compiler->CompilingMain && Compiler->Config->OutputFormat = OUTPUT_ELF) {
-		/* If returning from Main() on Linux, actually call sys_exit() to ensure that the program exits correctly. */
+		/* If returning from Main() on Linux/BSD, actually call sys_exit() to ensure that the program exits correctly. */
 		
 		EmitMove_R64_R64(Compiler, RDI, RAX)
-		EmitMove_R32_I32(Compiler, RAX, 60)
+
+		i32 LINUX_SYSCALL_EXIT := 60
+		i32 FREEBSD_13_1_SYSCALL_EXIT := 1
+
+		if (Compiler->Config->ELFABI = ELF_ABI_LINUX) {
+			EmitMove_R32_I32(Compiler, RAX, LINUX_SYSCALL_EXIT)
+		}
+		else if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
+			EmitMove_R32_I32(Compiler, RAX, FREEBSD_13_1_SYSCALL_EXIT)
+		}
+
 		EmitSysCall(Compiler)
 	}
 	else {

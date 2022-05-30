@@ -781,7 +781,7 @@ define void EmitAnd_RX_IX(CompilerState* Compiler, i8 TargetRegister, i32 Mask, 
 	else if (Size = 2) {
 		PushI16(Compiler, Mask As i16)
 	}
-	else if (Size = 4) {
+	else if (Size = 4 || Size = 8) {
 		PushI32(Compiler, Mask)
 	}
 }

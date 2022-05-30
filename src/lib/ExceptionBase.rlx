@@ -1,3 +1,5 @@
+#Require "$/Exit.rlx"
+
 define void RestoreHandlerContextAndTransferControl(i64 Code, void* Handler, void* OldRBP, void* OldRSP) asm {
 	; Restores the execution context to how the function containing the handler expects, and then
 	;  calls the handler passing the exception code
@@ -91,7 +93,7 @@ define void CallUnhandledExceptionHandler(i64 Code) {
 		CallUnhandledExceptionFilter(Code, UnhandledExceptionHandler)
 	}
 	
-	TerminateAfterUnhandledException(Code)
+	Exit(Code As i32)
 }
 
 define void Throw(i64 Code) {

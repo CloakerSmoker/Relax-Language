@@ -1,27 +1,7 @@
-DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
-DllImport i8 WriteFile(i64, i8*, i32, i32*, i64) {Kernel32.dll, WriteFile}
-
-define i32 ALen(i8* AString) {
-	for (i32 Length := 0, AString[Length] != 0, Length += 1) {
-	}
-	
-	return Length
-}
-define i32 AWrite(i8* AString) {
-	windows {
-		i32 BytesWritten := 0
-		
-		WriteFile(GetStdHandle(-11), AString, ALen(AString), &BytesWritten, 0)
-		
-		return BytesWritten
-	}
-	linux {
-		return syscall:(1, 1, AString, ALen(AString)) As i32
-	}
-}
+#Require "$/ConsoleBase.rlx"
 
 define i32 Main() {
-	AWrite("This is a basic test")
+	PrintCharacters("This is a basic test", StringLength("This is a basic test"))
 	
 	return 0
 }

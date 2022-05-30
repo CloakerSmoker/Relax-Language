@@ -61,6 +61,8 @@ define i8 DirectoryWalk(i8* DirectoryPath, void* VisitFunction) {
 
     Free(FixedDirectoryPath)
     FindClose(FindHandle)
+
+    return 0
 }
 
 DllImport i32 GetCurrentDirectory(i32, i8*) {Kernel32.dll, GetCurrentDirectoryA}
@@ -73,77 +75,7 @@ define i8* GetWorkingDirectory() {
 	return Buffer
 }
 
-define i8* MakeAbsolute(i8* Path) {
-	if (Path[0] != '/') {
-		i8* WorkingDirectory := GetWorkingDirectory()
 
-		i32 PathLength := StringLength(Path)
-		i32 WorkingDirectoryLength := StringLength(WorkingDirectory)
-
-		i8* Absolute := Alloc(WorkingDirectoryLength + 1 + PathLength + 1)
-
-		MoveMemory(Absolute, WorkingDirectory, WorkingDirectoryLength)
-		Absolute[WorkingDirectoryLength] := '/'
-		MoveMemory(&Absolute[WorkingDirectoryLength] + 1, Path, PathLength)
-
-		Free(WorkingDirectory)
-
-		return Absolute
-	}
-
-	return Path
-}
-
-define i8* ExpandPath(i8* Path) {
-	i32 Length := StringLength(Path)
-
-	i8* Result := Alloc(Length + 2)
-	i32 ResultIndex := 0
-
-	i8* CurrentPart := Path
-
-	for (i32 Index := 0, Index < Length, Index++) {
-		i8 AtSeperator := Path[Index] = '/'
-		i8 AtEnd := Index + 1 = Length
-
-		if (AtSeperator || AtEnd) {
-			if (AtSeperator) {
-				Path[Index] := 0
-			}
-			else {
-				Path[Index + AtEnd] := 0
-			}
-
-			if (StringEquals(CurrentPart, ".")) {
-
-			}
-			else if (StringEquals(CurrentPart, "..")) {
-				for (i32 ReverseIndex := ResultIndex - 1, ReverseIndex >= 0, ReverseIndex--) {
-					if (Result[ReverseIndex] = '/') {
-						Result[ReverseIndex] := 0
-						ResultIndex := ReverseIndex
-						break
-					}
-				}
-			}
-			else {
-				Result[ResultIndex++] := '/'
-
-				MoveMemory(&Result[ResultIndex], CurrentPart, StringLength(CurrentPart))
-				ResultIndex += StringLength(CurrentPart)
-			}
-
-			if (AtEnd && AtSeperator) {
-				Result[ResultIndex++] := '/'
-				Result[ResultIndex] := 0
-			}
-
-			CurrentPart := &Path[Index + 1]
-		}
-	}
-
-	return Result + 1
-}
 
 DllImport i32 GetFullPathName(i8*, i32, i8*, i8*) {Kernel32.dll, GetFullPathNameA}
 

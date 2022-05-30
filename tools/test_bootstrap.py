@@ -21,14 +21,16 @@ path_join = os.path.join
 bin_dir = path_join(cwd, 'build')
 tools_dir = path_join(cwd, 'tools')
 
+all_platforms = [('windows', 'exe'), ('linux', 'elf'), ('freebsd', 'elf')]
+
 running_on = platform.system()
 
-compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug'
+compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug --' + running_on.lower()
 platform_extension = 'exe'
 python = sys.executable if running_on == 'Linux' else '"' + sys.executable + '"'
 expected_returncode = 1
 
-if running_on == 'Linux':
+if running_on == 'Linux' or running_on == 'FreeBSD':
     platform_extension = 'elf'
     expected_returncode = 0
 elif running_on != 'Windows':
@@ -87,29 +89,15 @@ safe_compiler = path_join(bin_dir, f'new_compiler.{platform_extension}')
 
 move(compiler_output, safe_compiler)
 
-if platform_extension == 'exe':
-    elf_compile_output = path_join(bin_dir, 'new_compiler.elf')
-    elf_compile_command = compile_command_format.format(safe_compiler, elf_compile_output) + ' --elf --debug'
+for platform, extension in all_platforms:
+    output = path_join(bin_dir, f'{platform}_new_compiler.elf')
+    command = compile_command_format.format(safe_compiler, output) + ' --elf --debug --' + platform
 
-    elf_compile_result = subprocess.run(elf_compile_command, cwd=cwd, shell=True, capture_output=True)
+    result = subprocess.run(command, cwd=cwd, shell=True, capture_output=True)
+    stderr_text = result.stderr.decode('UTF-8')
 
-    elf_stderr_text = elf_compile_result.stderr.decode('UTF-8')
-
-    if elf_compile_result.returncode != 1 or len(elf_stderr_text) != 0:
-        print(f'{Fore.LIGHTRED_EX}ELF Compile error ({hex(elf_compile_result.returncode)}):\n{elf_stderr_text}', file=sys.stderr)
+    if result.returncode != expected_returncode or len(stderr_text) != 0:
+        print(f'{Fore.LIGHTRED_EX}{platform} compile error ({hex(result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
-    
-    print(f'{Fore.LIGHTGREEN_EX}ELF Compile complete.')
-if platform_extension == 'elf':
-    exe_compile_output = path_join(bin_dir, 'new_compiler.exe')
-    exe_compile_command = compile_command_format.format(safe_compiler, exe_compile_output) + ' --pe'
-    
-    exe_compile_result = subprocess.run(exe_compile_command, cwd=cwd, shell=True, capture_output=True)
 
-    exe_stderr_text = exe_compile_result.stderr.decode('UTF-8')
-
-    if exe_compile_result.returncode != 0 or len(exe_stderr_text) != 0:
-        print(f'{Fore.LIGHTRED_EX}PE Compile error ({hex(exe_compile_result.returncode)}):\n{exe_stderr_text}', file=sys.stderr)
-        sys.exit(1)
-    
-    print(f'{Fore.LIGHTGREEN_EX}PE Compile complete.')
+    print(f'{Fore.LIGHTGREEN_EX}{platform} compile complete')
