@@ -8,6 +8,7 @@ from shutil import rmtree
 from shutil import move
 from colorama import init, Fore, Back, Style
 from difflib import SequenceMatcher
+import argparse
 
 # Uses stable_version.exe to compile the most recent version of the source, and then 
 #  tests the new version of the compiled source (to ensure source changes haven't broken any part of the compiler)
@@ -37,10 +38,15 @@ elif running_on != 'Windows':
     print('Unsupported platform.', file=sys.stderr)
     sys.exit(1)
 
-recursion_count = 3
+parser = argparse.ArgumentParser(description='Test lots of compiler builds')
+parser.add_argument('iterations', type=int, nargs='?', default=3, help='number of times to have the compiler compile the compiler')
+parser.add_argument('-r', '--release', action="store_true", help='should the output compilers replace the current/input compilers')
+args = parser.parse_args()
 
-if len(sys.argv) >= 2:
-    recursion_count = int(sys.argv[1])
+recursion_count = args.iterations
+
+if args.release:
+	print('Building for release')
 
 compile_command_format += ' ' + ' '.join(sys.argv[2:])
 
@@ -85,12 +91,12 @@ for i in range(0, recursion_count):
 
 print(f'{Fore.LIGHTGREEN_EX}Output file(s) passed all tests.')
 
-safe_compiler = path_join(bin_dir, f'new_compiler.{platform_extension}')
+safe_compiler = path_join(bin_dir, f'safe_compiler.{platform_extension}')
 
 move(compiler_output, safe_compiler)
 
 for platform, extension in all_platforms:
-    output = path_join(bin_dir, f'{platform}_new_compiler.elf')
+    output = path_join(bin_dir, f'{platform}_new_compiler.{extension}')
     command = compile_command_format.format(safe_compiler, output) + ' --elf --debug --' + platform
 
     result = subprocess.run(command, cwd=cwd, shell=True, capture_output=True)
@@ -99,5 +105,8 @@ for platform, extension in all_platforms:
     if result.returncode != expected_returncode or len(stderr_text) != 0:
         print(f'{Fore.LIGHTRED_EX}{platform} compile error ({hex(result.returncode)}):\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
+
+    if args.release:
+        move(output, path_join(bin_dir, f'{platform}_compiler.{extension}'))
 
     print(f'{Fore.LIGHTGREEN_EX}{platform} compile complete')
