@@ -37,5 +37,5 @@ jobs:
     - name: Run Tests
       run: |
         cd $GITHUB_WORKSPACE
-        chmod +x ./build/compiler.elf
+        chmod +x ./build/linux_compiler.elf
         python ./tools/test_bootstrap.py 5
