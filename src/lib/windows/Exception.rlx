@@ -1,0 +1,118 @@
+struct WindowsExceptionRecord {
+	i32 ExceptionCode,
+	i32 ExceptionFlag,
+	WindowsExceptionRecord* ExceptionRecord,
+	void* ExceptionAddress,
+	i32 ExceptionParameters
+}
+
+struct WindowsContextRecord {
+    i64 P1Home,
+    i64 P2Home,
+    i64 P3Home,
+    i64 P4Home,
+    i64 P5Home,
+    i64 P6Home,
+
+    i32 ContextFlags,
+    i32 MxCsr,
+
+    i16 CS,
+    i16 DS,
+    i16 ES,
+    i16 FS,
+    i16 GS,
+    i16 SS,
+    i32 EFlags,
+
+    i64 DR0,
+    i64 DR1,
+    i64 DR2,
+    i64 DR3,
+    i64 DR6,
+    i64 DR7,
+
+    i64 RAX,
+    i64 RCX,
+    i64 RDX,
+    i64 RBX,
+    i64* RSP,
+    i64* RBP,
+    i64 RSI,
+    i64 RDI,
+    i64 R8,
+    i64 R9,
+    i64 R10,
+    i64 R11,
+    i64 R12,
+    i64 R13,
+    i64 R14,
+    i64 R15,
+
+	void* RIP
+}
+
+struct WindowsExceptionPointers {
+	WindowsExceptionRecord* ExceptionRecord,
+	WindowsContextRecord* ContextRecord
+}
+
+define void PushX64Volitile() asm {
+	pop, rax
+	push, rbx
+	push, rdi
+	push, rsi
+	push, r12
+	push, r13
+	push, r14
+	push, r15
+	jmp, rax
+}
+define void PopX64Volitile() asm {
+	pop, rax
+	pop, r15
+	pop, r14
+	pop, r13
+	pop, r12
+	pop, rsi
+	pop, rdi
+	pop, rbx
+	jmp, rax
+}
+
+define i32 WindowsExceptionFilter(WindowsExceptionPointers* ExceptionInfo) x64 {
+	PushX64Volitile()
+
+	WindowsContextRecord* Context := ExceptionInfo->ContextRecord
+	StackFrame* Handler := FindHandler(Context->RBP)
+
+	Context->RDI := ExceptionInfo->ExceptionRecord->ExceptionCode
+
+	if (Handler = null) {
+		Context->RIP := &CallUnhandledExceptionHandler
+	}
+	else {
+		Context->RBP := Handler As i64*
+		Context->RSP := (Handler->LastFrame - 1) As i64*
+		Context->RIP := Handler->ReturnAddress
+	}
+
+	PopX64Volitile()
+
+	return -1
+}
+
+DllImport i8 SetErrorMode(i32) {Kernel32.dll, SetErrorMode}
+DllImport void* SetUnhandledExceptionFilter(void*) {Kernel32.dll, SetUnhandledExceptionFilter}
+DllImport void* AddVectoredExceptionHandler(i32, void*) {Kernel32.dll, AddVectoredExceptionHandler}
+
+define void* SetupExceptionTranslation() {
+    SetErrorMode(1)
+
+    SetUnhandledExceptionFilter(&WindowsExceptionFilter)
+    AddVectoredExceptionHandler(1, &WindowsExceptionFilter)
+
+    return null
+}
+
+void* DummyNameForExceptionTranslation := SetupExceptionTranslation()

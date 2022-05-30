@@ -27,7 +27,7 @@ running_on = platform.system()
 
 compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug --' + running_on.lower()
 platform_extension = 'exe'
-python = sys.executable if running_on == 'Linux' else '"' + sys.executable + '"'
+python =  '"' + sys.executable + '"' if running_on == 'Windows' else sys.executable
 expected_returncode = 1
 
 if running_on == 'Linux' or running_on == 'FreeBSD':
@@ -44,7 +44,7 @@ if len(sys.argv) >= 2:
 
 compile_command_format += ' ' + ' '.join(sys.argv[2:])
 
-safe_compiler = path_join(bin_dir, f'compiler.{platform_extension}')
+safe_compiler = path_join(bin_dir, f'{running_on.lower()}_compiler.{platform_extension}')
 
 for i in range(0, recursion_count):
     compiler_output = path_join(bin_dir, f'testing{i}.{platform_extension}')

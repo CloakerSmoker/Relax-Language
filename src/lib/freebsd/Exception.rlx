@@ -1,0 +1,98 @@
+struct SigInfo {
+	i32 SignalNumber
+	i32 ErrorNumber
+	i32 SignalCode
+	i32 TrapNumber
+
+	void* Address
+}
+
+struct SigContext {
+    void*[2] Dummy
+
+    i64 RDI
+    i64 RSI
+    i64 RDX
+    i64 RCX
+    i64 R8
+    i64 R9
+    i64 RAX
+    i64 RBX
+    i64* RBP
+    i64 R10
+	i64 R11
+	i64 R12
+	i64 R13
+	i64 R14
+	i64 R15
+	i32 TrapNumber
+	i16 FS
+	i16 GS
+	i64 Address
+	i32 Flags
+	i16 ES
+	i16 DS
+	i64 Error
+	void* RIP
+	i64 CS
+	i64 RFlags
+	i64* RSP
+	i64 SS
+}
+
+struct SigUserContext {
+	i64 Flags
+	SigContext Registers
+}
+
+void* SIG_DEFAULT := 0 As void*
+void* SIG_IGNORE := 1 As void*
+
+i32 SA_RESETHAND := 0x04
+i32 SA_SIGINFO := 0x40
+
+struct SigAction {
+	void* Handler
+	i64 Flags
+	i64[8] Mask
+}
+
+define void SigHandler(i32 SignalNumber, SigInfo* Info, SigUserContext* UserContext) {
+	SigContext* Context := UserContext~>Registers
+
+	;Print("RIP %x\n", Context->RIP)
+
+	StackFrame* Handler := FindHandler(Context->RBP)
+
+	Context->RDI := Info->SignalNumber
+
+	if (Handler = null) {
+		Context->RIP := &CallUnhandledExceptionHandler
+	}
+	else {
+		Context->RBP := Handler As i64*
+		Context->RSP := (Handler->LastFrame - 1) As i64*
+		Context->RIP := Handler->ReturnAddress
+	}
+}
+
+SigAction SignalToExceptionHandler {
+	Handler: &SigHandler,
+	Flags: SA_SIGINFO
+}
+
+i32 SIGILL  := 4
+i32 SIGBUS  := 20
+i32 SIGFPE  := 8
+i32 SIGSEGV := 11
+
+define void* SetupExceptionTranslation() {
+    syscall:(416, SIGILL, &SignalToExceptionHandler, null)
+    syscall:(416, SIGBUS, &SignalToExceptionHandler, null)
+    syscall:(416, SIGFPE, &SignalToExceptionHandler, null)
+    syscall:(416, SIGSEGV, &SignalToExceptionHandler, null)
+
+    return null
+}
+
+void* DummyNameForExceptionTranslation := SetupExceptionTranslation()
