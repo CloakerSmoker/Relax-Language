@@ -1,0 +1,425 @@
+;#Require "$/Console.rlx"
+#Require "$/Memory.rlx"
+
+i32 DIRECTION_LEFT := 0
+i32 DIRECTION_RIGHT := 1
+
+struct AVLTreeNode {
+	AVLTreeNode* Left
+	AVLTreeNode* Right
+	i64 Key
+	i32 LeftSize
+	i32 ValueSize
+	
+	void[0] Value
+	
+	define void* ValueAsPointer() {
+		if (this) {
+			return *(this->Value As void**)
+		}
+		
+		return null
+	}
+
+	define i32 GetHeight() {
+		if (this != null) {
+			i32 LeftHeight := this->Left->GetHeight()
+			i32 RightHeight := this->Right->GetHeight()
+	
+			if (LeftHeight < RightHeight) {
+				return RightHeight + 1
+			}
+			else {
+				return LeftHeight + 1
+			}
+		}
+		else {
+			return 0
+		}
+	}
+
+	define i32 GetBalance() {
+		if (this != null) {
+			return this->Right->GetHeight() - this->Left->GetHeight()
+		}
+		else {
+			return 0
+		}
+	}
+
+	declare i32 Count()
+
+	define AVLTreeNode* RightRotate() {
+		;Print("RR\n")
+
+		AVLTreeNode* NewRoot := this->Left
+		AVLTreeNode* OldRight := NewRoot->Right
+
+		NewRoot->Right := this
+		this->Left := OldRight
+
+		this->LeftSize := this->Left->Count()
+		NewRoot->LeftSize := NewRoot->Left->Count()
+
+		return NewRoot
+	}
+
+	define AVLTreeNode* LeftRotate() {
+		;Print("LR\n")
+
+		AVLTreeNode* NewRoot := this->Right
+		AVLTreeNode* OldLeft := NewRoot->Left
+
+		NewRoot->Left := this
+		this->Right := OldLeft
+
+		this->LeftSize := this->Left->Count()
+		NewRoot->LeftSize := NewRoot->Left->Count()
+
+		return NewRoot
+	}
+
+	define AVLTreeNode* LeftRightRotate() {
+		this->Left := this->Left->LeftRotate()
+
+		return this->RightRotate()
+	}
+	
+	define AVLTreeNode* RightLeftRotate() {
+		this->Right := this->Right->RightRotate()
+
+		return this->LeftRotate()
+	}
+
+	define AVLTreeNode* Balance() {
+		i32 Balance := this->GetBalance()
+
+		if (Balance < -1) {
+			if (this->Left->GetBalance() < 0) {
+				return this->RightRotate()
+			}
+			else {
+				return this->LeftRightRotate()
+			}
+		}
+		else if (Balance > 1) {
+			if (this->Right->GetBalance() >= 0) {
+				return this->LeftRotate()
+			}
+			else {
+				return this->RightLeftRotate()
+			}
+		}
+
+		return this
+	}
+	
+	define void SetValue(void* Value) {
+		if (this->ValueSize && Value) {
+			MoveMemory(this~>Value, Value, this->ValueSize)
+		}
+	}
+	define void* GetValue() {
+		return this~>Value
+	}
+
+	declare AVLTreeNode* Insert(i64, void*)
+
+	define void InsertHelper(AVLTreeNode** Destination, i64 Key, void* Value) {
+		if (*Destination = null) {
+			AVLTreeNode* NewChild := Alloc(#AVLTreeNode + this->ValueSize)
+			
+			NewChild->ValueSize := this->ValueSize
+			NewChild->SetValue(Value)
+
+			NewChild->Key := Key
+
+			*Destination := NewChild
+		}
+		else {
+			*Destination := (*Destination)->Insert(Key, Value)
+		}
+	}
+
+	define AVLTreeNode* Insert(i64 Key, void* Value) {
+		if (this->Key != Key) {
+			if (Key > this->Key) {
+				this->InsertHelper(this~>Right, Key, Value)
+			}
+			else {
+				this->LeftSize += 1
+				this->InsertHelper(this~>Left, Key, Value)
+			}
+			
+			return this->Balance()
+		}
+		
+		this->SetValue(Value)
+
+		return this
+	}
+	define AVLTreeNode* Insert(i64 Key) {
+		return this->Insert(Key, null)
+	}
+
+	define AVLTreeNode* Remove(i64 Key) {
+		if (this->Key = Key) {
+			if (this->Left = null || this->Right = null) {
+				AVLTreeNode* Survivor := this->Left
+
+				if (Survivor = null) {
+					Survivor := this->Right
+				}
+				
+				if (Survivor) {
+					MoveMemory(this, Survivor, #AVLTreeNode)
+					Free(Survivor)
+
+					return this
+				}
+				else {
+					Free(this)
+
+					return null
+				}
+			}
+			else {
+				AVLTreeNode* SmallestRightNode := this->Right
+
+				while (SmallestRightNode->Left != null) {
+					SmallestRightNode := SmallestRightNode->Left
+				}
+
+				this->Key := SmallestRightNode->Key
+				this->Right := this->Right->Remove(SmallestRightNode->Key)
+			}
+		}
+		else if (Key > this->Key) {
+			this->Right := this->Right->Remove(Key)
+		}
+		else {
+			this->LeftSize -= 1
+			this->Left := this->Left->Remove(Key)
+		}
+		
+		return this->Balance()
+	}
+
+	define i8 Has(i64 Key) {
+		if (this = null) {
+			return 0
+		}
+		else if (this->Key = Key) {
+			return 1
+		}
+		else {
+			if (Key > this->Key) {
+				return this->Right->Has(Key)
+			}
+			else {
+				return this->Left->Has(Key)
+			}
+		}
+	}
+	
+	define AVLTreeNode* Get(i64 Key) {
+		if (this = null) {
+			return null
+		}
+		else if (this->Key = Key) {
+			return this
+		}
+		else {
+			if (Key > this->Key) {
+				return this->Right->Get(Key)
+			}
+			else {
+				return this->Left->Get(Key)
+			}
+		}
+	}
+
+	define AVLTreeNode* At(i32 Index) {
+		if (Index = this->LeftSize) {
+			return this
+		}
+		else {
+			if (Index < this->LeftSize) {
+				return this->Left->At(Index)
+			}
+			else {
+				return this->Right->At(Index - this->LeftSize - 1)
+			}
+		}
+	}
+
+	define i32 IndexOf(i32 TotalLeftSize, i64 Key) {
+		if (this->Key = Key ) {
+			return TotalLeftSize + this->LeftSize
+		}
+		else {
+			if (Key < this->Key) {
+				return this->Left->IndexOf(TotalLeftSize, Key)
+			}
+			else {
+				return this->Right->IndexOf(TotalLeftSize + this->LeftSize + 1, Key)
+			}
+		}
+	}
+
+	define i32 IndexOf(i64 Key) {
+		return this->IndexOf(0, Key)
+	}
+
+	define i32 Count() {
+		if (this = null) {
+			return 0
+		}
+
+		return this->LeftSize + this->Right->Count() + 1
+	}
+
+	define void Print(i32 Depth) {
+		for (i32 Index := 0, Index < Depth, Index++) {
+			Print("    ")
+		}
+
+		if (this = null) {
+			Print("nil\n")
+		}
+		else {
+			Print("%x %x (%i, %i) [%i]:\n", this->Key, *(this->Value As void**), this->GetBalance(), this->GetHeight(), this->LeftSize)
+
+			this->Left->Print(Depth + 1)
+			this->Right->Print(Depth + 1)
+		}
+
+	}
+}
+
+struct AVLTree {
+	AVLTreeNode* Root
+	i32 ValueSize
+	
+	static AVLTree* New(i32 ValueSize) {
+		AVLTree* this := Alloc(#AVLTree)
+		
+		this->ValueSize := ValueSize
+		
+		return this
+	}
+
+	define void Insert(i64 Key, void* Value) {
+		if (this->Root = null) {
+			this->Root := Alloc(#AVLTreeNode + this->ValueSize)
+			
+			this->Root->ValueSize := this->ValueSize
+			this->Root->SetValue(Value)
+			
+			this->Root->Key := Key
+		}
+		else {
+			this->Root := this->Root->Insert(Key, Value)
+		}
+	}
+	define void Insert(i64 Key) {
+		this->Insert(Key, null)
+	}
+
+	define void Remove(i64 Key) {
+		this->Root := this->Root->Remove(Key)
+	}
+
+	define i32 Count() {
+		return this->Root->Count()
+	}
+	define i8 Has(i64 Key) {
+		return this->Root->Has(Key)
+	}
+	define AVLTreeNode* NodeAt(i32 Index) {
+		return this->Root->At(Index)
+	}
+	define i64 KeyAt(i32 Index) {
+		return this->Root->At(Index)->Key
+	}
+	define void* PointerValueAt(i32 Index) {
+		return *(this->Root->At(Index)->Value As void**)
+	}
+	define i32 IndexOf(i64 Key) {
+		return this->Root->IndexOf(Key)
+	}
+
+	define void Add(i64 Key, void* Value) {
+		if (this->Has(Key)) {
+			return
+		}
+		
+		this->Insert(Key, Value)
+	}
+	define void Add(i64 Key) {
+		this->Add(Key, null)
+	}
+	
+	define void Set(i64 Key, void* Value) {
+		if !(this->Has(Key)) {
+			return
+		}
+		
+		this->Insert(Key, Value)
+	}
+	define void Set(i64 Key) {
+		this->Set(Key, null)
+	}
+	
+	define AVLTreeNode* GetNode(i64 Key) {
+		return this->Root->Get(Key)
+	}
+	
+	define void* Get(i64 Key) {
+		AVLTreeNode* Node := this->Root->Get(Key)
+		
+		if !(Node) {
+			return null
+		}
+		
+		return Node->Value
+	}
+
+	define void Print() {
+		this->Root->Print(0)
+	}
+}
+
+;define void Main() {
+;	AVLTree* Tree := AVLTree:New(8)
+;
+;	Tree->Insert('1', "a")
+;	Tree->Print()
+;	Tree->Insert('2', "b")
+;	Tree->Print()
+;	Tree->Insert('3', "c")
+;	Tree->Print()
+;	Tree->Insert('4', "d")
+;	Tree->Print()
+;	Tree->Insert('5', "e")
+;	Tree->Print()
+;	Tree->Insert('6', "f")
+;	Tree->Print()
+;
+;	Tree->Insert('0', "g")
+;
+;	Print("%i total nodes\n", Tree->Count())
+;
+;	for (i32 Index := 0, Index < Tree->Count(), Index++) {
+;		AVLTreeNode* Node := Tree->NodeAt(Index)
+;
+;		Print("%i : %l, %c\n", Index, Node->Key, *(Node->Value As i8*))
+;	}
+;
+;	Print("%i\n", Tree->IndexOf('1'))
+;	Print("%i\n", Tree->IndexOf('2'))
+;	Print("%i\n", Tree->IndexOf('3'))
+;	Print("%i\n", Tree->IndexOf('4'))
+;	Print("%i\n", Tree->IndexOf('5'))
+;	Print("%i\n", Tree->IndexOf('6'))
+;}

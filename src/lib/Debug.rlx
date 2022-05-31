@@ -47,7 +47,7 @@ define void PrintStackDump() {
 
 define void UnhandledExceptionHandler(i64 Code) {
 	Print("\n\n^40----------------------^F0\n")
-	Print("^40Unhandled exception ^F0%x^40 with call stack:^F0\n", Code)
+	Print("^40Unhandled exception ^F0%x (%l)^40 with call stack:^F0\n", Code, Code)
 	PrintStackDump(3)
 	Print("^40Aborting...^F0\n")
 	Print("^40----------------------^F0\n\n\n")
