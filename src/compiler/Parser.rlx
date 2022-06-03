@@ -1516,7 +1516,23 @@ struct ParserState {
 		BaseEnumType->Size := 4
 		HashMap* Fields := BaseEnumType~>Fields
 		Fields->Initialize()
-		
+
+		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_AS)) {
+			ASTNode* BackingTypeNode := this->ParseTypeNode()
+			Type BackingType := BackingTypeNode->ValueType
+			
+			TypeInfo* BackingBase := GetBaseType(BackingType)
+			i32 BackingDepth := GetPointerDepth(BackingType)
+			
+			if (BackingBase->IsStructType || BackingDepth) {
+				; Invalid types for bits backing types
+				
+				BackingTypeNode->Error("Enum backing type must be a plain integer.")
+			}
+
+			BaseEnumType->Size := BackingBase->Size
+		}
+
 		Type EnumType := MakeType(BaseEnumType, 0)
 		
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for enum type body")

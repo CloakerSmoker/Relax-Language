@@ -322,6 +322,19 @@ define i32 FormatLength(i8* Format, ... Parameters) {
 	return FormatLengthPrinter.Index
 }
 
+define void* StartCountingCharactersPrinted() {
+	void* State := Printer
+	
+	FormatLengthPrinter.Index := 0
+	Printer := &FormatLengthPrinter
+	
+	return State
+}
+define i32 StopCountingCharactersPrinted(void* State) {
+	Printer := State
+	
+	return FormatLengthPrinter.Index
+}
 
 define void FormatStringPrintCharacter(PrintOutputAdapterPrototype* this, i8 Character) {
 	if (this->Index >= this->Length) {
@@ -341,5 +354,22 @@ define i32 FormatString(i8* String, i32 Length, i8* Format, ... Parameters) {
 	FormatStringPrinter->Buffer := String
 	FormatStringPrinter->Length := Length
 	FormatStringPrinter->RawPrint(Format, Parameters)
+	return FormatStringPrinter->Index
+}
+
+define void* StartCapturingCharactersPrinted(void* Buffer, i32 Length) {
+	void* State := Printer
+	
+	FormatStringPrinter->Index := 0
+	FormatStringPrinter->Buffer := Buffer
+	FormatStringPrinter->Length := Length
+	
+	Printer := FormatStringPrinter
+	
+	return State
+}
+define i32 StopCapturingCharactersPrinted(void* State) {
+	Printer := State
+	
 	return FormatStringPrinter->Index
 }
