@@ -436,7 +436,7 @@
 			
 			HashMapElement* TypeElement := this~>Types->Get(NextToken->StringValue)
 			
-			if (TypeElement) {
+			if (TypeElement && !(TypeElement->Value As TypeInfo*)->IsIncomplete) {
 				TypeInfo* StaticBase := TypeElement->Value
 				
 				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
