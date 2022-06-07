@@ -107,6 +107,6 @@ for platform, extension in all_platforms:
         sys.exit(1)
 
     if args.release:
-        move(output, path_join(bin_dir, f'{platform}_compiler.{extension}'))
+        copyfile(output, path_join(bin_dir, f'{platform}_compiler.{extension}'))
 
     print(f'{Fore.LIGHTGREEN_EX}{platform} compile complete')
