@@ -35,12 +35,7 @@ struct HashMap {
 	}
 	
 	define i64 HashString(i8* StringToHash, i32 Length) {
-		i64 HashLow := 0
-		i64 HashHigh := 0
-		
-		MD5->Hash(StringToHash, Length, &HashLow, this->IgnoreCase)
-		
-		return HashLow
+		return FNV1A(StringToHash, Length, this->IgnoreCase)
 	}
 	define i64 HashString(SafeString* StringToHash) {
 		return this->HashString(StringToHash->Buffer, StringToHash->Length)

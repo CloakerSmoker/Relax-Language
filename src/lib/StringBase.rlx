@@ -286,17 +286,28 @@ define i64 AToI(i8* String) {
 	return AToI(String, StringLength(String), 10)
 }
 
-define i64 FNV1A(void* RawBuffer, i32 Size) {
+define i64 FNV1A(void* RawBuffer, i32 Size, i8 IgnoreCase) {
 	i8* Buffer := RawBuffer
 	
 	i64 Result := 14695981039346656037
 	
-	for (i32 Index := 0, Index < Size, Index++) {
-		Result ^= Buffer[Index]
-		Result *= 1099511628211
+	if (IgnoreCase) {
+		for (i32 Index := 0, Index < Size, Index++) {
+			Result ^= Lower(Buffer[Index])
+			Result *= 1099511628211
+		}
+	}
+	else {
+		for (i32 Index := 0, Index < Size, Index++) {
+			Result ^= Buffer[Index]
+			Result *= 1099511628211
+		}
 	}
 	
 	return Result
+}
+define i64 FNV1A(void* RawBuffer, i32 Size) {
+	return FNV1A(RawBuffer, Size, false)
 }
 
 define i64 FNV1A(i8* String) {
