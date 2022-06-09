@@ -305,10 +305,10 @@ struct DWARFBuilder {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
-	define i32 StartEnum(i8* Name) {
+	define i32 StartEnum(i8* Name, i32 Size) {
 		i32 EnumOffset := this->DIEStream->StartEntry(this->EnumTypeTag)
 			this->DIEStream->AppendString(Name)
-			this->DIEStream->AppendI32(4) ; TODO: If an enum holds flags it might need to be bigger than 4 bytes
+			this->DIEStream->AppendI32(Size)
 		this->DIEStream->EndEntry()
 		
 		return EnumOffset
@@ -506,7 +506,7 @@ struct DWARFBuilder {
 			this->EndBits()
 		}
 		else if (T->IsEnum) {
-			Offset := this->StartEnum(T->Name->Buffer)
+			Offset := this->StartEnum(T->Name->Buffer, T->Size)
 			this~>Types->Set(T->Name, Offset)
 			
 			DWARFStream* NameStream := DWARFStream:Tiny()

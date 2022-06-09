@@ -1259,6 +1259,8 @@ struct ParserState {
 		i8 InUnion := false
 		i16 MaxUnionSize := 0
 		
+		this~>Types->Set("self", NewType)
+		
 		loop {
 			if !(InUnion) {
 				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
@@ -1341,7 +1343,7 @@ struct ParserState {
 				NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
 			}
 			
-			; If we're in a union, don't change the NextFieldOffset so all union fields get overlapping offsets
+			; If we're in a union, don't change the NextFielzOffset so all union fields get overlapping offsets
 			
 			NextField->Offset := NextFieldOffset
 			
@@ -1369,6 +1371,8 @@ struct ParserState {
 				break
 			}
 		}
+		
+		this~>Types->Set("self", null)
 		
 		NewType->Size := TotalSize
 		NewType->IsStructType := true

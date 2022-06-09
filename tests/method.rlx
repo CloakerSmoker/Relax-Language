@@ -32,6 +32,17 @@ struct Test {
 	static Test* New() {
 		return Alloc(#Test)
 	}
+	
+	static self* SelfNew() {
+		return Alloc(#self)
+	}
+	static self* AlternativeName(i64 Value) {
+		self* this := self:SelfNew()
+		
+		this->Value := Value
+		
+		return this
+	}
 }
 
 struct BadIdea {
@@ -73,7 +84,11 @@ define i32 Main() {
 	
 	Print(L.GetValue(90))
 	
-	Print(" %i", &Test.GetValue() != &Test.GetValue(i8))
+	Print(" %i ", &Test.GetValue() != &Test.GetValue(i8))
+	
+	Test* SelfTest := Test:AlternativeName(123)
+	
+	Print("%i", SelfTest.GetValue())
 	
 	return 0
 }
