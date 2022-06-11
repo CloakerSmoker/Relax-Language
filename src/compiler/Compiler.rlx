@@ -727,7 +727,7 @@ define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariab
 define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVariable) {
 	; Get the distance from the first global to this code
 	
-	i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index
+	i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index - 0xE6
 	
 	; Then negate it (making it the distance from this code to the first global) and add the variable's offset
 	

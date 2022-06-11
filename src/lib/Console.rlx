@@ -1,6 +1,12 @@
 #Require "$/ConsoleBase.rlx"
 #Require "$/Memory.rlx"
 
+define void ConsolePanicHandler(i8* Format, void* Args) {
+	RawPrint(Format, Args)
+}
+
+i32 CONSOLE_PANIC_HANDLER_ID := SetAllocatorPanicHandler(1, &ConsolePanicHandler)
+
 /* Basic command line to argv parser since CommandLineToArgvW has no ascii version, and ArgV needs to be ASCII  */
 define void ParseCommandLine(i8* CommandLine, i64* ArgC, i8*** ArgV) {
 	i32 Length := StringLength(CommandLine)

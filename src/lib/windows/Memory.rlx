@@ -18,3 +18,7 @@ define void* ReAlloc(void* Memory, i64 NewSize) {
 define void Free(void* Memory) {
     HeapFree(hProcessHeap, 0, Memory)
 }
+
+define i32 SetAllocatorPanicHandler(i32 Priority, void(i8*, void*) Handler) {
+	return 0
+}

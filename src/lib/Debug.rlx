@@ -53,6 +53,14 @@ define void UnhandledExceptionHandler(i64 Code) {
 	Print("^40----------------------^F0\n\n\n")
 }
 
+define void DebugPanicHandler(i8* Format, void* Args) {
+	RawPrint(Format, Args)
+	
+	UnhandledExceptionHandler('whoops')
+}
+
+i32 DEBUG_PANIC_HANDLER_ID := SetAllocatorPanicHandler(2, &DebugPanicHandler)
+
 define void* DebugInsertUnhandledExceptionHandler() {
 	UnhandledExceptionHandler := &UnhandledExceptionHandler
 	

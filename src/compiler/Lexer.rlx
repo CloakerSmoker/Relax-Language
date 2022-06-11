@@ -900,6 +900,8 @@ struct LexerState {
 				
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
 				
+				;Print("Expanded '%s' to '%s'\n", IncludePathBuffer, AbsoluteIncludePath)
+				
 				if (IsRequire) {
 					HashMapElement* FoundFile := this->Config->IncludedFiles->Get(AbsoluteIncludePath)
 					

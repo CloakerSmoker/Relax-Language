@@ -1,28 +1,57 @@
+#Require "$/Exit.rlx"
+
+void(i8*, void*) DoAllocatorPanic := null
+i32 AllocatorPanicHandlerPriority := 0
+
+define void DefaultAllocatorPanic(i8* Format, void* Args) {
+	*(null + 0x420) := 0
+}
+
+define void AllocatorPanic(i8* Format, ... Args) {
+	if (DoAllocatorPanic != null) {
+		DoAllocatorPanic(Format, Args)
+	}
+	else {
+		DefaultAllocatorPanic(Format, Args)
+	}
+	
+	Exit(-1)
+}
+
+define i32 SetAllocatorPanicHandler(i32 Priority, void(i8*, void*) Handler) {
+	if (Priority >= AllocatorPanicHandlerPriority) {
+		DoAllocatorPanic := Handler
+		AllocatorPanicHandlerPriority := Priority
+	}
+	
+	return 0
+}
+
 #Require "$/allocators/SwimmingPool.rlx"
 
 SwimmingPoolAllocator _Allocator
 SwimmingPoolAllocator* Allocator := &_Allocator
 
 define void* Alloc(i64 Size) {
-    return Allocator->Allocate(Size As i32)
+	return Allocator->Allocate(Size As i32)
 }
 
 define void Free(void* Memory) {
-    Allocator->Free(Memory)
+	Allocator->Free(Memory)
 }
 
 define void* ReAlloc(void* Memory, i64 NewSize) {
-    i32 OldSize := Allocator->AllocationSize(Memory)
-    
-    if (OldSize >= NewSize) {
-        return Memory
-    }
-    
-    void* New := Alloc(NewSize)
-    
-    FastMoveMemory(New, Memory, OldSize)
-    
-    Free(Memory)
-    
-    return New
+	i32 OldSize := Allocator->AllocationSize(Memory)
+	
+	if (OldSize >= NewSize) {
+		return Memory
+	}
+	
+	void* New := Alloc(NewSize)
+	
+	FastMoveMemory(New, Memory, OldSize)
+	
+	Free(Memory)
+	
+	return New
 }
