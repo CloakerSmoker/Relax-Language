@@ -481,15 +481,12 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 			GlobalPages += 1
 		}
 		
+		i32 ELFCodeOffset := 0x400
+		
 		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
-		Compiler->CodeBase := (0x131a + (GlobalPages * 0x1000)) As i32
+		Compiler->CodeBase := (0x1000 + ELFCodeOffset + (GlobalPages * 0x1000)) As i32
 		
-		; TODO: This number sucks, where did it come from?
-		;  It used to be 0x31A
-		;  Now it is 0x31A - 0xE6 = 0x234 (adjusted in GetGlobalMemoryOffset)
-		; Why?!?!?!?!?!??
-		
-		Compiler->DistanceBetweenGlobalsAndCode := 0x31a + (GlobalPages * 0x1000) As i32
+		Compiler->DistanceBetweenGlobalsAndCode := ELFCodeOffset + (GlobalPages * 0x1000) As i32
 	}
 	else if (Config->OutputFormat = OUTPUT_PE) {
 		Compiler->PE := BuildBuilder(Config->PESubsystem, Config->DebugMode & DEBUG_EMIT_RELOC)
@@ -596,7 +593,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 			Compiler->DWARF->WriteSections(Compiler->ELF)
 		}
 		
-		Compiler->ELF->Finalize(MainOffset, Config->ImageBase)
+		Compiler->ELF->Finalize(ELFCodeOffset, MainOffset, Config->ImageBase)
 		
 		Result := FileWrite(OutputFileHandle, Compiler->ELF->Buffer, Compiler->ELF->BufferSize)
 		BytesWritten := Compiler->ELF->BufferSize
@@ -732,7 +729,7 @@ define i32 GetVariableOffset(CompilerState* Compiler, VariableInfo* TargetVariab
 define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVariable) {
 	; Get the distance from the first global to this code
 	
-	i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index - 0xE6
+	i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index
 	
 	; Then negate it (making it the distance from this code to the first global) and add the variable's offset
 	

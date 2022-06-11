@@ -304,8 +304,8 @@ struct ELFBuilder {
 		
 		return this
 	}
-
-	define void Finalize(i32 MainOffset, i64 ImageBase) {
+	
+	define void Finalize(i32 CodeOffset, i32 MainOffset, i64 ImageBase) {
 		; Note: the data section is excluded from the size, since a program header with a FileSize of 0 and non-zero 
 		;  MemorySize will have MemorySize zero bytes loaded into memory
 		
@@ -327,7 +327,10 @@ struct ELFBuilder {
 		}
 		
 		i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
-		i32 FinalSize := #ELFHeader + PHDRSize + StringSectionSize + CodeSize + DataSize
+		i32 HeadersSize := #ELFHeader + PHDRSize + StringSectionSize
+		i32 CodePaddingSize := CodeOffset - HeadersSize
+		
+		i32 FinalSize := HeadersSize + CodePaddingSize + CodeSize + DataSize
 		
 		; Update the PHDR segment to contain the headers we are writing
 		this->PHDR->FileSize := PHDRSize
@@ -347,7 +350,7 @@ struct ELFBuilder {
 		i32 ProgramHeadersOffset := #ELFHeader
 		i32 SectionHeadersOffset := ProgramHeadersOffset + ProgramHeadersSize
 		i32 StringsOffset := SectionHeadersOffset + SectionHeadersSize
-		i32 CodeOffset := StringsOffset + StringSectionSize
+		;i32 CodeOffset := StringsOffset + StringSectionSize
 		i32 DataOffset := CodeOffset + CodeSize
 		
 		; Update the ELF header to contain the program/section header offsets, and entry-point

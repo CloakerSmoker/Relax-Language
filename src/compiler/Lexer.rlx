@@ -917,8 +917,6 @@ struct LexerState {
 				this->Config->IncludedFiles->Set(AbsoluteIncludePath, AbsoluteIncludePath)
 				this->Config->IncludedFiles->Set(IncludePath, AbsoluteIncludePath)
 				
-				Free(AbsoluteIncludePath)
-				
 				Print("Including file: '")
 				IncludePath->Print()
 				Print("'\n")

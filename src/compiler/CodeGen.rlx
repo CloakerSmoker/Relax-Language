@@ -743,11 +743,6 @@ define void EmitCall_R64(CompilerState* Compiler, i8 RegisterNumber) {
 	EmitBasicInstruction(Compiler, 0xFF, MODE_RTOR, 4, 2, RegisterNumber)
 }
 
-define void EmitSysCall(CompilerState* Compiler) {
-	PushByte(Compiler, 0x0F)
-	PushByte(Compiler, 0x05)
-}
-
 /*
 ==========================================
 	Logic
@@ -891,4 +886,20 @@ define void EmitMove_Offset_RX(CompilerState* Compiler, i32 Offset, i8 SourceReg
 	EmitBasicInstruction(Compiler, 0x89, 0, Size, SourceRegister, 5)
 
 	PushMemoryOffset(Compiler, InstructionOffset, Offset)
+}
+
+define void EmitSysCall(CompilerState* Compiler) {
+	PushByte(Compiler, 0x0F)
+	PushByte(Compiler, 0x05)
+	
+	if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
+		; FreeBSD ABI doesn't return -ERRNO, and instead returns ERROR
+		;  and sets CF, so we need to check CF and negate RAX to convert
+		;   back into the semi-sane -ERRNO we know and love.
+		
+		PushByte(Compiler, 0x73) ; JNC
+		PushByte(Compiler, 3)
+		
+		EmitNeg_RX(Compiler, RAX, 8)
+	}
 }
