@@ -1,0 +1,95 @@
+
+struct PoolFreeListEntry {
+	PoolFreeListEntry* Next
+}
+
+struct PoolAllocator {
+	AllocatorArena Arena
+	
+	i32 EntrySize
+	i32 EntriesPerPage
+	
+	PoolFreeListEntry* FreeListHead
+	
+	define void Initialize(i32 EntrySize) {
+		if !(AllocatorHelpers:IsPowerOfTwo(EntrySize)) {
+			EntrySize := 2 << AllocatorHelpers:FindFirstBitSet(EntrySize)
+		}
+		
+		this->EntrySize := EntrySize
+		this->EntriesPerPage := PAGE_SIZE / EntrySize
+		
+		this->FreeListHead := null
+	}
+	
+	define PoolFreeListEntry** AdoptPage(PoolFreeListEntry** Last, void* Page) {
+		for (i32 Offset := 0, Offset < PAGE_SIZE, Offset += this->EntrySize) {
+			PoolFreeListEntry* Entry := Page + Offset
+			
+			*Last := Entry
+			
+			Last := Entry~>Next
+		}
+		
+		return Last
+	}
+	
+	define void Grow() {
+		void* New := this~>Arena->Grow(4)
+		
+		PoolFreeListEntry** Last := this~>FreeListHead
+		
+		for (i32 Index := 0, Index < 4, Index++) {
+			Last := this->AdoptPage(Last, New + (Index * PAGE_SIZE))
+		}
+	}
+	
+	static PoolAllocator* New(i32 EntrySize) {
+		PoolAllocator* this := AllocatorArena:New(0)
+		
+		this->Initialize(EntrySize)
+		this->Grow()
+		
+		return this
+	}
+	
+	define void* Allocate() {
+		if !(this->FreeListHead) {
+			this->Grow()
+		}
+		
+		PoolFreeListEntry* Result := this->FreeListHead
+		
+		this->FreeListHead := Result->Next
+		
+		FastSetMemory8(Result, 0, this->EntrySize)
+		
+		return Result As void*
+	}
+	
+	define i8 Contains(void* Where) {
+		return (this~>Arena->Base <= Where && Where <= this~>Arena->End)
+	}
+	
+	define void Free(void* Where) {
+		if (this->Contains(Where)) {
+			if (Where % this->EntrySize != 0) {
+				AllocatorPanic("Unaligned free at %x in PoolAllocator(%x - %x, %x)", Where, this~>Arena->Base, this~>Arena->End, this->EntrySize)
+			}
+			
+			FastSetMemory8(Where, 0, this->EntrySize)
+			
+			PoolFreeListEntry* Entry := Where
+			
+			if (this->FreeListHead) {
+				Entry->Next := this->FreeListHead->Next
+			}
+			
+			this->FreeListHead := Entry
+		}
+		else {
+			AllocatorPanic("Out of bounds free at %x in PoolAllocator(%x - %x, %x)", Where, this~>Arena->Base, this~>Arena->End, this->EntrySize)
+		}
+	}
+	
+}

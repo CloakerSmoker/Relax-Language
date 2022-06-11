@@ -1,0 +1,88 @@
+#Require "@/MemoryMapping.rlx"
+
+i64 KB := 1 * 1024
+i64 MB := KB * 1024
+i64 GB := MB * 1024
+
+i32 PAGE_SIZE := 0x1000
+
+struct AllocatorHelpers {
+	static i8 IsPowerOfTwo(i64 Number) {
+		return Number && !(Number & (Number - 1))
+	}
+	static i8 FindFirstBitSet(i64 Number) asm {
+		bsr, rax, rdi
+		ret
+	}
+
+	static i32 SizeToPageCount(i32 Size) {
+		i32 Result := Size / PAGE_SIZE
+		
+		if (Size % PAGE_SIZE) {
+			Result += 1
+		}
+		
+		return Result
+	}
+}
+
+void* ALLOCATOR_BASE := 0x200_0000_0000 As void*
+i64 ALLOCATOR_GAP := 4 * GB
+
+i32 NextAllocatorIndex := 0
+
+struct AllocatorArena {
+	void* Base
+	void* End
+	i32 Pages
+	
+	static void* New(i32 Pages) {
+		Pages += 1
+		i32 Bytes := Pages * PAGE_SIZE
+		
+		AllocatorArena* this := ALLOCATOR_BASE + (ALLOCATOR_GAP * NextAllocatorIndex++)
+		
+		MapMemory(this, Bytes, MMAP_PROTECTION_READ | MMAP_PROTECTION_WRITE, MMAP_FLAG_NO_RESERVE | MMAP_FLAG_SHARED | MMAP_FLAG_ANONYMOUS)
+		
+		this->Base := this
+		this->Pages := Pages
+		this->End := this->Base + Bytes
+		
+		return this
+	}
+	
+	define void Initialize(i32 Pages) {
+		i32 Bytes := Pages * PAGE_SIZE
+		
+		this->Base := ALLOCATOR_BASE + (ALLOCATOR_GAP * NextAllocatorIndex++)
+		
+		MapMemory(this->Base, Bytes, MMAP_PROTECTION_READ | MMAP_PROTECTION_WRITE, MMAP_FLAG_NO_RESERVE | MMAP_FLAG_SHARED | MMAP_FLAG_ANONYMOUS)
+		
+		this->End := this->Base + Bytes
+	}
+	
+	define void* Grow(i32 Size) {
+		i32 Bytes := Size * PAGE_SIZE
+		
+		void* Result := this->End
+		
+		MapMemory(this->End, Bytes, MMAP_PROTECTION_READ | MMAP_PROTECTION_WRITE, MMAP_FLAG_NO_RESERVE | MMAP_FLAG_SHARED | MMAP_FLAG_ANONYMOUS)
+		
+		this->End += Bytes
+		this->Pages += Size
+		
+		return Result
+	}
+	define void Shrink(i32 Size) {
+		i32 Bytes := Size * PAGE_SIZE
+		
+		UnMapMemory(this->End - Bytes, Bytes)
+		
+		this->End -= Bytes
+		this->Pages -= Size
+	}
+	
+	define void Delete() {
+		UnMapMemory(this->Base, this->Pages * PAGE_SIZE)
+	}
+}

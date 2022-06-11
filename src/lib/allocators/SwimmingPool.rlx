@@ -1,0 +1,89 @@
+#Require "$/allocators/AllocatorHelpers.rlx"
+#Require "$/allocators/PoolAllocator.rlx"
+#Require "$/allocators/PageAllocator.rlx"
+
+;declare void Print(i8*, ...)
+
+struct SwimmingPoolAllocator {
+	AllocatorArena Arena
+	
+	PoolAllocator*[9] Ranks
+	
+	PageAllocation* FirstPageAllocation
+	
+	define i32 RankValue(i32 RankIndex) {
+		if (RankIndex = 0) {
+			return 8
+		}
+		else {
+			return 8 << (RankIndex As i8)
+		}
+	}
+	
+	define void* Allocate(i32 Size) {
+		if (Size >= 0x800) {
+			PageAllocation* Pages := PageAllocation:New(AllocatorHelpers:SizeToPageCount(Size))
+			
+			Pages->Next := this->FirstPageAllocation
+			
+			if (Pages->Next) {
+				Pages->Next->Last := Pages
+			}
+			
+			this->FirstPageAllocation := Pages
+			
+			return Pages->Body()
+		}
+		
+		i32 RankIndex := AllocatorHelpers:FindFirstBitSet(Size) - 3
+		
+		if (Size < 8) {
+			RankIndex := 0
+		}
+		else if (Size > this->RankValue(RankIndex)) {
+			RankIndex += 1
+		}
+		
+		;Print("Allocate(%x) = Rank[%i] = %x\n", Size, RankIndex, this->RankValue(RankIndex))
+		
+		;Print("Rank[%i] = %x %x\n", RankIndex, this, &DoAllocatorPanic)
+		
+		if !(this->Ranks[RankIndex]) {
+			this->Ranks[RankIndex] := PoolAllocator:New(this->RankValue(RankIndex))
+			
+			;Print("Rank %i at %x (%x byte entries)\n", RankIndex, this->Ranks[RankIndex], this->RankValue(RankIndex))
+		}
+		
+		void* R := this->Ranks[RankIndex]->Allocate()
+		
+		;Print(" = %x\n", R)
+		
+		return R
+	}
+	
+	define i32 AllocationSize(void* Where) {
+		for (i32 RankIndex := 0, RankIndex < 9, RankIndex++) {
+			PoolAllocator* Rank := this->Ranks[RankIndex]
+			
+			if (Rank && Rank->Contains(Where)) {
+				return Rank->EntrySize
+			}
+		}
+		
+		return PageAllocation:Find(Where)->Size()
+	}
+	
+	define void Free(void* Where) {
+		for (i32 RankIndex := 0, RankIndex < 9, RankIndex++) {
+			PoolAllocator* Rank := this->Ranks[RankIndex]
+			
+			if (Rank && Rank->Contains(Where)) {
+				Rank->Free(Where)
+				
+				return
+			}
+		}
+		
+		PageAllocation:Find(Where)->Free()
+	}
+}

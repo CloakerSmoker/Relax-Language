@@ -1,0 +1,50 @@
+struct PageAllocation {
+	AllocatorArena Arena
+	
+	i64 Checksum
+	
+	PageAllocation* Last
+	PageAllocation* Next
+	
+	define i64 CalculateChecksum() {
+		return (this~>Arena->Base As i64) ^ (this~>Arena->End As i64)
+	}
+	
+	static PageAllocation* New(i32 Pages) {
+		PageAllocation* this := AllocatorArena:New(1 + Pages)
+		
+		this->Checksum := this->CalculateChecksum()
+		
+		return this
+	}
+	
+	define void* Body() {
+		return this + PAGE_SIZE
+	}
+	
+	define i32 Size() {
+		return (this~>Arena->Pages - 1) * PAGE_SIZE
+	}
+	
+	static PageAllocation* Find(void* Where) {
+		PageAllocation* this := Where - PAGE_SIZE
+		
+		if (this->Checksum != this->CalculateChecksum()) {
+			AllocatorPanic("Bad free at PageAllocation(%x - %x, %x): expected %x, got %x", this~>Arena->Base, this~>Arena->End, Where, this->Checksum, this->CalculateChecksum())
+		}
+		
+		return this
+	}
+	
+	define void Free() {
+		if (this->Next) {
+			this->Next->Last := this->Last
+		}
+		
+		if (this->Last) {
+			this->Last->Next := this->Next
+		}
+		
+		this~>Arena->Delete()
+	}
+}
