@@ -1,13 +1,28 @@
-#Require "$/HeapOfGarbage.rlx"
+#Require "$/allocators/SwimmingPool.rlx"
+
+SwimmingPoolAllocator _Allocator
+SwimmingPoolAllocator* Allocator := &_Allocator
 
 define void* Alloc(i64 Size) {
-    return GarbageHeapAlloc(Size As i32)
-}
-
-define void* ReAlloc(void* Memory, i64 NewSize) {
-    return GarbageHeapReAlloc(Memory, NewSize As i32)
+    return Allocator->Allocate(Size As i32)
 }
 
 define void Free(void* Memory) {
+    Allocator->Free(Memory)
+}
 
+define void* ReAlloc(void* Memory, i64 NewSize) {
+    i32 OldSize := Allocator->AllocationSize(Memory)
+    
+    if (OldSize >= NewSize) {
+        return Memory
+    }
+    
+    void* New := Alloc(NewSize)
+    
+    FastMoveMemory(New, Memory, OldSize)
+    
+    Free(Memory)
+    
+    return New
 }

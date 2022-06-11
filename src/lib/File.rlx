@@ -84,5 +84,7 @@ define i8* ExpandPath(i8* Path) {
 		}
 	}
 	
-	return Result + 1
+	MoveMemory(Result, Result + 1, StringLength(Result + 1))
+	
+	return Result
 }
