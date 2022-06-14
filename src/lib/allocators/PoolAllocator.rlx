@@ -92,4 +92,21 @@ struct PoolAllocator {
 		}
 	}
 	
+	define void GetUsage(AllocatorUsage* Out) {
+		i32 ReservedBytes := (this~>Arena->Pages - 1) * PAGE_SIZE
+		i32 FreeBytes := 0
+		
+		PoolFreeListEntry* Current := this->FreeListHead
+		
+		while (Current) {
+			FreeBytes += this->EntrySize
+			
+			Current := Current->Next
+		}
+		
+		Out->MetaBytes += PAGE_SIZE
+		Out->FreeBytes += FreeBytes
+		Out->ReservedBytes += ReservedBytes
+		Out->AllocatedBytes += ReservedBytes - FreeBytes
+	}
 }

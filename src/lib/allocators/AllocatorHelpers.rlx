@@ -86,3 +86,17 @@ struct AllocatorArena {
 		UnMapMemory(this->Base, this->Pages * PAGE_SIZE)
 	}
 }
+
+struct AllocatorUsage {
+	i32 AllocatedBytes
+	i32 FreeBytes
+	i32 MetaBytes
+	i32 ReservedBytes
+	
+	define void Zero() {
+		this->AllocatedBytes := 0
+		this->FreeBytes := 0
+		this->MetaBytes := 0
+		this->ReservedBytes := 0
+	}
+}

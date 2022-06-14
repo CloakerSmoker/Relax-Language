@@ -47,4 +47,13 @@ struct PageAllocation {
 		
 		this~>Arena->Delete()
 	}
+	
+	define void GetUsage(AllocatorUsage* Out) {
+		i32 ReservedBytes := (this~>Arena->Pages - 1) * PAGE_SIZE
+		
+		Out->MetaBytes += PAGE_SIZE
+		Out->FreeBytes += 0
+		Out->ReservedBytes += ReservedBytes
+		Out->AllocatedBytes += ReservedBytes
+	}
 }

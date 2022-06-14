@@ -86,4 +86,22 @@ struct SwimmingPoolAllocator {
 		
 		PageAllocation:Find(Where)->Free()
 	}
+	
+	define void GetUsage(AllocatorUsage* Out) {
+		for (i32 RankIndex := 0, RankIndex < 9, RankIndex++) {
+			PoolAllocator* Rank := this->Ranks[RankIndex]
+			
+			if (Rank) {
+				Rank->GetUsage(Out)
+			}
+		}
+		
+		PageAllocation* Current := this->FirstPageAllocation
+		
+		while (Current) {
+			Current->GetUsage(Out)
+			
+			Current := Current->Next
+		}
+	}
 }

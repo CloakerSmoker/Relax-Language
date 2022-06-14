@@ -1,0 +1,38 @@
+define void PrintSwimmingPoolInfo(SwimmingPoolAllocator* this) {
+	AllocatorUsage Info
+	
+	Info.Zero()
+	this->GetUsage(&Info)
+	
+	Print("%x / %x bytes used\n", Info.AllocatedBytes, Info.ReservedBytes)
+	Print("%x free bytes, %x meta bytes\n", Info.FreeBytes, Info.MetaBytes)
+	Print("Ranks:\n")
+	
+	for (i32 Index := 0, Index < 9, Index++) {
+		PoolAllocator* Rank := this->Ranks[Index]
+		
+		if (Rank) {
+			Info.Zero()
+			Rank->GetUsage(&Info)
+			
+			Print("\tRank[%i]: %x entries:\n", Index, Rank->EntrySize)
+			Print("\t\t%x / %x bytes used\n", Info.AllocatedBytes, Info.ReservedBytes)
+			Print("\t\t%x free bytes, %x meta bytes\n", Info.FreeBytes, Info.MetaBytes)
+		}
+	}
+	
+	Print("Large Allocations:\n")
+	
+	PageAllocation* Current := this->FirstPageAllocation
+		
+	while (Current) {
+		Info.Zero()
+		Current->GetUsage(&Info)
+		
+		Print("\t%x: %x pages:\n", Current->Body(), Current~>Arena->Pages - 1)
+		Print("\t\t%x / %x bytes used\n", Info.AllocatedBytes, Info.ReservedBytes)
+		Print("\t\t%x free bytes, %x meta bytes\n", Info.FreeBytes, Info.MetaBytes)
+		
+		Current := Current->Next
+	}
+}

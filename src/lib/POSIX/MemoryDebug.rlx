@@ -1,0 +1,5 @@
+#Require "$/allocators/SwimmingPoolDebug.rlx"
+
+define void DumpHeap() {
+	PrintSwimmingPoolInfo(Allocator)
+}
