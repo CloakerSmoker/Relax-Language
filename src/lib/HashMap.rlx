@@ -87,7 +87,7 @@ struct HashMap {
 	define void Upsert(i64 Hash, void* Value) {
 		i64 Index := this->GetBucketIndex(Hash)
 		
-		HashMapElement* Bucket := this->FindElement(Index)
+		HashMapElement* Bucket := this->FindElement(Hash)
 		HashMapElement* NewElement := null
 		
 		if (Bucket = null) {
