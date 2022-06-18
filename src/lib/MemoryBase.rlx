@@ -10,8 +10,8 @@ define void MoveMemory(void* RawTo, void* RawFrom, i32 Size) {
 		}
 	}
 	else {
-		for (Index := Size, Index != 0, Index -= 1) {
-			To[Index - 1] := From[Index - 1]
+		for (Index := Size - 1, Index >= 0, Index -= 1) {
+			To[Index] := From[Index]
 		}
 	}
 }
