@@ -165,6 +165,21 @@ i32 TAC_LOAD_ADDRESS := 9
 
 i32 TAC_ALU_FIRST := 20
 
+define i32 SizedOpcode(i32 Opcode, i32 Size) {
+	if (Size = 8) {
+		return Opcode + 3
+	}
+	else if (Size = 4) {
+		return Opcode + 2
+	}
+	else if (Size = 2) {
+		return Opcode + 1
+	}
+	else {
+		return Opcode
+	}
+}
+
 define i8* GetOperatorName(i32 Operator) {
 	i8*[40] Operators {
 		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
