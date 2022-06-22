@@ -1411,6 +1411,8 @@ struct ParserState {
 		
 		NewType->Size := BackingTypeSize
 		
+		this~>Types->Set("self", NewType)
+		
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
 		
 		loop {
@@ -1511,6 +1513,8 @@ struct ParserState {
 				break
 			}
 		}
+		
+		this~>Types->Set("self", null)
 	}
 	
 	define void ParseEnumDefinition() {
