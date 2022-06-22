@@ -1,0 +1,429 @@
+	declare i64 CompileExpression(ASTNode*)
+	
+	declare i64 CompileStructAccessAddress(StructAccessExpression*)
+	
+	define void Emit(i32 Opcode, TACAddress* Left, TACAddress* Right) {
+		return this~>Builder->Emit(Opcode, Left, Right)
+	}
+	define void Emit(i32 Opcode, TACAddress* Operand) {
+		return this~>Builder->Emit(Opcode, Operand)
+	}
+	
+	define void EmitOperator(i32 Opcode, TACAddress* Left, TACAddress* Right) {
+		return this~>Builder->Emit(TAC_ALU_FIRST + Opcode, Left, Right)
+	}
+	define void EmitOperator(i32 Opcode, TACAddress* Operand) {
+		return this~>Builder->Emit(TAC_ALU_FIRST + Opcode, Operand)
+	}
+	
+	define TACAddress* FindOrAddVariable(VariableInfo* Variable) {
+		if (Variable->IsGlobal) {
+			
+		}
+		else {
+			HashMapElement* LocalElement := this~>Locals->Get(Variable->Name)
+			
+			if (LocalElement) {
+				return LocalElement->Value
+			}
+			else {
+				TACAddress* Result := TACVariable:New(Variable)
+				
+				this~>Locals->Set(Variable->Name, Result)
+				
+				return Result
+			}
+		}
+	}
+	
+	define i32 CompileMove(TACAddress* To, TACAddress* From) {
+		return this->Emit(TAC_MOVE, To, From)
+	}
+	
+	define i32 CompileStructAccessLeft(StructAccessExpression* Access) {
+		ASTNode* Left := Access->Left
+		
+		if (Access->Operator->Value = OPERATOR_DOT) {
+			if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+				return this->CompileStructAccessAddress(Left->AccessNode)
+			}
+			else if (Left->NodeType = NODE_TYPE_VARIABLE) {
+				return this->Emit(TAC_LOAD_ADDRESS, this->FindOrAddVariable(Left->VariableValue))
+			}
+		}
+		
+		return this->CompileExpression(Left)
+	}
+	
+	define i32 CompileStructAccessAddress(StructAccessExpression* Access) {
+		StructField* Field := Access->TargetField
+		i32 FieldOffset := Field->Offset
+		i32 Left := this->CompileStructAccessLeft(Access)
+		
+		if (FieldOffset = 0) {
+			return Left
+		}
+		else {
+			return this->EmitOperator(OPERATOR_PLUS, Left, FieldOffset)
+		}
+	}
+	
+	define i32 CompileStructAccess(StructAccessExpression* Access) {
+		StructField* Field := Access->TargetField
+		i8 FieldSize := GetTypeSize(Field->ValueType) As i8
+		i32 FieldOffset := Field->Offset
+		
+		i32 Left := this->CompileStructAccessLeft(Access)
+		
+		Left := this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
+		
+		return this->Emit(TAC_LOAD_INDIRECT_1 + FieldSize, Left)
+	}
+	
+	define i32 CompileStructAccessSet(StructAccessExpression* Access, i32 Value) {
+		StructField* Field := Access->TargetField
+		i8 FieldSize := GetTypeSize(Field->ValueType) As i8
+		i32 FieldOffset := Field->Offset
+		
+		i32 Left := this->CompileStructAccessLeft(Access)
+		
+		Left := this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
+		
+		this->Emit(TAC_LOAD_INDIRECT_1 + FieldSize, Left, Value)
+		
+		return Value
+	}
+	
+	define i64 CompileCall(ASTNode* CallNode) {
+		/*CallExpression* Call := CallNode->CallNode
+		
+		FunctionDefine* Target := Call->TargetFunction
+		
+		i64* Parameters := Alloc(Call->ParameterCount * #i64)
+		
+		for (i32 Index := 0, Index < Call->ParameterCount, Index++) {
+			Parameters[Index] := this->CompileExpression(Call->Parameters[Index])
+		}
+		
+		return this->EmitCall(Target->LabelNumber, Call->ParameterCount, Parameters)
+		*/
+		
+		return 0
+	}
+	
+	define i64 CompileExpression(ASTNode* Target) {
+		i8 ResultSize := GetTypeSize(Target->ValueType) As i8
+		
+		if (Target->NodeType = NODE_TYPE_INTEGER) {
+			return this->Emit(TAC_MOVE, )
+		}
+		else if (Target->NodeType = NODE_TYPE_ZERO) {
+			return this->EmitInteger(0, 4)
+		}
+		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
+			return this->FindOrAddVariable(Target->VariableValue)->ToRegister()
+		}
+		else if (Target->NodeType = NODE_TYPE_CALL) {
+			return this->CompileCall(Target)
+		}
+		else if (Target->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+			if (Target->AccessNode->Operator->Value = OPERATOR_TILDE_GREATER) {
+				return this->CompileStructAccessAddress(Target->AccessNode)
+			}
+			else {
+				return this->CompileStructAccess(Target->AccessNode)
+			}
+		}
+		else if (Target->NodeType = NODE_TYPE_UNARY) {
+			UnaryExpression* Unary := Target->UnaryNode
+			i8 UnaryOperator := Unary->Operator->IntegerValue As i8
+			
+			if (UnaryOperator = OPERATOR_AND) {
+				ASTNode* UnaryRight := Unary->Operand
+				
+				if (UnaryRight->NodeType = NODE_TYPE_VARIABLE) {
+					; TODO
+				}
+				else if (UnaryRight->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+					return this->CompileStructAccessAddress(UnaryRight->AccessNode)
+				}
+			}
+			else {
+				i64 Operand := this->CompileExpression(Unary->Operand)
+				
+				if (UnaryOperator = OPERATOR_STAR) {
+					return this->EmitLoad(Operand, ResultSize)
+				}
+				else {
+					return this->EmitUnary(UnaryOperator, Operand, ResultSize)
+				}
+			}
+		}
+		else if (Target->NodeType = NODE_TYPE_BINARY) {
+			BinaryExpression* Binary := Target->BinaryNode
+			
+			i8 BinaryOperator := Binary->Operator->IntegerValue As i8
+			
+			if (OPERATOR_FIRST_ASSIGNMENT <= BinaryOperator && BinaryOperator <= OPERATOR_LAST_ASSIGNMENT) {
+				ASTNode* LeftNode := Binary->Left
+				i64 AssignmentRight := this->CompileExpression(Binary->Right)
+				
+				if (BinaryOperator = OPERATOR_COLON_EQUAL) {	
+					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
+						i64 VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+						
+						this->EmitMove(VariableRegister, AssignmentRight, 4)
+					}
+					else if (LeftNode->NodeType = NODE_TYPE_STRUCT_ACCESS) {
+						this->CompileStructAccessSet(LeftNode->AccessNode, AssignmentRight)
+					}
+					
+					return AssignmentRight
+				}
+				else {
+					if (BinaryOperator <= OPERATOR_PERCENT_EQUAL) {	
+						BinaryOperator += OPERATOR_PLUS - OPERATOR_PLUS_EQUAL
+					}
+					else {
+						BinaryOperator += OPERATOR_AND - OPERATOR_AND_EQUAL
+					}
+					
+					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
+						VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+						
+						i64 CompoundResult := this->EmitBinary(VariableRegister, BinaryOperator, AssignmentRight, ResultSize)
+						
+						this->EmitMove(VariableRegister, CompoundResult, ResultSize)
+					}
+				}
+			}
+			else {
+				i64 Left := this->CompileExpression(Binary->Left)
+				i64 Right := this->CompileExpression(Binary->Right)
+				
+				return this->EmitBinary(Left, BinaryOperator As i32, Right, ResultSize)
+			}
+		}
+		
+		return 0
+	}
+	
+	declare void CompileBlock(Block*)
+	
+	define void CompileIf(IfGroup* Target) {
+		i32 BranchCount := Target->BranchCount
+		i32 HasElse := (Target->ElseBranch) != 0
+		
+		i32 EndLabel := this->ReserveLabel()
+		i32 NextBranch := 0
+		
+		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex += 1) {
+			if (BranchIndex != 0) {
+				this->SetLabel(NextBranch)
+			}
+			
+			NextBranch := this->ReserveLabel()
+			
+			ASTNode* Condition := Target->Conditions[BranchIndex]
+			
+			if (Condition->NodeType = NODE_TYPE_NONE) {
+				continue
+			}
+			
+			i64 ConditionRegister := this->CompileExpression(Condition)
+			i32 BodyLabel := this->ReserveLabel()
+			
+			this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, NextBranch)
+			
+			this->SetLabel(BodyLabel)
+			
+			this->CompileBlock(Target->Bodies[BranchIndex])
+			
+			this->EmitJump(EndLabel)
+		}
+		
+		this->SetLabel(NextBranch)
+		;this->EmitJump(EndLabel)
+		
+		if (Target->ElseBranch) {
+			this->CompileBlock(Target->ElseBranch)
+			this->EmitJump(EndLabel)
+		}
+		
+		this->SetLabel(EndLabel)
+		;this->EmitJump(this->BlockCount)
+	}
+	
+	i32 CurrentLoopContinueLabel
+	i32 CurrentLoopBreakLabel
+	
+	define i64 EnterLoop(i32 ContinueLabel, i32 BreakLabel) {
+		LoopLables Result := this->CurrentLoopContinueLabel As LoopLables
+		Result.BreakLabel := this->CurrentLoopBreakLabel
+		
+		this->CurrentLoopContinueLabel := ContinueLabel
+		this->CurrentLoopBreakLabel := BreakLabel
+		
+		return Result As i64
+	}
+	define void ExitLoop(i64 PackedLoopState) {
+		LoopLables LoopState := PackedLoopState As LoopLables
+		
+		this->CurrentLoopContinueLabel := LoopState.ContinueLabel
+		this->CurrentLoopBreakLabel := LoopState.BreakLabel
+	}
+	
+	define void CompileLoop(Block* LoopBody) {
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		this->CompileBlock(LoopBody)
+		
+		this->EmitJump(StartLabel)
+		this->SetLabel(EndLabel)
+		
+		this->ExitLoop(LoopState)
+	}
+	define void CompileWhile(WhileLoop* WhileToCompile) {
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		i32 BodyLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		ASTNode* Condition := WhileToCompile->Condition
+		
+		i64 ConditionRegister := this->CompileExpression(Condition)
+		this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, EndLabel)
+		
+		this->SetLabel(BodyLabel)
+		this->CompileBlock(WhileToCompile->Body)
+		
+		this->EmitJump(StartLabel)
+		this->SetLabel(EndLabel)
+		
+		this->ExitLoop(LoopState)
+	}
+	define void CompileFor(ForLoop* ForToCompile) {
+		this->CompileExpression(ForToCompile->Initializer)
+		
+		i32 StartLabel := this->ReserveLabel()
+		i32 EndLabel := this->ReserveLabel()
+		i32 BodyLabel := this->ReserveLabel()
+		
+		this->EmitJump(StartLabel)
+		i64 LoopState := this->EnterLoop(StartLabel, EndLabel)
+		
+		this->SetLabel(StartLabel)
+		
+		ASTNode* Condition := ForToCompile->Condition
+		
+		i64 ConditionRegister := this->CompileExpression(Condition)
+		this->EmitConditional(ConditionRegister, GetTypeSize(Condition->ValueType) As i8, BodyLabel, EndLabel)
+		
+		this->SetLabel(BodyLabel)
+		this->CompileBlock(ForToCompile->Body)
+		
+		this->CompileExpression(ForToCompile->Step)
+		this->EmitJump(StartLabel)
+		
+		this->SetLabel(EndLabel)
+		this->ExitLoop(LoopState)
+	}
+	
+	define void CompileStatement(ASTNode* Target) {
+		if (Target->NodeType = NODE_TYPE_EXPRESSION) {
+			if (Target->ExpressionStatement->NodeType != NODE_TYPE_NONE) {
+				; TODO: Remove check for NODE_TYPE_NONE once FoldConstants is called on the input AST, since it
+				;  will remove all NODE_TYPE_NONE nodes
+				
+				this->CompileExpression(Target->ExpressionStatement)
+			}
+		}
+		else if (Target->NodeType = NODE_TYPE_RETURN) {
+			i64 ReturnValueRegister := this->CompileExpression(Target->ReturnExpression)
+			this->EmitReturn(ReturnValueRegister, GetTypeSize(Target->ReturnExpression->ValueType) As i8)
+		}
+		else if (Target->NodeType = NODE_TYPE_IF) {
+			this->CompileIf(Target->IfNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_LOOP) {
+			this->CompileLoop(Target->LoopBody)
+		}
+		else if (Target->NodeType = NODE_TYPE_WHILE) {
+			this->CompileWhile(Target->WhileNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_FOR) {
+			this->CompileFor(Target->ForNode)
+		}
+		else if (Target->NodeType = NODE_TYPE_CONTINUEBREAK) {
+			if (Target->IsContinue) {
+				this->EmitJump(this->CurrentLoopContinueLabel)
+			}
+			else {
+				this->EmitJump(this->CurrentLoopBreakLabel)
+			}
+		}
+	}
+	
+	define void CompileBlock(Block* Target) {
+		for (i32 Index := 0, Index < Target->StatementCount, Index++) {
+			this->CompileStatement(Target->Statements[Index])
+		}
+	}
+	
+	define void CompileFunction(FunctionDefine* Function) {
+		if (Function->CallCount != 0) {
+			this->StartBlock(Function->LabelNumber)
+			
+			IRNode* RawNode := this->AppendNode(IR_FUNCTION)
+			IRFunction* Node := RawNode~>FunctionNode
+			
+			Node->ParameterCount := Function->ParameterCount
+			Node->Parameters := Alloc(Node->ParameterCount * #i64)
+			
+			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+				i64 ParameterRegister := this->FindOrAddVariable(Function->Parameters[Index])->ToRegister()
+				
+				Node->Parameters[Index] := ParameterRegister
+			}
+			
+			this->CompileBlock(Function->Body)
+		}
+	}
+	
+	define void CompileFunctionOverloads(FunctionDefine* Function) {
+		this->CompileFunction(Function)
+		
+		while (Function->Next) {
+			Function := Function->Next
+			
+			this->CompileFunction(Function)
+		}
+	}
+	
+	define void CompileFunctionHashMap(HashMap* Map) {
+		void* Elements := Map->Elements
+		
+		for (i32 ElementIndex := 0, ElementIndex < (Map->BufferMaxCount), ElementIndex += 1) {
+			if (Elements[ElementIndex]) {
+				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				
+				while (FoundElement) {
+					FunctionDefine* NextFunction := (FoundElement->Value) As FunctionDefine*
+					
+					this->CompileFunctionOverloads(NextFunction)
+					
+					FoundElement := FoundElement->NextElement
+				}
+			}
+		}
+	}
