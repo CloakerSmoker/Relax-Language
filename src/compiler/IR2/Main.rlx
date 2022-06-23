@@ -7,6 +7,8 @@
 #Require "$/HashMap.rlx"
 #Require "$/Debug.rlx"
 
+#Require "./src/compiler/IR2/PointerArray.rlx"
+
 #Require "./src/compiler/Utility.rlx"
 #Require "./src/compiler/Lexer.rlx"
 #Require "./src/compiler/Parser.rlx"
@@ -27,6 +29,8 @@ struct TACVariable {
 	
 	i32 Generation
 	
+	i64 LastValue
+	
 	static self* New(VariableInfo* Base) {
 		self* this := Alloc(#self)
 		
@@ -46,6 +50,18 @@ bits TACAddress As i64 {
 	i32 [48:55] Generation
 	TACAddressKind [56:59] Kind
 	TACAddressSize [60:63] Size
+	
+	define TACAddress IncrementGeneration() {
+		this->Generation := this->Variable->Generation++
+		
+		return this
+	}
+	
+	define TACAddress CopyGeneration() {
+		this->Generation := this->Variable->Generation
+		
+		return this
+	}
 	
 	static self WrapLong(TACAddressKind Kind, void* Value) {
 		self this := 0 As self
@@ -117,12 +133,12 @@ bits TACAddress As i64 {
 		}
 		else {
 			if (this->Is(TACAddressKind:Variable)) {
-				Print("%s", this->Variable->Base->Name)
+				this->Variable->Base->Name->Print()
 				
-				Print("_%i", this->Generation)
+				Print("%i", this->Generation)
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
-				Print("(%i)", this->TemporaryNumber)
+				Print("@%i", this->TemporaryNumber)
 			}
 		}
 		
@@ -164,6 +180,11 @@ i32 TAC_STORE_INDIRECT_4 := 7
 i32 TAC_STORE_INDIRECT_8 := 8
 
 i32 TAC_LOAD_ADDRESS := 9
+i32 TAC_JUMP_TRUE := 10
+i32 TAC_JUMP_FALSE := 11
+i32 TAC_JUMP := 12
+
+i32 TAC_RETURN := 13
 
 i32 TAC_ALU_FIRST := 20
 
@@ -203,7 +224,7 @@ define i8* GetOperatorName(i32 Operator) {
 }
 
 define i8* GetOpcodeName(i32 Opcode) {
-	i8*[10] Names {
+	i8*[14] Names {
 		":=",
 		"* As i8",
 		"* As i16",
@@ -213,7 +234,11 @@ define i8* GetOpcodeName(i32 Opcode) {
 		"* As i16 := ",
 		"* As i32 :=",
 		"* As i64 :=",
-		"&"
+		"&",
+		"jnz",
+		"jez",
+		"jmp",
+		"return"
 	}
 	
 	if (Opcode >= TAC_ALU_FIRST) {
@@ -256,8 +281,18 @@ struct TACTriple {
 	}
 	
 	define void Print() {
-		Print("(%s, %a, %a)", GetOpcodeName(this->Opcode), this->Left, this->Right)
+		if (this->Right) {
+			Print("%s\t%a,\t%a", GetOpcodeName(this->Opcode), this->Left, this->Right)
+		}
+		else {
+			Print("%s\t%a", GetOpcodeName(this->Opcode), this->Left)
+		}
 	}
+}
+
+struct TACBlock {
+	i32 Start
+	i32 Size
 }
 
 struct TACBuilder {
@@ -268,46 +303,77 @@ struct TACBuilder {
 	
 	i32 Length
 	
+	TACBlock* CurrentBlock
+	
+	PointerArray* Blocks ; <TACBlock*>
+	
 	static TACBuilder* New() {
 		self* this := Alloc(#self)
 		
 		this->Buffer := Alloc(100 * #TACTriple*)
 		
+		this->Blocks := PointerArray:New()
+		
 		return this
 	}
 	
-	define TACAddress FindOrAddTriple(i32 Opcode, TACAddress Left, TACAddress Right) {
-		for (i32 Index := 0, Index < this->Length, Index++) {
-			TACTriple* Next := this->Triples[Index]
-			
-			if (Next->Opcode = Opcode) {
-				if (Next->Left->Equals(Left) && Next->Right->Equals(Right)) {
-					return TACAddress:WrapLong(TACAddressKind:Temporary, Index)
-				}
-			}
-		}
-		
+	define TACAddress Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
 		i32 Result := this->Length++
 		
 		this->Triples[Result] := TACTriple:New(Opcode, Left, Right)
 		
 		return TACAddress:WrapLong(TACAddressKind:Temporary, Result)
 	}
-	
-	define TACAddress Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
-		return this->FindOrAddTriple(Opcode, Left, Right)
-	}
 	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
-		return this->FindOrAddTriple(Opcode, Operand, 0 As TACAddress)
+		return this->Emit(Opcode, Operand, TAC_ADDRESS_NULL)
+	}
+	
+	define void EndBlock() {
+		if (this->CurrentBlock) {
+			i32 Length := this->Length - this->CurrentBlock->Start
+			
+			this->CurrentBlock->Size := Length
+			
+			this->CurrentBlock := null
+		}
+	}
+	
+	define i32 StartBlock(i32 Index) {
+		this->EndBlock()
+		
+		this->CurrentBlock := this->Blocks->Get(Index)
+		this->CurrentBlock->Start := this->Length
+		
+		return Index
+	}
+	
+	define i32 ReserveLabel() {
+		i32 Result := this->Blocks->Length
+		
+		this->Blocks->Append(Alloc(#TACBlock))
+		
+		return Result
+	}
+	
+	define i32 SetLabel() {
+		return this->StartBlock(this->ReserveLabel())
+	}
+	define i32 SetLabel(i32 Number) {
+		return this->StartBlock(Number)
 	}
 	
 	define void Print() {
 		for (i32 Index := 0, Index < this->Length, Index++) {
-			Print("%i: ", Index)
+			Print("%i:\t", Index)
 			this->Triples[Index]->Print()
 			Print("\n")
 		}
 	}
+}
+
+bits LoopLables As i64 {
+	[0:31] BreakLabel
+	[32:63] ContinueLabel
 }
 
 #Require "./src/compiler/IR2/TACFromAST.rlx"
@@ -338,7 +404,9 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	TACFromAST* TFA := TACFromAST:New()
 	
-	TFA->CompileExpression(Parser->ParseExpression())
+	Parser->ParseProgram()
+	
+	TFA->CompileFunctionHashMap(Parser~>Functions)
 	
 	TFA->Builder->Print()
 }
