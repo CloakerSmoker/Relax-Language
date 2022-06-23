@@ -1,19 +1,30 @@
-	declare i64 CompileExpression(ASTNode*)
+struct TACFromAST {
+	TACBuilder* Builder
 	
-	declare i64 CompileStructAccessAddress(StructAccessExpression*)
+	HashMap Locals
 	
-	define void Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
-		return this~>Builder->Emit(Opcode, Left, Right)
-	}
-	define void Emit(i32 Opcode, TACAddress Operand) {
-		return this~>Builder->Emit(Opcode, Operand)
+	static self* New() {
+		self* this := Alloc(#self)
+		
+		this->Builder := TACBuilder:New()
+		
+		this~>Locals->Initialize()
+		
+		return this
 	}
 	
-	define void EmitOperator(i32 Opcode, TACAddress Left, TACAddress Right) {
-		return this~>Builder->Emit(TAC_ALU_FIRST + Opcode, Left, Right)
+	define TACAddress Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
+		return this->Builder->Emit(Opcode, Left, Right)
 	}
-	define void EmitOperator(i32 Opcode, TACAddress Operand) {
-		return this~>Builder->Emit(TAC_ALU_FIRST + Opcode, Operand)
+	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
+		return this->Builder->Emit(Opcode, Operand)
+	}
+	
+	define TACAddress EmitOperator(i32 Opcode, TACAddress Left, TACAddress Right) {
+		return this->Builder->Emit(TAC_ALU_FIRST + Opcode, Left, Right)
+	}
+	define TACAddress EmitOperator(i32 Opcode, TACAddress Operand) {
+		return this->Builder->Emit(TAC_ALU_FIRST + Opcode, Operand)
 	}
 	
 	define TACAddress FindOrAddVariable(VariableInfo* Variable) {
@@ -24,7 +35,7 @@
 			HashMapElement* LocalElement := this~>Locals->Get(Variable->Name)
 			
 			if (LocalElement) {
-				return LocalElement->Value
+				return LocalElement->Value As TACAddress
 			}
 			else {
 				TACVariable* Result := TACVariable:New(Variable)
@@ -34,11 +45,17 @@
 				return TACAddress:WrapLong(TACAddressKind:Variable, Result)
 			}
 		}
+		
+		return TAC_ADDRESS_NULL
 	}
 	
 	define TACAddress CompileMove(TACAddress To, TACAddress From) {
 		return this->Emit(TAC_MOVE, To, From)
 	}
+	
+	declare TACAddress CompileExpression(ASTNode*)
+	
+	declare TACAddress CompileStructAccessAddress(StructAccessExpression*)
 	
 	define TACAddress CompileStructAccessLeft(StructAccessExpression* Access) {
 		ASTNode* Left := Access->Left
@@ -64,7 +81,7 @@
 			return Left
 		}
 		else {
-			return this->EmitOperator(OPERATOR_PLUS, Left, FieldOffset)
+			return this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
 		}
 	}
 	
@@ -108,7 +125,7 @@
 		return this->EmitCall(Target->LabelNumber, Call->ParameterCount, Parameters)
 		*/
 		
-		return 0
+		return TAC_ADDRESS_NULL
 	}
 	
 	define TACAddress CompileExpression(ASTNode* Target) {
@@ -175,7 +192,7 @@
 				
 				if (BinaryOperator = OPERATOR_COLON_EQUAL) {	
 					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->ToRegister()
+						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)
 						
 						this->Emit(TAC_MOVE, VariableRegister, AssignmentRight)
 					}
@@ -210,10 +227,10 @@
 			}
 		}
 		
-		return 0
+		return TAC_ADDRESS_NULL
 	}
 	
-	declare void CompileBlock(Block*)
+	/*declare void CompileBlock(Block*)
 	
 	define void CompileIf(IfGroup* Target) {
 		i32 BranchCount := Target->BranchCount
@@ -432,3 +449,6 @@
 			}
 		}
 	}
+	
+	*/
+}

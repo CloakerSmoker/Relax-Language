@@ -7,6 +7,10 @@
 #Require "$/HashMap.rlx"
 #Require "$/Debug.rlx"
 
+#Require "./src/compiler/Utility.rlx"
+#Require "./src/compiler/Lexer.rlx"
+#Require "./src/compiler/Parser.rlx"
+
 enum TACAddressKind As i8 {
 	Variable,
 	Temporary,
@@ -16,10 +20,6 @@ enum TACAddressKind As i8 {
 enum TACAddressSize As i8 {
 	Word,
 	Long
-}
-
-struct VariableInfo {
-	i8* Name
 }
 
 struct TACVariable {
@@ -134,6 +134,8 @@ bits TACAddress As i64 {
 		}
 	}
 }
+
+TACAddress TAC_ADDRESS_NULL := 0 As TACAddress
 
 define void DoAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
 	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
@@ -259,7 +261,6 @@ struct TACTriple {
 }
 
 struct TACBuilder {
-	
 	union {
 		void* Buffer
 		TACTriple** Triples
@@ -267,13 +268,21 @@ struct TACBuilder {
 	
 	i32 Length
 	
-	define i32 FindOrAddTriple(i32 Opcode, TACAddress Left, TACAddress Right) {
+	static TACBuilder* New() {
+		self* this := Alloc(#self)
+		
+		this->Buffer := Alloc(100 * #TACTriple*)
+		
+		return this
+	}
+	
+	define TACAddress FindOrAddTriple(i32 Opcode, TACAddress Left, TACAddress Right) {
 		for (i32 Index := 0, Index < this->Length, Index++) {
 			TACTriple* Next := this->Triples[Index]
 			
 			if (Next->Opcode = Opcode) {
 				if (Next->Left->Equals(Left) && Next->Right->Equals(Right)) {
-					return Index
+					return TACAddress:WrapLong(TACAddressKind:Temporary, Index)
 				}
 			}
 		}
@@ -282,15 +291,54 @@ struct TACBuilder {
 		
 		this->Triples[Result] := TACTriple:New(Opcode, Left, Right)
 		
-		return Result
+		return TACAddress:WrapLong(TACAddressKind:Temporary, Result)
+	}
+	
+	define TACAddress Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
+		return this->FindOrAddTriple(Opcode, Left, Right)
+	}
+	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
+		return this->FindOrAddTriple(Opcode, Operand, 0 As TACAddress)
+	}
+	
+	define void Print() {
+		for (i32 Index := 0, Index < this->Length, Index++) {
+			Print("%i: ", Index)
+			this->Triples[Index]->Print()
+			Print("\n")
+		}
 	}
 }
 
-define void Main() {
-	TACAddress L := TACAddress:WrapLong(TACAddressKind:Integer, 123)
-	TACAddress R := TACAddress:WrapWord(TACAddressKind:Temporary, 321)
+#Require "./src/compiler/IR2/TACFromAST.rlx"
+
+define void Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
 	
-	TACTriple* F := TACTriple:New(TAC_LOAD_INDIRECT_1, L, R)
+	if (ArgC != 2) {
+		Print("No input file\n")
+		Exit(1)
+	}
 	
-	F->Print()
+	BuildConfig* Config := Alloc(#BuildConfig)
+	
+	Config->DumpInfo := 0
+	Config->LineEnding := LINE_ENDING_DEFAULT
+	Config->OutputFormat := OUTPUT_ELF
+	
+	i8* InputFilePath := ArgV[1]
+	
+	i32 SourceLength := 0
+	i8* Source := OpenAndRead(InputFilePath, &SourceLength)
+	
+	LexerState* Lexer := LexerState:New(Config, Source, SourceLength, AToS(InputFilePath))
+	Config->Lexer := Lexer
+	
+	ParserState* Parser := ParserState:New(Config, Lexer)
+	
+	TACFromAST* TFA := TACFromAST:New()
+	
+	TFA->CompileExpression(Parser->ParseExpression())
+	
+	TFA->Builder->Print()
 }
