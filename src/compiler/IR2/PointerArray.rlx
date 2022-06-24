@@ -1,0 +1,53 @@
+#Require "$/Memory.rlx"
+
+struct PointerArray {
+	union {
+		void** Data
+		void* Buffer
+	}
+	
+	i32 Length
+	i32 Capacity
+	
+	define void Initialize() {
+		this->Buffer := Alloc(0x20)
+		this->Capacity := 4
+	}
+	
+	static PointerArray* New() {
+		PointerArray* this := Alloc(#PointerArray)
+		
+		this->Initialize()
+		
+		return this
+	}
+	
+	define void EnsureCapacity(i32 MaxIndex) {
+		if (MaxIndex > this->Capacity) {
+			this->Capacity := MaxIndex + 4
+			
+			this->Buffer := ReAlloc(this->Buffer, this->Capacity * #void*)
+		}
+	}
+	
+	define i32 Length() {
+		return this->Length
+	}
+	define i32 Count() {
+		return this->Length
+	}
+	define void* Get(i32 Index) {
+		return this->Data[Index]
+	}
+	define void* At(i32 Index) {
+		return this->Data[Index]
+	}
+	
+	define void Set(i32 Index, void* Value) {
+		this->Data[Index] := Value
+	}
+	define void Append(void* Value) {
+		this->EnsureCapacity(this->Length + 1)
+		this->Data[this->Length++] := Value
+	}
+}
