@@ -840,12 +840,13 @@ define void EmitInB(CompilerState* Compiler) {
 	PushByte(Compiler, 0xEC)
 }
 define void EmitLea_RAX_Label(CompilerState* Compiler, i32 Label) {
+	EmitREX(Compiler, 0, 0, REX_B | REX_W)
 	PushByte(Compiler, 0x8D)
 	EmitModRM(Compiler, 0, RAX, 5)
 	UseLabel(Compiler, Label)
 }
 define void EmitLea_R64_Label(CompilerState* Compiler, i8 TargetRegister, i32 Label) {
-	EmitBasicInstruction(Compiler, 0x8D, 0, 4, TargetRegister, 5)
+	EmitBasicInstruction(Compiler, 0x8D, 0, 8, TargetRegister, 5)
 	UseLabel(Compiler, Label)
 }
 define void EmitXCHG_R64_RI64(CompilerState* Compiler, i8 Register, i8 PointerRegister) {
