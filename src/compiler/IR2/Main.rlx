@@ -186,6 +186,8 @@ i32 TAC_JUMP := 12
 
 i32 TAC_RETURN := 13
 
+i32 TAC_REMOVED := 14
+
 i32 TAC_ALU_FIRST := 20
 
 define i32 SizedOpcode(i32 Opcode, i32 Size) {
@@ -248,6 +250,37 @@ define i8* GetOpcodeName(i32 Opcode) {
 	return Names[Opcode]
 }
 
+struct TACPhiInfo {
+	i8* Name
+	i64 Hash
+
+	PointerArray Definitions ; <TACAddress>
+
+	static self* New(i8* Name, i64 Hash) {
+		self* this := Alloc(#this)
+
+		this->Name := Name
+		this->Hash := Hash
+		this~>Definitions->Initialize()
+
+		return this
+	}
+
+	define void AddDefinition(TACAddress Address) {
+		this~>Definitions->Push(Address)
+	}
+
+	define void RemoveDefinition(TACAddress Address) {
+		for (i32 Index := 0, Index < this~>Definitions->Count(), Index++) {
+			if (this~>Definitions->At(Index) = Address) {
+				this~>Definitions->Remove(Index)
+
+				return
+			}
+		}
+	}
+}
+
 struct TACTriple {
 	i32 Opcode
 	
@@ -255,6 +288,7 @@ struct TACTriple {
 		TACAddress Left
 		TACAddress Operand
 		TACAddress Source
+		TACPhiInfo* Phi
 	}
 	
 	union {
@@ -279,6 +313,10 @@ struct TACTriple {
 		
 		return this
 	}
+
+	define void Remove() {
+		this->Opcode := TAC_REMOVED
+	}
 	
 	define void Print() {
 		if (this->Right) {
@@ -291,8 +329,26 @@ struct TACTriple {
 }
 
 struct TACBlock {
-	i32 Start
-	i32 Size
+	PointerArray Parents ; <TACBlock*>
+	PointerArray Children ; <TACBlock*>
+
+	PointerArray IncompletePhi ; <TACPhiInfo*>
+	PointerArray Body ; <TACTriple*>
+
+	AVLTree Definitions
+
+	i8 Sealed
+
+	define void Initialize() {
+		this~>Parents->Initialize()
+		this~>Children->Initialize()
+		this~>Body->Initialize()
+
+		this~>Definitions->Initialize(8)
+	}
+
+	
+
 }
 
 struct TACBuilder {
@@ -327,6 +383,100 @@ struct TACBuilder {
 	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
 		return this->Emit(Opcode, Operand, TAC_ADDRESS_NULL)
 	}
+
+	define void Remove(TACAddress TemporyAddress) {
+		i32 Temporary := TemporyAddress.TemporaryNumber
+
+		this->Triples[Temporary]->Remove()
+
+	}
+
+	define void SetName(i8* Name, TACAddress Value) {
+		i64 Hash := FNV1A(Name)
+
+		this~>Definitions->Set(Hash, &Value)
+	}
+
+	define TACAddress RemoveTrivialPhi(TACPhiInfo* Phi, TACAddress PhiAddress) {
+		TACAddress Same := TAC_ADDRESS_NULL
+
+		for (i32 Index := 0, Index < Phi~>DefiningBlocks->Count(), Index++) {
+			TACAddress Next := Phi~>DefiningBlocks->At(Index)
+
+			if (Next = Same || Next = PhiAddress) {
+				continue
+			}
+			else if (Same != null) {
+				return PhiAddress
+			}
+
+			Same := Next
+		}
+
+		if (Same = TAC_ADDRESS_NULL) {
+			this->Remove(PhiAddress)
+		}
+
+		Phi->RemoveDefinition(PhiAddress)
+
+		for (i32 Index := 0, Index < Phi~>Definitions->Count(), Index++) {
+			TACAddress Address := Phi~>Definitions->At(Index)
+
+			if (Address.Is(TACAddressKind:Temporary)) {
+				i32 TemporaryNumber := Address.TemporaryNumber
+
+				TACTriple* Triple := this->Triples[TemporaryNumber]
+
+				if (Triple->Is(TAC_PHI)) {
+					this->RemoveTrivialPhi(Triple->Phi, Address)
+				}
+			}
+		}
+	}
+	
+	define TACAddress LookupName(TACBlock* Block, i8* Name, i64 Hash) {
+		if (Block~>Definitions->Has(Hash)) {
+			return Block~>Definitions->GetPointer(Hash) As TACAddress
+		}
+		
+		TACAddress Result := TAC_ADDRESS_NULL
+		
+		if !(Block->Sealed) {
+			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
+			Result := this->Emit(TAC_PHI, Phi As TACAddress)
+		}
+		else if (Block~>Parents->Count() = 1) {
+			return Block~>Parents->At(0)->LookupName(Name, Hash)
+		}
+		else {
+			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
+			Result := this->Emit(TAC_PHI, Phi As TACAddress)
+
+			for (i32 Index := 0, Index < Block~>Parents->Count(), Index++) {
+				TACBlock* Parent := Block~>Parents->At(Index)
+
+				TACAddress ParentDefinition := Parent->LookupName(Name, Hash)
+
+				if (ParentDefinition != TAC_ADDRESS_NULL) {
+					Phi->AddDefinition(ParentDefinition)
+				}
+			}
+
+			;Result := this->RemoveTrivialPhi(Phi, Result)
+		}
+
+		this->SetName(Name, TACAddress:New(TACAddressKind:Temporary, Result))
+
+		return Result
+	}
+
+	define TACAddress LookupName(TACBlock* Block, i8* Name) {
+		return this->LookupName(Block, Name, FNV1A(Name))
+	}
+
+	define void SealBlock(TACBlock* Block) {
+		Block->Sealed := true
+	}
 	
 	define void EndBlock() {
 		if (this->CurrentBlock) {
@@ -343,6 +493,7 @@ struct TACBuilder {
 		
 		this->CurrentBlock := this->Blocks->Get(Index)
 		this->CurrentBlock->Start := this->Length
+		this->CurrentBlock~>CurrentDefinitions->Initialize(8)
 		
 		return Index
 	}
@@ -364,6 +515,10 @@ struct TACBuilder {
 	
 	define void Print() {
 		for (i32 Index := 0, Index < this->Length, Index++) {
+			if (this->Triples[Index]->Opcode = TAC_REMOVED) {
+				continue
+			}
+
 			Print("%i:\t", Index)
 			this->Triples[Index]->Print()
 			Print("\n")

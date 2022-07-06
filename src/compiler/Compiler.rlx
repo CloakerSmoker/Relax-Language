@@ -27,8 +27,8 @@ struct CompilerState {
 	},
 	
 	/* Address (in loaded output file) where globals will live */
-	i32 GlobalBase,
-	i32 CodeBase,
+	i64 GlobalBase,
+	i64 CodeBase,
 	
 	/* Buffer containing assembled (but not linked) code */
 	i8* CodeBuffer,
@@ -146,7 +146,6 @@ struct CompilerState {
 			void* Elements := RawGlobals->Elements
 			
 			i32 MaxOffset := Globals->NextOffset
-			i32 Base := this->GlobalBase
 			
 			i32 MaxIndex := RawGlobals->BufferMaxCount As i32
 			
@@ -185,11 +184,11 @@ struct CompilerState {
 		}
 		
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
-			i32 Offset := this->CodeBase + this->Index
+			i64 Offset := this->CodeBase + this->Index
 			
 			i8* AbsoluteSourceFile := this->SourcePathToAbsolutePath(Context->SourceFilePath->Buffer)
 			
-			this->DWARF->LineInfo->AddLine(Offset, Context->LineNumber, AbsoluteSourceFile)
+			this->DWARF->LineInfo->AddLine(Offset As i32, Context->LineNumber, AbsoluteSourceFile)
 		}
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {
@@ -298,9 +297,9 @@ struct CompilerState {
 	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			i32 FunctionSize := this->Index - FunctionOffset
-			i32 Offset := this->CodeBase + this->Index
+			i64 Offset := this->CodeBase + this->Index
 			
-			this->DWARF->LineInfo->EmitEndSequence(Offset)
+			this->DWARF->LineInfo->EmitEndSequence(Offset As i32)
 			
 			this->DWARF->EndFunction(Data, FunctionSize)
 		}
@@ -329,7 +328,7 @@ define void DumpGlobals(CompilerState* Compiler) {
 	void* Elements := RawGlobals->Elements
 	
 	i32 MaxOffset := Globals->NextOffset
-	i32 Base := Compiler->GlobalBase
+	i64 Base := Compiler->GlobalBase
 	
 	i32 MaxIndex := RawGlobals->BufferMaxCount As i32
 	
@@ -347,8 +346,8 @@ define void DumpGlobals(CompilerState* Compiler) {
 					i32 ThisOffset := NextGlobal->StackOffset
 					i32 ThisSize := GetTypeStorageSize(NextGlobal->Type)
 					
-					i32 Start := Base + ThisOffset
-					i32 End := Start + ThisSize
+					i64 Start := Base + ThisOffset
+					i64 End := Start + ThisSize
 					
 					Print("%x:%x = ", Start, End)
 				}
@@ -466,7 +465,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	Compiler->Initialize(Config, Parser)
 	
 	if (Config->OutputFormat = OUTPUT_BIN) {
-		Compiler->GlobalBase := (Config->ImageBase + 0x10) As i32
+		Compiler->GlobalBase := Config->ImageBase + 0x10
 		Compiler->CodeBase := (Parser~>Globals->NextOffset + 0x10) As i32
 		
 		Compiler->DistanceBetweenGlobalsAndCode := Parser~>Globals->NextOffset
@@ -483,7 +482,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		i32 ELFCodeOffset := 0x400
 		
-		Compiler->GlobalBase := (Config->ImageBase + 0x1000) As i32
+		Compiler->GlobalBase := Config->ImageBase + 0x1000
 		Compiler->CodeBase := (0x1000 + ELFCodeOffset + (GlobalPages * 0x1000)) As i32
 		
 		Compiler->DistanceBetweenGlobalsAndCode := ELFCodeOffset + (GlobalPages * 0x1000) As i32
@@ -494,7 +493,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->PE->ImportFixupBase := Compiler->CodeBuffer
 		Compiler->PE->PE->ImageBase := Config->ImageBase
 		
-		Compiler->GlobalBase := (Config->ImageBase + 0x2000) As i32
+		Compiler->GlobalBase := Config->ImageBase + 0x2000
 		Compiler->CodeBase := 0x3000
 		
 		Compiler->DistanceBetweenGlobalsAndCode := 0x2000
@@ -589,11 +588,15 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->ELF->AddCodeSection(Compiler->CodeBuffer, Compiler->Index)
 		
 		if (Config->DebugMode & DEBUG_EMIT_DWARF) {
-			Compiler->DWARF->EndCompilationUnit(Compiler->DWARFCompilationUnitOffset, Compiler->CodeBase + Compiler->Index)
+			Compiler->DWARF->EndCompilationUnit(Compiler->DWARFCompilationUnitOffset, (Compiler->CodeBase + Compiler->Index) As i32)
 			Compiler->DWARF->WriteSections(Compiler->ELF)
 		}
+
+		if (Config->PhysicalImageBase = 0) {
+			Config->PhysicalImageBase := Config->ImageBase
+		}
 		
-		Compiler->ELF->Finalize(ELFCodeOffset, MainOffset, Config->ImageBase)
+		Compiler->ELF->Finalize(ELFCodeOffset, MainOffset, Config->ImageBase, Config->PhysicalImageBase)
 		
 		Result := FileWrite(OutputFileHandle, Compiler->ELF->Buffer, Compiler->ELF->BufferSize)
 		BytesWritten := Compiler->ELF->BufferSize

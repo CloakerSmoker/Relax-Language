@@ -305,7 +305,7 @@ struct ELFBuilder {
 		return this
 	}
 	
-	define void Finalize(i32 CodeOffset, i32 MainOffset, i64 ImageBase) {
+	define void Finalize(i32 CodeOffset, i32 MainOffset, i64 ImageBase, i64 PhysicalImageBase) {
 		; Note: the data section is excluded from the size, since a program header with a FileSize of 0 and non-zero 
 		;  MemorySize will have MemorySize zero bytes loaded into memory
 		
@@ -377,24 +377,33 @@ struct ELFBuilder {
 		if (this->DataProgramHeader) {
 			; Update the data segment/section. Todo: If 1kb of globals are used, push the code segment back
 			this->DataProgramHeader->VirtualAddress := ImageBase + 0x1000
+			this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
 			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
 		}
 		
 		; Update the segments to be relative to the image base
+		this->PHDR->PhysicalAddress := this->PHDR->VirtualAddress + PhysicalImageBase
 		this->PHDR->VirtualAddress += ImageBase
+
+		this->LoadPHDR->PhysicalAddress := this->LoadPHDR->VirtualAddress + PhysicalImageBase
 		this->LoadPHDR->VirtualAddress += ImageBase
+
 		this->StringSection->VirtualAddress += ImageBase
 		
 		; Update the code segment+section with the code file offset, and entry-point
 		; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
 		;  and virtual address to be equal modulo 1024
-		i64 CodeBase := ImageBase + 0x1000 + (GlobalPages * 0x1000) + CodeOffset
+		i64 ImageBaseToCode := 0x1000 + (GlobalPages * 0x1000) + CodeOffset
+
+		i64 CodeBase := ImageBase + ImageBaseToCode
+		i64 PhysicalCodeBase := PhysicalImageBase + ImageBaseToCode
 		
 		i64 EntryPoint := CodeBase + MainOffset
 		
 		this->Header->EntryPoint := EntryPoint
 		this->CodeProgramHeader->FileOffset := CodeOffset
 		this->CodeProgramHeader->VirtualAddress := CodeBase
+		this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
 		this->CodeSectionHeader->FileOffset := CodeOffset
 		this->CodeSectionHeader->VirtualAddress := CodeBase
 		

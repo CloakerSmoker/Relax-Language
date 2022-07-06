@@ -48,12 +48,7 @@ struct TACFromAST {
 			if (LocalElement) {
 				TACVariable* Result := LocalElement->Value
 				
-				if (Result->LastValue) {
-					return Result->LastValue As TACAddress
-				}
-				else {
-					return TACAddress:WrapLong(TACAddressKind:Variable, Result).CopyGeneration()
-				}
+				return TACAddress:WrapLong(TACAddressKind:Variable, Result).CopyGeneration()
 			}
 			else {
 				TACVariable* Result := TACVariable:New(Variable)

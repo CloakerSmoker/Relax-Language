@@ -110,7 +110,7 @@ struct AVLTreeNode {
 				return this->RightLeftRotate()
 			}
 		}
-
+		
 		return this
 	}
 	

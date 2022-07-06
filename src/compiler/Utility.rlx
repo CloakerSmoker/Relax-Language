@@ -78,6 +78,7 @@ struct BuildConfig {
 	i8* PlatformName
 	
 	i64 ImageBase
+	i64 PhysicalImageBase
 	i8 OutputFormat
 	i8 TargetABI
 	i8 DumpInfo

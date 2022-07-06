@@ -50,4 +50,33 @@ struct PointerArray {
 		this->EnsureCapacity(this->Length + 1)
 		this->Data[this->Length++] := Value
 	}
+	define void Push(void* Value) {
+		this->Append(Value)
+	}
+
+	define void Insert(i32 Index, void* Value) {
+		this->EnsureCapacity(this->Length + 1)
+
+		i32 Space := this->Length - Index
+
+		MoveMemory(&this->Data[Index + 1], &this->Data[Index], Space * #void*)
+
+		this->Data[Index] := Value
+		this->Length += 1
+	}
+	define void Remove(i32 Index) {
+		i32 Space := this->Length - Index
+
+		MoveMemory(&this->Data[Index], &this->Data[Index + 1], Space * #void*)
+
+		this->Length -= 1
+	}
+
+	define void Swap(i32 Left, i32 Right) {
+		void* L := this->Data[Left]
+		void* R := this->Data[Right]
+
+		this->Data[Left] := R
+		this->Data[Right] := L
+	}
 }
