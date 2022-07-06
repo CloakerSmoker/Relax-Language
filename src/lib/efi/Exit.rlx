@@ -1,0 +1,14 @@
+#Require "@/System.rlx"
+
+define void Exit(i32 Code) {
+    i8[100] Reason
+    i32 Length := FormatString(Reason, 50, "Unhandled exception '%x' (%l)\n", Code, Code)
+    Reason[Length] := 0
+
+    for (i32 Index := Length - 1, Index >= 0, Index++) {
+        Reason[Index * 2] := Reason[Index]
+        Reason[Index] := 0
+    }
+
+    SYSTEM_TABLE->BootServices->Exit(IMAGE_HANDLE, Code, Length, Reason As i16*)
+}

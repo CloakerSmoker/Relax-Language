@@ -1,0 +1,750 @@
+#Require "$/MemoryBase.rlx"
+#Require "$/StringBase.rlx"
+
+struct EFI_GUID {
+	i32 Data1
+	i16 Data2
+	i16 Data3
+	i8[8] Data4
+	
+	define i8 Equals(EFI_GUID* Other) {
+		return CompareMemory(this, Other, #EFI_GUID)
+	}
+}
+
+struct EFI_HANDLE {
+	void* Dummy
+}
+struct EFI_EVENT {
+	void* Dummy
+}
+
+define i64 EFICall(void* this, void* One, void* Two, void* Three, void* Four, void* Five, void* Function) x64 asm {
+	mov, rax, {rsp + 0x38} As i64*
+	jmp, rax
+}
+define i64 EFICall(void* this, void* One, void* Two, void* Three, void* Four, void* Function) x64 asm {
+	mov, rax, {rsp + 0x30} As i64*
+	jmp, rax
+}
+define i64 EFICall(void* this, void* One, void* Two, void* Three, void* Function) x64 asm {
+	mov, rax, {rsp + 0x28} As i64*
+	jmp, rax
+}
+define i64 EFICall(void* this, void* One, void* Two, void* Function) x64 asm {
+	jmp, r9
+}
+define i64 EFICall(void* this, void* One, void* Function) x64 asm {
+	jmp, r8
+}
+define i64 EFICall(void* this, void* Function) x64 asm {
+	jmp, rdx
+}
+
+struct EFI_TABLE_HEADER {
+	i64 Signature
+	i32 Revision
+	i32 HeaderSize
+	i32 Checksum
+	i32 Reserved
+}
+
+struct EFI_INPUT_KEY {
+	i16 ScanCode
+	i16 WideCharacter
+}
+
+i8* EFI_SIMPLE_TEXT_INPUT_PROTOCOL_GUID := i8[0x38, 0x74, 0x77, 0xc1, 0x69, 0xc7, 0x11, 0xd2, 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]
+
+struct SIMPLE_TEXT_INPUT_INTERFACE {
+	void* _Reset
+	void* _ReadKeyStroke
+	EFI_EVENT* WaitForKey
+	
+	define i64 Reset(i8 ExtendedVerification) {
+		return EFICall(this, ExtendedVerification As void*, this->_Reset)
+	}
+	define i64 Reset() {
+		return EFICall(this, null, this->_Reset)
+	}
+	define i64 ReadKey(EFI_INPUT_KEY* Key) {
+		return EFICall(this, Key, this->_ReadKeyStroke)
+	}
+}
+
+struct SIMPLE_TEXT_OUTPUT_MODE {
+	i32 MaxMode
+	i32 Mode
+	i32 Attribute
+	i32 CursorColumn
+	i32 CursorRow
+	i8 CursorVisible
+}
+
+struct SIMPLE_TEXT_OUTPUT_INTERFACE {
+	void* _Reset
+	void* _OutputString
+	void* _TestString
+	void* _QueryMode
+	void* _SetMode
+	void* _SetAttribute
+	void* _ClearScreen
+	void* _SetCursorPosition
+	void* _EnableCursor
+
+	SIMPLE_TEXT_OUTPUT_MODE* Mode
+	
+	define i64 Reset() {
+		return EFICall(this, this->_Reset)
+	}
+	
+	define i64 OutputString(i16* String) {
+		return EFICall(this, String, this->_OutputString)
+	}
+}
+
+define i64 EFI_REVISION_PACK(i64 High, i64 Low) {
+	return (High << 16) | Low
+}
+
+/*
+^{0x([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2}),0x([0-9a-f]{2})([0-9a-f]{2}),0x([0-9a-f]{2})([0-9a-f]{2}), {0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2}),0x([0-9a-f]{2})}}
+0x$4, 0x$3, 0x$2, 0x$1, 0x$6, 0x$5, 0x$8, 0x$7, 0x$9, 0x$10, 0x$11, 0x$12, 0x$13, 0x$14, 0x$15, 0x$16
+*/
+
+EFI_GUID* EFI_BLOCK_IO_PROTOCOL_GUID := i8[0x21, 0x5b, 0x4e, 0x96, 0x59, 0x64, 0xd2, 0x11, 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b] As EFI_GUID*
+i64 EFI_BLOCK_IO_PROTOCOL_REVISION_2 := EFI_REVISION_PACK(2, 1)
+i64 EFI_BLOCK_IO_PROTOCOL_REVISION_3 := EFI_REVISION_PACK(2, 31)
+
+struct EFI_BLOCK_IO_MEDIA {
+	i32 MediaID
+	
+	i8 IsRemovable
+	i8 IsPresent
+	i8 IsLogicalPartition
+	i8 IsReadOnly
+	i8 DoesWriteCaching
+	
+	i32 BlockSize
+	i32 IOBufferAlignment
+	
+	i64 LastBlock
+	i64 FirstAlignedBlock
+	
+	i32 LogicalBlocksPerPhysicalBlock
+	i32 OptimalTransferLengthGranularity
+}
+
+struct EFI_BLOCK_IO_PROTOCOL {
+	i64 Revision
+	
+	EFI_BLOCK_IO_MEDIA* Media
+	
+	void* _Reset
+	void* _ReadBlocks
+	void* _WriteBlocks
+	void* _FlushBlocks
+	
+	define i64 Reset(i8 ExtendedVerification) {
+		return EFICall(this, ExtendedVerification As void*, this->_Reset)
+	}
+	define i64 Reset() {
+		return EFICall(this, null, this->_Reset)
+	}
+	
+	define i64 ReadBlocks(i32 MediaID, i64 LBA, i64 BlockCount, void* Buffer) {
+		return EFICall(this,
+		               MediaID As void*,
+					   LBA As void*,
+					   (BlockCount * this->Media->BlockSize) As void*,
+					   Buffer,
+					   this->_ReadBlocks)
+	}
+	define i64 ReadBlocks(i64 LBA, i64 BlockCount, void* Buffer) {
+		return EFICall(this,
+		               this->Media->MediaID As void*,
+					   LBA As void*,
+					   (BlockCount * this->Media->BlockSize) As void*,
+					   Buffer,
+					   this->_ReadBlocks)
+	}
+	
+	define i64 WriteBlocks(i32 MediaID, i64 LBA, i64 BlockCount, void* Buffer) {
+		return EFICall(this, 
+		               MediaID As void*,
+					   LBA As void*,
+					   (BlockCount * this->Media->BlockSize) As void*,
+					   Buffer,
+					   this->_WriteBlocks)
+	}
+	define i64 WriteBlocks(i64 LBA, i64 BlockCount, void* Buffer) {
+		return EFICall(this,
+		               this->Media->MediaID As void*,
+					   LBA As void*,
+					   (BlockCount * this->Media->BlockSize) As void*,
+					   Buffer,
+					   this->_WriteBlocks)
+	}
+	
+	define i64 Flush() {
+		return EFICall(this, this->_FlushBlocks)
+	}
+}
+
+struct EFI_RUNTIME_SERVICES {
+	EFI_TABLE_HEADER Header
+
+	void* GetTime
+	void* SetTime
+	void* GetWakeupTime
+	void* SetWakeupTime
+
+	void* SetVirtualAddressMap
+	void* ConvertPointer
+
+	void* GetVariable
+	void* GetNextVariableName
+	void* SetVariable
+
+	void* GetNextHighMonotonicCount
+	void* ResetSystem
+
+	void* UpdateCapsule
+	void* QueryCapsuleCapabilities
+	void* QueryVariableInfo
+}
+
+EFI_GUID* EFI_SIMPLE_FILE_SYSTEM_PROTOCOL := i8[0x22, 0x5b, 0x4e, 0x96, 0x59, 0x64, 0xd2, 0x11, 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b] As EFI_GUID*
+
+EFI_GUID* EFI_PARTITION_INFO_PROTOCOL_GUID := i8[0x2c, 0xf6, 0xf2, 0x8c, 0x9b, 0xbc, 0x21, 0x48, 0x80, 0x8d, 0xec, 0x9e, 0xc4, 0x21, 0xa1, 0xa0
+] As EFI_GUID*
+
+struct EFI_PARTITION_ENTRY {
+	EFI_GUID Type
+	EFI_GUID GUID
+	i64 StartingLBA
+	i64 EndingLBA
+	i64 Attributes
+	i16[36] PartitionName
+}
+
+i32 EFI_PARTITION_INFO_TYPE_OTHER := 0
+i32 EFI_PARTITION_INFO_TYPE_MBR := 1
+i32 EFI_PARTITION_INFO_TYPE_GPT := 2
+
+struct EFI_PARTITION_INFO_PROTOCOL {
+	i32 Revision
+	i32 Type
+	i8 System
+	i8[7] Reserved
+	
+	EFI_PARTITION_ENTRY Entry
+}
+
+EFI_GUID* EFI_DEVICE_PATH_PROTOCOL_GUID := i8[0x91, 0x6e, 0x57, 0x09, 0x3f, 0x6d, 0xd2, 0x11, 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b] As EFI_GUID*
+
+i8 EFI_DEVICE_PATH_NODE_TYPE_END := 0x7F
+i8 EFI_DEVICE_PATH_NODE_SUBTYPE_END_ENTIRE := 0xFF As i8
+
+struct EFI_DEVICE_PATH_PROTOCOL {
+	i8 Type
+	i8 SubType
+	i8[2] Length
+	
+	define i32 GetLength() {
+		return (this->Length[0] | (this->Length[1] << 8)) & 0xFFFF
+	}
+	define void SetLength(i32 New) {
+		this->Length[0] := (New & 0xFF) As i8
+		this->Length[0] := ((New >> 8) & 0xFF) As i8
+	}
+	
+	define EFI_DEVICE_PATH_PROTOCOL* NextNode() {
+		return this + this->GetLength()
+	}
+	
+	define i8 IsEndNode() {
+		return this->Type = EFI_DEVICE_PATH_NODE_TYPE_END && this->SubType = EFI_DEVICE_PATH_NODE_SUBTYPE_END_ENTIRE
+	}
+	
+	define void PopNode() {
+		EFI_DEVICE_PATH_PROTOCOL* Current := this
+	
+		loop {
+			EFI_DEVICE_PATH_PROTOCOL* Next := Current->NextNode()
+			
+			if (Next->IsEndNode()) {
+				break
+			}
+			
+			Current := Next
+		}
+		
+		Current->Type := EFI_DEVICE_PATH_NODE_TYPE_END
+		Current->SubType := EFI_DEVICE_PATH_NODE_SUBTYPE_END_ENTIRE
+		Current->SetLength(#EFI_DEVICE_PATH_PROTOCOL)
+	}
+	
+	static i8 Equals(EFI_DEVICE_PATH_PROTOCOL* Left, EFI_DEVICE_PATH_PROTOCOL* Right) {
+		loop {
+			if (Left->GetLength() != Right->GetLength()) {
+				return false
+			}
+			
+			i8 ContentsEqual := CompareMemory(Left, Right, Left->GetLength())
+			
+			if !(ContentsEqual) {
+				return false
+			}
+			
+			if (Left->IsEndNode()) {
+				return true
+			}
+			
+			Left := Left->NextNode()
+			Right := Right->NextNode()
+		}
+		
+		return false
+	}
+	
+	define i8 Equals(EFI_DEVICE_PATH_PROTOCOL* Other) {
+		return EFI_DEVICE_PATH_PROTOCOL:Equals(this, Other)
+	}
+}
+
+EFI_GUID* EFI_DEVICE_PATH_UTILITIES_PROTOCOL_GUID := i8[0x4e, 0xbe, 0x79, 0x03, 0x06, 0xd7, 0x7d, 0x43, 0xb0, 0x37, 0xed, 0xb8, 0x2f, 0xb7, 0x72, 0xa4] As EFI_GUID*
+
+struct EFI_DEVICE_PATH_UTILITIES_PROTOCOL {
+	void* _GetDevicePathSize
+	void* _DuplicateDevicePath
+	void* _AppendDevicePath
+	void* _AppendDeviceNode
+	void* _AppendDevicePathInstance
+	void* _GetNextDevicePathInstance
+	void* _IsDevicePathMultiInstance
+	void* _CreateDeviceNode
+	
+	define i32 GetDevicePathSize(EFI_DEVICE_PATH_PROTOCOL* DevicePath) {
+		return EFICall(DevicePath, this->_GetDevicePathSize) As i32
+	}
+	define EFI_DEVICE_PATH_PROTOCOL* DuplicateDevicePath(EFI_DEVICE_PATH_PROTOCOL* DevicePath) {
+		return EFICall(DevicePath, this->_DuplicateDevicePath) As EFI_DEVICE_PATH_PROTOCOL*
+	}
+	define EFI_DEVICE_PATH_PROTOCOL* GetNextDevicePathInstance(EFI_DEVICE_PATH_PROTOCOL** DevicePathInstance) {
+		return EFICall(DevicePathInstance, null, this->_GetNextDevicePathInstance) As EFI_DEVICE_PATH_PROTOCOL*
+	}
+}
+
+EFI_GUID* EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID := i8[0x20, 0x3e, 0x84, 0x8b, 0x32, 0x81, 0x52, 0x48, 0x90, 0xcc, 0x55, 0x1a, 0x4e, 0x4a, 0x7f, 0x1c] As EFI_GUID*
+
+struct EFI_DEVICE_PATH_TO_TEXT_PROTOCOL {
+	void* _ConvertDeviceNodeToText
+	void* _ConvertDevicePathToText
+	
+	define i16* ConvertDeviceNodeToText(EFI_DEVICE_PATH_PROTOCOL* DeviceNode, i8 DisplayOnly, i8 AllowShortcuts) {
+		return EFICall(DeviceNode, DisplayOnly As void*, AllowShortcuts As void*, this->_ConvertDeviceNodeToText) As i16*
+	}
+	define i16* ConvertDevicePathToText(EFI_DEVICE_PATH_PROTOCOL* DevicePath, i8 DisplayOnly, i8 AllowShortcuts) {
+		return EFICall(DevicePath, DisplayOnly As void*, AllowShortcuts As void*, this->_ConvertDevicePathToText) As i16*
+	}
+}
+
+EFI_GUID* EFI_LOADED_IMAGE_PROTOCOL_GUID := i8[0xa1, 0x31, 0x1b, 0x5b, 0x62, 0x95, 0xd2, 0x11, 0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b] As EFI_GUID*
+
+struct EFI_LOADED_IMAGE_PROTOCOL {
+	i32 Revision
+	EFI_HANDLE* ParentHandle
+	EFI_SYSTEM_TABLE* SystemTable
+	
+	EFI_HANDLE* DeviceHandle
+	EFI_DEVICE_PATH_PROTOCOL* FilePath
+	void* Reserved
+	
+	i32 LoadOptionsSize
+	void* LoadOptions
+	
+	void* ImageBase
+	i64 ImageSize
+	i32 ImageCodeType
+	i32 ImageDataType
+	void* _Unload
+}
+
+EFI_GUID* EFI_DEBUG_SUPPORT_PROTOCOL_GUID := i8[0x0C, 0x59, 0x55, 0x27, 0x3C, 0x6F, 0xFA, 0x42, 0x9E, 0xA4, 0xA3, 0xBA, 0x54, 0x3C, 0xDA, 0x25] As EFI_GUID*
+
+struct EFI_FX_SAVE_STATE_X64 {
+	i16 Fcw
+	i16 Csw
+	i16 Ftw
+	i16 Opcode
+	i64 RIP
+	i64 DataOffset
+	
+	i8[8] Reserved1
+	
+	i8[10] St0Mm0
+	i8[6] Reserved2
+	i8[10] St0Mm1
+	i8[6] Reserved3
+	i8[10] St0Mm2
+	i8[6] Reserved4
+	i8[10] St0Mm3
+	i8[6] Reserved5
+	i8[10] St0Mm4
+	i8[6] Reserved6
+	i8[10] St0Mm5
+	i8[6] Reserved7
+	i8[10] St0Mm6
+	i8[6] Reserved8
+	i8[10] St0Mm7
+	i8[6] Reserved9
+	
+	i8[16] Xmm0
+	i8[16] Xmm1
+	i8[16] Xmm2
+	i8[16] Xmm3
+	i8[16] Xmm4
+	i8[16] Xmm5
+	i8[16] Xmm6
+	i8[16] Xmm7
+	
+	i8[224] Reserved11 ; 14 * 16
+}
+
+struct EFI_SYSTEM_CONTEXT_X64 {
+	i64 ExceptionData
+	
+	EFI_FX_SAVE_STATE_X64 FxSaveState
+	
+	i64[6] Dr
+	i64[6] Cr
+	
+	i64 Flags
+	
+	i64 LDTR
+	i64 TR
+	i64[2] GDTR
+	i64[2] IDTR
+	
+	i64 RIP
+	
+	i64 GS
+	i64 FS
+	i64 ES
+	i64 DS
+	i64 CS
+	i64 SS
+	
+	i64 RDI
+	i64 RSI
+	i64 RBP
+	i64 RSP
+	i64 RBX
+	i64 RDX
+	i64 RCX
+	i64 RAX
+	i64 R8
+	i64 R9
+	i64 R10
+	i64 R11
+	i64 R12
+	i64 R13
+	i64 R14
+	i64 R15
+}
+
+i64 EFI_DEBUG_SUPPORT_ARCHITECTURE_X64 := 0x8664
+
+i32 EFI_EXCEPTION_X64_INVALID_OPCODE := 6
+i32 EFI_EXCEPTION_X64_PROTECTION_FAULT := 13
+i32 EFI_EXCEPTION_X64_PAGE_FAULT := 14
+
+struct EFI_DEBUG_SUPPORT_PROTOCOL {
+	i64 Architecture
+	void* _GetMaximumProcessorIndex
+	void* _RegisterPeriodicCallback
+	void* _RegisterExceptionCallback
+	void* _InvalidateInstructionCache
+	
+	define i64 RegisterExceptionCallback(i32 Type, void* Callback) {
+		return EFICall(this, null, Callback, Type As void*, this->_RegisterExceptionCallback)
+	}
+}
+
+EFI_GUID* EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID := i8[0xde, 0xa9, 0x42, 0x90, 0xdc, 0x23, 0x38, 0x4a, 0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a] As EFI_GUID*
+
+i32 EFI_GRAPHICS_PIXEL_FORMAT_RGB_8 := 0
+i32 EFI_GRAPHICS_PIXEL_FORMAT_BGR_8 := 1
+i32 EFI_GRAPHICS_PIXEL_FORMAT_MASK := 2
+i32 EFI_GRAPHICS_PIXEL_FORMAT_BLOCK_TRANSFER_ONLY := 3
+
+struct EFI_PIXEL_BITMASK {
+	i32 RedMask
+	i32 GreenMask
+	i32 BlueMask
+	i32 ReservedMask
+}
+
+struct EFI_GRAPHICS_OUTPUT_MODE_INFORMATION {
+	i32 Version
+	i32 HorizontalResolution
+	i32 VerticalResolution
+	i32 PixelFormat
+	i32 PixelInformation
+	i32 PixelsPerScanLine
+}
+
+struct EFI_GRAPHICS_OUTPUT_MODE {
+	i32 MaxMode
+	i32 CurrentMode
+	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* Info
+	i32 SizeOfInfo
+	void* FrameBufferBase
+	i64 FrameBufferSize
+}
+
+struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
+	void* _QueryMode
+	void* _SetMode
+	void* _BlockTransfer
+	EFI_GRAPHICS_OUTPUT_MODE* Mode
+	
+	define EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* QueryMode(i32 ModeNumber) {
+		i64 SizeOfInfo := #EFI_GRAPHICS_OUTPUT_MODE_INFORMATION
+		EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* Result := null
+		
+		EFICall(this, ModeNumber As void*, &SizeOfInfo, &Result, this->_QueryMode)
+		
+		return Result
+	}
+	define i64 SetMode(i32 ModeNumber) {
+		return EFICall(this, ModeNumber As void*, this->_SetMode)
+	}
+}
+
+
+i32 EFI_MEMORY_ALLOCATE_ANY := 0
+i32 EFI_MEMORY_ALLOCATE_MAX_ADDRESS := 1
+i32 EFI_MEMORY_ALLOCATE_ADDRESS := 2
+
+i32 EFI_MEMORY_DESCRIPTOR_VERSION := 1
+
+struct EFI_MEMORY_DESCRIPTOR {
+	i32 Type
+	i64 PhysicalStart
+	void* VirtualStart
+	i64 NumberOfPages
+	i64 Attribute
+}
+
+i32 EFI_MEMORY_TYPE_LOADER_CODE := 1
+i32 EFI_MEMORY_TYPE_LOADER_DATA := 2
+i32 EFI_MEMORY_TYPE_BOOT_SERVICE_CODE := 3
+i32 EFI_MEMORY_TYPE_BOOT_SERVICE_DATA := 4
+i32 EFI_MEMORY_TYPE_RUNTIME_SERVICE_CODE := 5
+i32 EFI_MEMORY_TYPE_RUNTIME_SERVICE_CODE := 6
+i32 EFI_MEMORY_TYPE_CONVENTIONAL := 7
+i32 EFI_MEMORY_TYPE_UNUSABLE := 8
+i32 EFI_MEMORY_TYPE_ACPI_RECLAIM := 9
+i32 EFI_MEMORY_TYPE_ACPI_NVS := 10
+
+define i8* EFIMemoryTypeToString(i32 Type) {
+	i8*[16] Names {
+		"null",
+		"loader code",
+		"loader data",
+		"boot service code",
+		"boot service data",
+		"runtime service code",
+		"runtime service data",
+		"conventional",
+		"unusable",
+		"ACPI reclaim",
+		"ACPI NVS",
+		"memory mapped IO",
+		"memory mapped IO port space",
+		"PAL code",
+		"persistent memory",
+		"unaccepted type"
+	}
+	
+	return Names[Type]
+}
+
+i32 EFI_LOCATE_SEARCH_TYPE_ALL := 0
+i32 EFI_LOCATE_SEARCH_TYPE_REGISTER_NOTIFY := 1
+i32 EFI_LOCATE_SEARCH_TYPE_BY_PROTOCOL := 2
+
+struct EFI_BOOT_SERVICES {
+	EFI_TABLE_HEADER Header
+
+	void* _RaiseTPL
+    void* _RestoreTPL
+	
+    void* _AllocatePages
+    void* _FreePages
+    void* _GetMemoryMap
+    void* _AllocatePool
+    void* _FreePool
+	
+    void* _CreateEvent
+    void* _SetTimer
+    void* _WaitForEvent
+    void* _SignalEvent
+    void* _CloseEvent
+    void* _CheckEvent
+	
+    void* _InstallProtocolInterface
+    void* _ReinstallProtocolInterface
+    void* _UninstallProtocolInterface
+    void* _HandleProtocol
+    void* _PCHandleProtocol
+    void* _RegisterProtocolNotify
+    void* _LocateHandle
+    void* _LocateDevicePath
+    void* _InstallConfigurationTable
+	
+    void* _LoadImage
+    void* _StartImage
+    void* _Exit
+    void* _UnloadImage
+    void* _ExitBootServices
+	
+    void* _GetNextMonotonicCount
+    void* _Stall
+    void* _SetWatchdogTimer
+	
+    void* _ConnectController
+    void* _DisconnectController
+	
+    void* _OpenProtocol
+    void* _CloseProtocol
+    void* _OpenProtocolInformation
+	
+    void* _ProtocolsPerHandle
+    void* _LocateHandleBuffer
+    void* _LocateProtocol
+    void* _InstallMultipleProtocolInterfaces
+    void* _UninstallMultipleProtocolInterfaces
+	
+    void* _CalculateCrc32
+	
+    void* _CopyMem
+    void* _SetMem
+    void* _CreateEventEx
+	
+	define i64 AllocatePages(i32 AllocateType, i32 MemoryType, i32 PageCount, void** Memory) {
+		return EFICall(AllocateType As void*, MemoryType As void*, PageCount As void*, Memory, this->_AllocatePages)
+	}
+	define i64 AllocatePages(i32 AllocateType, i32 PageCount, void** Memory) {
+		return EFICall(AllocateType As void*, EFI_MEMORY_TYPE_BOOT_SERVICE_DATA As void*, PageCount As void*, Memory, this->_AllocatePages)
+	}
+	define void* AllocatePages(i32 PageCount) {
+		void* Result := null
+		
+		this->AllocatePages(EFI_MEMORY_ALLOCATE_ANY, EFI_MEMORY_TYPE_BOOT_SERVICE_DATA, PageCount, &Result)
+		
+		return Result
+	}
+	define i64 FreePages(void* Memory, i32 PageCount) {
+		return EFICall(Memory, PageCount As void*, this->_FreePages)
+	}
+	
+	define i64 GetMemoryMapInfo(i64* Size, i64* DescriptorSize) {
+		i64 MapKey := 0
+		i64 DescriptorVersion := EFI_MEMORY_DESCRIPTOR_VERSION
+		
+		return EFICall(Size, null, &MapKey, DescriptorSize, &DescriptorVersion, this->_GetMemoryMap)
+	}
+	define i64 GetMemoryMap(i64 Size, EFI_MEMORY_DESCRIPTOR* Out, i64* MapKey) {
+		i64 DescriptorSize := 0
+		i64 DescriptorVersion := EFI_MEMORY_DESCRIPTOR_VERSION
+		
+		return EFICall(&Size, Out, MapKey, &DescriptorSize, &DescriptorVersion, this->_GetMemoryMap)
+	}
+	
+	define i64 AllocatePool(i32 PoolType, i64 Size, void** Buffer) {
+		return EFICall(PoolType As void*, Size As void*, Buffer, this->_AllocatePool)
+	}
+	define void* AllocatePool(i32 PoolType, i64 Size) {
+		void* Result := null
+		
+		EFICall(PoolType As void*, Size As void*, &Result, this->_AllocatePool)
+		
+		return Result
+	}
+	define void* AllocatePool(i64 Size) {
+		void* Result := null
+		
+		EFICall(EFI_MEMORY_TYPE_BOOT_SERVICE_DATA As void*, Size As void*, &Result, this->_AllocatePool)
+		
+		return Result
+	}
+	define i64 FreePool(void* Buffer) {
+		return EFICall(Buffer, this->_FreePool)
+	}
+	
+	define i64 WaitForEvent(EFI_EVENT* Event) {
+		i32 SignalIndex := 0
+		
+		return EFICall(1 As void*, &Event, &SignalIndex , this->_WaitForEvent)
+	}
+
+    define i64 Exit(EFI_HANDLE* ImageHandle, i32 Status, i32 DataSize, i16* Data) {
+        return EFICall(ImageHandle, Status As void*, DataSize As void*, Data, this->_Exit)
+    }
+	
+	define i64 ExitBootServices(EFI_HANDLE* ImageHandle, i64 MapKey) {
+		return EFICall(ImageHandle, MapKey As void*, this->_ExitBootServices)
+	}
+	
+	define i64 HandleProtocol(EFI_HANDLE* Handle, EFI_GUID* Protocol, void** Interface) {
+		return EFICall(Handle, Protocol, Interface, this->_HandleProtocol)
+	}
+	
+	define i64 LocateHandle(i32 SearchType, EFI_GUID* Protocol, void* SearchKey, i32* BufferSize, void* Buffer) {
+		return EFICall(SearchType As void*, Protocol, SearchKey, BufferSize, Buffer, this->_LocateHandle)
+	}
+	
+	define i64 LocateDevicePath(EFI_GUID* Protocol, EFI_DEVICE_PATH_PROTOCOL** DevicePath, EFI_HANDLE** Device) {
+		return EFICall(Protocol, DevicePath, Device, this->_LocateDevicePath)
+	}
+	
+	define i64 LocateProtocol(EFI_GUID* Protocol, void* Registration, void** Interface) {
+		return EFICall(Protocol, Registration, Interface, this->_LocateProtocol)
+	}
+	define i64 LocateProtocol(EFI_GUID* Protocol, void** Interface) {
+		return EFICall(Protocol, null, Interface, this->_LocateProtocol)
+	}
+}
+
+struct EFI_CONFIGURATION_TABLE {
+	EFI_GUID VendorGUID
+	void* VendorTable
+}
+
+struct EFI_SYSTEM_TABLE {
+	EFI_TABLE_HEADER Header
+	
+	i16* FirmwareVender
+	i32 FirmwareRevision
+	
+	void* ConsoleInputHandle
+	SIMPLE_TEXT_INPUT_INTERFACE* ConsoleInput
+
+	void* ConsoleOutputHandle
+	SIMPLE_TEXT_OUTPUT_INTERFACE* ConsoleOutput
+
+	void* ConsoleErrorHandle
+	SIMPLE_TEXT_OUTPUT_INTERFACE* ConsoleError
+	
+	EFI_RUNTIME_SERVICES* RuntimeServices
+	EFI_BOOT_SERVICES* BootServices
+
+	i32 NumberOfTableEntries
+	EFI_CONFIGURATION_TABLE* ConfigurationTable
+}
+
+EFI_SYSTEM_TABLE* SYSTEM_TABLE := null
+EFI_HANDLE* IMAGE_HANDLE := null

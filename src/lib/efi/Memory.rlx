@@ -1,0 +1,36 @@
+#Require "$/MemoryBase.rlx"
+
+struct EFIAllocation {
+	i32 Size
+	i32 Dummy
+	i8[0] Data
+}
+
+define void* Alloc(i32 Size) {
+	EFIAllocation* Result := SYSTEM_TABLE->BootServices->AllocatePool(8 + Size)
+	
+	Result->Size := Size
+	
+	for (i32 Index := 0, Index < Size, Index++) {
+		Result->Data[Index] := 0
+	}
+	
+	return Result~>Data
+}
+define void Free(void* RawMemory) {
+	EFIAllocation* Memory := (RawMemory - 8) As EFIAllocation*
+
+	SYSTEM_TABLE->BootServices->FreePool(Memory As void*)
+}
+define void EFIFree(void* Memory) {
+	SYSTEM_TABLE->BootServices->FreePool(Memory)
+}
+define void* ReAlloc(void* Old, i32 Size) {
+	EFIAllocation* Memory := (Old - 8) As EFIAllocation*
+	
+	void* New := Alloc(Size)
+	MoveMemory(New, Old, Memory->Size)
+	Free(Old)
+	
+	return New
+}

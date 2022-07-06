@@ -1,0 +1,84 @@
+#Require "@/System.rlx"
+
+define void PrintCharacter(i8 Character) {
+	i8[4] Temp {Character, 0, 0, 0}
+	
+	SYSTEM_TABLE->ConsoleOutput->OutputString(Temp As i16*)
+}
+
+define void PrintCharacters(i8* Characters, i32 Length) {
+	for (i32 Index := 0, Index < Length, Index++) {
+		PrintCharacter(Characters[Index])
+	}
+}
+
+#Require "$/Print.rlx"
+
+define void DoWideStringPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	i32 Index := 0
+	i16* String := Parameters[*ParameterIndex] As i16*
+	
+	loop {
+		i16 Next := String[Index++]
+		
+		if (Next = 0) {
+			break
+		}
+		
+		this->PrintCharacter(Next As i8)
+	}
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype WideStringFormatPrototype {
+	Name: "w",
+	Format: &DoWideStringPrint
+}
+
+i32 WIDE_STRING_FORMAT_PROTOTYPE_ID := AddPrintFormat(&WideStringFormatPrototype)
+
+define void DoGUIDPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	i8* GUID := Parameters[*ParameterIndex] As i8*
+	
+	this->Print("{")
+	
+	for (i32 Index := 3, Index >= 0, Index--) {
+		this->PrintByte(GUID[Index])
+	}
+	
+	this->Print("-")
+	
+	for (i32 Index := 5, Index >= 4, Index--) {
+		this->PrintByte(GUID[Index])
+	}
+	
+	this->Print("-")
+	
+	for (i32 Index := 7, Index >= 6, Index--) {
+		this->PrintByte(GUID[Index])
+	}
+	
+	this->Print("-")
+	
+	for (i32 Index := 8, Index < 10, Index++) {
+		this->PrintByte(GUID[Index])
+	}
+	
+	this->Print("-")
+	
+	for (i32 Index := 10, Index < 16, Index++) {
+		this->PrintByte(GUID[Index])
+	}
+	
+	this->Print("}")
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype GUIDFormatPrototype {
+	Name: "guid",
+	Format: &DoGUIDPrint
+}
+
+i32 GUID_FORMAT_PROTOTYPE_ID := AddPrintFormat(&GUIDFormatPrototype)
