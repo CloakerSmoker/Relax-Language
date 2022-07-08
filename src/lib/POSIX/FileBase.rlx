@@ -49,6 +49,10 @@ define i32 FileDelete(i8* FilePath) {
     return syscall:(SYSCALL_UNLINK, FilePath) As i32
 }
 
+define void FileTruncate(i64 File, i64 Size) {
+    syscall:(SYSCALL_FTRUNCATE, File, Size)
+}
+
 define void SetWorkingDirectory(i8* Path) {
     syscall:(SYSCALL_CHDIR, Path)
 }

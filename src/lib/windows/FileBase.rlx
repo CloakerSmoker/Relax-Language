@@ -84,6 +84,16 @@ define i32 FileDelete(i8* FilePath) {
     return DeleteFile(FilePath)
 }
 
+DllImport void SetEndOfFile(i64) {Kernel32.dll, SetEndOfFile}
+
+define void FileTruncate(i64 File, i32 Size) {
+    i32 Here := FileTell(File)
+
+    FileSeek(File, Size, SEEK_SET)
+    SetEndOfFile(File)
+    FileSeek(File, Here, SEEK_SET)
+}
+
 DllImport i32 SetCurrentDirectory(i8*) {Kernel32.dll, SetCurrentDirectoryA}
 
 define void SetWorkingDirectory(i8* Path) {
