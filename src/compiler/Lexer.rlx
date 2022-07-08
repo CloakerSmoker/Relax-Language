@@ -919,9 +919,11 @@ struct LexerState {
 				this->Config->IncludedFiles->Set(AbsoluteIncludePath, AbsoluteIncludePath)
 				this->Config->IncludedFiles->Set(IncludePath, AbsoluteIncludePath)
 				
-				Print("Including file: '")
-				IncludePath->Print()
-				Print("'\n")
+				if !(this->Config->DumpInfo & DUMP_SILENT) {
+					Print("Including file: '")
+					IncludePath->Print()
+					Print("'\n")
+				}
 				
 				i32 IncludeFileSize := 0
 				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize, &IncludePathBlame)

@@ -149,6 +149,14 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextOption, "--cr"  )) { Config->LineEnding := LINE_ENDING_CR   }
 		else if (StringEquals(NextOption, "--crlf")) { Config->LineEnding := LINE_ENDING_CRLF }
 
+		else if (StringEquals(NextOption, "--silent")) {
+			Config->DumpInfo |= DUMP_SILENT
+		}
+		else if (StringEquals(NextOption, "--makedep")) {
+			Config->DumpInfo |= DUMP_SILENT | DUMP_MAKEDEP
+		}
+
+
 		else if (StringEquals(NextOption, "--windows")) {
 			Config->PlatformName := "windows"
 			Config->OutputFormat := OUTPUT_PE
@@ -187,14 +195,10 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextOption, "-i") && !InputFilePath) {
 			Index += 1
 			InputFilePath := ArgV[Index]
-			
-			Print("Input File: '%s'\n", InputFilePath)
 		}
 		else if (StringEquals(NextOption, "-o") && !OutputFilePath) {
 			Index += 1
 			OutputFilePath := ArgV[Index]
-			
-			Print("Output File: '%s'\n", OutputFilePath)
 		}
 		else if (StringEquals(NextOption, "-h") || StringEquals(NextOption, "--help")) {
 			Help()
@@ -212,9 +216,14 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Exit(1)
 		}
 	}
-	
-	if (Config->OutputFormat != OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_DWARF) {
-		Print("^60Warning: `--dwarf` flag is only implemented for ELF files.^F0\n")
+
+	if !(Config->DumpInfo & DUMP_SILENT) {
+		Print("Input File: '%s'\n", InputFilePath)
+		Print("Output File: '%s'\n", OutputFilePath)
+
+		if (Config->OutputFormat != OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_DWARF) {
+			Print("^60Warning: `--dwarf` flag is only implemented for ELF files.^F0\n")
+		}
 	}
 	
 	if (Config->LineEnding = LINE_ENDING_DEFAULT) {
@@ -243,8 +252,36 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	ParserState* Parser := ParserState:New(Config, Lexer)
 	Parser->ParseProgram()
+
+	if (Config->DumpInfo & DUMP_MAKEDEP) {
+		FileDelete(OutputFilePath)
+		i64 MakeDep := FileOpen(OutputFilePath, FILE_CREATE_NEW | FILE_WRITE)
+
+		void* Elements := Config->IncludedFiles->Elements
 	
-	CompilerStart(Config, Parser, OutputFilePath)
+		for (i32 ElementIndex := 0, ElementIndex < (Config->IncludedFiles->BufferMaxCount), ElementIndex += 1) {
+			if (Elements[ElementIndex]) {
+				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				
+				while (FoundElement) {
+					i8* NextFile := FoundElement->Value
+					
+					FileWrite(MakeDep, NextFile, StringLength(NextFile))
+					FileWrite(MakeDep, " ", 1)
+					
+					/* Update the current element to be the next element in the linked list */
+					FoundElement := FoundElement->NextElement
+				}
+			}
+		}
+
+		FileTruncate(MakeDep, FileTell(MakeDep) - 1)
+
+		FileClose(MakeDep)
+	}
+	else {
+		CompilerStart(Config, Parser, OutputFilePath)
+	}
 	
 	;Print("%x\n", Heap->End - Heap->Base)
 	
