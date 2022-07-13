@@ -72,6 +72,22 @@ struct PointerArray {
 		this->Length -= 1
 	}
 
+	define i8 Has(void* Value) {
+		for (i32 Index := 0, Index < this->Length, Index++) {
+			if (this->Data[Index] = Value) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	define void Add(void* Value) {
+		if !(this->Has(Value)) {
+			this->Push(Value)
+		}
+	}
+
 	define void Swap(i32 Left, i32 Right) {
 		void* L := this->Data[Left]
 		void* R := this->Data[Right]

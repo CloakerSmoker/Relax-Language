@@ -152,7 +152,7 @@ struct TACFromAST {
 			return TACAddress:Integer(0)
 		}
 		else if (Target->NodeType = NODE_TYPE_VARIABLE) {
-			return this->FindOrAddVariable(Target->VariableValue)
+			return this->Builder->LookupName(Target->VariableValue->Name->Buffer)
 		}
 		else if (Target->NodeType = NODE_TYPE_CALL) {
 			return this->CompileCall(Target)
@@ -201,9 +201,9 @@ struct TACFromAST {
 				
 				if (BinaryOperator = OPERATOR_COLON_EQUAL) {	
 					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->IncrementGeneration()
+						;TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->IncrementGeneration()
 						
-						this->Emit(TAC_MOVE, VariableRegister, AssignmentRight)
+						this->Builder->SetName(LeftNode->VariableValue->Name->Buffer, AssignmentRight)
 					}
 					else if (LeftNode->NodeType = NODE_TYPE_STRUCT_ACCESS) {
 						this->CompileStructAccessSet(LeftNode->AccessNode, AssignmentRight)
@@ -220,7 +220,7 @@ struct TACFromAST {
 					}
 					
 					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-						VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->IncrementGeneration()
+						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->IncrementGeneration()
 						
 						TACAddress CompoundResult := this->EmitOperator(BinaryOperator, VariableRegister, AssignmentRight)
 						
@@ -416,7 +416,7 @@ struct TACFromAST {
 	
 	define void CompileFunction(FunctionDefine* Function) {
 		;if (Function->CallCount != 0) {
-			;this->StartBlock(Function->LabelNumber)
+			this->SetLabel()
 			
 			this->CompileBlock(Function->Body)
 		;}
