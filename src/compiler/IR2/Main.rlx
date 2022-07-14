@@ -157,10 +157,10 @@ bits TACAddress As i64 {
 		}
 		
 		if (this->Size = TACAddressSize:Word) {
-			Print("_w")
+			;Print("_w")
 		}
 		else {
-			Print("_l")
+			;Print("_l")
 		}
 	}
 }
@@ -427,12 +427,12 @@ struct TACBlock {
 	}
 
 	define void Print() {
-		Print("%i: %i ", this->Number, this->Sealed)
+		Print("%i: ", this->Number, this->Sealed)
 
 		i32 ParentCount := this~>Parents->Count()
 
 		if (ParentCount) {
-			Print("[")
+			Print("[parents: ")
 
 			for (i32 Index := 0, Index < ParentCount, Index++) {
 				TACBlock* Parent := this~>Parents->At(Index)
@@ -450,7 +450,7 @@ struct TACBlock {
 		i32 ChildCount := this~>Children->Count()
 
 		if (ChildCount) {
-			Print("(")
+			Print("(children: ")
 
 			for (i32 Index := 0, Index < ChildCount, Index++) {
 				TACBlock* Child := this~>Children->At(Index)
@@ -490,6 +490,43 @@ struct TACBlock {
 		}
 	}
 
+	define void PrintGraphViz() {
+		i32 ChildCount := this~>Children->Count()
+
+		if (ChildCount) {
+			for (i32 Index := 0, Index < ChildCount, Index++) {
+				TACBlock* Child := this~>Children->At(Index)
+
+				Print("\t.%i -> .%i;\n", this->Number, Child->Number)
+			}
+		}
+
+		Print("\t.%i [shape=box,label=\".%i:\\l", this->Number, this->Number)
+
+		i32 DefinitionCount := this~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
+
+			Print("    %s: %a\\l", Definition->Name, Definition->Value)
+		}
+
+		Print("    ====\\l")
+
+		for (i32 Index := 0, Index < this->Count(), Index++) {
+			TACTriple* Next := this->At(Index)
+
+			if (Next->Opcode = TAC_REMOVED) {
+				continue
+			}
+
+			Print("    .%i:\t", Index)
+			Next->Print()
+			Print("\\l")
+		}
+
+		Print("\"];\n")
+	}
 }
 
 struct TACBuilder {
@@ -621,7 +658,7 @@ struct TACBuilder {
 			TACAddress ParentDefinition := this->LookupName(Parent, Phi->Name, Phi->Hash)
 
 			if (ParentDefinition != TAC_ADDRESS_NULL) {
-				Phi->AddDefinition(Index, ParentDefinition)
+				Phi->AddDefinition(Parent->Number, ParentDefinition)
 			}
 		}
 
@@ -728,6 +765,17 @@ struct TACBuilder {
 			InBlock->Print()
 		}
 	}
+	define void PrintGraphViz() {
+		Print("digraph CFG {\n")
+
+		for (i32 BlockIndex := 0, BlockIndex < this->Blocks->Count(), BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			InBlock->PrintGraphViz()
+		}
+
+		Print("}\n")
+	}
 }
 
 bits LoopLables As i64 {
@@ -767,5 +815,5 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	TFA->CompileFunctionHashMap(Parser~>Functions)
 	
-	TFA->Builder->Print()
+	TFA->Builder->PrintGraphViz()
 }

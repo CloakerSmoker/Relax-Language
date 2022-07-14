@@ -252,6 +252,13 @@ struct TACFromAST {
 		i32 HasElse := (Target->ElseBranch) != 0
 		
 		i32 FirstLabel := this->Builder->Blocks->Count()
+		i32 FirstBodyLabel := FirstLabel + BranchCount
+		i32 LastHeaderLabel := FirstBodyLabel - 1
+		i32 EndLabel := FirstBodyLabel + BranchCount
+
+		for (i32 Index := FirstLabel, Index <= EndLabel, Index++) {
+			this->ReserveLabel()
+		}
 		
 		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex += 1) {
 			ASTNode* ConditionNode := Target->Conditions[BranchIndex]
@@ -259,14 +266,27 @@ struct TACFromAST {
 			if (ConditionNode->NodeType = NODE_TYPE_NONE) {
 				continue
 			}
+
+			if (BranchIndex != 0) {
+				this->SetLabel(FirstLabel + BranchIndex - 1)
+			}
 			
+			i32 BodyLabel := FirstBodyLabel + BranchIndex
+
 			TACAddress Condition := this->CompileExpression(ConditionNode)
-			i32 BodyLabel := this->ReserveLabel()
 			
 			this->Emit(TAC_JUMP_TRUE, Condition, TACAddress:Integer(BodyLabel))
+			this->Emit(TAC_JUMP_FALSE, Condition, TACAddress:Integer(FirstLabel + BranchIndex))
+
+			this->SealBlock(BodyLabel)
+
+			if (BranchIndex != 0) {
+				this->SealBlock(FirstLabel + BranchIndex)
+			}
 		}
 
-		i32 EndLabel := this->ReserveLabel()
+		this->SetLabel(LastHeaderLabel)
+		this->SealBlock(LastHeaderLabel)
 
 		if (Target->ElseBranch) {
 			this->CompileBlock(Target->ElseBranch)
@@ -275,7 +295,7 @@ struct TACFromAST {
 		this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
 
 		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex++) {
-			i32 BodyLabel := FirstLabel + BranchIndex
+			i32 BodyLabel := FirstBodyLabel + BranchIndex
 
 			this->SetLabel(BodyLabel)
 			this->SealBlock(BodyLabel)
@@ -289,7 +309,6 @@ struct TACFromAST {
 		
 		this->SetLabel(EndLabel)
 		this->SealBlock(EndLabel)
-		;this->EmitJump(this->BlockCount)
 	}
 	
 	i32 CurrentLoopContinueLabel
@@ -325,7 +344,7 @@ struct TACFromAST {
 		this->Emit(TAC_JUMP, TACAddress:Integer(StartLabel))
 		
 		this->SetLabel(EndLabel)
-		
+
 		this->SealBlock(StartLabel)
 		this->SealBlock(EndLabel)
 		
