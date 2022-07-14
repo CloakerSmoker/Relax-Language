@@ -266,6 +266,20 @@ define i8* GetOpcodeName(i32 Opcode) {
 	return Names[Opcode]
 }
 
+struct TACPhiDefinition {
+	TACAddress Address
+	i32 BlockNumber
+
+	static self* New(i32 BlockNumber, TACAddress Address) {
+		self* this := Alloc(#self)
+
+		this->BlockNumber := BlockNumber
+		this->Address := Address
+
+		return this
+	}
+}
+
 struct TACPhiInfo {
 	i8* Name
 	i64 Hash
@@ -282,15 +296,17 @@ struct TACPhiInfo {
 		return this
 	}
 
-	define void AddDefinition(TACAddress Address) {
-		this~>Definitions->Push(Address As void*)
+	define void AddDefinition(i32 BlockNumber, TACAddress Address) {
+		TACPhiDefinition* Definition := TACPhiDefinition:New(BlockNumber, Address)
+
+		this~>Definitions->Push(Definition As void*)
 	}
 
-	define void RemoveDefinition(TACAddress Address) {
+	define void RemoveDefinition(i32 BlockNumber, TACAddress Address) {
 		for (i32 Index := 0, Index < this~>Definitions->Count(), Index++) {
-			TACAddress Next := this~>Definitions->At(Index) As TACAddress
+			TACPhiDefinition* Next := this~>Definitions->At(Index)
 
-			if (Next->Equals(Address)) {
+			if (Next->BlockNumber = BlockNumber && Next->Address->Equals(Address)) {
 				this~>Definitions->Remove(Index)
 
 				return
@@ -301,8 +317,8 @@ struct TACPhiInfo {
 	define i32 Count() {
 		return this~>Definitions->Count()
 	}
-	define TACAddress At(i32 Index) {
-		return this~>Definitions->At(Index) As TACAddress
+	define TACPhiDefinition* At(i32 Index) {
+		return this~>Definitions->At(Index)
 	}
 }
 
@@ -352,7 +368,9 @@ struct TACTriple {
 			Print("phi\t%s", this->Phi->Name)
 
 			for (i32 Index := 0, Index < this->Phi->Count(), Index++) {
-				Print("\t%a", this->Phi->At(Index))
+				TACPhiDefinition* Next := this->Phi->At(Index)
+				
+				Print("\t%i: %a", Next->BlockNumber, Next->Address)
 
 				if (Index + 1 != this->Phi->Count()) {
 					Print(",")
@@ -368,6 +386,11 @@ struct TACTriple {
 	}
 }
 
+struct TACDefinition {
+	i8* Name
+	TACAddress Value
+}
+
 struct TACBlock {
 	i32 Number
 
@@ -377,7 +400,7 @@ struct TACBlock {
 	PointerArray IncompletePhi ; <TACAddress>
 	PointerArray Body ; <TACTriple*>
 
-	AVLTree Definitions
+	AVLTree Definitions ; <i64, TACDefinition>
 
 	i8 Sealed
 
@@ -390,7 +413,7 @@ struct TACBlock {
 		this~>IncompletePhi->Initialize()
 		this~>Body->Initialize()
 
-		this~>Definitions->ValueSize := 8
+		this~>Definitions->ValueSize := #TACDefinition
 	}
 
 	define void Push(TACTriple* Triple) {
@@ -404,7 +427,7 @@ struct TACBlock {
 	}
 
 	define void Print() {
-		Print("%i: ", this->Number)
+		Print("%i: %i ", this->Number, this->Sealed)
 
 		i32 ParentCount := this~>Parents->Count()
 
@@ -443,6 +466,16 @@ struct TACBlock {
 		}
 
 		Print("\n")
+
+		i32 DefinitionCount := this~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
+
+			Print("\t%s: %a\n", Definition->Name, Definition->Value)
+		}
+
+		Print("\t====\n")
 
 		for (i32 Index := 0, Index < this->Count(), Index++) {
 			TACTriple* Next := this->At(Index)
@@ -534,7 +567,12 @@ struct TACBuilder {
 
 		i64 Hash := FNV1A(Name)
 
-		this->CurrentBlock~>Definitions->Insert(Hash, &Value)
+		TACDefinition Definition {
+			Name: Name,
+			Value: Value
+		}
+
+		this->CurrentBlock~>Definitions->Insert(Hash, &Definition)
 	}
 
 	define TACAddress RemoveTrivialPhi(TACPhiInfo* Phi, TACAddress PhiAddress) {
@@ -557,7 +595,7 @@ struct TACBuilder {
 			this->Remove(PhiAddress)
 		}
 
-		Phi->RemoveDefinition(PhiAddress)
+		Phi->RemoveDefinition(PhiAddress.BlockNumber, PhiAddress)
 
 		for (i32 Index := 0, Index < Phi~>Definitions->Count(), Index++) {
 			TACAddress Address := Phi~>Definitions->At(Index) As TACAddress
@@ -583,7 +621,7 @@ struct TACBuilder {
 			TACAddress ParentDefinition := this->LookupName(Parent, Phi->Name, Phi->Hash)
 
 			if (ParentDefinition != TAC_ADDRESS_NULL) {
-				Phi->AddDefinition(ParentDefinition)
+				Phi->AddDefinition(Index, ParentDefinition)
 			}
 		}
 
@@ -594,7 +632,9 @@ struct TACBuilder {
 	
 	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
 		if (InBlock~>Definitions->Has(Hash)) {
-			return InBlock~>Definitions->GetPointer(Hash) As TACAddress
+			TACDefinition* Definition := InBlock~>Definitions->Get(Hash)
+
+			return Definition->Value
 		}
 		
 		TACAddress Result := TAC_ADDRESS_NULL
@@ -613,6 +653,7 @@ struct TACBuilder {
 		else {
 			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
 			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
+			this->SetName(Name, Result)
 
 			Result := this->AddPhiOperands(InBlock, Phi, Result)
 		}
@@ -681,10 +722,6 @@ struct TACBuilder {
 	}
 	
 	define void Print() {
-		this->SealBlock(this->Blocks->At(0))
-		this->SealBlock(this->Blocks->At(3))
-		this->SealBlock(this->Blocks->At(1))
-
 		for (i32 BlockIndex := 0, BlockIndex < this->Blocks->Count(), BlockIndex++) {
 			TACBlock* InBlock := this->Blocks->At(BlockIndex)
 

@@ -37,6 +37,12 @@ struct TACFromAST {
 	define i32 SetLabel(i32 Number) {
 		return this->Builder->SetLabel(Number)
 	}
+
+	define void SealBlock(i32 Number) {
+		TACBlock* InBlock := this->Builder->Blocks->At(Number)
+
+		this->Builder->SealBlock(InBlock)
+	}
 	
 	define TACAddress FindOrAddVariable(VariableInfo* Variable) {
 		if (Variable->IsGlobal) {
@@ -245,16 +251,9 @@ struct TACFromAST {
 		i32 BranchCount := Target->BranchCount
 		i32 HasElse := (Target->ElseBranch) != 0
 		
-		i32 EndLabel := this->ReserveLabel()
-		i32 NextBranch := 0
+		i32 FirstLabel := this->Builder->Blocks->Count()
 		
 		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex += 1) {
-			if (BranchIndex != 0) {
-				this->SetLabel(NextBranch)
-			}
-			
-			NextBranch := this->ReserveLabel()
-			
 			ASTNode* ConditionNode := Target->Conditions[BranchIndex]
 			
 			if (ConditionNode->NodeType = NODE_TYPE_NONE) {
@@ -265,24 +264,31 @@ struct TACFromAST {
 			i32 BodyLabel := this->ReserveLabel()
 			
 			this->Emit(TAC_JUMP_TRUE, Condition, TACAddress:Integer(BodyLabel))
-			this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
-			
+		}
+
+		i32 EndLabel := this->ReserveLabel()
+
+		if (Target->ElseBranch) {
+			this->CompileBlock(Target->ElseBranch)
+		}
+
+		this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
+
+		for (i32 BranchIndex := 0, BranchIndex < BranchCount, BranchIndex++) {
+			i32 BodyLabel := FirstLabel + BranchIndex
+
 			this->SetLabel(BodyLabel)
+			this->SealBlock(BodyLabel)
 			
 			this->CompileBlock(Target->Bodies[BranchIndex])
 			
 			this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
 		}
-		
-		this->SetLabel(NextBranch)
+
 		;this->EmitJump(EndLabel)
 		
-		if (Target->ElseBranch) {
-			this->CompileBlock(Target->ElseBranch)
-			this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
-		}
-		
 		this->SetLabel(EndLabel)
+		this->SealBlock(EndLabel)
 		;this->EmitJump(this->BlockCount)
 	}
 	
@@ -317,7 +323,11 @@ struct TACFromAST {
 		this->CompileBlock(LoopBody)
 		
 		this->Emit(TAC_JUMP, TACAddress:Integer(StartLabel))
+		
 		this->SetLabel(EndLabel)
+		
+		this->SealBlock(StartLabel)
+		this->SealBlock(EndLabel)
 		
 		this->ExitLoop(LoopState)
 	}
@@ -416,7 +426,9 @@ struct TACFromAST {
 	
 	define void CompileFunction(FunctionDefine* Function) {
 		;if (Function->CallCount != 0) {
-			this->SetLabel()
+			i32 Label := this->SetLabel()
+
+			this->SealBlock(Label)
 			
 			this->CompileBlock(Function->Body)
 		;}
