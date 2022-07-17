@@ -147,8 +147,13 @@ struct AVLTreeNode {
 				this->InsertHelper(this~>Right, Key, Value)
 			}
 			else {
-				this->LeftSize += 1
+				AVLTreeNode* OldLeft := this->Left
+
 				this->InsertHelper(this~>Left, Key, Value)
+
+				if (this->Left != OldLeft) {
+					this->LeftSize += 1
+				}
 			}
 			
 			return this->Balance()

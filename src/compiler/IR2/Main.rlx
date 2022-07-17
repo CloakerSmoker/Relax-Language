@@ -593,7 +593,7 @@ struct TACBuilder {
 	}
 
 	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Operand) {
-		return this->Emit(this->CurrentBlock, Opcode, Operand, TAC_ADDRESS_NULL)
+		return this->Emit(InBlock, Opcode, Operand, TAC_ADDRESS_NULL)
 	}
 
 	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
@@ -613,8 +613,8 @@ struct TACBuilder {
 		this->GetTemporary(TemporaryAddress)->Remove()
 	}
 
-	define void SetName(i8* Name, TACAddress Value) {
-		Print("Set %i.%s to %a\n", this->CurrentBlock->Number, Name, Value)
+	define void SetName(TACBlock* InBlock, i8* Name, TACAddress Value) {
+		Print("Set %i.%s to %a\n", InBlock->Number, Name, Value)
 
 		i64 Hash := FNV1A(Name)
 
@@ -623,13 +623,17 @@ struct TACBuilder {
 			Value: Value
 		}
 
-		this->CurrentBlock~>Definitions->Insert(Hash, &Definition)
+		InBlock~>Definitions->Insert(Hash, &Definition)
+	}
+	define void SetName(i8* Name, TACAddress Value) {
+		this->SetName(this->CurrentBlock, Name, Value)
 	}
 
 	define TACAddress RemoveTrivialPhi(TACPhiInfo* Phi, TACAddress PhiAddress) {
 		TACAddress Same := TAC_ADDRESS_NULL
+		i32 DefinitionCount := Phi~>Definitions->Count()
 
-		for (i32 Index := 0, Index < Phi~>Definitions->Count(), Index++) {
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
 			TACAddress Next := Phi~>Definitions->At(Index) As TACAddress
 
 			if (Next->Equals(Same) || Next->Equals(PhiAddress)) {
@@ -646,6 +650,7 @@ struct TACBuilder {
 			this->Remove(PhiAddress)
 		}
 
+		/*
 		Phi->RemoveDefinition(PhiAddress.BlockNumber, PhiAddress)
 
 		for (i32 Index := 0, Index < Phi~>Definitions->Count(), Index++) {
@@ -659,6 +664,7 @@ struct TACBuilder {
 				}
 			}
 		}
+		;*/
 
 		return Same
 	}
@@ -676,16 +682,21 @@ struct TACBuilder {
 			}
 		}
 
-		; return this->RemoveTrivialPhi(Phi, PhiAddress)
+		return this->RemoveTrivialPhi(Phi, PhiAddress)
 
-		return PhiAddress
+		;return PhiAddress
 	}
 	
 	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
 		if (InBlock~>Definitions->Has(Hash)) {
 			TACDefinition* Definition := InBlock~>Definitions->Get(Hash)
 
+			Print("Get %i.%s is %a\n", InBlock->Number, Name, Definition->Value)
+
 			return Definition->Value
+		}
+		else {
+			Print("No such %i.%s (sealed? %i)\n", InBlock->Number, Name, InBlock->Sealed)
 		}
 		
 		TACAddress Result := TAC_ADDRESS_NULL
@@ -694,7 +705,7 @@ struct TACBuilder {
 			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
 			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
 
-			this->CurrentBlock~>IncompletePhi->Push(Result As void*)
+			InBlock~>IncompletePhi->Push(Result As void*)
 		}
 		else if (InBlock~>Parents->Count() = 1) {
 			TACBlock* Parent := InBlock~>Parents->At(0)
@@ -702,14 +713,15 @@ struct TACBuilder {
 			return this->LookupName(Parent, Name, Hash)
 		}
 		else {
+			Print("new phi\n")
 			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
 			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
-			this->SetName(Name, Result)
+			this->SetName(InBlock, Name, Result)
 
 			Result := this->AddPhiOperands(InBlock, Phi, Result)
 		}
 
-		this->SetName(Name, Result)
+		this->SetName(InBlock, Name, Result)
 
 		return Result
 	}
@@ -730,12 +742,14 @@ struct TACBuilder {
 
 			for (i32 Index := 0, Index < PhiCount, Index++) {
 				TACAddress PhiAddress := InBlock~>IncompletePhi->At(Index) As TACAddress
-				
-				Print("Seal %a\n", PhiAddress)
 
 				TACPhiInfo* Phi := this->GetTemporary(PhiAddress)->Phi
 
+				Print("\nSeal %a %i.%s\n", PhiAddress, InBlock->Number, Phi->Name)
+
 				this->AddPhiOperands(InBlock, Phi, PhiAddress)
+
+				Print("\n")
 			}
 		}
 	}
@@ -955,10 +969,14 @@ define void Main(i64 ArgC, i8** ArgV) {
 	Parser->ParseProgram()
 	
 	TFA->CompileFunctionHashMap(Parser~>Functions)
+
+	;TFA->Builder->Print()
 	
+	;/*
 	Print("digraph CFG {\n")
 	TFA->Builder->PrintGraphViz("original", "Unoptimized SSA")
 	TFA->Builder->RemoveExtraJumps()
 	TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
 	Print("}\n")
+	;*/
 }

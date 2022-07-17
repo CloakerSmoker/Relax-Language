@@ -368,12 +368,17 @@ struct TACFromAST {
 		
 		TACAddress Condition := this->CompileExpression(ConditionNode)
 		this->Emit(TAC_JUMP_TRUE, Condition, TACAddress:Integer(BodyLabel))
-		this->Emit(TAC_JUMP, TACAddress:Integer(EndLabel))
+		this->Emit(TAC_JUMP_FALSE, Condition, TACAddress:Integer(EndLabel))
 		
 		this->SetLabel(BodyLabel)
+
 		this->CompileBlock(WhileToCompile->Body)
+		this->SealBlock(EndLabel)
 		
 		this->Emit(TAC_JUMP, TACAddress:Integer(StartLabel))
+		this->SealBlock(StartLabel)
+		this->SealBlock(BodyLabel)
+
 		this->SetLabel(EndLabel)
 		
 		this->ExitLoop(LoopState)
