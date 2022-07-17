@@ -38,6 +38,10 @@ struct TACFromAST {
 		return this->Builder->SetLabel(Number)
 	}
 
+	define void EnterBlock(i32 Number) {
+		this->Builder->StartBlock(Number)
+	}
+
 	define void SealBlock(i32 Number) {
 		TACBlock* InBlock := this->Builder->Blocks->At(Number)
 

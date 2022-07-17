@@ -403,6 +403,7 @@ struct TACBlock {
 	AVLTree Definitions ; <i64, TACDefinition>
 
 	i8 Sealed
+	i8 Deleted
 
 	define void Initialize(i32 Number) {
 		this->Number := Number
@@ -423,7 +424,20 @@ struct TACBlock {
 		return this~>Body->Count()
 	}
 	define TACTriple* At(i32 Index) {
+		if (Index < 0) {
+			return this~>Body->At(this->Count() + Index)
+		}
+
 		return this~>Body->At(Index)
+	}
+	define TACTriple* Last() {
+		return this~>Body->Last()
+	}
+	define TACTriple* Pop() {
+		return this~>Body->Pop()
+	}
+	define void Remove(i32 Index) {
+		this~>Body->Remove(Index)
 	}
 
 	define void Print() {
@@ -490,28 +504,28 @@ struct TACBlock {
 		}
 	}
 
-	define void PrintGraphViz() {
+	define void PrintGraphViz(i8* Name) {
 		i32 ChildCount := this~>Children->Count()
 
 		if (ChildCount) {
 			for (i32 Index := 0, Index < ChildCount, Index++) {
 				TACBlock* Child := this~>Children->At(Index)
 
-				Print("\t.%i -> .%i;\n", this->Number, Child->Number)
+				Print("\t%s_%i -> %s_%i;\n", Name, this->Number, Name, Child->Number)
 			}
 		}
 
-		Print("\t.%i [shape=box,label=\".%i:\\l", this->Number, this->Number)
+		Print("\t%s_%i [fontname=\"Courier\",shape=record,label=\"{%i: |", Name, this->Number, this->Number)
 
 		i32 DefinitionCount := this~>Definitions->Count()
 
 		for (i32 Index := 0, Index < DefinitionCount, Index++) {
 			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
 
-			Print("    %s: %a\\l", Definition->Name, Definition->Value)
+			Print("\t%s: %a\\l", Definition->Name, Definition->Value)
 		}
 
-		Print("    ====\\l")
+		Print(" | ")
 
 		for (i32 Index := 0, Index < this->Count(), Index++) {
 			TACTriple* Next := this->At(Index)
@@ -520,12 +534,12 @@ struct TACBlock {
 				continue
 			}
 
-			Print("    .%i:\t", Index)
+			Print("\t.%i:\t", Index)
 			Next->Print()
 			Print("\\l")
 		}
 
-		Print("\"];\n")
+		Print("}\"];\n")
 	}
 }
 
@@ -765,16 +779,143 @@ struct TACBuilder {
 			InBlock->Print()
 		}
 	}
-	define void PrintGraphViz() {
-		Print("digraph CFG {\n")
+	define void PrintGraphViz(i8* Name, i8* Description) {
+		Print("subgraph cluster_%i {\n", FNV1A(Name) & 0x7FFF_FFFF)
+		Print("\tstyle=filled;\n")
+		Print("\tcolor=lightgrey;\n")
+		Print("\tlabel=\"%s:\n%s\";\n", Name, Description)
 
 		for (i32 BlockIndex := 0, BlockIndex < this->Blocks->Count(), BlockIndex++) {
 			TACBlock* InBlock := this->Blocks->At(BlockIndex)
-
-			InBlock->PrintGraphViz()
+			
+			InBlock->PrintGraphViz(Name)
 		}
 
 		Print("}\n")
+	}
+
+	define void ReplaceJumpTarget(TACBlock* InBlock, i32 OldTarget, i32 NewTarget) {
+		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
+			TACTriple* Next := InBlock->At(Index)
+
+			if (Next->Is(TAC_JUMP)) {
+				if (Next->Left.Integer = OldTarget) {
+					Next->Left.Integer := NewTarget
+				}
+			}
+			else if (Next->Is(TAC_JUMP_TRUE) || Next->Is(TAC_JUMP_FALSE)) {
+				if (Next->Right.Integer = OldTarget) {
+					Next->Right.Integer := NewTarget
+				}
+			}
+		}
+	}
+
+	define void ReplaceJumpsTo(TACBlock* Child, TACBlock* NewTarget) {
+		i32 ParentCount := Child~>Parents->Count()
+
+		for (i32 Index := ParentCount - 1, Index >= 0, Index--) {
+			TACBlock* Parent := Child~>Parents->At(Index)
+
+			this->ReplaceJumpTarget(Parent, Child->Number, NewTarget->Number)
+
+			Parent~>Children->RemoveValue(Child)
+			Child~>Parents->RemoveValue(Parent)
+
+			Parent~>Children->Push(NewTarget)
+			NewTarget~>Parents->Push(Parent)
+		}
+	}
+
+	define void RecomputePhi(TACBlock* InBlock, TACPhiInfo* Phi, TACAddress PhiAddress) {
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			Free(Phi~>Definitions->At(Index))
+		}
+
+		Phi~>Definitions->Clear()
+
+		;this->GetTemporary(PhiAddress)->Print()
+		;Print("\n")
+
+		this->AddPhiOperands(InBlock, Phi, PhiAddress)
+
+		;this->GetTemporary(PhiAddress)->Print()
+		;Print("\n\n")
+	}
+
+	define void RecomputeAllPhi(TACBlock* InBlock, i32 RemovedBlock) {
+		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
+			TACTriple* Next := InBlock->At(Index)
+
+			if (Next->Is(TAC_PHI)) {
+				TACPhiInfo* Phi := Next->Phi
+				i32 DefinitionCount := Phi~>Definitions->Count()
+
+				for (i32 PhiIndex := 0, PhiIndex < DefinitionCount, PhiIndex++) {
+					TACPhiDefinition* Definition := Phi~>Definitions->At(PhiIndex)
+
+					if (Definition->BlockNumber = RemovedBlock) {
+						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(InBlock->Number, Index))
+					}
+				}
+			}
+		}
+	}
+
+	define void ReplaceJumpsFrom(TACBlock* Parent, TACBlock* NewParent) {
+		i32 ChildCount := Parent~>Children->Count()
+
+		for (i32 Index := ChildCount - 1, Index >= 0, Index--) {
+			TACBlock* Child := Parent~>Children->At(Index)
+
+			Parent~>Children->RemoveValue(Child)
+			Child~>Parents->RemoveValue(Parent)
+
+			this->RecomputeAllPhi(Child, Parent->Number)
+		}
+	}
+	
+	define void RemoveExtraJumps() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			i32 Count := InBlock->Count()
+			i32 JumpCount := 0
+
+			if (InBlock~>Definitions->Count() != 0) {
+				continue
+			}
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_JUMP)) {
+					JumpCount += 1
+				}
+				;else if (Next->Is(TAC_JUMP_TRUE) || Next->Is(TAC_JUMP_FALSE)) {
+				;	JumpCount += 1
+				;}
+			}
+
+			if (Count = JumpCount) {
+				TACTriple* First := InBlock->At(0)
+
+				TACBlock* NewTarget := this->Blocks->At(First->Left.Integer As i32)
+
+				this->ReplaceJumpsTo(InBlock, NewTarget)
+				this->ReplaceJumpsFrom(InBlock, NewTarget)
+			}
+		}
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			;InBlock->Print()
+			;this->SealBlock(InBlock)
+		}
 	}
 }
 
@@ -815,5 +956,9 @@ define void Main(i64 ArgC, i8** ArgV) {
 	
 	TFA->CompileFunctionHashMap(Parser~>Functions)
 	
-	TFA->Builder->PrintGraphViz()
+	Print("digraph CFG {\n")
+	TFA->Builder->PrintGraphViz("original", "Unoptimized SSA")
+	TFA->Builder->RemoveExtraJumps()
+	TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
+	Print("}\n")
 }
