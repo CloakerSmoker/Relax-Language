@@ -224,7 +224,7 @@ define i8* GetOperatorName(i32 Operator) {
 	i8*[40] Operators {
 		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
 		"&&", "||",
-		"=", "!=", "<", "<=", ">", ">=",
+		"eq", "neq", "lt", "lt_e", "gt", "gt_e",
 		"as",
 		"+", "-",
 		"*", "/", "%",
@@ -335,6 +335,8 @@ struct TACTriple {
 	union {
 		TACAddress Right
 	}
+
+	PointerArray Uses ; <TACAddress>
 	
 	static self* New(i32 Opcode, TACAddress Left, TACAddress Right) {
 		self* this := Alloc(#self)
@@ -342,6 +344,8 @@ struct TACTriple {
 		this->Opcode := Opcode
 		this->Left := Left
 		this->Right := Right
+
+		this~>Uses->Initialize()
 		
 		return this
 	}
@@ -362,7 +366,7 @@ struct TACTriple {
 	define i8 Is(i32 Opcode) {
 		return this->Opcode = Opcode
 	}
-	
+
 	define void Print() {
 		if (this->Is(TAC_PHI)) {
 			Print("phi\t%s", this->Phi->Name)
@@ -515,7 +519,7 @@ struct TACBlock {
 			}
 		}
 
-		Print("\t%s_%i [fontname=\"Courier\",shape=record,label=\"{%i: |", Name, this->Number, this->Number)
+		Print("\t%s_%i [fontname=\"Courier\",shape=record,label=\"{%i: | - definitions -\\n", Name, this->Number, this->Number)
 
 		i32 DefinitionCount := this~>Definitions->Count()
 
@@ -523,6 +527,30 @@ struct TACBlock {
 			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
 
 			Print("\t%s: %a\\l", Definition->Name, Definition->Value)
+		}
+
+		Print(" | - uses -\\n")
+
+		for (i32 Index := 0, Index < this->Count(), Index++) {
+			TACTriple* Next := this->At(Index)
+
+			if (Next->Opcode = TAC_REMOVED) {
+				continue
+			}
+
+			i32 UseCount := Next~>Uses->Count()
+
+			if (UseCount) {
+				Print(".%i:", Index)
+
+				for (i32 UseIndex := 0, UseIndex < UseCount, UseIndex++) {
+					TACAddress NextUse := Next~>Uses->At(UseIndex) As TACAddress
+
+					Print(" %a", NextUse)
+				}
+
+				Print("\\l")
+			}
 		}
 
 		Print(" | ")
@@ -564,8 +592,41 @@ struct TACBuilder {
 		
 		return this
 	}
+
+	define TACTriple* GetTemporary(TACAddress TemporaryAddress) {
+		i32 BlockNumber := TemporaryAddress.BlockNumber
+		i32 InstructionNumber := TemporaryAddress.InstructionNumber
+
+		TACBlock* InBlock := this->Blocks->At(BlockNumber)
+
+		return InBlock->At(InstructionNumber)
+	}
+
+	define void UseAt(TACAddress Where, TACAddress Value) {
+		if (Value->Is(TACAddressKind:Temporary)) {
+			Print("use %a at %a\n", Value, Where)
+
+			TACTriple* Definer := this->GetTemporary(Value)
+
+			Definer~>Uses->Push(Where As void*)
+		}
+	}
+	define void RemoveUseAt(TACAddress Where, TACAddress Value) {
+		if (Value->Is(TACAddressKind:Temporary)) {
+			TACTriple* Definer := this->GetTemporary(Value)
+
+			Definer~>Uses->RemoveValue(Where As void*)
+		}
+	}
 	
 	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Left, TACAddress Right) {
+		i32 Index := InBlock->Count()
+
+		TACTriple* New := TACTriple:New(Opcode, Left, Right)
+		InBlock->Push(New)
+		
+		TACAddress Result := TACAddress:Temporary(InBlock->Number, Index)
+		
 		if (Opcode = TAC_JUMP || Opcode = TAC_JUMP_TRUE || Opcode = TAC_JUMP_FALSE) {
 			TACBlock* Destination := null
 
@@ -579,13 +640,17 @@ struct TACBuilder {
 			InBlock~>Children->Add(Destination)
 			Destination~>Parents->Add(InBlock)
 		}
-		
-		i32 Index := InBlock->Count()
+		else {
+			if (Left != TAC_ADDRESS_NULL) {
+				this->UseAt(Result, Left)
+			}
 
-		TACTriple* New := TACTriple:New(Opcode, Left, Right)
-		InBlock->Push(New)
+			if (Right != TAC_ADDRESS_NULL) {
+				this->UseAt(Result, Right)
+			}
+		}
 		
-		return TACAddress:Temporary(InBlock->Number, Index)
+		return Result
 	}
 
 	define TACAddress Emit(i32 Opcode, TACAddress Left, TACAddress Right) {
@@ -598,15 +663,6 @@ struct TACBuilder {
 
 	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
 		return this->Emit(Opcode, Operand, TAC_ADDRESS_NULL)
-	}
-
-	define TACTriple* GetTemporary(TACAddress TemporaryAddress) {
-		i32 BlockNumber := TemporaryAddress.BlockNumber
-		i32 InstructionNumber := TemporaryAddress.InstructionNumber
-
-		TACBlock* InBlock := this->Blocks->At(BlockNumber)
-
-		return InBlock->At(InstructionNumber)
 	}
 
 	define void Remove(TACAddress TemporaryAddress) {
@@ -629,12 +685,32 @@ struct TACBuilder {
 		this->SetName(this->CurrentBlock, Name, Value)
 	}
 
-	define TACAddress RemoveTrivialPhi(TACPhiInfo* Phi, TACAddress PhiAddress) {
+	define void ReplacePhiSource(TACPhiInfo* Phi, TACAddress Old, TACAddress New) {
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACPhiDefinition* Definition := Phi~>Definitions->At(Index) As TACPhiDefinition*
+			TACAddress Next := Definition->Address
+
+			if (Next->Equals(Old)) {
+				this->RemoveUseAt(Next, Old)
+				this->UseAt(Next, New)
+
+				Definition->Address := New
+				return
+			}
+		}
+	}
+
+	define TACAddress RemoveTrivialPhi(TACAddress PhiAddress, TACTriple* Triple, TACPhiInfo* Phi) {
+		return PhiAddress
+		
 		TACAddress Same := TAC_ADDRESS_NULL
 		i32 DefinitionCount := Phi~>Definitions->Count()
 
 		for (i32 Index := 0, Index < DefinitionCount, Index++) {
-			TACAddress Next := Phi~>Definitions->At(Index) As TACAddress
+			TACPhiDefinition* Definition := Phi~>Definitions->At(Index)
+			TACAddress Next := Definition->Address
 
 			if (Next->Equals(Same) || Next->Equals(PhiAddress)) {
 				continue
@@ -646,8 +722,45 @@ struct TACBuilder {
 			Same := Next
 		}
 
-		if (Same = TAC_ADDRESS_NULL) {
+		;if (Same = TAC_ADDRESS_NULL) {
 			this->Remove(PhiAddress)
+		;}
+
+		;Print("Replace %a with %a\n", PhiAddress, Same)
+
+		i32 UseCount := Triple~>Uses->Count()
+
+		for (i32 Index := 0, Index < UseCount, Index++) {
+			TACAddress NextUser := Triple~>Uses->At(Index) As TACAddress
+			TACTriple* NextTriple := this->GetTemporary(NextUser)
+			
+			if (NextTriple->Is(TAC_PHI)) {
+				this->ReplacePhiSource(NextTriple->Phi, PhiAddress, Same)
+			}
+			else {
+				if (NextTriple->Left->Equals(PhiAddress)) {
+					this->RemoveUseAt(NextUser, PhiAddress)
+					this->UseAt(NextUser, Same)
+
+					NextTriple->Left := Same
+				}
+
+				if (NextTriple->Right->Equals(PhiAddress)) {
+					this->RemoveUseAt(NextUser, PhiAddress)
+					this->UseAt(NextUser, Same)
+
+					NextTriple->Right := Same
+				}
+			}
+		}
+
+		for (i32 Index := 0, Index < UseCount, Index++) {
+			TACAddress NextUser := Triple~>Uses->At(Index) As TACAddress
+			TACTriple* NextTriple := this->GetTemporary(NextUser)
+			
+			if (NextTriple->Is(TAC_PHI)) {
+				this->RemoveTrivialPhi(NextUser, NextTriple, NextTriple->Phi)
+			}
 		}
 
 		/*
@@ -671,7 +784,10 @@ struct TACBuilder {
 
 	declare TACAddress LookupName(TACBlock*, i8*, i64)
 
-	define TACAddress AddPhiOperands(TACBlock* InBlock, TACPhiInfo* Phi, TACAddress PhiAddress) {
+	define TACAddress AddPhiOperands(TACBlock* InBlock, TACAddress PhiAddress) {
+		TACTriple* Triple := this->GetTemporary(PhiAddress)
+		TACPhiInfo* Phi := Triple->Phi
+		
 		for (i32 Index := 0, Index < InBlock~>Parents->Count(), Index++) {
 			TACBlock* Parent := InBlock~>Parents->At(Index)
 
@@ -679,12 +795,13 @@ struct TACBuilder {
 
 			if (ParentDefinition != TAC_ADDRESS_NULL) {
 				Phi->AddDefinition(Parent->Number, ParentDefinition)
+				this->UseAt(PhiAddress, ParentDefinition)
 			}
 		}
 
-		return this->RemoveTrivialPhi(Phi, PhiAddress)
+		;return this->RemoveTrivialPhi(PhiAddress, Triple, Phi)
 
-		;return PhiAddress
+		return PhiAddress
 	}
 	
 	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
@@ -718,7 +835,7 @@ struct TACBuilder {
 			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
 			this->SetName(InBlock, Name, Result)
 
-			Result := this->AddPhiOperands(InBlock, Phi, Result)
+			Result := this->AddPhiOperands(InBlock, Result)
 		}
 
 		this->SetName(InBlock, Name, Result)
@@ -747,7 +864,7 @@ struct TACBuilder {
 
 				Print("\nSeal %a %i.%s\n", PhiAddress, InBlock->Number, Phi->Name)
 
-				this->AddPhiOperands(InBlock, Phi, PhiAddress)
+				this->AddPhiOperands(InBlock, PhiAddress)
 
 				Print("\n")
 			}
@@ -853,7 +970,7 @@ struct TACBuilder {
 		;this->GetTemporary(PhiAddress)->Print()
 		;Print("\n")
 
-		this->AddPhiOperands(InBlock, Phi, PhiAddress)
+		this->AddPhiOperands(InBlock, PhiAddress)
 
 		;this->GetTemporary(PhiAddress)->Print()
 		;Print("\n\n")
@@ -929,6 +1046,25 @@ struct TACBuilder {
 
 			;InBlock->Print()
 			;this->SealBlock(InBlock)
+		}
+	}
+
+	define void RemoveAllTrivialPhi() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_PHI)) {
+					TACAddress PhiAddress := TACAddress:Temporary(BlockIndex, Index)
+
+					this->RemoveTrivialPhi(PhiAddress, Next, Next->Phi)
+				}
+			}
 		}
 	}
 }
