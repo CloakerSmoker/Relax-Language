@@ -53,20 +53,15 @@ bits TACAddress As i64 {
 
 	void* [0:47] Value
 	
-	i32 [48:55] Generation
+	i32 [48:55] Web
 	TACAddressKind [56:59] Kind
 	TACAddressSize [60:63] Size
 	
-	define TACAddress IncrementGeneration() {
-		this->Generation := this->Variable->Generation++
-		
-		return this
+	define void Web(i32 WebNumber) {
+		this->Web := WebNumber
 	}
-	
-	define TACAddress CopyGeneration() {
-		this->Generation := this->Variable->Generation
-		
-		return this
+	define i32 Web() {
+		return this->Web
 	}
 	
 	static self WrapLong(TACAddressKind Kind, void* Value) {
@@ -130,16 +125,16 @@ bits TACAddress As i64 {
 			return false
 		}
 		
-		if (Other->Generation != this->Generation) {
-			return false
-		}
-		
 		return true
 	}
 	
 	define void Print() {
 		if (this = 0) {
 			return
+		}
+
+		if (this->Web) {
+			Print("[%i]", this->Web)
 		}
 		
 		if (this->Is(TACAddressKind:Integer)) {
@@ -149,7 +144,6 @@ bits TACAddress As i64 {
 			if (this->Is(TACAddressKind:Variable)) {
 				this->Variable->Base->Name->Print()
 				
-				Print("%i", this->Generation)
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
 				Print("@%i.%i", this->BlockNumber, this->InstructionNumber)
@@ -281,6 +275,8 @@ struct TACPhiDefinition {
 }
 
 struct TACPhiInfo {
+	i32 Web
+
 	i8* Name
 	i64 Hash
 
@@ -369,7 +365,13 @@ struct TACTriple {
 
 	define void Print() {
 		if (this->Is(TAC_PHI)) {
-			Print("phi\t%s", this->Phi->Name)
+			Print("phi\t")
+
+			if (this->Phi->Web) {
+				Print("[%i]", this->Phi->Web)
+			}
+
+			Print("%s", this->Phi->Name)
 
 			for (i32 Index := 0, Index < this->Phi->Count(), Index++) {
 				TACPhiDefinition* Next := this->Phi->At(Index)
@@ -634,6 +636,8 @@ struct TACBuilder {
 				Destination := this->Blocks->At(Left.Integer As i32)
 			}
 			else {
+				this->UseAt(Result, Left)
+
 				Destination := this->Blocks->At(Right.Integer As i32)
 			}
 
@@ -703,8 +707,6 @@ struct TACBuilder {
 	}
 
 	define TACAddress RemoveTrivialPhi(TACAddress PhiAddress, TACTriple* Triple, TACPhiInfo* Phi) {
-		return PhiAddress
-		
 		TACAddress Same := TAC_ADDRESS_NULL
 		i32 DefinitionCount := Phi~>Definitions->Count()
 
@@ -722,9 +724,11 @@ struct TACBuilder {
 			Same := Next
 		}
 
-		;if (Same = TAC_ADDRESS_NULL) {
+		if (Same = TAC_ADDRESS_NULL) {
 			this->Remove(PhiAddress)
-		;}
+		}
+
+		return PhiAddress
 
 		;Print("Replace %a with %a\n", PhiAddress, Same)
 
@@ -799,9 +803,9 @@ struct TACBuilder {
 			}
 		}
 
-		;return this->RemoveTrivialPhi(PhiAddress, Triple, Phi)
+		return this->RemoveTrivialPhi(PhiAddress, Triple, Phi)
 
-		return PhiAddress
+		;return PhiAddress
 	}
 	
 	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
@@ -1067,6 +1071,156 @@ struct TACBuilder {
 			}
 		}
 	}
+
+	declare void AssignPhiWeb(TACAddress, i32)
+
+	define void AssignWeb(TACAddress Origin, i32 Web) {
+		TACTriple* Triple := this->GetTemporary(Origin)
+		i32 UseCount := Triple~>Uses->Count()
+
+		for (i32 UseIndex := 0, UseIndex < UseCount, UseIndex++) {
+			TACAddress NextUse := Triple~>Uses->At(UseIndex) As TACAddress
+			TACTriple* NextTriple := this->GetTemporary(NextUse)
+
+			if (NextTriple->Is(TAC_PHI)) {
+				this->AssignPhiWeb(NextUse, Web)
+			}
+			else {
+				if (NextTriple->Left->Equals(Origin)) {
+					NextTriple->Left->Web := Web
+				}
+
+				if (NextTriple->Right->Equals(Origin)) {
+					NextTriple->Right->Web := Web
+				}
+			}
+		}
+	}
+
+	define void AssignPhiWeb(TACAddress PhiAddress, i32 Web) {
+		TACTriple* Triple := this->GetTemporary(PhiAddress)
+		TACPhiInfo* Phi := Triple->Phi
+
+		if (Phi->Web = Web) {
+			return
+		}
+
+		if (Phi->Web != 0) {
+			Throw('badweb')
+			return
+		}
+
+		Phi->Web := Web
+
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACPhiDefinition* Next := Phi~>Definitions->At(Index)
+
+			i32 NextWeb := Next->Address->Web
+
+			if (NextWeb != 0 && NextWeb != Web) {
+				Throw('badweb2')
+				return
+			}
+			else {
+				Next->Address->Web := Web
+
+				TACAddress NextAddress := Next->Address
+
+				if (NextAddress->Is(TACAddressKind:Temporary)) {
+					TACTriple* Definer := this->GetTemporary(NextAddress)
+
+					if (Definer->Is(TAC_PHI)) {
+						this->AssignPhiWeb(NextAddress, Web)
+					}
+					else {
+						this->AssignWeb(NextAddress, Web)
+					}
+				}
+			}
+		}
+		
+		this->AssignWeb(PhiAddress, Web)
+	}
+
+	i32 NextPhiWeb
+
+	define i32 FindOrAddPhiWeb(TACTriple* Triple) {
+		TACPhiInfo* Phi := Triple->Phi
+
+		if (Phi->Web != 0) {
+			return Phi->Web
+		}
+
+		Phi->Web := -1
+		i32 Web := 0
+
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACPhiDefinition* Next := Phi~>Definitions->At(Index)
+
+			Web := Next->Address->Web
+
+			if (Web != 0) {
+				break
+			}
+			else {
+				if (Next->Address->Is(TACAddressKind:Temporary)) {
+					TACTriple* Definer := this->GetTemporary(Next->Address)
+
+					if (Definer->Is(TAC_PHI)) {
+						Web := this->FindOrAddPhiWeb(Definer)
+					}
+				}
+				
+				if (Web = 0) {
+					Web := Next->Address->Web
+				}
+
+				if (Web > 0) {
+					break
+				}
+			}
+		}
+
+		if (Web <= 0) {
+			Web := ++this->NextPhiWeb
+		}
+
+		Phi->Web := 0
+
+		return Web
+	}
+
+	define void AssignPhiWebs(TACBlock* InBlock) {
+		i32 Count := InBlock->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACAddress Address := TACAddress:Temporary(InBlock->Number, Index)
+			TACTriple* Next := InBlock->At(Index)
+
+			if (Next->Is(TAC_PHI)) {
+				i32 Web := this->FindOrAddPhiWeb(Next)
+
+				Next->Print()
+				Print(" is in web %i\n", Web)
+
+				this->AssignPhiWeb(Address, Web)
+			}
+		}
+	}
+
+	define void AssignPhiWebs() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			
+			this->AssignPhiWebs(InBlock)
+		}
+	}
 }
 
 bits LoopLables As i64 {
@@ -1111,8 +1265,10 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;/*
 	Print("digraph CFG {\n")
 	TFA->Builder->PrintGraphViz("original", "Unoptimized SSA")
-	TFA->Builder->RemoveExtraJumps()
-	TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
+	;TFA->Builder->RemoveExtraJumps()
+	;TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
+	TFA->Builder->AssignPhiWebs()
+	TFA->Builder->PrintGraphViz("rak", "Phi webs assigned")
 	Print("}\n")
 	;*/
 }

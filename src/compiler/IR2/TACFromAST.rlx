@@ -56,25 +56,6 @@ struct TACFromAST {
 	}
 	
 	define TACAddress FindOrAddVariable(VariableInfo* Variable) {
-		if (Variable->IsGlobal) {
-			
-		}
-		else {
-			HashMapElement* LocalElement := this~>Locals->Get(Variable->Name)
-			
-			if (LocalElement) {
-				TACVariable* Result := LocalElement->Value
-				
-				return TACAddress:WrapLong(TACAddressKind:Variable, Result).CopyGeneration()
-			}
-			else {
-				TACVariable* Result := TACVariable:New(Variable)
-				
-				this~>Locals->Set(Variable->Name, Result)
-				
-				return TACAddress:WrapLong(TACAddressKind:Variable, Result).CopyGeneration()
-			}
-		}
 		
 		return TAC_ADDRESS_NULL
 	}
@@ -237,7 +218,7 @@ struct TACFromAST {
 					}
 					
 					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
-						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)->IncrementGeneration()
+						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)
 						
 						TACAddress CompoundResult := this->EmitOperator(BinaryOperator, VariableRegister, AssignmentRight)
 						
@@ -289,11 +270,7 @@ struct TACFromAST {
 			this->Emit(TAC_JUMP_TRUE, Condition, TACAddress:Integer(BodyLabel))
 			this->Emit(TAC_JUMP_FALSE, Condition, TACAddress:Integer(FirstLabel + BranchIndex))
 
-			this->Seal(BodyLabel)
-
-			if (BranchIndex != 0) {
-				this->Seal(FirstLabel + BranchIndex)
-			}
+			this->Seal(BodyLabel, FirstLabel + BranchIndex)
 		}
 
 		this->SetLabel(LastHeaderLabel)
