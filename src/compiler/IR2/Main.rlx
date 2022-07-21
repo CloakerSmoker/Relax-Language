@@ -15,593 +15,25 @@
 #Require "./src/compiler/Lexer.rlx"
 #Require "./src/compiler/Parser.rlx"
 
-enum TACAddressKind As i8 {
-	Variable,
-	Temporary,
-	Integer
-}
-
-enum TACAddressSize As i8 {
-	Word,
-	Long
-}
-
-struct TACVariable {
-	VariableInfo* Base
-	
-	i32 Generation
-	
-	i64 LastValue
-	
-	static self* New(VariableInfo* Base) {
-		self* this := Alloc(#self)
-		
-		this->Base := Base
-		
-		return this
-	}
-}
-
-bits TACAddress As i64 {
-	TACVariable* [0:47] Variable
-
-	i32 [0:32] BlockNumber
-	i32 [33:47] InstructionNumber
-
-	i64* [0:47] IntegerPointer
-	i64 [0:47] Integer
-
-	void* [0:47] Value
-	
-	i32 [48:55] Web
-	TACAddressKind [56:59] Kind
-	TACAddressSize [60:63] Size
-	
-	define void Web(i32 WebNumber) {
-		this->Web := WebNumber
-	}
-	define i32 Web() {
-		return this->Web
-	}
-	
-	static self WrapLong(TACAddressKind Kind, void* Value) {
-		self this := 0 As self
-		
-		this->Kind := Kind
-		this->Size := TACAddressSize:Long
-		this->Value := Value
-		
-		return this
-	}
-	static self WrapLong(TACAddressKind Kind, i64 Value) {
-		return self:WrapLong(Kind, Value As void*)
-	}
-	
-	static self WrapWord(TACAddressKind Kind, void* Value) {
-		self this := 0 As self
-		
-		this->Kind := Kind
-		this->Size := TACAddressSize:Long
-		this->Value := Value
-		
-		return this
-	}
-	static self WrapWord(TACAddressKind Kind, i64 Value) {
-		return self:WrapWord(Kind, Value As void*)
-	}
-	
-	static self Integer(i32 Value) {
-		return self:WrapWord(TACAddressKind:Integer, Value As void*)
-	}
-	static self Integer(i64 Value) {
-		return self:WrapLong(TACAddressKind:Integer, Value As void*)
-	}
-
-	static self Temporary(i32 BlockNumber, i32 InstructionNumber) {
-		self Result := self:WrapLong(TACAddressKind:Temporary, BlockNumber)
-
-		Result.InstructionNumber := InstructionNumber
-
-		return Result
-	}
-	
-	define i8 Is(TACAddressKind Kind) {
-		return this->Kind = Kind
-	}
-	
-	define i8 Equals(TACAddress Other) {
-		if (this = 0 && Other = 0) {
-			return true
-		}
-		else if (this = 0 || Other = 0) {
-			return false
-		}
-		
-		if (Other->Kind != this->Kind) {
-			return false
-		}
-		
-		if (Other->Value != this->Value) {
-			return false
-		}
-		
-		return true
-	}
-	
-	define void Print() {
-		if (this = 0) {
-			return
-		}
-
-		if (this->Web) {
-			Print("[%i]", this->Web)
-		}
-		
-		if (this->Is(TACAddressKind:Integer)) {
-			Print("%i", this->Integer)
-		}
-		else {
-			if (this->Is(TACAddressKind:Variable)) {
-				this->Variable->Base->Name->Print()
-				
-			}
-			else if (this->Is(TACAddressKind:Temporary)) {
-				Print("@%i.%i", this->BlockNumber, this->InstructionNumber)
-			}
-		}
-		
-		if (this->Size = TACAddressSize:Word) {
-			;Print("_w")
-		}
-		else {
-			;Print("_l")
-		}
-	}
-}
-
-TACAddress TAC_ADDRESS_NULL := 0 As TACAddress
-
-define void DoAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
-	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
-	
-	Address->Print()
-	
-	*ParameterIndex += 1
-}
-
-PrintFormatPrototype AddressPrintPrototype {
-	Name: "a",
-	Format: &DoAddressPrint
-}
-
-i32 ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&AddressPrintPrototype)
-
-i32 TAC_MOVE := 0
-
-i32 TAC_LOAD_INDIRECT_1 := 1
-i32 TAC_LOAD_INDIRECT_2 := 2
-i32 TAC_LOAD_INDIRECT_4 := 3
-i32 TAC_LOAD_INDIRECT_8 := 4
-i32 TAC_STORE_INDIRECT_1 := 5
-i32 TAC_STORE_INDIRECT_2 := 6
-i32 TAC_STORE_INDIRECT_4 := 7
-i32 TAC_STORE_INDIRECT_8 := 8
-
-i32 TAC_LOAD_ADDRESS := 9
-i32 TAC_JUMP_TRUE := 10
-i32 TAC_JUMP_FALSE := 11
-i32 TAC_JUMP := 12
-
-i32 TAC_RETURN := 13
-i32 TAC_PHI := 14
-
-i32 TAC_REMOVED := 15
-
-i32 TAC_ALU_FIRST := 20
-
-define i32 SizedOpcode(i32 Opcode, i32 Size) {
-	if (Size = 8) {
-		return Opcode + 3
-	}
-	else if (Size = 4) {
-		return Opcode + 2
-	}
-	else if (Size = 2) {
-		return Opcode + 1
-	}
-	else {
-		return Opcode
-	}
-}
-
-define i8* GetOperatorName(i32 Operator) {
-	i8*[40] Operators {
-		":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-		"&&", "||",
-		"eq", "neq", "lt", "lt_e", "gt", "gt_e",
-		"as",
-		"+", "-",
-		"*", "/", "%",
-		"&", "|", "^",
-		"<<", ">>",
-		"!", "~",
-		"++", "--", "++", "--",
-		"[",
-		".", "->", "~>",
-		":", "#"
-	}
-	
-	return Operators[Operator]
-}
-
-define i8* GetOpcodeName(i32 Opcode) {
-	i8*[15] Names {
-		":=",
-		"* As i8",
-		"* As i16",
-		"* As i32",
-		"* As i64",
-		"* As i8 :=",
-		"* As i16 := ",
-		"* As i32 :=",
-		"* As i64 :=",
-		"&",
-		"jnz",
-		"jez",
-		"jmp",
-		"return",
-		"phi"
-	}
-	
-	if (Opcode >= TAC_ALU_FIRST) {
-		return GetOperatorName(Opcode - TAC_ALU_FIRST)
-	}
-	
-	return Names[Opcode]
-}
-
-struct TACPhiDefinition {
-	TACAddress Address
-	i32 BlockNumber
-
-	static self* New(i32 BlockNumber, TACAddress Address) {
-		self* this := Alloc(#self)
-
-		this->BlockNumber := BlockNumber
-		this->Address := Address
-
-		return this
-	}
-}
-
-struct TACPhiInfo {
-	i32 Web
-
-	i8* Name
-	i64 Hash
-
-	PointerArray Definitions ; <TACAddress>
-
-	static self* New(i8* Name, i64 Hash) {
-		self* this := Alloc(#self)
-
-		this->Name := Name
-		this->Hash := Hash
-		this~>Definitions->Initialize()
-
-		return this
-	}
-
-	define void AddDefinition(i32 BlockNumber, TACAddress Address) {
-		TACPhiDefinition* Definition := TACPhiDefinition:New(BlockNumber, Address)
-
-		this~>Definitions->Push(Definition As void*)
-	}
-
-	define void RemoveDefinition(i32 BlockNumber, TACAddress Address) {
-		for (i32 Index := 0, Index < this~>Definitions->Count(), Index++) {
-			TACPhiDefinition* Next := this~>Definitions->At(Index)
-
-			if (Next->BlockNumber = BlockNumber && Next->Address->Equals(Address)) {
-				this~>Definitions->Remove(Index)
-
-				return
-			}
-		}
-	}
-
-	define i32 Count() {
-		return this~>Definitions->Count()
-	}
-	define TACPhiDefinition* At(i32 Index) {
-		return this~>Definitions->At(Index)
-	}
-}
-
-struct TACTriple {
-	i32 Opcode
-	
-	union {
-		TACAddress Left
-		TACAddress Operand
-		TACAddress Source
-		TACPhiInfo* Phi
-	}
-	
-	union {
-		TACAddress Right
-	}
-
-	PointerArray Uses ; <TACAddress>
-	
-	static self* New(i32 Opcode, TACAddress Left, TACAddress Right) {
-		self* this := Alloc(#self)
-		
-		this->Opcode := Opcode
-		this->Left := Left
-		this->Right := Right
-
-		this~>Uses->Initialize()
-		
-		return this
-	}
-	
-	static self* New(i32 Opcode, TACAddress Operand) {
-		self* this := Alloc(#self)
-		
-		this->Opcode := Opcode
-		this->Operand := Operand
-		
-		return this
-	}
-
-	define void Remove() {
-		this->Opcode := TAC_REMOVED
-	}
-
-	define i8 Is(i32 Opcode) {
-		return this->Opcode = Opcode
-	}
-
-	define void Print() {
-		if (this->Is(TAC_PHI)) {
-			Print("phi\t")
-
-			if (this->Phi->Web) {
-				Print("[%i]", this->Phi->Web)
-			}
-
-			Print("%s", this->Phi->Name)
-
-			for (i32 Index := 0, Index < this->Phi->Count(), Index++) {
-				TACPhiDefinition* Next := this->Phi->At(Index)
-				
-				Print("\t%i: %a", Next->BlockNumber, Next->Address)
-
-				if (Index + 1 != this->Phi->Count()) {
-					Print(",")
-				}
-			}
-		}
-		else if (this->Right) {
-			Print("%s\t%a,\t%a", GetOpcodeName(this->Opcode), this->Left, this->Right)
-		}
-		else {
-			Print("%s\t%a", GetOpcodeName(this->Opcode), this->Left)
-		}
-	}
-}
-
-struct TACDefinition {
-	i8* Name
-	TACAddress Value
-}
-
-struct TACBlock {
-	i32 Number
-
-	PointerArray Parents ; <TACBlock*>
-	PointerArray Children ; <TACBlock*>
-
-	PointerArray IncompletePhi ; <TACAddress>
-	PointerArray Body ; <TACTriple*>
-
-	AVLTree Definitions ; <i64, TACDefinition>
-
-	i8 Sealed
-	i8 Deleted
-
-	define void Initialize(i32 Number) {
-		this->Number := Number
-
-		this~>Parents->Initialize()
-		this~>Children->Initialize()
-
-		this~>IncompletePhi->Initialize()
-		this~>Body->Initialize()
-
-		this~>Definitions->ValueSize := #TACDefinition
-	}
-
-	define void Push(TACTriple* Triple) {
-		this~>Body->Push(Triple)
-	}
-	define i32 Count() {
-		return this~>Body->Count()
-	}
-	define TACTriple* At(i32 Index) {
-		if (Index < 0) {
-			return this~>Body->At(this->Count() + Index)
-		}
-
-		return this~>Body->At(Index)
-	}
-	define TACTriple* Last() {
-		return this~>Body->Last()
-	}
-	define TACTriple* Pop() {
-		return this~>Body->Pop()
-	}
-	define void Remove(i32 Index) {
-		this~>Body->Remove(Index)
-	}
-
-	define void Print() {
-		Print("%i: ", this->Number, this->Sealed)
-
-		i32 ParentCount := this~>Parents->Count()
-
-		if (ParentCount) {
-			Print("[parents: ")
-
-			for (i32 Index := 0, Index < ParentCount, Index++) {
-				TACBlock* Parent := this~>Parents->At(Index)
-
-				Print("%i", Parent->Number)
-
-				if (Index + 1 != ParentCount) {
-					Print(", ")
-				}
-			}
-
-			Print("] ")
-		}
-
-		i32 ChildCount := this~>Children->Count()
-
-		if (ChildCount) {
-			Print("(children: ")
-
-			for (i32 Index := 0, Index < ChildCount, Index++) {
-				TACBlock* Child := this~>Children->At(Index)
-
-				Print("%i", Child->Number)
-
-				if (Index + 1 != ChildCount) {
-					Print(", ")
-				}
-			}
-
-			Print(")")
-		}
-
-		Print("\n")
-
-		i32 DefinitionCount := this~>Definitions->Count()
-
-		for (i32 Index := 0, Index < DefinitionCount, Index++) {
-			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
-
-			Print("\t%s: %a\n", Definition->Name, Definition->Value)
-		}
-
-		Print("\t====\n")
-
-		for (i32 Index := 0, Index < this->Count(), Index++) {
-			TACTriple* Next := this->At(Index)
-
-			if (Next->Opcode = TAC_REMOVED) {
-				continue
-			}
-
-			Print("\t.%i:\t", Index)
-			Next->Print()
-			Print("\n")
-		}
-	}
-
-	define void PrintGraphViz(i8* Name) {
-		i32 ChildCount := this~>Children->Count()
-
-		if (ChildCount) {
-			for (i32 Index := 0, Index < ChildCount, Index++) {
-				TACBlock* Child := this~>Children->At(Index)
-
-				Print("\t%s_%i -> %s_%i;\n", Name, this->Number, Name, Child->Number)
-			}
-		}
-
-		Print("\t%s_%i [fontname=\"Courier\",shape=record,label=\"{%i: | - definitions -\\n", Name, this->Number, this->Number)
-
-		i32 DefinitionCount := this~>Definitions->Count()
-
-		for (i32 Index := 0, Index < DefinitionCount, Index++) {
-			TACDefinition* Definition := this~>Definitions->ValueAt(Index)
-
-			Print("\t%s: %a\\l", Definition->Name, Definition->Value)
-		}
-
-		Print(" | - uses -\\n")
-
-		for (i32 Index := 0, Index < this->Count(), Index++) {
-			TACTriple* Next := this->At(Index)
-
-			if (Next->Opcode = TAC_REMOVED) {
-				continue
-			}
-
-			i32 UseCount := Next~>Uses->Count()
-
-			if (UseCount) {
-				Print(".%i:", Index)
-
-				for (i32 UseIndex := 0, UseIndex < UseCount, UseIndex++) {
-					TACAddress NextUse := Next~>Uses->At(UseIndex) As TACAddress
-
-					Print(" %a", NextUse)
-				}
-
-				Print("\\l")
-			}
-		}
-
-		Print(" | ")
-
-		for (i32 Index := 0, Index < this->Count(), Index++) {
-			TACTriple* Next := this->At(Index)
-
-			if (Next->Opcode = TAC_REMOVED) {
-				continue
-			}
-
-			Print("\t.%i:\t", Index)
-			Next->Print()
-			Print("\\l")
-		}
-
-		Print("}\"];\n")
-	}
-}
+#Require "./src/compiler/IR2/Structures.rlx"
 
 struct TACBuilder {
-	union {
-		void* Buffer
-		TACTriple** Triples
-	}
-	
-	i32 Length
-	
 	TACBlock* CurrentBlock
 	
+	PointerArray* Triples ; <TACTriple*>
 	PointerArray* Blocks ; <TACBlock*>
 	
 	static TACBuilder* New() {
 		self* this := Alloc(#self)
 		
-		this->Buffer := Alloc(100 * #TACTriple*)
-		
+		this->Triples := PointerArray:New()
 		this->Blocks := PointerArray:New()
 		
 		return this
 	}
 
 	define TACTriple* GetTemporary(TACAddress TemporaryAddress) {
-		i32 BlockNumber := TemporaryAddress.BlockNumber
-		i32 InstructionNumber := TemporaryAddress.InstructionNumber
-
-		TACBlock* InBlock := this->Blocks->At(BlockNumber)
-
-		return InBlock->At(InstructionNumber)
+		return this->Triples->At(TemporaryAddress.InstructionNumber)
 	}
 
 	define void UseAt(TACAddress Where, TACAddress Value) {
@@ -622,12 +54,22 @@ struct TACBuilder {
 	}
 	
 	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Left, TACAddress Right) {
-		i32 Index := InBlock->Count()
-
 		TACTriple* New := TACTriple:New(Opcode, Left, Right)
-		InBlock->Push(New)
+
+		if (Opcode = TAC_PHI) {
+			InBlock~>Body->Insert(0, New)
+			InBlock->PhiCount += 1
+		}
+		else {
+			InBlock->Push(New)
+		}
+
+		New->BlockNumber := InBlock->Number
+		New->Number := this->Triples->Count()
+
+		this->Triples->Push(New)
 		
-		TACAddress Result := TACAddress:Temporary(InBlock->Number, Index)
+		TACAddress Result := TACAddress:Temporary(New->Number)
 		
 		if (Opcode = TAC_JUMP || Opcode = TAC_JUMP_TRUE || Opcode = TAC_JUMP_FALSE) {
 			TACBlock* Destination := null
@@ -839,6 +281,12 @@ struct TACBuilder {
 			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
 			this->SetName(InBlock, Name, Result)
 
+			TACTriple* NewPhi := this->GetTemporary(Result)
+
+			; Move phi to start of block
+			InBlock~>Body->RemoveValue(NewPhi)
+			InBlock~>Body->Insert(0, NewPhi)
+
 			Result := this->AddPhiOperands(InBlock, Result)
 		}
 
@@ -992,7 +440,7 @@ struct TACBuilder {
 					TACPhiDefinition* Definition := Phi~>Definitions->At(PhiIndex)
 
 					if (Definition->BlockNumber = RemovedBlock) {
-						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(InBlock->Number, Index))
+						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(Next->Number))
 					}
 				}
 			}
@@ -1064,7 +512,7 @@ struct TACBuilder {
 				TACTriple* Next := InBlock->At(Index)
 
 				if (Next->Is(TAC_PHI)) {
-					TACAddress PhiAddress := TACAddress:Temporary(BlockIndex, Index)
+					TACAddress PhiAddress := TACAddress:Temporary(Next->Number)
 
 					this->RemoveTrivialPhi(PhiAddress, Next, Next->Phi)
 				}
@@ -1198,8 +646,8 @@ struct TACBuilder {
 		i32 Count := InBlock->Count()
 
 		for (i32 Index := 0, Index < Count, Index++) {
-			TACAddress Address := TACAddress:Temporary(InBlock->Number, Index)
 			TACTriple* Next := InBlock->At(Index)
+			TACAddress Address := Next->Address()
 
 			if (Next->Is(TAC_PHI)) {
 				i32 Web := this->FindOrAddPhiWeb(Next)
@@ -1219,6 +667,53 @@ struct TACBuilder {
 			TACBlock* InBlock := this->Blocks->At(BlockIndex)
 			
 			this->AssignPhiWebs(InBlock)
+		}
+	}
+
+	define void GenerateMoves() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 ParentCount := InBlock~>Parents->Count()
+
+			for (i32 Index := 0, Index < ParentCount, Index++) {
+				TACBlock* Parent := InBlock~>Parents->At(Index)
+
+				i32 ParentChildCount := Parent~>Children~>Count()
+
+				TACBlock* MoveContainer := Parent
+
+				if (ParentCount > 1 && ParentChildCount > 1) {
+					i32 NewBlockID := this->ReserveLabel()
+
+					TACBlock* NewBlock := this->Blocks->At(NewBlockID)
+
+					Parent~>Children->RemoveValue(InBlock)
+					InBlock~>Parents->RemoveValue(Parent)
+
+					Parent~>Children->Push(NewBlock)
+					NewBlock~>Parents->Push(Parent)
+
+					NewBlock~>Children->Push(InBlock)
+					InBlock~>Parents->Push(NewBlock)
+
+					MoveContainer := NewBlock
+				}
+
+				for (i32 PhiIndex := 0, PhiIndex < InBlock->PhiCount, PhiIndex++) {
+					TACTriple* Triple := InBlock->At(PhiIndex)
+					TACPhiInfo* Phi := Triple->Phi
+
+					TACPhiDefinition* Definition := Phi->FindDefinition(Parent->Number)
+
+					TACAddress MoveAddress := this->Emit(MoveContainer, TAC_MOVE, Definition->Address)
+
+					this->RemoveUseAt(Triple->Address(), Definition->Address)
+					Definition->Address := MoveAddress
+				}
+			}
 		}
 	}
 }
@@ -1267,8 +762,8 @@ define void Main(i64 ArgC, i8** ArgV) {
 	TFA->Builder->PrintGraphViz("original", "Unoptimized SSA")
 	;TFA->Builder->RemoveExtraJumps()
 	;TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
-	TFA->Builder->AssignPhiWebs()
-	TFA->Builder->PrintGraphViz("rak", "Phi webs assigned")
+	TFA->Builder->GenerateMoves()
+	TFA->Builder->PrintGraphViz("mov", "Moves added")
 	Print("}\n")
 	;*/
 }
