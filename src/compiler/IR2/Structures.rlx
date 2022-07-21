@@ -337,6 +337,10 @@ bits TACLiveRange As i64 {
 		return false
 	}
 
+	define i8 IsContaining(i32 Offset) {
+		return this.Start <= Offset && Offset <= this.End
+	}
+
 	define self Merge(TACLiveRange Other) {
 		if (Other.Start >= this.Start) {
 			Other.Start := this.Start
@@ -348,9 +352,130 @@ bits TACLiveRange As i64 {
 
 		return Other
 	}
+
+	define i8 IsOverlapping(TACLiveRange Other) {
+		i32 Start := this.Start
+
+		if (Other.Start <= Start) {
+			Start := Other.Start
+		}
+
+		i32 End := this.End
+
+		if (Other.End >= End) {
+			End := Other.End
+		}
+
+		return this.Start <= Other.End && Other.Start <= this.End
+	}
 }
 
 TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
+
+struct TACInterval {
+	PointerArray Ranges ; <TACLiveRange>
+
+	define void Initialize() {
+		this~>Ranges->Initialize()
+	}
+
+	define void Add(TACLiveRange Range) {
+		i32 RangeCount := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < RangeCount, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Next->IsAdjacent(Range)) {
+				this~>Ranges->Set(Index, Next->Merge(Range) As void*)
+
+				return
+			}
+		}
+
+		this~>Ranges->Push(Range As void*)
+	}
+
+	define i8 IsOverlapping(TACLiveRange Other) {
+		i32 RangeCount := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < RangeCount, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Next.IsOverlapping(Other)) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	define i8 IsOverlapping(TACInterval* Other) {
+		i32 Count := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Other->IsOverlapping(Next)) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	define void UnionWith(TACInterval* Other) {
+		i32 Count := Other~>Ranges->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+			
+			this->Add(Next)
+		}
+	}
+
+	define void Free() {
+		this~>Ranges->Free()
+	}
+
+	define i8 IsContaining(i32 Offset) {
+		i32 Count := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACLiveRange Range := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Range.IsContaining(Offset)) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	define void Print(i32 Max) {
+		;Print("├")
+
+		i8 ContainedLast := false
+
+		for (i32 Index := 0, Index <= Max, Index++) {
+			if (this->IsContaining(Index)) {
+				if (ContainedLast) {
+					Print("┼─")
+				}
+				else {
+					Print("├─")
+				}
+			}
+			else if (ContainedLast) {
+				Print("┤ ")
+			}
+			else {
+				Print("│ ")
+			}
+
+			ContainedLast := this->IsContaining(Index)
+		}
+	}
+}
 
 struct TACTriple {
 	i32 Opcode
@@ -368,10 +493,12 @@ struct TACTriple {
 	}
 
 	PointerArray Uses ; <TACAddress>
-	PointerArray Interval ; <TACLiveRange>
+	TACInterval Interval
 
 	i32 Number
 	i32 BlockNumber
+
+	TACTriple* Join
 
 	i32 RegisterNumber
 	
@@ -384,6 +511,8 @@ struct TACTriple {
 
 		this~>Uses->Initialize()
 		this~>Interval->Initialize()
+
+		this->Join := this
 
 		this->RegisterNumber := -1
 		
@@ -404,19 +533,7 @@ struct TACTriple {
 	}
 
 	define void AddRange(TACLiveRange Range) {
-		i32 RangeCount := this~>Interval->Count()
-
-		for (i32 Index := 0, Index < RangeCount, Index++) {
-			TACLiveRange Next := this~>Interval->At(Index) As TACLiveRange
-
-			if (Next->IsAdjacent(Range)) {
-				this~>Interval->Set(Index, Next->Merge(Range) As void*)
-
-				return
-			}
-		}
-
-		this~>Interval->Push(Range As void*)
+		this~>Interval->Add(Range)
 	}
 
 	define i32 OperandCount() {

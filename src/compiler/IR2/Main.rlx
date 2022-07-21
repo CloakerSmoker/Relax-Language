@@ -681,6 +681,30 @@ struct TACBuilder {
 		}
 	}
 
+	define TACTriple* Joined(TACTriple* Triple) {
+		if (Triple->Join = Triple) {
+			return Triple
+		}
+		else {
+			return this->Joined(Triple->Join)
+		}
+	}
+
+	define void TryJoin(TACTriple* RawLeft, TACTriple* RawRight) {
+		TACTriple* Left := this->Joined(RawLeft)
+		TACTriple* Right := this->Joined(RawRight)
+
+		if (RawLeft->RegisterNumber != RawRight->RegisterNumber) {
+			return
+		}
+
+		if !(Left~>Interval->IsOverlapping(Right~>Interval)) {
+			Right~>Interval->UnionWith(Left~>Interval)
+			;Left~>Interval->Free()
+			RawLeft->Join := this->Joined(RawRight)
+		}
+	}
+
 	define void GenerateMoves() {
 		i32 BlockCount := this->Blocks->Count()
 
@@ -724,6 +748,8 @@ struct TACBuilder {
 					this->RemoveUseAt(Triple->Address(), Definition->Address)
 					this->UseAt(Triple->Address(), MoveAddress)
 					Definition->Address := MoveAddress
+
+					this->TryJoin(MoveAddress->TemporaryTriple, Triple)
 				}
 			}
 		}
@@ -822,6 +848,7 @@ struct TACBuilder {
 			}
 
 			Live->Free()
+			Free(Live)
 		}
 	}
 
@@ -842,20 +869,15 @@ struct TACBuilder {
 	define void PrintLiveIntervals() {
 		for (i32 Index := 0, Index < this->NextInstructionNumber, Index++) {
 			TACTriple* Next := this->FindInstruction(Index)
-			i32 RangeCount := Next~>Interval->Count()
+
+			;Print("%i: ", Next->Number)
+			;Next~>Interval->Print(this->Triples->Count())
+			;Print("\n")
 
 			Print("%i: ", Next->Number)
-
-			for (i32 RangeIndex := 0, RangeIndex < RangeCount, RangeIndex++) {
-				TACLiveRange Range := Next~>Interval->At(RangeIndex) As TACLiveRange
-
-				Print(" [%i - %i]", Range.Start, Range.End)
-			}
-
+			Next->Join~>Interval->Print(this->Triples->Count())
 			Print("\n")
 		}
-
-
 	}
 }
 

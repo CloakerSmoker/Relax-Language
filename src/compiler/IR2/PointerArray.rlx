@@ -134,7 +134,6 @@ struct PointerArray {
 
 	define void Free() {
 		Free(this->Buffer)
-		Free(this)
 	}
 
 	define void UnionWith(PointerArray* Other) {
