@@ -698,8 +698,8 @@ struct TACBuilder {
 			return
 		}
 
-		if !(Left~>Interval->IsOverlapping(Right~>Interval)) {
-			Right~>Interval->UnionWith(Left~>Interval)
+		if !(Left->Interval()->IsOverlapping(Right->Interval())) {
+			Right->Interval()->UnionWith(Left->Interval())
 			;Left~>Interval->Free()
 			RawLeft->Join := this->Joined(RawRight)
 		}
@@ -852,6 +852,129 @@ struct TACBuilder {
 		}
 	}
 
+	define void LinearScan() {
+		PointerArray* Handled := PointerArray:New() ; <TACInterval*>
+		PointerArray* Unhandled := PointerArray:New() ; <TACInterval*>
+		PointerArray* Active := PointerArray:New() ; <TACInterval*>
+		PointerArray* Inactive := PointerArray:New() ; <TACInterval*>
+
+		RegisterSet Free := RegisterSet:New(7)
+
+		i32 Count := this->Triples->Count()
+
+		for (i32 OuterIndex := 0, OuterIndex < Count, OuterIndex++) {
+			for (i32 InnerIndex := 0, InnerIndex < Count, InnerIndex++) {
+				TACTriple* Triple := this->Triples->At(InnerIndex)
+				TACInterval* Interval := Triple->Interval()
+
+				if (Unhandled->Has(Interval)) {
+					continue
+				}
+
+				if (Interval->IsContaining(OuterIndex)) {
+					Unhandled->Push(Interval)
+				}
+			}
+		}
+
+		for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+			Print("Unhandled [%i] = ", Index)
+			TACInterval* Next := Unhandled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		while (Unhandled->Count() != 0) {
+			TACInterval* Current := Unhandled->Remove(0)
+
+			for (i32 Index := 0, Index < Active->Count(), Index++) {
+				TACInterval* ActiveInterval := Active->At(Index)
+				
+				if (ActiveInterval->End() < Current->Start()) {
+					Active->Remove(Index)
+					Handled->Push(ActiveInterval)
+
+					Free := Free.Add(ActiveInterval->RegisterNumber)
+				}
+				else if !(ActiveInterval->IsContaining(Current->Start())) {
+					Active->Remove(Index)
+					Inactive->Push(ActiveInterval)
+
+					Free := Free.Add(ActiveInterval->RegisterNumber)
+				}
+			}
+
+			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+				TACInterval* InactiveInterval := Inactive->At(Index)
+				
+				if (ActiveInterval->End() < Current->Start()) {
+					Handled->Push(InactiveInterval)
+				}
+				else if (ActiveInterval->IsContaining(Current->Start())) {
+					Inactive->Remove(Index)
+					Active->Push(InactiveInterval)
+
+					Free := Free.Remove(InactiveInterval->RegisterNumber)
+				}
+			}
+
+			RegisterSet Potential := Free
+
+			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+				TACInterval* InactiveInterval := Inactive->At(Index)
+
+				if (InactiveInterval->IsOverlapping(Current)) {
+					Potential := Potential.Remove(InactiveInterval->RegisterNumber)
+				}
+			}
+
+			/*for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+				TACInterval* InactiveInterval := Inactive->At(Index)
+
+				if (InactiveInterval->IsOverlapping(CurrentInterval)) {
+					Potential.Remove(InactiveTriple->RegisterNumber)
+				}
+			}
+			*/
+
+			if (Potential.Count() = 0) {
+				;this->AssignMemoryLocation(Current)
+			}
+			else {
+				Current->RegisterNumber := Potential.First()
+				Free := Free.Remove(Current->RegisterNumber)
+				Active->Push(Current)
+			}
+		}
+
+		Print("=============\n")
+
+		for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+			Print("Unhandled [%i] = ", Index)
+			TACInterval* Next := Unhandled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Handled->Count(), Index++) {
+			TACInterval* Next := Handled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Active->Count(), Index++) {
+			TACInterval* Next := Active->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+			TACInterval* Next := Inactive->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+	}
+
 	define TACTriple* FindInstruction(i32 Number) {
 		i32 Count := this->Triples->Count()
 
@@ -875,7 +998,7 @@ struct TACBuilder {
 			;Print("\n")
 
 			Print("%i: ", Next->Number)
-			Next->Join~>Interval->Print(this->Triples->Count())
+			Next->Interval()->Print(this->Triples->Count())
 			Print("\n")
 		}
 	}
@@ -933,6 +1056,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	Print("}\n")
 
 	TFA->Builder->PrintLiveIntervals()
+	TFA->Builder->LinearScan()
 
 	;*/
 }

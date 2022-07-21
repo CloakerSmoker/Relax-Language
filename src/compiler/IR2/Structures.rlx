@@ -374,9 +374,11 @@ TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
 
 struct TACInterval {
 	PointerArray Ranges ; <TACLiveRange>
+	i32 RegisterNumber
 
 	define void Initialize() {
 		this~>Ranges->Initialize()
+		this->RegisterNumber := -1
 	}
 
 	define void Add(TACLiveRange Range) {
@@ -421,6 +423,35 @@ struct TACInterval {
 		}
 
 		return false
+	}
+
+	define i32 Start() {
+		i32 Result := 0x7FFF_FFFF
+		i32 Count := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Next.Start <= Result) {
+				Result := Next.Start
+			}
+		}
+
+		return Result
+	}
+	define i32 End() {
+		i32 Result := 0
+		i32 Count := this~>Ranges->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+
+			if (Next.End >= Result) {
+				Result := Next.End
+			}
+		}
+
+		return Result
 	}
 
 	define void UnionWith(TACInterval* Other) {
@@ -474,6 +505,10 @@ struct TACInterval {
 
 			ContainedLast := this->IsContaining(Index)
 		}
+
+		if (this->RegisterNumber != -1) {
+			Print(" = r%i", this->RegisterNumber)
+		}
 	}
 }
 
@@ -493,7 +528,7 @@ struct TACTriple {
 	}
 
 	PointerArray Uses ; <TACAddress>
-	TACInterval Interval
+	TACInterval LiveInterval
 
 	i32 Number
 	i32 BlockNumber
@@ -510,7 +545,7 @@ struct TACTriple {
 		this->Right := Right
 
 		this~>Uses->Initialize()
-		this~>Interval->Initialize()
+		this~>LiveInterval->Initialize()
 
 		this->Join := this
 
@@ -532,8 +567,11 @@ struct TACTriple {
 		return this->Opcode = Opcode
 	}
 
+	define TACInterval* Interval() {
+		return this->Join~>LiveInterval
+	}
 	define void AddRange(TACLiveRange Range) {
-		this~>Interval->Add(Range)
+		this~>LiveInterval->Add(Range)
 	}
 
 	define i32 OperandCount() {
@@ -786,5 +824,62 @@ struct TACBlock {
 		}
 
 		Print("}\"];\n")
+	}
+}
+
+bits RegisterSet As i64 {
+	i64[0:63] Value
+
+	static RegisterSet New(i32 MaxIndex) {
+		i64 Value := (1 As i64) << ((MaxIndex + 1) As i8)
+
+		Value -= 1
+
+		return Value As RegisterSet
+	}
+
+	define i8 Has(i32 Index) {
+		i64 Mask := (1 As i64) << (Index As i8)
+
+		if (this.Value & Mask) {
+			return true
+		}
+		else {
+			return false
+		}
+	}
+
+	define RegisterSet Remove(i32 Index) {
+		i64 Mask := (1 As i64) << (Index As i8)
+
+		return (this.Value ^ Mask) As RegisterSet
+	}
+
+	define RegisterSet Add(i32 Index) {
+		i64 Mask := (1 As i64) << (Index As i8)
+
+		return (this.Value | Mask) As RegisterSet
+	}
+
+	define i32 Count() {
+		i32 Result := 0
+
+		for (i32 Index := 0, Index < 64, Index++) {
+			if (this->Has(Index)) {
+				Result += 1
+			}
+		}
+
+		return Result
+	}
+
+	define i32 First() {
+		for (i32 Index := 0, Index < 64, Index++) {
+			if (this->Has(Index)) {
+				return Index
+			}
+		}
+
+		return -1
 	}
 }
