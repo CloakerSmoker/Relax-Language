@@ -25,10 +25,11 @@ struct TACVariable {
 	}
 }
 
+declare i32 GetTripleNumber(TACTriple*)
+
 bits TACAddress As i64 {
 	TACVariable* [0:47] Variable
-	
-	i32 [0:31] InstructionNumber
+	TACTriple* [0:47] TemporaryTriple
 
 	i64* [0:47] IntegerPointer
 	i64 [0:47] Integer
@@ -79,8 +80,8 @@ bits TACAddress As i64 {
 		return self:WrapLong(TACAddressKind:Integer, Value As void*)
 	}
 
-	static self Temporary(i32 InstructionNumber) {
-		return self:WrapLong(TACAddressKind:Temporary, InstructionNumber)
+	static self Temporary(TACTriple* Triple) {
+		return self:WrapLong(TACAddressKind:Temporary, Triple)
 	}
 	
 	define i8 Is(TACAddressKind Kind) {
@@ -124,7 +125,7 @@ bits TACAddress As i64 {
 				
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
-				Print("@%i", this->InstructionNumber)
+				Print("@%i", GetTripleNumber(this->TemporaryTriple))
 			}
 		}
 		
@@ -315,12 +316,47 @@ struct TACPhiInfo {
 bits TACLiveRange As i64 {
 	i32 [0:31] Start
 	i32 [32:63] End
+
+	static self New(i32 Start, i32 End) {
+		self Result
+
+		Result.Start := Start
+		Result.End := End
+
+		return Result
+	}
+
+	define i8 IsAdjacent(TACLiveRange Other) {
+		if (Other.End + 1 = this.Start) {
+			return true
+		}
+		else if (this.End + 1 = Other.Start) {
+			return true
+		}
+
+		return false
+	}
+
+	define self Merge(TACLiveRange Other) {
+		if (Other.Start >= this.Start) {
+			Other.Start := this.Start
+		}
+
+		if (Other.End <= this.End) {
+			Other.End := this.End
+		}
+
+		return Other
+	}
 }
+
+TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
 
 struct TACTriple {
 	i32 Opcode
 	
 	union {
+		TACAddress[0] Operands
 		TACAddress Left
 		TACAddress Operand
 		TACAddress Source
@@ -347,6 +383,7 @@ struct TACTriple {
 		this->Right := Right
 
 		this~>Uses->Initialize()
+		this~>Interval->Initialize()
 
 		this->RegisterNumber := -1
 		
@@ -362,16 +399,52 @@ struct TACTriple {
 		return this
 	}
 
+	define i8 Is(i32 Opcode) {
+		return this->Opcode = Opcode
+	}
+
+	define void AddRange(TACLiveRange Range) {
+		i32 RangeCount := this~>Interval->Count()
+
+		for (i32 Index := 0, Index < RangeCount, Index++) {
+			TACLiveRange Next := this~>Interval->At(Index) As TACLiveRange
+
+			if (Next->IsAdjacent(Range)) {
+				this~>Interval->Set(Index, Next->Merge(Range) As void*)
+
+				return
+			}
+		}
+
+		this~>Interval->Push(Range As void*)
+	}
+
+	define i32 OperandCount() {
+		if (this->Is(TAC_PHI)) {
+			return this->Phi~>Definitions->Count()
+		}
+		else {
+			return 2
+		}
+	}
+
+	define TACAddress OperandAt(i32 Index) {
+		if (this->Is(TAC_PHI)) {
+			TACPhiDefinition* Definition := this->Phi~>Definitions->At(Index)
+
+			return Definition->Address
+		}
+		else {
+			return this->Operands[Index]
+		}
+	}
+
 	define TACAddress Address() {
-		return TACAddress:Temporary(this->Number)
+		return TACAddress:Temporary(this)
 	}
 
 	define void Remove() {
 		this->Opcode := TAC_REMOVED
-	}
-
-	define i8 Is(i32 Opcode) {
-		return this->Opcode = Opcode
 	}
 
 	define void Print() {
@@ -403,6 +476,11 @@ struct TACTriple {
 	}
 }
 
+define i32 GetTripleNumber(TACTriple* Triple) {
+	return Triple->Number
+}
+
+
 struct TACDefinition {
 	i8* Name
 	TACAddress Value
@@ -410,6 +488,7 @@ struct TACDefinition {
 
 struct TACBlock {
 	i32 Number
+	i32 Fallthrough
 
 	PointerArray Parents ; <TACBlock*>
 	PointerArray Children ; <TACBlock*>
@@ -420,8 +499,14 @@ struct TACBlock {
 
 	AVLTree Definitions ; <i64, TACDefinition>
 
+	PointerArray Live ; <TACTriple*>
+
 	i32 PhiCount
 
+	i32 First
+	i32 Last
+
+	i8 Renumbered
 	i8 Sealed
 	i8 Deleted
 

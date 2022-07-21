@@ -119,4 +119,37 @@ struct PointerArray {
 	define void Clear() {
 		this->Length := 0
 	}
+
+	define PointerArray* Clone() {
+		PointerArray* Result := Alloc(#PointerArray)
+
+		Result->Length := this->Length
+		Result->Capacity := this->Length
+		Result->Buffer := Alloc(this->Length * 8)
+
+		MoveMemory(Result->Buffer, this->Buffer, this->Length * 8)
+
+		return Result
+	}
+
+	define void Free() {
+		Free(this->Buffer)
+		Free(this)
+	}
+
+	define void UnionWith(PointerArray* Other) {
+		for (i32 Index := 0, Index < Other->Count(), Index++) {
+			void* Value := Other->At(Index)
+
+			if !(this->Has(Value)) {
+				this->Push(Value)
+			}
+		}
+	}
+
+	define void Subtract(PointerArray* Other) {
+		for (i32 Index := 0, Index < Other->Count(), Index++) {
+			this->RemoveValue(Other->At(Index))
+		}
+	}
 }

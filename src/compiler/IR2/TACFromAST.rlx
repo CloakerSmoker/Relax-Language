@@ -268,7 +268,7 @@ struct TACFromAST {
 			TACAddress Condition := this->CompileExpression(ConditionNode)
 			
 			this->Emit(TAC_JUMP_TRUE, Condition, TACAddress:Integer(BodyLabel))
-			this->Emit(TAC_JUMP_FALSE, Condition, TACAddress:Integer(FirstLabel + BranchIndex))
+			this->Emit(TAC_JUMP, TACAddress:Integer(FirstLabel + BranchIndex))
 
 			this->Seal(BodyLabel, FirstLabel + BranchIndex)
 		}

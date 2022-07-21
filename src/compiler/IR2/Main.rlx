@@ -32,15 +32,15 @@ struct TACBuilder {
 		return this
 	}
 
-	define TACTriple* GetTemporary(TACAddress TemporaryAddress) {
-		return this->Triples->At(TemporaryAddress.InstructionNumber)
+	define TACTriple* GetTemporary(TACAddress Value) {
+		return Value.TemporaryTriple
 	}
 
 	define void UseAt(TACAddress Where, TACAddress Value) {
 		if (Value->Is(TACAddressKind:Temporary)) {
 			Print("use %a at %a\n", Value, Where)
 
-			TACTriple* Definer := this->GetTemporary(Value)
+			TACTriple* Definer := Value.TemporaryTriple
 
 			Definer~>Uses->Push(Where As void*)
 		}
@@ -54,6 +54,17 @@ struct TACBuilder {
 	}
 	
 	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Left, TACAddress Right) {
+		if (Opcode = TAC_JUMP) {
+			TACBlock* Destination := this->Blocks->At(Left.Integer As i32)
+
+			InBlock->Fallthrough := Destination->Number
+
+			InBlock~>Children->Add(Destination)
+			Destination~>Parents->Add(InBlock)
+
+			return TAC_ADDRESS_NULL
+		}
+
 		TACTriple* New := TACTriple:New(Opcode, Left, Right)
 
 		if (Opcode = TAC_PHI) {
@@ -69,9 +80,9 @@ struct TACBuilder {
 
 		this->Triples->Push(New)
 		
-		TACAddress Result := TACAddress:Temporary(New->Number)
+		TACAddress Result := TACAddress:Temporary(New)
 		
-		if (Opcode = TAC_JUMP || Opcode = TAC_JUMP_TRUE || Opcode = TAC_JUMP_FALSE) {
+		if (Opcode = TAC_JUMP_TRUE || Opcode = TAC_JUMP_FALSE) {
 			TACBlock* Destination := null
 
 			if (Opcode = TAC_JUMP) {
@@ -440,7 +451,7 @@ struct TACBuilder {
 					TACPhiDefinition* Definition := Phi~>Definitions->At(PhiIndex)
 
 					if (Definition->BlockNumber = RemovedBlock) {
-						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(Next->Number))
+						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(Next))
 					}
 				}
 			}
@@ -512,7 +523,7 @@ struct TACBuilder {
 				TACTriple* Next := InBlock->At(Index)
 
 				if (Next->Is(TAC_PHI)) {
-					TACAddress PhiAddress := TACAddress:Temporary(Next->Number)
+					TACAddress PhiAddress := TACAddress:Temporary(Next)
 
 					this->RemoveTrivialPhi(PhiAddress, Next, Next->Phi)
 				}
@@ -711,10 +722,140 @@ struct TACBuilder {
 					TACAddress MoveAddress := this->Emit(MoveContainer, TAC_MOVE, Definition->Address)
 
 					this->RemoveUseAt(Triple->Address(), Definition->Address)
+					this->UseAt(Triple->Address(), MoveAddress)
 					Definition->Address := MoveAddress
 				}
 			}
 		}
+	}
+
+	i32 NextInstructionNumber
+
+	define void RenumberInstructions(TACBlock* InBlock) {
+		if (InBlock->Renumbered) {
+			return
+		}
+
+		InBlock->Renumbered := true
+
+		i32 ParentCount := InBlock~>Parents->Count()
+
+		for (i32 Index := 0, Index < ParentCount, Index++) {
+			this->RenumberInstructions(InBlock~>Parents->At(Index))
+		}
+
+		InBlock->First := this->NextInstructionNumber
+
+		i32 Count := InBlock->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			InBlock->At(Index)->Number := this->NextInstructionNumber++
+		}
+
+		InBlock->Last := this->NextInstructionNumber - 1
+	}
+
+	define void RenumberInstructions() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			this->RenumberInstructions(InBlock)
+		}
+	}
+
+	define void AddRange(TACBlock* InBlock, TACTriple* Definition, i32 End) {
+		TACLiveRange Range := TAC_RANGE_NULL
+
+		if (InBlock->First <= Definition->Number && Definition->Number <= InBlock->Last) {
+			Range := TACLiveRange:New(Definition->Number, End)
+		}
+		else {
+			Range := TACLiveRange:New(InBlock->First, End)
+		}
+
+		Definition->AddRange(Range)
+	}
+
+	define void BuildIntervals() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 PhiCount := InBlock->PhiCount
+			i32 ChildCount := InBlock~>Children->Count()
+
+			PointerArray* Live := InBlock~>Live->Clone()
+
+			for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
+				TACBlock* Child := InBlock~>Children->At(ChildIndex)
+
+				Live->UnionWith(Child~>Live)
+
+				for (i32 ChildPhiIndex := 0, ChildPhiIndex < Child->PhiCount, ChildPhiIndex++) {
+
+				}
+			}
+
+			for (i32 Index := PhiCount, Index < Live->Count(), Index++) {
+				this->AddRange(InBlock, Live->At(Index), InBlock->Last)
+			}
+
+			for (i32 Index := InBlock->Count() - 1, Index >= PhiCount, Index--) {
+				TACTriple* Next := InBlock->At(Index)
+				Live->RemoveValue(Next)
+
+				for (i32 OperandIndex := 0, OperandIndex < Next->OperandCount(), OperandIndex++) {
+					TACAddress OperandAddress := Next->OperandAt(OperandIndex)
+
+					if (OperandAddress->Is(TACAddressKind:Temporary)) {
+						TACTriple* Operand := OperandAddress.TemporaryTriple
+
+						if !(Live->Has(Operand)) {
+							Live->Push(Operand)
+							this->AddRange(InBlock, Operand, Next->Number)
+						}
+					}
+				}
+			}
+
+			Live->Free()
+		}
+	}
+
+	define TACTriple* FindInstruction(i32 Number) {
+		i32 Count := this->Triples->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACTriple* Next := this->Triples->At(Index)
+
+			if (Next->Number = Number) {
+				return Next
+			}
+		}
+
+		return null
+	}
+
+	define void PrintLiveIntervals() {
+		for (i32 Index := 0, Index < this->NextInstructionNumber, Index++) {
+			TACTriple* Next := this->FindInstruction(Index)
+			i32 RangeCount := Next~>Interval->Count()
+
+			Print("%i: ", Next->Number)
+
+			for (i32 RangeIndex := 0, RangeIndex < RangeCount, RangeIndex++) {
+				TACLiveRange Range := Next~>Interval->At(RangeIndex) As TACLiveRange
+
+				Print(" [%i - %i]", Range.Start, Range.End)
+			}
+
+			Print("\n")
+		}
+
+
 	}
 }
 
@@ -764,6 +905,12 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
 	TFA->Builder->GenerateMoves()
 	TFA->Builder->PrintGraphViz("mov", "Moves added")
+	TFA->Builder->RenumberInstructions()
+	TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
+	TFA->Builder->BuildIntervals()
 	Print("}\n")
+
+	TFA->Builder->PrintLiveIntervals()
+
 	;*/
 }
