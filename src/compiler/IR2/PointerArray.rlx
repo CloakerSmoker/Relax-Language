@@ -95,14 +95,18 @@ struct PointerArray {
 		}
 	}
 
-	define i8 Has(void* Value) {
+	define i32 Find(void* Value) {
 		for (i32 Index := 0, Index < this->Length, Index++) {
 			if (this->Data[Index] = Value) {
-				return true
+				return Index
 			}
 		}
 
-		return false
+		return -1
+	}
+
+	define i8 Has(void* Value) {
+		return this->Find(Value) != -1
 	}
 
 	define void Add(void* Value) {

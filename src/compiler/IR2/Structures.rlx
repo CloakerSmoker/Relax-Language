@@ -26,6 +26,7 @@ struct TACVariable {
 }
 
 declare i32 GetTripleNumber(TACTriple*)
+declare i32 GetTripleRegisterNumber(TACTriple*)
 
 bits TACAddress As i64 {
 	TACVariable* [0:47] Variable
@@ -107,7 +108,7 @@ bits TACAddress As i64 {
 		return true
 	}
 	
-	define void Print() {
+	define void Print(i8 ShowRegisterNumber) {
 		if (this = 0) {
 			return
 		}
@@ -125,7 +126,14 @@ bits TACAddress As i64 {
 				
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
-				Print("@%i", GetTripleNumber(this->TemporaryTriple))
+				i32 RegisterNumber := GetTripleRegisterNumber(this->TemporaryTriple)
+
+				if (ShowRegisterNumber && RegisterNumber != -1) {
+					Print("r%i", RegisterNumber)
+				}
+				else {
+					Print("@%i", GetTripleNumber(this->TemporaryTriple))
+				}
 			}
 		}
 		
@@ -143,7 +151,7 @@ TACAddress TAC_ADDRESS_NULL := 0 As TACAddress
 define void DoAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
 	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
 	
-	Address->Print()
+	Address->Print(false)
 	
 	*ParameterIndex += 1
 }
@@ -154,6 +162,21 @@ PrintFormatPrototype AddressPrintPrototype {
 }
 
 i32 ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&AddressPrintPrototype)
+
+define void DoOperandAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
+	
+	Address->Print(true)
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype OperandAddressPrintPrototype {
+	Name: "o",
+	Format: &DoOperandAddressPrint
+}
+
+i32 OPERAND_ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&OperandAddressPrintPrototype)
 
 i32 TAC_MOVE := 0
 
@@ -174,8 +197,9 @@ i32 TAC_JUMP := 12
 i32 TAC_RETURN := 13
 i32 TAC_MOVE := 14
 i32 TAC_PHI := 15
+i32 TAC_CLOBBER := 16
 
-i32 TAC_REMOVED := 16
+i32 TAC_REMOVED := 17
 
 i32 TAC_ALU_FIRST := 20
 
@@ -215,7 +239,7 @@ define i8* GetOperatorName(i32 Operator) {
 }
 
 define i8* GetOpcodeName(i32 Opcode) {
-	i8*[16] Names {
+	i8*[17] Names {
 		":=",
 		"* As i8",
 		"* As i16",
@@ -231,7 +255,8 @@ define i8* GetOpcodeName(i32 Opcode) {
 		"jmp",
 		"return",
 		"move",
-		"phi"
+		"phi",
+		"clobber"
 	}
 	
 	if (Opcode >= TAC_ALU_FIRST) {
@@ -603,14 +628,16 @@ struct TACTriple {
 	}
 
 	define void Print() {
+		if (this->Interval()->RegisterNumber != -1) {
+			Print("r%i := ", this->Interval()->RegisterNumber)
+		}
+
 		if (this->Is(TAC_PHI)) {
-			Print("phi\t")
+			Print("phi(%s)\t", this->Phi->Name)
 
 			if (this->Phi->Web) {
 				Print("[%i]", this->Phi->Web)
 			}
-
-			Print("%s", this->Phi->Name)
 
 			for (i32 Index := 0, Index < this->Phi->Count(), Index++) {
 				TACPhiDefinition* Next := this->Phi->At(Index)
@@ -623,10 +650,10 @@ struct TACTriple {
 			}
 		}
 		else if (this->Right) {
-			Print("%s\t%a,\t%a", GetOpcodeName(this->Opcode), this->Left, this->Right)
+			Print("%s\t%o,\t%o", GetOpcodeName(this->Opcode), this->Left, this->Right)
 		}
 		else {
-			Print("%s\t%a", GetOpcodeName(this->Opcode), this->Left)
+			Print("%s\t%o", GetOpcodeName(this->Opcode), this->Left)
 		}
 	}
 }
@@ -635,6 +662,9 @@ define i32 GetTripleNumber(TACTriple* Triple) {
 	return Triple->Number
 }
 
+define i32 GetTripleRegisterNumber(TACTriple* Triple) {
+	return Triple->Interval()->RegisterNumber
+}
 
 struct TACDefinition {
 	i8* Name
