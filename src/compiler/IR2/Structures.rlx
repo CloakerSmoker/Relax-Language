@@ -350,85 +350,25 @@ bits TACLiveRange As i64 {
 
 		return Result
 	}
-
-	define i8 IsAdjacent(TACLiveRange Other) {
-		if (Other.End + 1 = this.Start) {
-			return true
-		}
-		else if (this.End + 1 = Other.Start) {
-			return true
-		}
-
-		return false
-	}
-
-	define i8 IsContaining(i32 Offset) {
-		return this.Start <= Offset && Offset <= this.End
-	}
-
-	define self Merge(TACLiveRange Other) {
-		if (Other.Start >= this.Start) {
-			Other.Start := this.Start
-		}
-
-		if (Other.End <= this.End) {
-			Other.End := this.End
-		}
-
-		return Other
-	}
-
-	define i8 IsOverlapping(TACLiveRange Other) {
-		i32 Start := this.Start
-
-		if (Other.Start <= Start) {
-			Start := Other.Start
-		}
-
-		i32 End := this.End
-
-		if (Other.End >= End) {
-			End := Other.End
-		}
-
-		return this.Start <= Other.End && Other.Start <= this.End
-	}
 }
 
 TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
 
+#Require "./src/compiler/IR2/BitSet.rlx"
+
 struct TACInterval {
-	PointerArray Ranges ; <TACLiveRange>
+	BitSet Range
 	i32 RegisterNumber
 
-	define void Initialize() {
-		this~>Ranges->Initialize()
-		this->RegisterNumber := -1
-	}
-
-	define void Add(TACLiveRange Range) {
-		i32 RangeCount := this~>Ranges->Count()
-
-		for (i32 Index := 0, Index < RangeCount, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
-
-			if (Next->IsAdjacent(Range)) {
-				this~>Ranges->Set(Index, Next->Merge(Range) As void*)
-
-				return
-			}
+	define void Add(TACLiveRange New) {
+		for (i32 Index := New.Start, Index <= New.End, Index++) {
+			this~>Range->Set(Index)
 		}
-
-		this~>Ranges->Push(Range As void*)
 	}
 
-	define i8 IsOverlapping(TACLiveRange Other) {
-		i32 RangeCount := this~>Ranges->Count()
-
-		for (i32 Index := 0, Index < RangeCount, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
-
-			if (Next.IsOverlapping(Other)) {
+	define i8 Overlaps(TACLiveRange Other) {
+		for (i32 Index := Other.Start, Index <= Other.End, Index++) {
+			if (this~>Range->Get(Index)) {
 				return true
 			}
 		}
@@ -436,84 +376,44 @@ struct TACInterval {
 		return false
 	}
 
-	define i8 IsOverlapping(TACInterval* Other) {
-		i32 Count := this~>Ranges->Count()
+	define i8 Overlaps(TACInterval* Other) {
+		BitSet* Clone := this~>Range->Clone()
 
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
+		Clone->And(Other~>Range)
+		i32 Count := Clone->Count()
 
-			if (Other->IsOverlapping(Next)) {
-				return true
-			}
-		}
+		Clone->Free()
+		Free(Clone)
 
-		return false
+		return Count != 0
 	}
 
 	define i32 Start() {
-		i32 Result := 0x7FFF_FFFF
-		i32 Count := this~>Ranges->Count()
-
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
-
-			if (Next.Start <= Result) {
-				Result := Next.Start
-			}
-		}
-
-		return Result
+		return this~>Range->FirstOne()
 	}
 	define i32 End() {
-		i32 Result := 0
-		i32 Count := this~>Ranges->Count()
-
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
-
-			if (Next.End >= Result) {
-				Result := Next.End
-			}
-		}
-
-		return Result
+		return this~>Range->LastOne()
 	}
 
-	define void UnionWith(TACInterval* Other) {
-		i32 Count := Other~>Ranges->Count()
-
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACLiveRange Next := this~>Ranges->At(Index) As TACLiveRange
-			
-			this->Add(Next)
-		}
+	define void Or(TACInterval* Other) {
+		this~>Range->Or(Other~>Range)
 	}
 
 	define void Free() {
-		this~>Ranges->Free()
+		this~>Range->Free()
 	}
 
-	define i8 IsContaining(i32 Offset) {
-		i32 Count := this~>Ranges->Count()
-
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACLiveRange Range := this~>Ranges->At(Index) As TACLiveRange
-
-			if (Range.IsContaining(Offset)) {
-				return true
-			}
-		}
-
-		return false
+	define i8 Contains(i32 Offset) {
+		return this~>Range->Get(Offset) != 0
 	}
 
 	define void Print(i32 Max) {
-		;Print("├")
+		Print("\t")
 
 		i8 ContainedLast := false
 
 		for (i32 Index := 0, Index <= Max, Index++) {
-			if (this->IsContaining(Index)) {
+			if (this->Contains(Index)) {
 				if (ContainedLast) {
 					Print("┼─")
 				}
@@ -528,7 +428,7 @@ struct TACInterval {
 				Print("│ ")
 			}
 
-			ContainedLast := this->IsContaining(Index)
+			ContainedLast := this->Contains(Index)
 		}
 
 		if (this->RegisterNumber != -1) {
@@ -559,9 +459,11 @@ struct TACTriple {
 	i32 BlockNumber
 
 	TACTriple* Join
-
-	i32 RegisterNumber
 	
+	define TACInterval* Interval() {
+		return this->Join~>LiveInterval
+	}
+
 	static self* New(i32 Opcode, TACAddress Left, TACAddress Right) {
 		self* this := Alloc(#self)
 		
@@ -570,11 +472,10 @@ struct TACTriple {
 		this->Right := Right
 
 		this~>Uses->Initialize()
-		this~>LiveInterval->Initialize()
 
 		this->Join := this
 
-		this->RegisterNumber := -1
+		this->Interval()->RegisterNumber := -1
 		
 		return this
 	}
@@ -592,9 +493,6 @@ struct TACTriple {
 		return this->Opcode = Opcode
 	}
 
-	define TACInterval* Interval() {
-		return this->Join~>LiveInterval
-	}
 	define void AddRange(TACLiveRange Range) {
 		this~>LiveInterval->Add(Range)
 	}
@@ -684,7 +582,7 @@ struct TACBlock {
 
 	AVLTree Definitions ; <i64, TACDefinition>
 
-	PointerArray Live ; <TACTriple*>
+	BitSet Live
 
 	i32 PhiCount
 
@@ -854,62 +752,5 @@ struct TACBlock {
 		}
 
 		Print("}\"];\n")
-	}
-}
-
-bits RegisterSet As i64 {
-	i64[0:63] Value
-
-	static RegisterSet New(i32 MaxIndex) {
-		i64 Value := (1 As i64) << ((MaxIndex + 1) As i8)
-
-		Value -= 1
-
-		return Value As RegisterSet
-	}
-
-	define i8 Has(i32 Index) {
-		i64 Mask := (1 As i64) << (Index As i8)
-
-		if (this.Value & Mask) {
-			return true
-		}
-		else {
-			return false
-		}
-	}
-
-	define RegisterSet Remove(i32 Index) {
-		i64 Mask := (1 As i64) << (Index As i8)
-
-		return (this.Value ^ Mask) As RegisterSet
-	}
-
-	define RegisterSet Add(i32 Index) {
-		i64 Mask := (1 As i64) << (Index As i8)
-
-		return (this.Value | Mask) As RegisterSet
-	}
-
-	define i32 Count() {
-		i32 Result := 0
-
-		for (i32 Index := 0, Index < 64, Index++) {
-			if (this->Has(Index)) {
-				Result += 1
-			}
-		}
-
-		return Result
-	}
-
-	define i32 First() {
-		for (i32 Index := 0, Index < 64, Index++) {
-			if (this->Has(Index)) {
-				return Index
-			}
-		}
-
-		return -1
 	}
 }

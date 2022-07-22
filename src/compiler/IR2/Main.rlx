@@ -800,12 +800,12 @@ struct TACBuilder {
 		TACTriple* Left := this->Joined(RawLeft)
 		TACTriple* Right := this->Joined(RawRight)
 
-		if (RawLeft->RegisterNumber != RawRight->RegisterNumber) {
+		if (RawLeft->Interval()->RegisterNumber != RawRight->Interval()->RegisterNumber) {
 			return
 		}
 
-		if !(Left->Interval()->IsOverlapping(Right->Interval())) {
-			Right->Interval()->UnionWith(Left->Interval())
+		if !(Left->Interval()->Overlaps(Right->Interval())) {
+			Right->Interval()->Or(Left->Interval())
 			;Left~>Interval->Free()
 			RawLeft->Join := this->Joined(RawRight)
 		}
@@ -910,6 +910,20 @@ struct TACBuilder {
 		Definition->AddRange(Range)
 	}
 
+	define TACTriple* FindInstruction(i32 Number) {
+		i32 Count := this->Triples->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACTriple* Next := this->Triples->At(Index)
+
+			if (Next->Number = Number) {
+				return Next
+			}
+		}
+
+		return null
+	}
+
 	define void BuildIntervals() {
 		i32 BlockCount := this->Blocks->Count()
 
@@ -919,33 +933,37 @@ struct TACBuilder {
 			i32 PhiCount := InBlock->PhiCount
 			i32 ChildCount := InBlock~>Children->Count()
 
-			PointerArray* Live := InBlock~>Live->Clone()
+			BitSet* Live := InBlock~>Live->Clone()
 
 			for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
 				TACBlock* Child := InBlock~>Children->At(ChildIndex)
 
-				Live->UnionWith(Child~>Live)
+				Live->Or(Child~>Live)
 
 				for (i32 ChildPhiIndex := 0, ChildPhiIndex < Child->PhiCount, ChildPhiIndex++) {
 					TACTriple* ChildPhi := Child->At(ChildPhiIndex)
 					
-					Live->RemoveValue(ChildPhi)
+					Live->Clear(ChildPhi->Number)
 
 					TACPhiDefinition* ChildPhiParent := ChildPhi->Phi->FindDefinition(InBlock->Number)
 
 					if (ChildPhiParent) {
-						Live->RemoveValue(ChildPhiParent->Address->TemporaryTriple)
+						Live->Clear(ChildPhiParent->Address->TemporaryTriple->Number)
 					}
 				}
 			}
 
 			for (i32 Index := PhiCount, Index < Live->Count(), Index++) {
-				this->AddRange(InBlock, Live->At(Index), InBlock->Last)
+				i32 Location := Live->Find(Index)
+
+				TACTriple* Next := this->FindInstruction(Location)
+
+				this->AddRange(InBlock, Next, InBlock->Last)
 			}
 
 			for (i32 Index := InBlock->Count() - 1, Index >= PhiCount, Index--) {
 				TACTriple* Next := InBlock->At(Index)
-				Live->RemoveValue(Next)
+				Live->Clear(Next->Number)
 
 				for (i32 OperandIndex := 0, OperandIndex < Next->OperandCount(), OperandIndex++) {
 					TACAddress OperandAddress := Next->OperandAt(OperandIndex)
@@ -953,8 +971,8 @@ struct TACBuilder {
 					if (OperandAddress->Is(TACAddressKind:Temporary)) {
 						TACTriple* Operand := OperandAddress.TemporaryTriple
 
-						if !(Live->Has(Operand)) {
-							Live->Push(Operand)
+						if !(Live->Get(Operand->Number)) {
+							Live->Set(Operand->Number)
 							this->AddRange(InBlock, Operand, Next->Number)
 						}
 					}
@@ -972,7 +990,11 @@ struct TACBuilder {
 		PointerArray* Active := PointerArray:New() ; <TACInterval*>
 		PointerArray* Inactive := PointerArray:New() ; <TACInterval*>
 
-		RegisterSet Free := RegisterSet:New(7)
+		BitSet* Free := BitSet:New()
+
+		for (i32 Index := 0, Index < 10, Index++) {
+			Free->Set(Index)
+		}
 
 		i32 Count := this->Triples->Count()
 
@@ -985,7 +1007,7 @@ struct TACBuilder {
 					continue
 				}
 
-				if (Interval->IsContaining(OuterIndex)) {
+				if (Interval->Contains(OuterIndex)) {
 					Unhandled->Push(Interval)
 				}
 			}
@@ -1010,13 +1032,13 @@ struct TACBuilder {
 					Active->Remove(Index)
 					Handled->Push(ActiveInterval)
 
-					Free := Free.Add(ActiveInterval->RegisterNumber)
+					Free->Set(ActiveInterval->RegisterNumber)
 				}
-				else if !(ActiveInterval->IsContaining(Current->Start())) {
+				else if !(ActiveInterval->Contains(Current->Start())) {
 					Active->Remove(Index)
 					Inactive->Push(ActiveInterval)
 
-					Free := Free.Add(ActiveInterval->RegisterNumber)
+					Free->Set(ActiveInterval->RegisterNumber)
 				}
 			}
 
@@ -1026,33 +1048,33 @@ struct TACBuilder {
 				if (ActiveInterval->End() < Current->Start()) {
 					Handled->Push(InactiveInterval)
 				}
-				else if (ActiveInterval->IsContaining(Current->Start())) {
+				else if (ActiveInterval->Contains(Current->Start())) {
 					Inactive->Remove(Index)
 					Active->Push(InactiveInterval)
 
-					Free := Free.Remove(InactiveInterval->RegisterNumber)
+					Free->Clear(InactiveInterval->RegisterNumber)
 				}
 			}
 
-			RegisterSet Potential := Free
+			BitSet* Potential := Free->Clone()
 
 			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
 				TACInterval* InactiveInterval := Inactive->At(Index)
 
-				if (InactiveInterval->IsOverlapping(Current)) {
-					Potential := Potential.Remove(InactiveInterval->RegisterNumber)
+				if (InactiveInterval->Overlaps(Current)) {
+					Potential->Clear(InactiveInterval->RegisterNumber)
 				}
 			}
 			
 			for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
 				TACInterval* UnhandledInterval := Unhandled->At(Index)
 
-				if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->IsOverlapping(Current)) {
-					Potential := Potential.Remove(UnhandledInterval->RegisterNumber)
+				if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->Overlaps(Current)) {
+					Potential->Clear(UnhandledInterval->RegisterNumber)
 				}
 			}
 
-			if (Potential.Count() = 0) {
+			if (Potential->Count() = 0) {
 				/*i32[32] RegisterWeights
 
 				for (i32 Index := 0, Index < 32, Index++) {
@@ -1076,13 +1098,16 @@ struct TACBuilder {
 				}
 
 				*/
+
+				Print("OH NO!")
+				Throw('aaa')
 			}
 			else {
 				if (Current->RegisterNumber = -1) {
-					Current->RegisterNumber := Potential.First()
+					Current->RegisterNumber := Potential->First()
 				}
 				
-				Free := Free.Remove(Current->RegisterNumber)
+				Free->Clear(Current->RegisterNumber)
 				Active->Push(Current)
 			}
 		}
@@ -1115,20 +1140,6 @@ struct TACBuilder {
 			Print("\n")
 		}
 		;*/
-	}
-
-	define TACTriple* FindInstruction(i32 Number) {
-		i32 Count := this->Triples->Count()
-
-		for (i32 Index := 0, Index < Count, Index++) {
-			TACTriple* Next := this->Triples->At(Index)
-
-			if (Next->Number = Number) {
-				return Next
-			}
-		}
-
-		return null
 	}
 
 	define void PrintLiveIntervals() {

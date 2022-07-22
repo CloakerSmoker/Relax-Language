@@ -1,0 +1,188 @@
+struct BitSet {
+	i32 Capacity
+	i8* Storage
+
+	static self* New() {
+		return Alloc(#self)
+	}
+
+	static i32 ToBytes(i32 Value) {
+		i32 Bytes := Value / 8
+
+		if (Value % 8) {
+			Bytes += 1
+		}
+
+		return Bytes
+	}
+
+	define self* Clone() {
+		self* Result := CloneMemory(this, #BitSet)
+
+		Result->Storage := CloneMemory(this->Storage, self:ToBytes(this->Capacity))
+
+		return Result
+	}
+
+	define void Free() {
+		Free(this->Storage)
+	}
+
+	define i8* Slot(i32 Index) {
+		return &this->Storage[Index / 8]
+	}
+	define i8 Bit(i32 Index) {
+		return (1 << ((Index % 8) As i8)) As i8
+	}
+
+	define i32 Get(i32 Index) {
+		if (Index >= this->Capacity) {
+			return 0
+		}
+
+		i8* Slot := this->Slot(Index)
+
+		return *Slot & this->Bit(Index) != 0
+	}
+
+	define void EnsureCapacity(i32 Index) {
+		if (Index >= this->Capacity) {
+			i32 Bytes := self:ToBytes(Index)
+
+			if (this->Capacity = 0) {
+				this->Storage := Alloc(Bytes)
+			}
+			else {
+				this->Storage := ReAlloc(this->Storage, Bytes)
+			}
+
+			this->Capacity := Bytes * 8
+		}
+	}
+
+	define void Set(i32 Index) {
+		this->EnsureCapacity(Index + 1)
+
+		i8* Slot := this->Slot(Index)
+
+		*Slot |= this->Bit(Index)
+	}
+
+	define void Clear(i32 Index) {
+		this->EnsureCapacity(Index)
+
+		i8* Slot := this->Slot(Index)
+
+		*Slot &= ~this->Bit(Index)
+	}
+
+	define void And(BitSet* Other) {
+		this->EnsureCapacity(Other->Capacity)
+		Other->EnsureCapacity(this->Capacity)
+		i32 OtherBytes := self:ToBytes(Other->Capacity)
+
+		for (i32 Index := 0, Index < OtherBytes, Index++) {
+			i8* MySlot := &this->Storage[Index]
+			i8* OtherSlot := &Other->Storage[Index]
+
+			*MySlot &= *OtherSlot
+		}
+	}
+
+	; "union" is a reserved word...
+
+	define void Or(BitSet* Other) {
+		this->EnsureCapacity(Other->Capacity)
+		Other->EnsureCapacity(this->Capacity)
+		i32 OtherBytes := self:ToBytes(Other->Capacity)
+
+		for (i32 Index := 0, Index < OtherBytes, Index++) {
+			i8* MySlot := &this->Storage[Index]
+			i8* OtherSlot := &Other->Storage[Index]
+
+			*MySlot |= *OtherSlot
+		}
+	}
+
+	define void Difference(BitSet* Other) {
+		this->EnsureCapacity(Other->Capacity)
+		Other->EnsureCapacity(this->Capacity)
+		i32 OtherBytes := self:ToBytes(Other->Capacity)
+
+		for (i32 Index := 0, Index < OtherBytes, Index++) {
+			i8* MySlot := &this->Storage[Index]
+			i8* OtherSlot := &Other->Storage[Index]
+
+			*MySlot := *MySlot & ~*OtherSlot
+		}
+	}
+
+	define i32 Count() {
+		i32 Result := 0
+
+		for (i32 Index := 0, Index < this->Capacity, Index++) {
+			if (this->Get(Index)) {
+				Result += 1
+			}
+		}
+
+		return Result
+	}
+
+	define i32 FirstOne() {
+		for (i32 Index := 0, Index < this->Capacity, Index++) {
+			if (this->Get(Index)) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+	define i32 First() {
+		return this->FirstOne()
+	}
+
+	define i32 FirstZero() {
+		for (i32 Index := 0, Index < this->Capacity, Index++) {
+			if !(this->Get(Index)) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+	define i32 LastOne() {
+		for (i32 Index := this->Capacity - 1, Index >= 0, Index--) {
+			if (this->Get(Index)) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+	define i32 LastZero() {
+		for (i32 Index := this->Capacity - 1, Index >= 0, Index--) {
+			if !(this->Get(Index)) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+
+	define i32 Find(i32 Start) {
+		for (i32 Index := Start, Index < this->Capacity, Index++) {
+			if (this->Get(Index)) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+
+	define void Print() {
+		for (i32 Index := 0, Index < this->Capacity, Index++) {
+			Print("%i", this->Get(Index))
+		}
+	}
+}

@@ -142,20 +142,4 @@ struct PointerArray {
 	define void Free() {
 		Free(this->Buffer)
 	}
-
-	define void UnionWith(PointerArray* Other) {
-		for (i32 Index := 0, Index < Other->Count(), Index++) {
-			void* Value := Other->At(Index)
-
-			if !(this->Has(Value)) {
-				this->Push(Value)
-			}
-		}
-	}
-
-	define void Subtract(PointerArray* Other) {
-		for (i32 Index := 0, Index < Other->Count(), Index++) {
-			this->RemoveValue(Other->At(Index))
-		}
-	}
 }
