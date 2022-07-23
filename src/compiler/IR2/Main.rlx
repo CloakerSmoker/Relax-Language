@@ -682,6 +682,102 @@ struct TACBuilder {
 		}
 	}
 
+
+	define TACTriple* Joined(TACTriple* Triple) {
+		if (Triple->Join = Triple) {
+			return Triple
+		}
+		else {
+			return this->Joined(Triple->Join)
+		}
+	}
+
+	define i8 CouldJoinIntervals(TACInterval* Left, TACInterval* Right) {
+		BitSet* Clone := Left~>Range->Clone()
+
+		Clone->And(Right~>Range)
+		i32 Count := Clone->Count()
+		i32 Edge := Clone->Find()
+
+		Clone->Free()
+		Free(Clone)
+
+		if (Count = 1) {
+			if (Left->End() != Edge || Right->Start() != Edge) {
+				return false
+			}
+
+			return true
+		}
+		else if (Count = 0) {
+			return true
+		}
+
+		return false
+	}
+
+	define void TryJoin(TACTriple* RawLeft, TACTriple* RawRight) {
+		TACTriple* Left := this->Joined(RawLeft)
+		TACTriple* Right := this->Joined(RawRight)
+
+		if (Left->Interval()->RegisterNumber != Right->Interval()->RegisterNumber) {
+			return
+		}
+
+		if (this->CouldJoinIntervals(Left->Interval(), Right->Interval())) {
+			Right->Interval()->Or(Left->Interval())
+			;Left~>Interval->Free()
+			RawLeft->Join := Right
+		}
+	}
+	define void Join(TACAddress Left, TACAddress Right) {
+		this->TryJoin(Left.TemporaryTriple, Right.TemporaryTriple)
+	}
+
+	define void ReplaceUses(TACTriple* Triple, TACAddress Old, TACAddress New) {
+		i32 UseCount := Triple~>Uses->Count()
+
+		for (i32 Index := UseCount - 1, Index >= 0, Index--) {
+			TACAddress NextUse := Triple~>Uses->At(Index) As TACAddress
+
+			if (NextUse->Equals(New)) {
+				continue
+			}
+
+			TACTriple* Next := NextUse.TemporaryTriple
+
+			if (Next->Is(TAC_PHI)) {
+				i32 DefinitionCount := Next->Phi~>Definitions->Count()
+
+				for (i32 DefinitionIndex := 0, DefinitionIndex < DefinitionCount, DefinitionIndex++) {
+					TACPhiDefinition* Definition := Next->Phi~>Definitions->At(DefinitionIndex)
+
+					if (Definition->Address->Equals(Old)) {
+						Definition->Address := New
+
+						this->RemoveUseAt(NextUse, Old)
+						this->UseAt(NextUse, New)
+					}
+				}
+			}
+			else {
+				if (Next->Left->Equals(Old)) {
+					this->RemoveUseAt(NextUse, Old)
+					this->UseAt(NextUse, New)
+
+					Next->Left := New
+				}
+
+				if (Next->Right->Equals(Old)) {
+					this->RemoveUseAt(NextUse, Old)
+					this->UseAt(NextUse, New)
+
+					Next->Right := New
+				}
+			}
+		}
+	}
+
 	define void TieOperandRegister(TACBlock* InBlock, TACTriple* Triple, TACAddress* Operand, i32 RegisterNumber) {
 		TACAddress MoveAddress := this->Emit(InBlock, TAC_MOVE, *Operand)
 
@@ -696,6 +792,8 @@ struct TACBuilder {
 
 		InBlock~>Body->RemoveValue(Move)
 		InBlock~>Body->Insert(Index, Move)
+
+		this->TryJoin(Move, Triple)
 	}
 	define void TieOperandRegister(TACAddress Address, i32 Operand, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
@@ -717,47 +815,7 @@ struct TACBuilder {
 		InBlock~>Body->RemoveValue(Move)
 		InBlock~>Body->Insert(Index + 1, Move)
 
-		i32 UseCount := Triple~>Uses->Count()
-
-		for (i32 Index := UseCount - 1, Index >= 0, Index--) {
-			TACAddress NextUse := Triple~>Uses->At(Index) As TACAddress
-
-			if (NextUse->Equals(MoveAddress)) {
-				continue
-			}
-
-			TACTriple* Next := NextUse.TemporaryTriple
-
-			if (Next->Is(TAC_PHI)) {
-				i32 DefinitionCount := Next->Phi~>Definitions->Count()
-
-				for (i32 DefinitionIndex := 0, DefinitionIndex < DefinitionCount, DefinitionIndex++) {
-					TACPhiDefinition* Definition := Next->Phi~>Definitions->At(DefinitionIndex)
-
-					if (Definition->Address->Equals(OldAddress)) {
-						Definition->Address := MoveAddress
-
-						this->RemoveUseAt(NextUse, OldAddress)
-						this->UseAt(NextUse, MoveAddress)
-					}
-				}
-			}
-			else {
-				if (Next->Left->Equals(OldAddress)) {
-					this->RemoveUseAt(NextUse, OldAddress)
-					this->UseAt(NextUse, MoveAddress)
-
-					Next->Left := MoveAddress
-				}
-
-				if (Next->Right->Equals(OldAddress)) {
-					this->RemoveUseAt(NextUse, OldAddress)
-					this->UseAt(NextUse, MoveAddress)
-
-					Next->Right := MoveAddress
-				}
-			}
-		}
+		this->ReplaceUses(Triple, OldAddress, MoveAddress)
 	}
 	define void TieResultRegister(TACAddress Address, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
@@ -785,30 +843,6 @@ struct TACBuilder {
 
 		InBlock~>Body->RemoveValue(ClosingClobber)
 		InBlock~>Body->Insert(Index + 2, ClosingClobber)
-	}
-
-	define TACTriple* Joined(TACTriple* Triple) {
-		if (Triple->Join = Triple) {
-			return Triple
-		}
-		else {
-			return this->Joined(Triple->Join)
-		}
-	}
-
-	define void TryJoin(TACTriple* RawLeft, TACTriple* RawRight) {
-		TACTriple* Left := this->Joined(RawLeft)
-		TACTriple* Right := this->Joined(RawRight)
-
-		if (RawLeft->Interval()->RegisterNumber != RawRight->Interval()->RegisterNumber) {
-			return
-		}
-
-		if !(Left->Interval()->Overlaps(Right->Interval())) {
-			Right->Interval()->Or(Left->Interval())
-			;Left~>Interval->Free()
-			RawLeft->Join := this->Joined(RawRight)
-		}
 	}
 
 	define void GenerateMoves() {
@@ -904,7 +938,7 @@ struct TACBuilder {
 			Range := TACLiveRange:New(Definition->Number, End)
 		}
 		else {
-			Range := TACLiveRange:New(InBlock->First, End)
+			Range := TACLiveRange:New(InBlock->First + InBlock->PhiCount, End)
 		}
 
 		Definition->AddRange(Range)
@@ -924,6 +958,42 @@ struct TACBuilder {
 		return null
 	}
 
+	define void TryJoinMoves() {
+		; NOT USED
+		; We copy every left operand before use for x86 since it stores
+		;  the result in the left operand.
+		; However, for the last use of any given temporary, we can
+		;  skip this and just clobber the old value.
+		; The problem is that the `copy := move value; res := op copy`
+		;  sequence can't be rewritten very easily.
+		; The obvious solution is joining `copy` and `value` so the move
+		;  is redundant and gets removed, but this doesn't work since
+		;   ???? this code sucks ????
+		; Yeah I'm out of ideas, fuck this 
+
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_MOVE)) {
+					TACAddress MoveFrom := Next->Left
+
+					if (MoveFrom.Is(TACAddressKind:Temporary)) {
+						this->TryJoin(Next, MoveFrom.TemporaryTriple)
+
+						this->ReplaceUses(Next, Next->Address(), MoveFrom)
+					}
+				}
+			}
+		}
+	}
+
 	define void BuildIntervals() {
 		i32 BlockCount := this->Blocks->Count()
 
@@ -933,7 +1003,7 @@ struct TACBuilder {
 			i32 PhiCount := InBlock->PhiCount
 			i32 ChildCount := InBlock~>Children->Count()
 
-			BitSet* Live := InBlock~>Live->Clone()
+			BitSet* Live := InBlock~>Live
 
 			for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
 				TACBlock* Child := InBlock~>Children->At(ChildIndex)
@@ -953,12 +1023,12 @@ struct TACBuilder {
 				}
 			}
 
-			for (i32 Index := PhiCount, Index < Live->Count(), Index++) {
+			for (i32 Index := 0, Index < Live->Count(), Index++) {
 				i32 Location := Live->Find(Index)
 
 				TACTriple* Next := this->FindInstruction(Location)
 
-				this->AddRange(InBlock, Next, InBlock->Last)
+				this->AddRange(InBlock, Next, InBlock->Last + 1)
 			}
 
 			for (i32 Index := InBlock->Count() - 1, Index >= PhiCount, Index--) {
@@ -979,8 +1049,8 @@ struct TACBuilder {
 				}
 			}
 
-			Live->Free()
-			Free(Live)
+			;Live->Free()
+			;Free(Live)
 		}
 	}
 
@@ -1142,6 +1212,32 @@ struct TACBuilder {
 		;*/
 	}
 
+	define void LinearScanCleanup() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := Count - 1, Index >= 0, Index--) {
+				TACTriple* Triple := InBlock->At(Index)
+
+				if (Triple->Is(TAC_PHI) || Triple->Is(TAC_CLOBBER)) {
+					InBlock~>Body->RemoveValue(Triple)
+				}
+				else if (Triple->Is(TAC_MOVE) && Triple->Left->Is(TACAddressKind:Temporary)) {
+					i32 ResultRegister := Triple->Interval()->RegisterNumber
+					i32 OperandRegister := Triple->Left.TemporaryTriple->Interval()->RegisterNumber
+
+					if (ResultRegister = OperandRegister) {
+						InBlock~>Body->RemoveValue(Triple)
+					}
+				}
+			}
+		}
+	}
+
 	define void PrintLiveIntervals() {
 		for (i32 Index := 0, Index < this->NextInstructionNumber, Index++) {
 			TACTriple* Next := this->FindInstruction(Index)
@@ -1163,6 +1259,15 @@ bits LoopLables As i64 {
 }
 
 #Require "./src/compiler/IR2/TACFromAST.rlx"
+
+i8 RAX := 0
+i8 RBX := 3
+i8 RCX := 1
+i8 RDX := 2
+i8 RSP := 4
+i8 RBP := 5
+i8 RSI := 6
+i8 RDI := 7
 
 define void Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
@@ -1202,7 +1307,7 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;TFA->Builder->RemoveExtraJumps()
 	;TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
 	TFA->Builder->GenerateMoves()
-	TFA->Builder->PrintGraphViz("mov", "Moves added")
+	;TFA->Builder->PrintGraphViz("mov", "Moves added")
 
 	i32 Count := TFA->Builder->Triples->Count()
 
@@ -1211,22 +1316,30 @@ define void Main(i64 ArgC, i8** ArgV) {
 		TACAddress NextAddress := Next->Address()
 
 		if (Next->Is(TAC_ALU_FIRST + OPERATOR_SLASH)) {
-			TFA->Builder->TieOperandRegister(NextAddress, 0, 5)
-			TFA->Builder->TieResultRegister(NextAddress, 4)
-			TFA->Builder->ClobberRegister(NextAddress, 1)
+			TFA->Builder->TieOperandRegister(NextAddress, 0, RAX)
+			TFA->Builder->TieResultRegister(NextAddress, RAX)
+			TFA->Builder->ClobberRegister(NextAddress, RDX)
 		}
 		else if (Next->Is(TAC_RETURN)) {
-			;TFA->Builder->TieOperandRegister(NextAddress, 0, 0)
+			TFA->Builder->TieOperandRegister(NextAddress, 0, RAX)
+		}
+		else if (TAC_ALU_FIRST <= Next->Opcode && Next->Opcode <= TAC_ALU_LAST) {
+			;TACAddress Left := NextAddress.TemporaryTriple->Left
+
+			;TFA->Builder->Join(NextAddress, Left)
+
+			TFA->Builder->TieOperandRegister(NextAddress, 0, -1)
 		}
 	}
 
 	TFA->Builder->PrintGraphViz("reg0", "Registers tied")
-
 	TFA->Builder->RenumberInstructions()
-	;TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
+	TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
 	TFA->Builder->BuildIntervals()
 	TFA->Builder->LinearScan()
 	TFA->Builder->PrintGraphViz("reg1", "Registers allocated")
+	TFA->Builder->LinearScanCleanup()
+	TFA->Builder->PrintGraphViz("reg2", "Register allocation helpers cleanup")
 	Print("}\n")
 
 	TFA->Builder->PrintLiveIntervals()

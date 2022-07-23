@@ -170,14 +170,24 @@ struct BitSet {
 		return -1
 	}
 
-	define i32 Find(i32 Start) {
-		for (i32 Index := Start, Index < this->Capacity, Index++) {
+	define i32 Find(i32 Number) {
+		i32 Count := 0
+
+		for (i32 Index := 0, Index < this->Capacity, Index++) {
 			if (this->Get(Index)) {
-				return Index
+				if (Count = Number) {
+					return Index
+				}
+				else {
+					Count++
+				}
 			}
 		}
 
 		return -1
+	}
+	define i32 Find() {
+		return this->Find(0)
 	}
 
 	define void Print() {
