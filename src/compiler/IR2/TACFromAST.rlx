@@ -49,9 +49,9 @@ struct TACFromAST {
 		for (i32 Index := 0, Index < Count, Index++) {
 			i32 Number := Numbers[Index] As i32
 
-			TACBlock* InBlock := this->Builder->Blocks->At(Number)
+			TACBlock* Block := this->Builder->Blocks->At(Number)
 
-			this->Builder->SealBlock(InBlock)
+			this->Builder->SealBlock(Block)
 		}
 	}
 	
@@ -237,7 +237,7 @@ struct TACFromAST {
 		return TAC_ADDRESS_NULL
 	}
 	
-	declare void CompileBlock(Block*)
+	declare void CompileBlock(CodeBlock*)
 	
 	define void CompileIf(IfGroup* Target) {
 		i32 BranchCount := Target->BranchCount
@@ -318,7 +318,7 @@ struct TACFromAST {
 		this->CurrentLoopBreakLabel := LoopState.BreakLabel
 	}
 	
-	define void CompileLoop(Block* LoopBody) {
+	define void CompileLoop(CodeBlock* LoopBody) {
 		i32 StartLabel := this->ReserveLabel()
 		i32 EndLabel := this->ReserveLabel()
 		
@@ -428,7 +428,7 @@ struct TACFromAST {
 		}
 	}
 	
-	define void CompileBlock(Block* Target) {
+	define void CompileBlock(CodeBlock* Target) {
 		for (i32 Index := 0, Index < Target->StatementCount, Index++) {
 			this->CompileStatement(Target->Statements[Index])
 		}

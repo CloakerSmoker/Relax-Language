@@ -210,7 +210,7 @@ struct CallExpression {
 
 ; Blocks
 
-struct Block {
+struct CodeBlock {
 	ASTNode** Statements,
 	i16 StatementCount
 	i8 HasUnconditionalReturn
@@ -220,8 +220,8 @@ struct Block {
 
 struct IfGroup {
 	ASTNode** Conditions,
-	Block** Bodies,
-	Block* ElseBranch,
+	CodeBlock** Bodies,
+	CodeBlock* ElseBranch,
 	i16 BranchCount
 }
 
@@ -229,17 +229,17 @@ struct ForLoop {
 	ASTNode* Initializer,
 	ASTNode* Condition,
 	ASTNode* Step,
-	Block* Body
+	CodeBlock* Body
 }
 
 struct WhileLoop {
 	ASTNode* Condition,
-	Block* Body
+	CodeBlock* Body
 }
 
 struct TryCatch {
-	Block* Body,
-	Block* CatchBody,
+	CodeBlock* Body,
+	CodeBlock* CatchBody,
 	VariableInfo* CatchCodeVariable
 }
 
@@ -424,7 +424,7 @@ struct FunctionDefine {
 	i8 IsImported,
 	
 	union {
-		Block* Body,
+		CodeBlock* Body,
 		AssemblyBlock* AssemblyBody,
 		SafeString* ImportFileName
 	},
@@ -577,7 +577,7 @@ struct ASTNode {
 		IfGroup* IfNode,
 		ForLoop* ForNode,
 		WhileLoop* WhileNode,
-		Block* LoopBody,
+		CodeBlock* LoopBody,
 		i8 IsContinue,
 		
 		FunctionDefine* DefineNode,
@@ -595,7 +595,7 @@ struct ASTNode {
 		AssemblyBlock* AssemblyValue,
 		TryCatch* TryNode,
 		
-		Block* BlockValue
+		CodeBlock* BlockValue
 		
 		ASTNode* CastFromValue
 	},
@@ -717,9 +717,9 @@ struct ASTVisitor {
 	declare void VisitNodes(...),
 	declare void RawVisitNodes(i64, ASTNode**),
 	
-	define void RawVisitBlocks(i64 Count, Block** Blocks) {
+	define void RawVisitBlocks(i64 Count, CodeBlock** Blocks) {
 		for (i32 Index := 0, Index < Count, Index += 1) {
-			Block* Next := Blocks[Index]
+			CodeBlock* Next := Blocks[Index]
 			
 			this->RawVisitNodes(Next->StatementCount, Next->Statements)
 
@@ -729,7 +729,7 @@ struct ASTVisitor {
 		}
 	}
 	define void VisitBlocks(... Blocks) {
-		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As Block**)
+		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As CodeBlock**)
 	}
 	define void VisitChildren(ASTNode* Node) {
 		Node->LastVisitor := this->ID

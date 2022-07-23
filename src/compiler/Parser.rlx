@@ -729,7 +729,7 @@ struct ParserState {
 				IsFirstInitializer := false
 			}
 			
-			Block* InitializersBlock := Alloc(#Block) As Block*
+			CodeBlock* InitializersBlock := Alloc(#CodeBlock) As CodeBlock*
 			
 			InitializersBlock->Statements := Initializers
 			InitializersBlock->StatementCount := InitializerIndex
@@ -784,7 +784,7 @@ struct ParserState {
 				}
 			}
 			
-			Block* ArrayInitializersBlock := Alloc(#Block) As Block*
+			CodeBlock* ArrayInitializersBlock := Alloc(#CodeBlock) As CodeBlock*
 			
 			ArrayInitializersBlock->Statements := ElementInitiailizers
 			ArrayInitializersBlock->StatementCount := (Index + 1) As i16

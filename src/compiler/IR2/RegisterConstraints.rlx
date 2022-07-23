@@ -49,8 +49,8 @@
 		this->TryJoin(Left.TemporaryTriple, Right.TemporaryTriple)
 	}
 	
-	define void TieOperandRegister(TACBlock* InBlock, TACTriple* Triple, TACAddress* Operand, i32 RegisterNumber) {
-		TACAddress MoveAddress := this->Emit(InBlock, TAC_MOVE, *Operand)
+	define void TieOperandRegister(TACBlock* Block, TACTriple* Triple, TACAddress* Operand, i32 RegisterNumber) {
+		TACAddress MoveAddress := this->Emit(Block, TAC_MOVE, *Operand)
 
 		this->RemoveUseAt(Triple->Address(), *Operand)
 		*Operand := MoveAddress
@@ -59,59 +59,59 @@
 
 		Move->Interval()->RegisterNumber := RegisterNumber
 
-		i32 Index := InBlock~>Body->Find(Triple)
+		i32 Index := Block~>Body->Find(Triple)
 
-		InBlock~>Body->RemoveValue(Move)
-		InBlock~>Body->Insert(Index, Move)
+		Block~>Body->RemoveValue(Move)
+		Block~>Body->Insert(Index, Move)
 
 		this->TryJoin(Move, Triple)
 	}
 	define void TieOperandRegister(TACAddress Address, i32 Operand, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
-		TACBlock* InBlock := this->Blocks->At(Triple->BlockNumber)
+		TACBlock* Block := this->Blocks->At(Triple->BlockNumber)
 
-		this->TieOperandRegister(InBlock, Triple, &Triple->Operands[Operand], RegisterNumber)
+		this->TieOperandRegister(Block, Triple, &Triple->Operands[Operand], RegisterNumber)
 	}
 
-	define void TieResultRegister(TACBlock* InBlock, TACTriple* Triple, i32 RegisterNumber) {
+	define void TieResultRegister(TACBlock* Block, TACTriple* Triple, i32 RegisterNumber) {
 		TACAddress OldAddress := Triple->Address()
 		
-		TACAddress MoveAddress := this->Emit(InBlock, TAC_MOVE, OldAddress)
+		TACAddress MoveAddress := this->Emit(Block, TAC_MOVE, OldAddress)
 		TACTriple* Move := MoveAddress.TemporaryTriple
 
 		Triple->Interval()->RegisterNumber := RegisterNumber
 
-		i32 Index := InBlock~>Body->Find(Triple)
+		i32 Index := Block~>Body->Find(Triple)
 		
-		InBlock~>Body->RemoveValue(Move)
-		InBlock~>Body->Insert(Index + 1, Move)
+		Block~>Body->RemoveValue(Move)
+		Block~>Body->Insert(Index + 1, Move)
 
 		this->ReplaceUses(Triple, OldAddress, MoveAddress)
 	}
 	define void TieResultRegister(TACAddress Address, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
-		TACBlock* InBlock := this->Blocks->At(Triple->BlockNumber)
+		TACBlock* Block := this->Blocks->At(Triple->BlockNumber)
 
-		this->TieResultRegister(InBlock, Triple, RegisterNumber)
+		this->TieResultRegister(Block, Triple, RegisterNumber)
 	}
 
 	define void ClobberRegister(TACAddress Address, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
-		TACBlock* InBlock := this->Blocks->At(Triple->BlockNumber)
+		TACBlock* Block := this->Blocks->At(Triple->BlockNumber)
 
-		TACAddress ClobberAddress := this->Emit(InBlock, TAC_CLOBBER, TAC_ADDRESS_NULL)
+		TACAddress ClobberAddress := this->Emit(Block, TAC_CLOBBER, TAC_ADDRESS_NULL)
 		TACTriple* Clobber := ClobberAddress.TemporaryTriple
 
 		Clobber->Interval()->RegisterNumber := RegisterNumber
 		
-		i32 Index := InBlock~>Body->Find(Triple)
+		i32 Index := Block~>Body->Find(Triple)
 
-		InBlock~>Body->RemoveValue(Clobber)
-		InBlock~>Body->Insert(Index, Clobber)
+		Block~>Body->RemoveValue(Clobber)
+		Block~>Body->Insert(Index, Clobber)
 
-		TACAddress ClosingClobberAddress := this->Emit(InBlock, TAC_CLOBBER, ClobberAddress)
+		TACAddress ClosingClobberAddress := this->Emit(Block, TAC_CLOBBER, ClobberAddress)
 		TACTriple* ClosingClobber := ClosingClobberAddress.TemporaryTriple
 
-		InBlock~>Body->RemoveValue(ClosingClobber)
-		InBlock~>Body->Insert(Index + 2, ClosingClobber)
+		Block~>Body->RemoveValue(ClosingClobber)
+		Block~>Body->Insert(Index + 2, ClosingClobber)
 	}

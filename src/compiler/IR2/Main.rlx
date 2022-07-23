@@ -54,14 +54,14 @@ struct TACBuilder {
 		}
 	}
 	
-	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Left, TACAddress Right) {
+	define TACAddress Emit(TACBlock* Block, i32 Opcode, TACAddress Left, TACAddress Right) {
 		if (Opcode = TAC_JUMP) {
 			TACBlock* Destination := this->Blocks->At(Left.Integer As i32)
 
-			InBlock->Fallthrough := Destination->Number
+			Block->Fallthrough := Destination->Number
 
-			InBlock~>Children->Add(Destination)
-			Destination~>Parents->Add(InBlock)
+			Block~>Children->Add(Destination)
+			Destination~>Parents->Add(Block)
 
 			return TAC_ADDRESS_NULL
 		}
@@ -69,14 +69,14 @@ struct TACBuilder {
 		TACTriple* New := TACTriple:New(Opcode, Left, Right)
 
 		if (Opcode = TAC_PHI) {
-			InBlock~>Body->Insert(0, New)
-			InBlock->PhiCount += 1
+			Block~>Body->Insert(0, New)
+			Block->PhiCount += 1
 		}
 		else {
-			InBlock->Push(New)
+			Block->Push(New)
 		}
 
-		New->BlockNumber := InBlock->Number
+		New->BlockNumber := Block->Number
 		New->Number := this->Triples->Count()
 
 		this->Triples->Push(New)
@@ -95,8 +95,8 @@ struct TACBuilder {
 				Destination := this->Blocks->At(Right.Integer As i32)
 			}
 
-			InBlock~>Children->Add(Destination)
-			Destination~>Parents->Add(InBlock)
+			Block~>Children->Add(Destination)
+			Destination~>Parents->Add(Block)
 		}
 		else {
 			if (Left != TAC_ADDRESS_NULL) {
@@ -115,8 +115,8 @@ struct TACBuilder {
 		return this->Emit(this->CurrentBlock, Opcode, Left, Right)
 	}
 
-	define TACAddress Emit(TACBlock* InBlock, i32 Opcode, TACAddress Operand) {
-		return this->Emit(InBlock, Opcode, Operand, TAC_ADDRESS_NULL)
+	define TACAddress Emit(TACBlock* Block, i32 Opcode, TACAddress Operand) {
+		return this->Emit(Block, Opcode, Operand, TAC_ADDRESS_NULL)
 	}
 
 	define TACAddress Emit(i32 Opcode, TACAddress Operand) {
@@ -161,9 +161,9 @@ struct TACBuilder {
 	
 	define void Print() {
 		for (i32 BlockIndex := 0, BlockIndex < this->Blocks->Count(), BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			InBlock->Print()
+			Block->Print()
 		}
 	}
 	define void PrintGraphViz(i8* Name, i8* Description) {
@@ -173,9 +173,9 @@ struct TACBuilder {
 		Print("\tlabel=\"%s:\n%s\";\n", Name, Description)
 
 		for (i32 BlockIndex := 0, BlockIndex < this->Blocks->Count(), BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 			
-			InBlock->PrintGraphViz(Name)
+			Block->PrintGraphViz(Name)
 		}
 
 		Print("}\n")

@@ -20,7 +20,7 @@
 			}
 		}
 	}
-	define Block* ParseBlock() {
+	define CodeBlock* ParseBlock() {
 		; Parses an array of statements, and builds a Block structure containing them
 		
 		Token* OpenBrace := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace in block")
@@ -116,7 +116,7 @@
 		
 		; Allocate a block structure and populate it with the statement list/count
 		
-		Block* NewBlock := Alloc(#Block) As Block*
+		CodeBlock* NewBlock := Alloc(#CodeBlock) As CodeBlock*
 		
 		NewBlock->Statements := Statements
 		NewBlock->StatementCount := StatementCount
@@ -127,8 +127,8 @@
 	
 	define ASTNode* ParseIf() {
 		ASTNode** Conditions := Alloc(10 * #ASTNode*) As ASTNode**
-		Block** Bodies := Alloc(10 * #Block*) As Block**
-		Block* ElseBranch := null
+		CodeBlock** Bodies := Alloc(10 * #CodeBlock*) As CodeBlock**
+		CodeBlock* ElseBranch := null
 		
 		i16 BranchCapacity := 10
 		i16 BranchIndex := 0

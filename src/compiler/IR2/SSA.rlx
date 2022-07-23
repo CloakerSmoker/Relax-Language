@@ -1,5 +1,5 @@
-	define void SetName(TACBlock* InBlock, i8* Name, TACAddress Value) {
-		Print("Set %i.%s to %a\n", InBlock->Number, Name, Value)
+	define void SetName(TACBlock* Block, i8* Name, TACAddress Value) {
+		Print("Set %i.%s to %a\n", Block->Number, Name, Value)
 
 		i64 Hash := FNV1A(Name)
 
@@ -8,7 +8,7 @@
 			Value: Value
 		}
 
-		InBlock~>Definitions->Insert(Hash, &Definition)
+		Block~>Definitions->Insert(Hash, &Definition)
 	}
 	define void SetName(i8* Name, TACAddress Value) {
 		this->SetName(this->CurrentBlock, Name, Value)
@@ -113,12 +113,12 @@
 
 	declare TACAddress LookupName(TACBlock*, i8*, i64)
 
-	define TACAddress AddPhiOperands(TACBlock* InBlock, TACAddress PhiAddress) {
+	define TACAddress AddPhiOperands(TACBlock* Block, TACAddress PhiAddress) {
 		TACTriple* Triple := this->GetTemporary(PhiAddress)
 		TACPhiInfo* Phi := Triple->Phi
 		
-		for (i32 Index := 0, Index < InBlock~>Parents->Count(), Index++) {
-			TACBlock* Parent := InBlock~>Parents->At(Index)
+		for (i32 Index := 0, Index < Block~>Parents->Count(), Index++) {
+			TACBlock* Parent := Block~>Parents->At(Index)
 
 			TACAddress ParentDefinition := this->LookupName(Parent, Phi->Name, Phi->Hash)
 
@@ -133,80 +133,80 @@
 		;return PhiAddress
 	}
 	
-	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
-		if (InBlock~>Definitions->Has(Hash)) {
-			TACDefinition* Definition := InBlock~>Definitions->Get(Hash)
+	define TACAddress LookupName(TACBlock* Block, i8* Name, i64 Hash) {
+		if (Block~>Definitions->Has(Hash)) {
+			TACDefinition* Definition := Block~>Definitions->Get(Hash)
 
-			Print("Get %i.%s is %a\n", InBlock->Number, Name, Definition->Value)
+			Print("Get %i.%s is %a\n", Block->Number, Name, Definition->Value)
 
 			return Definition->Value
 		}
 		else {
-			Print("No such %i.%s (sealed? %i)\n", InBlock->Number, Name, InBlock->Sealed)
+			Print("No such %i.%s (sealed? %i)\n", Block->Number, Name, Block->Sealed)
 		}
 		
 		TACAddress Result := TAC_ADDRESS_NULL
 		
-		if !(InBlock->Sealed) {
+		if !(Block->Sealed) {
 			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
-			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
+			Result := this->Emit(Block, TAC_PHI, Phi As TACAddress)
 
-			InBlock~>IncompletePhi->Push(Result As void*)
+			Block~>IncompletePhi->Push(Result As void*)
 		}
-		else if (InBlock~>Parents->Count() = 1) {
-			TACBlock* Parent := InBlock~>Parents->At(0)
+		else if (Block~>Parents->Count() = 1) {
+			TACBlock* Parent := Block~>Parents->At(0)
 
 			return this->LookupName(Parent, Name, Hash)
 		}
 		else {
 			Print("new phi\n")
 			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
-			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
-			this->SetName(InBlock, Name, Result)
+			Result := this->Emit(Block, TAC_PHI, Phi As TACAddress)
+			this->SetName(Block, Name, Result)
 
 			TACTriple* NewPhi := this->GetTemporary(Result)
 
 			; Move phi to start of block
-			InBlock~>Body->RemoveValue(NewPhi)
-			InBlock~>Body->Insert(0, NewPhi)
+			Block~>Body->RemoveValue(NewPhi)
+			Block~>Body->Insert(0, NewPhi)
 
-			Result := this->AddPhiOperands(InBlock, Result)
+			Result := this->AddPhiOperands(Block, Result)
 		}
 
-		this->SetName(InBlock, Name, Result)
+		this->SetName(Block, Name, Result)
 
 		return Result
 	}
 
-	define TACAddress LookupName(TACBlock* InBlock, i8* Name) {
-		return this->LookupName(InBlock, Name, FNV1A(Name))
+	define TACAddress LookupName(TACBlock* Block, i8* Name) {
+		return this->LookupName(Block, Name, FNV1A(Name))
 	}
 
 	define TACAddress LookupName(i8* Name) {
 		return this->LookupName(this->CurrentBlock, Name, FNV1A(Name))
 	}
 
-	define void SealBlock(TACBlock* InBlock) {
-		if !(InBlock->Sealed) {
-			InBlock->Sealed := true
+	define void SealBlock(TACBlock* Block) {
+		if !(Block->Sealed) {
+			Block->Sealed := true
 
-			i32 PhiCount := InBlock~>IncompletePhi->Count()
+			i32 PhiCount := Block~>IncompletePhi->Count()
 
 			for (i32 Index := 0, Index < PhiCount, Index++) {
-				TACAddress PhiAddress := InBlock~>IncompletePhi->At(Index) As TACAddress
+				TACAddress PhiAddress := Block~>IncompletePhi->At(Index) As TACAddress
 
 				TACPhiInfo* Phi := this->GetTemporary(PhiAddress)->Phi
 
-				Print("\nSeal %a %i.%s\n", PhiAddress, InBlock->Number, Phi->Name)
+				Print("\nSeal %a %i.%s\n", PhiAddress, Block->Number, Phi->Name)
 
-				this->AddPhiOperands(InBlock, PhiAddress)
+				this->AddPhiOperands(Block, PhiAddress)
 
 				Print("\n")
 			}
 		}
 	}
 	
-	define void RecomputePhi(TACBlock* InBlock, TACPhiInfo* Phi, TACAddress PhiAddress) {
+	define void RecomputePhi(TACBlock* Block, TACPhiInfo* Phi, TACAddress PhiAddress) {
 		i32 DefinitionCount := Phi~>Definitions->Count()
 
 		for (i32 Index := 0, Index < DefinitionCount, Index++) {
@@ -218,15 +218,15 @@
 		;this->GetTemporary(PhiAddress)->Print()
 		;Print("\n")
 
-		this->AddPhiOperands(InBlock, PhiAddress)
+		this->AddPhiOperands(Block, PhiAddress)
 
 		;this->GetTemporary(PhiAddress)->Print()
 		;Print("\n\n")
 	}
 
-	define void RecomputeAllPhi(TACBlock* InBlock, i32 RemovedBlock) {
-		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
-			TACTriple* Next := InBlock->At(Index)
+	define void RecomputeAllPhi(TACBlock* Block, i32 RemovedBlock) {
+		for (i32 Index := 0, Index < Block->Count(), Index++) {
+			TACTriple* Next := Block->At(Index)
 
 			if (Next->Is(TAC_PHI)) {
 				TACPhiInfo* Phi := Next->Phi
@@ -236,7 +236,7 @@
 					TACPhiDefinition* Definition := Phi~>Definitions->At(PhiIndex)
 
 					if (Definition->BlockNumber = RemovedBlock) {
-						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(Next))
+						this->RecomputePhi(Block, Phi, TACAddress:Temporary(Next))
 					}
 				}
 			}
@@ -247,11 +247,11 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
-			i32 Count := InBlock->Count()
+			TACBlock* Block := this->Blocks->At(BlockIndex)
+			i32 Count := Block->Count()
 
 			for (i32 Index := 0, Index < Count, Index++) {
-				TACTriple* Next := InBlock->At(Index)
+				TACTriple* Next := Block->At(Index)
 
 				if (Next->Is(TAC_PHI)) {
 					TACAddress PhiAddress := TACAddress:Temporary(Next)

@@ -847,7 +847,7 @@ define void CompileImportStub(CompilerState* Compiler, FunctionDefine* FunctionT
 	EmitJump_RI64(Compiler, RBX)
 }
 
-declare void CompileBlock(CompilerState*, Block*)
+declare void CompileBlock(CompilerState*, CodeBlock*)
 declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
@@ -1083,7 +1083,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	/* Compile the body of the function */
 	
-	Block* Body := FunctionToCompile->Body
+	CodeBlock* Body := FunctionToCompile->Body
 	i32 BodyCount := Body->StatementCount
 	ASTNode* ReturnExpression := null
 	
@@ -1153,7 +1153,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 
 declare void Compile(CompilerState*, ASTNode*)
 
-define void CompileBlock(CompilerState* Compiler, Block* BlockToCompile) {
+define void CompileBlock(CompilerState* Compiler, CodeBlock* BlockToCompile) {
 	/* Compiles a block of statements */
 	
 	for (i32 Index := 0, Index < BlockToCompile->StatementCount, Index += 1) {
@@ -1166,7 +1166,7 @@ define void CompileBlock(CompilerState* Compiler, Block* BlockToCompile) {
 declare void CompileReturn(CompilerState*, ASTNode*)
 declare void CompileIf(CompilerState*, IfGroup*)
 declare void CompileFor(CompilerState*, ForLoop*)
-declare void CompileLoop(CompilerState*, Block*)
+declare void CompileLoop(CompilerState*, CodeBlock*)
 declare void CompileWhile(CompilerState*, WhileLoop*)
 declare void CompileTry(CompilerState*, TryCatch*)
 
@@ -1444,7 +1444,7 @@ define void CompileFor(CompilerState* Compiler, ForLoop* ForToCompile) {
 	Compiler->ScopedTryDepth := TryDepth
 }
 
-define void CompileLoop(CompilerState* Compiler, Block* LoopBody) {
+define void CompileLoop(CompilerState* Compiler, CodeBlock* LoopBody) {
 	i32 StartLabel := NextLabel(Compiler)
 	i32 EndLabel := NextLabel(Compiler)
 	
@@ -1559,7 +1559,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 		EmitMove_RX_IX(Compiler, ResultRegister, OperandTypeSize, 4)
 	}
 	else if (ExpressionType = NODE_TYPE_EXPRESSION_BLOCK) {
-		Block* ExpressionBlock := ExpressionToCompile->BlockValue
+		CodeBlock* ExpressionBlock := ExpressionToCompile->BlockValue
 		
 		for (i32 Index := 0, Index < ExpressionBlock->StatementCount, Index += 1) {
 			CompileExpression(Compiler, RAX, ExpressionBlock->Statements[Index])

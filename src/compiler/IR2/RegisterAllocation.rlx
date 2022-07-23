@@ -2,12 +2,12 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			i32 ParentCount := InBlock~>Parents->Count()
+			i32 ParentCount := Block~>Parents->Count()
 
 			for (i32 Index := 0, Index < ParentCount, Index++) {
-				TACBlock* Parent := InBlock~>Parents->At(Index)
+				TACBlock* Parent := Block~>Parents->At(Index)
 
 				i32 ParentChildCount := Parent~>Children~>Count()
 
@@ -18,20 +18,20 @@
 
 					TACBlock* NewBlock := this->Blocks->At(NewBlockID)
 
-					Parent~>Children->RemoveValue(InBlock)
-					InBlock~>Parents->RemoveValue(Parent)
+					Parent~>Children->RemoveValue(Block)
+					Block~>Parents->RemoveValue(Parent)
 
 					Parent~>Children->Push(NewBlock)
 					NewBlock~>Parents->Push(Parent)
 
-					NewBlock~>Children->Push(InBlock)
-					InBlock~>Parents->Push(NewBlock)
+					NewBlock~>Children->Push(Block)
+					Block~>Parents->Push(NewBlock)
 
 					MoveContainer := NewBlock
 				}
 
-				for (i32 PhiIndex := 0, PhiIndex < InBlock->PhiCount, PhiIndex++) {
-					TACTriple* Triple := InBlock->At(PhiIndex)
+				for (i32 PhiIndex := 0, PhiIndex < Block->PhiCount, PhiIndex++) {
+					TACTriple* Triple := Block->At(PhiIndex)
 					TACPhiInfo* Phi := Triple->Phi
 
 					TACPhiDefinition* Definition := Phi->FindDefinition(Parent->Number)
@@ -50,37 +50,37 @@
 
 	i32 NextInstructionNumber
 
-	define void RenumberInstructions(TACBlock* InBlock) {
-		if (InBlock->Renumbered) {
+	define void RenumberInstructions(TACBlock* Block) {
+		if (Block->Renumbered) {
 			return
 		}
 
-		InBlock->Renumbered := true
+		Block->Renumbered := true
 
-		i32 ParentCount := InBlock~>Parents->Count()
+		i32 ParentCount := Block~>Parents->Count()
 
 		for (i32 Index := 0, Index < ParentCount, Index++) {
-			this->RenumberInstructions(InBlock~>Parents->At(Index))
+			this->RenumberInstructions(Block~>Parents->At(Index))
 		}
 
-		InBlock->First := this->NextInstructionNumber
+		Block->First := this->NextInstructionNumber
 
-		i32 Count := InBlock->Count()
+		i32 Count := Block->Count()
 
 		for (i32 Index := 0, Index < Count, Index++) {
-			InBlock->At(Index)->Number := this->NextInstructionNumber++
+			Block->At(Index)->Number := this->NextInstructionNumber++
 		}
 
-		InBlock->Last := this->NextInstructionNumber - 1
+		Block->Last := this->NextInstructionNumber - 1
 	}
 
 	define void RenumberInstructions() {
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			this->RenumberInstructions(InBlock)
+			this->RenumberInstructions(Block)
 		}
 	}
 	
@@ -100,12 +100,12 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			i32 Count := InBlock->Count()
+			i32 Count := Block->Count()
 
 			for (i32 Index := 0, Index < Count, Index++) {
-				TACTriple* Next := InBlock->At(Index)
+				TACTriple* Next := Block->At(Index)
 
 				if (Next->Is(TAC_MOVE)) {
 					TACAddress MoveFrom := Next->Left
@@ -120,14 +120,14 @@
 		}
 	}
 
-	define void AddRange(TACBlock* InBlock, TACTriple* Definition, i32 End) {
+	define void AddRange(TACBlock* Block, TACTriple* Definition, i32 End) {
 		TACLiveRange Range := TAC_RANGE_NULL
 
-		if (InBlock->First <= Definition->Number && Definition->Number <= InBlock->Last) {
+		if (Block->First <= Definition->Number && Definition->Number <= Block->Last) {
 			Range := TACLiveRange:New(Definition->Number, End)
 		}
 		else {
-			Range := TACLiveRange:New(InBlock->First + InBlock->PhiCount, End)
+			Range := TACLiveRange:New(Block->First + Block->PhiCount, End)
 		}
 
 		Definition->AddRange(Range)
@@ -137,15 +137,15 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			i32 PhiCount := InBlock->PhiCount
-			i32 ChildCount := InBlock~>Children->Count()
+			i32 PhiCount := Block->PhiCount
+			i32 ChildCount := Block~>Children->Count()
 
-			BitSet* Live := InBlock~>Live
+			BitSet* Live := Block~>Live
 
 			for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
-				TACBlock* Child := InBlock~>Children->At(ChildIndex)
+				TACBlock* Child := Block~>Children->At(ChildIndex)
 
 				Live->Or(Child~>Live)
 
@@ -154,7 +154,7 @@
 					
 					Live->Clear(ChildPhi->Number)
 
-					TACPhiDefinition* ChildPhiParent := ChildPhi->Phi->FindDefinition(InBlock->Number)
+					TACPhiDefinition* ChildPhiParent := ChildPhi->Phi->FindDefinition(Block->Number)
 
 					if (ChildPhiParent) {
 						Live->Clear(ChildPhiParent->Address->TemporaryTriple->Number)
@@ -167,11 +167,11 @@
 
 				TACTriple* Next := this->FindInstruction(Location)
 
-				this->AddRange(InBlock, Next, InBlock->Last + 1)
+				this->AddRange(Block, Next, Block->Last + 1)
 			}
 
-			for (i32 Index := InBlock->Count() - 1, Index >= PhiCount, Index--) {
-				TACTriple* Next := InBlock->At(Index)
+			for (i32 Index := Block->Count() - 1, Index >= PhiCount, Index--) {
+				TACTriple* Next := Block->At(Index)
 				Live->Clear(Next->Number)
 
 				for (i32 OperandIndex := 0, OperandIndex < Next->OperandCount(), OperandIndex++) {
@@ -182,7 +182,7 @@
 
 						if !(Live->Get(Operand->Number)) {
 							Live->Set(Operand->Number)
-							this->AddRange(InBlock, Operand, Next->Number)
+							this->AddRange(Block, Operand, Next->Number)
 						}
 					}
 				}
@@ -417,22 +417,22 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			i32 Count := InBlock->Count()
+			i32 Count := Block->Count()
 
 			for (i32 Index := Count - 1, Index >= 0, Index--) {
-				TACTriple* Triple := InBlock->At(Index)
+				TACTriple* Triple := Block->At(Index)
 
 				if (Triple->Is(TAC_PHI) || Triple->Is(TAC_CLOBBER)) {
-					InBlock~>Body->RemoveValue(Triple)
+					Block~>Body->RemoveValue(Triple)
 				}
 				else if (Triple->Is(TAC_MOVE) && Triple->Left->Is(TACAddressKind:Temporary)) {
 					i32 ResultRegister := Triple->Interval()->RegisterNumber
 					i32 OperandRegister := Triple->Left.TemporaryTriple->Interval()->RegisterNumber
 
 					if (ResultRegister = OperandRegister) {
-						InBlock~>Body->RemoveValue(Triple)
+						Block~>Body->RemoveValue(Triple)
 					}
 				}
 			}

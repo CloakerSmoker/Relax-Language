@@ -1,6 +1,6 @@
-	define void ReplaceJumpTarget(TACBlock* InBlock, i32 OldTarget, i32 NewTarget) {
-		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
-			TACTriple* Next := InBlock->At(Index)
+	define void ReplaceJumpTarget(TACBlock* Block, i32 OldTarget, i32 NewTarget) {
+		for (i32 Index := 0, Index < Block->Count(), Index++) {
+			TACTriple* Next := Block->At(Index)
 
 			if (Next->Is(TAC_JUMP)) {
 				if (Next->Left.Integer = OldTarget) {
@@ -48,16 +48,16 @@
 		i32 BlockCount := this->Blocks->Count()
 
 		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
-			i32 Count := InBlock->Count()
+			TACBlock* Block := this->Blocks->At(BlockIndex)
+			i32 Count := Block->Count()
 			i32 JumpCount := 0
 
-			if (InBlock~>Definitions->Count() != 0) {
+			if (Block~>Definitions->Count() != 0) {
 				continue
 			}
 
 			for (i32 Index := 0, Index < Count, Index++) {
-				TACTriple* Next := InBlock->At(Index)
+				TACTriple* Next := Block->At(Index)
 
 				if (Next->Is(TAC_JUMP)) {
 					JumpCount += 1
@@ -68,20 +68,20 @@
 			}
 
 			if (Count = JumpCount) {
-				TACTriple* First := InBlock->At(0)
+				TACTriple* First := Block->At(0)
 
 				TACBlock* NewTarget := this->Blocks->At(First->Left.Integer As i32)
 
-				this->ReplaceJumpsTo(InBlock, NewTarget)
-				this->ReplaceJumpsFrom(InBlock, NewTarget)
+				this->ReplaceJumpsTo(Block, NewTarget)
+				this->ReplaceJumpsFrom(Block, NewTarget)
 			}
 		}
 
 		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
-			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			TACBlock* Block := this->Blocks->At(BlockIndex)
 
-			;InBlock->Print()
-			;this->SealBlock(InBlock)
+			;Block->Print()
+			;this->SealBlock(Block)
 		}
 	}
 

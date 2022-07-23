@@ -252,7 +252,7 @@ define void EliminateGlobals(ParserState* Parser) {
 	Globals->NextOffset := NewNextOffset
 }
 
-define void FoldConstantsBlockVisitor(ASTVisitor* Visitor, Block* Target) {
+define void FoldConstantsBlockVisitor(ASTVisitor* Visitor, CodeBlock* Target) {
 	; Remove any NODE_TYPE_NONEs from the block, and repack contained nodes as a linear array of non-none nodes
 	; Effectively translating the block to exactly what it will be compiled as, allowing for us to optimize based on
 	;  the number of nodes inside of a block without worrying about them being NODE_TYPE_NONEs.
@@ -380,7 +380,7 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 					; If some parameters had side-effects, build a NODE_TYPE_EXPRESSION_BLOCK which will evaluate
 					;  just the ones with side-effects, without actually calling the target function
 					
-					Block* ParametersBlock := Alloc(#Block)
+					CodeBlock* ParametersBlock := Alloc(#CodeBlock)
 					
 					ParametersBlock->StatementCount := NewParametersIndex As i16
 					ParametersBlock->Statements := NewParameters
@@ -399,13 +399,13 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 		IfGroup* IfNode := Root->IfNode
 		
 		ASTNode** NewConditions := Alloc(IfNode->BranchCount * #ASTNode*)
-		Block** NewBodies := Alloc(IfNode->BranchCount * #Block*)
+		CodeBlock** NewBodies := Alloc(IfNode->BranchCount * #CodeBlock*)
 		
 		i16 NewBranchIndex := 0
 		
 		for (i32 BranchIndex := 0, BranchIndex < IfNode->BranchCount, BranchIndex += 1) {
 			ASTNode* Condition := FoldConstantsVisitor(Visitor, IfNode->Conditions[BranchIndex])
-			Block* Body := IfNode->Bodies[BranchIndex]
+			CodeBlock* Body := IfNode->Bodies[BranchIndex]
 			
 			if (Condition->NodeType = NODE_TYPE_INTEGER) {
 				i64 ConditionValue := Condition->IntegerValue
