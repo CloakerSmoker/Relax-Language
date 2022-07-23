@@ -1,0 +1,130 @@
+	define void ReplaceJumpTarget(TACBlock* InBlock, i32 OldTarget, i32 NewTarget) {
+		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
+			TACTriple* Next := InBlock->At(Index)
+
+			if (Next->Is(TAC_JUMP)) {
+				if (Next->Left.Integer = OldTarget) {
+					Next->Left.Integer := NewTarget
+				}
+			}
+			else if (Next->Is(TAC_JUMP_TRUE) || Next->Is(TAC_JUMP_FALSE)) {
+				if (Next->Right.Integer = OldTarget) {
+					Next->Right.Integer := NewTarget
+				}
+			}
+		}
+	}
+
+	define void ReplaceJumpsTo(TACBlock* Child, TACBlock* NewTarget) {
+		i32 ParentCount := Child~>Parents->Count()
+
+		for (i32 Index := ParentCount - 1, Index >= 0, Index--) {
+			TACBlock* Parent := Child~>Parents->At(Index)
+
+			this->ReplaceJumpTarget(Parent, Child->Number, NewTarget->Number)
+
+			Parent~>Children->RemoveValue(Child)
+			Child~>Parents->RemoveValue(Parent)
+
+			Parent~>Children->Push(NewTarget)
+			NewTarget~>Parents->Push(Parent)
+		}
+	}
+
+	define void ReplaceJumpsFrom(TACBlock* Parent, TACBlock* NewParent) {
+		i32 ChildCount := Parent~>Children->Count()
+
+		for (i32 Index := ChildCount - 1, Index >= 0, Index--) {
+			TACBlock* Child := Parent~>Children->At(Index)
+
+			Parent~>Children->RemoveValue(Child)
+			Child~>Parents->RemoveValue(Parent)
+
+			this->RecomputeAllPhi(Child, Parent->Number)
+		}
+	}
+	
+	define void RemoveExtraJumps() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			i32 Count := InBlock->Count()
+			i32 JumpCount := 0
+
+			if (InBlock~>Definitions->Count() != 0) {
+				continue
+			}
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_JUMP)) {
+					JumpCount += 1
+				}
+				;else if (Next->Is(TAC_JUMP_TRUE) || Next->Is(TAC_JUMP_FALSE)) {
+				;	JumpCount += 1
+				;}
+			}
+
+			if (Count = JumpCount) {
+				TACTriple* First := InBlock->At(0)
+
+				TACBlock* NewTarget := this->Blocks->At(First->Left.Integer As i32)
+
+				this->ReplaceJumpsTo(InBlock, NewTarget)
+				this->ReplaceJumpsFrom(InBlock, NewTarget)
+			}
+		}
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			;InBlock->Print()
+			;this->SealBlock(InBlock)
+		}
+	}
+
+	define void ReplaceUses(TACTriple* Triple, TACAddress Old, TACAddress New) {
+		i32 UseCount := Triple~>Uses->Count()
+
+		for (i32 Index := UseCount - 1, Index >= 0, Index--) {
+			TACAddress NextUse := Triple~>Uses->At(Index) As TACAddress
+
+			if (NextUse->Equals(New)) {
+				continue
+			}
+
+			TACTriple* Next := NextUse.TemporaryTriple
+
+			if (Next->Is(TAC_PHI)) {
+				i32 DefinitionCount := Next->Phi~>Definitions->Count()
+
+				for (i32 DefinitionIndex := 0, DefinitionIndex < DefinitionCount, DefinitionIndex++) {
+					TACPhiDefinition* Definition := Next->Phi~>Definitions->At(DefinitionIndex)
+
+					if (Definition->Address->Equals(Old)) {
+						Definition->Address := New
+
+						this->RemoveUseAt(NextUse, Old)
+						this->UseAt(NextUse, New)
+					}
+				}
+			}
+			else {
+				if (Next->Left->Equals(Old)) {
+					this->RemoveUseAt(NextUse, Old)
+					this->UseAt(NextUse, New)
+
+					Next->Left := New
+				}
+
+				if (Next->Right->Equals(Old)) {
+					this->RemoveUseAt(NextUse, Old)
+					this->UseAt(NextUse, New)
+
+					Next->Right := New
+				}
+			}
+		}
+	}

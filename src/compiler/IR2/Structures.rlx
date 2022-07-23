@@ -360,10 +360,12 @@ TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
 struct TACInterval {
 	BitSet Range
 	i32 RegisterNumber
+	i32 Weight
 
 	define void Add(TACLiveRange New) {
 		for (i32 Index := New.Start, Index <= New.End, Index++) {
 			this~>Range->Set(Index)
+			this->Weight += 1
 		}
 	}
 

@@ -1,0 +1,263 @@
+	define void SetName(TACBlock* InBlock, i8* Name, TACAddress Value) {
+		Print("Set %i.%s to %a\n", InBlock->Number, Name, Value)
+
+		i64 Hash := FNV1A(Name)
+
+		TACDefinition Definition {
+			Name: Name,
+			Value: Value
+		}
+
+		InBlock~>Definitions->Insert(Hash, &Definition)
+	}
+	define void SetName(i8* Name, TACAddress Value) {
+		this->SetName(this->CurrentBlock, Name, Value)
+	}
+
+	define void ReplacePhiSource(TACPhiInfo* Phi, TACAddress Old, TACAddress New) {
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACPhiDefinition* Definition := Phi~>Definitions->At(Index) As TACPhiDefinition*
+			TACAddress Next := Definition->Address
+
+			if (Next->Equals(Old)) {
+				this->RemoveUseAt(Next, Old)
+				this->UseAt(Next, New)
+
+				Definition->Address := New
+				return
+			}
+		}
+	}
+
+	define TACAddress RemoveTrivialPhi(TACAddress PhiAddress, TACTriple* Triple, TACPhiInfo* Phi) {
+		TACAddress Same := TAC_ADDRESS_NULL
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			TACPhiDefinition* Definition := Phi~>Definitions->At(Index)
+			TACAddress Next := Definition->Address
+
+			if (Next->Equals(Same) || Next->Equals(PhiAddress)) {
+				continue
+			}
+			else if (Same != null) {
+				return PhiAddress
+			}
+
+			Same := Next
+		}
+
+		if (Same = TAC_ADDRESS_NULL) {
+			this->Remove(PhiAddress)
+		}
+
+		return PhiAddress
+
+		;Print("Replace %a with %a\n", PhiAddress, Same)
+
+		i32 UseCount := Triple~>Uses->Count()
+
+		for (i32 Index := 0, Index < UseCount, Index++) {
+			TACAddress NextUser := Triple~>Uses->At(Index) As TACAddress
+			TACTriple* NextTriple := this->GetTemporary(NextUser)
+			
+			if (NextTriple->Is(TAC_PHI)) {
+				this->ReplacePhiSource(NextTriple->Phi, PhiAddress, Same)
+			}
+			else {
+				if (NextTriple->Left->Equals(PhiAddress)) {
+					this->RemoveUseAt(NextUser, PhiAddress)
+					this->UseAt(NextUser, Same)
+
+					NextTriple->Left := Same
+				}
+
+				if (NextTriple->Right->Equals(PhiAddress)) {
+					this->RemoveUseAt(NextUser, PhiAddress)
+					this->UseAt(NextUser, Same)
+
+					NextTriple->Right := Same
+				}
+			}
+		}
+
+		for (i32 Index := 0, Index < UseCount, Index++) {
+			TACAddress NextUser := Triple~>Uses->At(Index) As TACAddress
+			TACTriple* NextTriple := this->GetTemporary(NextUser)
+			
+			if (NextTriple->Is(TAC_PHI)) {
+				this->RemoveTrivialPhi(NextUser, NextTriple, NextTriple->Phi)
+			}
+		}
+
+		/*
+		Phi->RemoveDefinition(PhiAddress.BlockNumber, PhiAddress)
+
+		for (i32 Index := 0, Index < Phi~>Definitions->Count(), Index++) {
+			TACAddress Address := Phi~>Definitions->At(Index) As TACAddress
+
+			if (Address.Is(TACAddressKind:Temporary)) {
+				TACTriple* Triple := this->GetTemporary(Address)
+
+				if (Triple->Is(TAC_PHI)) {
+					this->RemoveTrivialPhi(Triple->Phi, Address)
+				}
+			}
+		}
+		;*/
+
+		return Same
+	}
+
+	declare TACAddress LookupName(TACBlock*, i8*, i64)
+
+	define TACAddress AddPhiOperands(TACBlock* InBlock, TACAddress PhiAddress) {
+		TACTriple* Triple := this->GetTemporary(PhiAddress)
+		TACPhiInfo* Phi := Triple->Phi
+		
+		for (i32 Index := 0, Index < InBlock~>Parents->Count(), Index++) {
+			TACBlock* Parent := InBlock~>Parents->At(Index)
+
+			TACAddress ParentDefinition := this->LookupName(Parent, Phi->Name, Phi->Hash)
+
+			if (ParentDefinition != TAC_ADDRESS_NULL) {
+				Phi->AddDefinition(Parent->Number, ParentDefinition)
+				this->UseAt(PhiAddress, ParentDefinition)
+			}
+		}
+
+		return this->RemoveTrivialPhi(PhiAddress, Triple, Phi)
+
+		;return PhiAddress
+	}
+	
+	define TACAddress LookupName(TACBlock* InBlock, i8* Name, i64 Hash) {
+		if (InBlock~>Definitions->Has(Hash)) {
+			TACDefinition* Definition := InBlock~>Definitions->Get(Hash)
+
+			Print("Get %i.%s is %a\n", InBlock->Number, Name, Definition->Value)
+
+			return Definition->Value
+		}
+		else {
+			Print("No such %i.%s (sealed? %i)\n", InBlock->Number, Name, InBlock->Sealed)
+		}
+		
+		TACAddress Result := TAC_ADDRESS_NULL
+		
+		if !(InBlock->Sealed) {
+			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
+			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
+
+			InBlock~>IncompletePhi->Push(Result As void*)
+		}
+		else if (InBlock~>Parents->Count() = 1) {
+			TACBlock* Parent := InBlock~>Parents->At(0)
+
+			return this->LookupName(Parent, Name, Hash)
+		}
+		else {
+			Print("new phi\n")
+			TACPhiInfo* Phi := TACPhiInfo:New(Name, Hash)
+			Result := this->Emit(InBlock, TAC_PHI, Phi As TACAddress)
+			this->SetName(InBlock, Name, Result)
+
+			TACTriple* NewPhi := this->GetTemporary(Result)
+
+			; Move phi to start of block
+			InBlock~>Body->RemoveValue(NewPhi)
+			InBlock~>Body->Insert(0, NewPhi)
+
+			Result := this->AddPhiOperands(InBlock, Result)
+		}
+
+		this->SetName(InBlock, Name, Result)
+
+		return Result
+	}
+
+	define TACAddress LookupName(TACBlock* InBlock, i8* Name) {
+		return this->LookupName(InBlock, Name, FNV1A(Name))
+	}
+
+	define TACAddress LookupName(i8* Name) {
+		return this->LookupName(this->CurrentBlock, Name, FNV1A(Name))
+	}
+
+	define void SealBlock(TACBlock* InBlock) {
+		if !(InBlock->Sealed) {
+			InBlock->Sealed := true
+
+			i32 PhiCount := InBlock~>IncompletePhi->Count()
+
+			for (i32 Index := 0, Index < PhiCount, Index++) {
+				TACAddress PhiAddress := InBlock~>IncompletePhi->At(Index) As TACAddress
+
+				TACPhiInfo* Phi := this->GetTemporary(PhiAddress)->Phi
+
+				Print("\nSeal %a %i.%s\n", PhiAddress, InBlock->Number, Phi->Name)
+
+				this->AddPhiOperands(InBlock, PhiAddress)
+
+				Print("\n")
+			}
+		}
+	}
+	
+	define void RecomputePhi(TACBlock* InBlock, TACPhiInfo* Phi, TACAddress PhiAddress) {
+		i32 DefinitionCount := Phi~>Definitions->Count()
+
+		for (i32 Index := 0, Index < DefinitionCount, Index++) {
+			Free(Phi~>Definitions->At(Index))
+		}
+
+		Phi~>Definitions->Clear()
+
+		;this->GetTemporary(PhiAddress)->Print()
+		;Print("\n")
+
+		this->AddPhiOperands(InBlock, PhiAddress)
+
+		;this->GetTemporary(PhiAddress)->Print()
+		;Print("\n\n")
+	}
+
+	define void RecomputeAllPhi(TACBlock* InBlock, i32 RemovedBlock) {
+		for (i32 Index := 0, Index < InBlock->Count(), Index++) {
+			TACTriple* Next := InBlock->At(Index)
+
+			if (Next->Is(TAC_PHI)) {
+				TACPhiInfo* Phi := Next->Phi
+				i32 DefinitionCount := Phi~>Definitions->Count()
+
+				for (i32 PhiIndex := 0, PhiIndex < DefinitionCount, PhiIndex++) {
+					TACPhiDefinition* Definition := Phi~>Definitions->At(PhiIndex)
+
+					if (Definition->BlockNumber = RemovedBlock) {
+						this->RecomputePhi(InBlock, Phi, TACAddress:Temporary(Next))
+					}
+				}
+			}
+		}
+	}
+
+	define void RemoveAllTrivialPhi() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := BlockCount - 1, BlockIndex >= 0, BlockIndex--) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_PHI)) {
+					TACAddress PhiAddress := TACAddress:Temporary(Next)
+
+					this->RemoveTrivialPhi(PhiAddress, Next, Next->Phi)
+				}
+			}
+		}
+	}

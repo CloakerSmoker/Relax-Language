@@ -1,0 +1,440 @@
+	define void GenerateMoves() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 ParentCount := InBlock~>Parents->Count()
+
+			for (i32 Index := 0, Index < ParentCount, Index++) {
+				TACBlock* Parent := InBlock~>Parents->At(Index)
+
+				i32 ParentChildCount := Parent~>Children~>Count()
+
+				TACBlock* MoveContainer := Parent
+
+				if (ParentCount > 1 && ParentChildCount > 1) {
+					i32 NewBlockID := this->ReserveLabel()
+
+					TACBlock* NewBlock := this->Blocks->At(NewBlockID)
+
+					Parent~>Children->RemoveValue(InBlock)
+					InBlock~>Parents->RemoveValue(Parent)
+
+					Parent~>Children->Push(NewBlock)
+					NewBlock~>Parents->Push(Parent)
+
+					NewBlock~>Children->Push(InBlock)
+					InBlock~>Parents->Push(NewBlock)
+
+					MoveContainer := NewBlock
+				}
+
+				for (i32 PhiIndex := 0, PhiIndex < InBlock->PhiCount, PhiIndex++) {
+					TACTriple* Triple := InBlock->At(PhiIndex)
+					TACPhiInfo* Phi := Triple->Phi
+
+					TACPhiDefinition* Definition := Phi->FindDefinition(Parent->Number)
+
+					TACAddress MoveAddress := this->Emit(MoveContainer, TAC_MOVE, Definition->Address)
+
+					this->RemoveUseAt(Triple->Address(), Definition->Address)
+					this->UseAt(Triple->Address(), MoveAddress)
+					Definition->Address := MoveAddress
+
+					this->TryJoin(MoveAddress->TemporaryTriple, Triple)
+				}
+			}
+		}
+	}
+
+	i32 NextInstructionNumber
+
+	define void RenumberInstructions(TACBlock* InBlock) {
+		if (InBlock->Renumbered) {
+			return
+		}
+
+		InBlock->Renumbered := true
+
+		i32 ParentCount := InBlock~>Parents->Count()
+
+		for (i32 Index := 0, Index < ParentCount, Index++) {
+			this->RenumberInstructions(InBlock~>Parents->At(Index))
+		}
+
+		InBlock->First := this->NextInstructionNumber
+
+		i32 Count := InBlock->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			InBlock->At(Index)->Number := this->NextInstructionNumber++
+		}
+
+		InBlock->Last := this->NextInstructionNumber - 1
+	}
+
+	define void RenumberInstructions() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			this->RenumberInstructions(InBlock)
+		}
+	}
+	
+	define void TryJoinMoves() {
+		; NOT USED
+		; We copy every left operand before use for x86 since it stores
+		;  the result in the left operand.
+		; However, for the last use of any given temporary, we can
+		;  skip this and just clobber the old value.
+		; The problem is that the `copy := move value; res := op copy`
+		;  sequence can't be rewritten very easily.
+		; The obvious solution is joining `copy` and `value` so the move
+		;  is redundant and gets removed, but this doesn't work since
+		;   ???? this code sucks ????
+		; Yeah I'm out of ideas, fuck this 
+
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* Next := InBlock->At(Index)
+
+				if (Next->Is(TAC_MOVE)) {
+					TACAddress MoveFrom := Next->Left
+
+					if (MoveFrom.Is(TACAddressKind:Temporary)) {
+						this->TryJoin(Next, MoveFrom.TemporaryTriple)
+
+						this->ReplaceUses(Next, Next->Address(), MoveFrom)
+					}
+				}
+			}
+		}
+	}
+
+	define void AddRange(TACBlock* InBlock, TACTriple* Definition, i32 End) {
+		TACLiveRange Range := TAC_RANGE_NULL
+
+		if (InBlock->First <= Definition->Number && Definition->Number <= InBlock->Last) {
+			Range := TACLiveRange:New(Definition->Number, End)
+		}
+		else {
+			Range := TACLiveRange:New(InBlock->First + InBlock->PhiCount, End)
+		}
+
+		Definition->AddRange(Range)
+	}
+
+	define void BuildIntervals() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 PhiCount := InBlock->PhiCount
+			i32 ChildCount := InBlock~>Children->Count()
+
+			BitSet* Live := InBlock~>Live
+
+			for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
+				TACBlock* Child := InBlock~>Children->At(ChildIndex)
+
+				Live->Or(Child~>Live)
+
+				for (i32 ChildPhiIndex := 0, ChildPhiIndex < Child->PhiCount, ChildPhiIndex++) {
+					TACTriple* ChildPhi := Child->At(ChildPhiIndex)
+					
+					Live->Clear(ChildPhi->Number)
+
+					TACPhiDefinition* ChildPhiParent := ChildPhi->Phi->FindDefinition(InBlock->Number)
+
+					if (ChildPhiParent) {
+						Live->Clear(ChildPhiParent->Address->TemporaryTriple->Number)
+					}
+				}
+			}
+
+			for (i32 Index := 0, Index < Live->Count(), Index++) {
+				i32 Location := Live->Find(Index)
+
+				TACTriple* Next := this->FindInstruction(Location)
+
+				this->AddRange(InBlock, Next, InBlock->Last + 1)
+			}
+
+			for (i32 Index := InBlock->Count() - 1, Index >= PhiCount, Index--) {
+				TACTriple* Next := InBlock->At(Index)
+				Live->Clear(Next->Number)
+
+				for (i32 OperandIndex := 0, OperandIndex < Next->OperandCount(), OperandIndex++) {
+					TACAddress OperandAddress := Next->OperandAt(OperandIndex)
+
+					if (OperandAddress->Is(TACAddressKind:Temporary)) {
+						TACTriple* Operand := OperandAddress.TemporaryTriple
+
+						if !(Live->Get(Operand->Number)) {
+							Live->Set(Operand->Number)
+							this->AddRange(InBlock, Operand, Next->Number)
+						}
+					}
+				}
+			}
+
+			;Live->Free()
+			;Free(Live)
+		}
+	}
+
+	define void PrintLiveIntervals() {
+		for (i32 Index := 0, Index < this->NextInstructionNumber, Index++) {
+			TACTriple* Next := this->FindInstruction(Index)
+
+			;Print("%i: ", Next->Number)
+			;Next~>Interval->Print(this->Triples->Count())
+			;Print("\n")
+
+			Print("%i: ", Next->Number)
+			Next->Interval()->Print(this->Triples->Count())
+			Print("\n")
+		}
+	}
+
+	define void LinearScan() {
+		PointerArray* Handled := PointerArray:New() ; <TACInterval*>
+		PointerArray* Unhandled := PointerArray:New() ; <TACInterval*>
+		PointerArray* Active := PointerArray:New() ; <TACInterval*>
+		PointerArray* Inactive := PointerArray:New() ; <TACInterval*>
+
+		i32 RegisterCount := 3
+		i32 NextMemorySlot := 8000
+
+		BitSet* Free := BitSet:New()
+
+		for (i32 Index := 0, Index < RegisterCount, Index++) {
+			Free->Set(Index)
+		}
+
+		i32* RegisterWeights := Alloc(RegisterCount * 4)
+
+		i32 Count := this->Triples->Count()
+
+		for (i32 OuterIndex := 0, OuterIndex < Count, OuterIndex++) {
+			for (i32 InnerIndex := 0, InnerIndex < Count, InnerIndex++) {
+				TACTriple* Triple := this->Triples->At(InnerIndex)
+				TACInterval* Interval := Triple->Interval()
+
+				if (Unhandled->Has(Interval)) {
+					continue
+				}
+
+				if (Interval->Contains(OuterIndex)) {
+					Unhandled->Push(Interval)
+				}
+			}
+		}
+
+		/*
+		for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+			Print("Unhandled [%i] = ", Index)
+			TACInterval* Next := Unhandled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+		;*/
+
+		while (Unhandled->Count() != 0) {
+			TACInterval* Current := Unhandled->Remove(0)
+
+			for (i32 Index := 0, Index < Active->Count(), Index++) {
+				TACInterval* ActiveInterval := Active->At(Index)
+				
+				if (ActiveInterval->End() < Current->Start()) {
+					Active->Remove(Index)
+					Handled->Push(ActiveInterval)
+
+					Free->Set(ActiveInterval->RegisterNumber)
+				}
+				else if !(ActiveInterval->Contains(Current->Start())) {
+					Active->Remove(Index)
+					Inactive->Push(ActiveInterval)
+
+					Free->Set(ActiveInterval->RegisterNumber)
+				}
+			}
+
+			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+				TACInterval* InactiveInterval := Inactive->At(Index)
+				
+				if (ActiveInterval->End() < Current->Start()) {
+					Handled->Push(InactiveInterval)
+				}
+				else if (ActiveInterval->Contains(Current->Start())) {
+					Inactive->Remove(Index)
+					Active->Push(InactiveInterval)
+
+					Free->Clear(InactiveInterval->RegisterNumber)
+				}
+			}
+
+			BitSet* Potential := Free->Clone()
+
+			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+				TACInterval* InactiveInterval := Inactive->At(Index)
+
+				if (InactiveInterval->Overlaps(Current)) {
+					Potential->Clear(InactiveInterval->RegisterNumber)
+				}
+			}
+			
+			for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+				TACInterval* UnhandledInterval := Unhandled->At(Index)
+
+				if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->Overlaps(Current)) {
+					Potential->Clear(UnhandledInterval->RegisterNumber)
+				}
+			}
+
+			if (Potential->Count() = 0) {
+				for (i32 Index := 0, Index < RegisterCount, Index++) {
+					RegisterWeights[Index] := 0
+				}
+
+				for (i32 Index := 0, Index < Active->Count(), Index++) {
+					TACInterval* Next := Active->At(Index)
+					
+					if (Next->Overlaps(Current)) {
+						RegisterWeights[Next->RegisterNumber] += Next->Weight
+					}
+				}
+
+				for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+					TACInterval* Next := Inactive->At(Index)
+
+					if (Next->Overlaps(Current)) {
+						RegisterWeights[Next->RegisterNumber] += Next->Weight
+					}
+				}
+
+				for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+					TACInterval* UnhandledInterval := Unhandled->At(Index)
+
+					if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->Overlaps(Current)) {
+						RegisterWeights[Next->RegisterNumber] += Next->Weight
+					}
+				}
+
+				i32 Best := -1
+				i32 BestWeight := 0x7FFF_FFFF
+
+				for (i32 Index := 0, Index < RegisterCount, Index++) {
+					if (RegisterWeights[Index] < BestWeight) {
+						Best := Index
+						BestWeight := RegisterWeights[Index]
+					}
+				}
+
+				if (Best != -1 && Current->Weight < BestWeight) {
+					Current->RegisterNumber := NextMemorySlot++
+					
+					Handled->Push(Current)
+				}
+				else {
+					for (i32 Index := Active->Count() - 1, Index >= 0, Index--) {
+						TACInterval* Next := Active->At(Index)
+						
+						if (Next->RegisterNumber = Best) {
+							Next->RegisterNumber := NextMemorySlot++
+							
+							Active->Remove(Index)
+							Handled->Push(Next)
+						}
+					}
+
+					for (i32 Index := Inactive->Count() - 1, Index >= 0, Index--) {
+						TACInterval* Next := Inactive->At(Index)
+
+						if (Next->RegisterNumber = Best) {
+							Next->RegisterNumber := NextMemorySlot++
+
+							Inactive->Remove(Index)
+							Handled->Push(Next)
+						}
+					}
+
+					Current->RegisterNumber := Best
+					Active->Push(Current)
+				}
+			}
+			else {
+				if (Current->RegisterNumber = -1) {
+					Current->RegisterNumber := Potential->First()
+				}
+				
+				Free->Clear(Current->RegisterNumber)
+				Active->Push(Current)
+			}
+		}
+
+		/*
+		Print("=============\n")
+
+		for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
+			Print("Unhandled [%i] = ", Index)
+			TACInterval* Next := Unhandled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Handled->Count(), Index++) {
+			TACInterval* Next := Handled->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Active->Count(), Index++) {
+			TACInterval* Next := Active->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+
+		for (i32 Index := 0, Index < Inactive->Count(), Index++) {
+			TACInterval* Next := Inactive->At(Index)
+			Next->Print(this->Triples->Count())
+			Print("\n")
+		}
+		;*/
+	}
+
+	define void LinearScanCleanup() {
+		i32 BlockCount := this->Blocks->Count()
+
+		for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+			TACBlock* InBlock := this->Blocks->At(BlockIndex)
+
+			i32 Count := InBlock->Count()
+
+			for (i32 Index := Count - 1, Index >= 0, Index--) {
+				TACTriple* Triple := InBlock->At(Index)
+
+				if (Triple->Is(TAC_PHI) || Triple->Is(TAC_CLOBBER)) {
+					InBlock~>Body->RemoveValue(Triple)
+				}
+				else if (Triple->Is(TAC_MOVE) && Triple->Left->Is(TACAddressKind:Temporary)) {
+					i32 ResultRegister := Triple->Interval()->RegisterNumber
+					i32 OperandRegister := Triple->Left.TemporaryTriple->Interval()->RegisterNumber
+
+					if (ResultRegister = OperandRegister) {
+						InBlock~>Body->RemoveValue(Triple)
+					}
+				}
+			}
+		}
+	}
