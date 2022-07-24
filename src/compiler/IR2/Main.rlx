@@ -197,7 +197,10 @@ struct TACBuilder {
 
 	#Require "./src/compiler/IR2/SSA.rlx"
 	#Require "./src/compiler/IR2/FlowOptimizations.rlx"
+
 	#Require "./src/compiler/IR2/RegisterConstraints.rlx"
+	#Require "./src/compiler/IR2/InstructionSelection.rlx"
+
 	#Require "./src/compiler/IR2/RegisterAllocation.rlx"
 }
 
@@ -216,6 +219,8 @@ i8 RSP := 4
 i8 RBP := 5
 i8 RSI := 6
 i8 RDI := 7
+
+#Require "./src/compiler/IR2/X64InstructionSelector.rlx"
 
 define void Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
@@ -255,37 +260,17 @@ define void Main(i64 ArgC, i8** ArgV) {
 	;TFA->Builder->RemoveExtraJumps()
 	;TFA->Builder->PrintGraphViz("opt1", "SSA with jumps cleaned")
 	TFA->Builder->GenerateMoves()
-	;TFA->Builder->PrintGraphViz("mov", "Moves added")
+	TFA->Builder->PrintGraphViz("mov", "Moves added")
 
-	i32 Count := TFA->Builder->Triples->Count()
-
-	for (i32 Index := 0, Index < Count, Index++) {
-		TACTriple* Next := TFA->Builder->Triples->At(Index)
-		TACAddress NextAddress := Next->Address()
-
-		if (Next->Is(TAC_ALU_FIRST + OPERATOR_SLASH)) {
-			TFA->Builder->TieOperandRegister(NextAddress, 0, RAX)
-			TFA->Builder->TieResultRegister(NextAddress, RAX)
-			TFA->Builder->ClobberRegister(NextAddress, RDX)
-		}
-		else if (Next->Is(TAC_RETURN)) {
-			TFA->Builder->TieOperandRegister(NextAddress, 0, RAX)
-		}
-		else if (TAC_ALU_FIRST <= Next->Opcode && Next->Opcode <= TAC_ALU_LAST) {
-			;TACAddress Left := NextAddress.TemporaryTriple->Left
-
-			;TFA->Builder->Join(NextAddress, Left)
-
-			TFA->Builder->TieOperandRegister(NextAddress, 0, -1)
-		}
-	}
+	TFA->Builder->SelectInstruction := &X64SelectInstruction
+	TFA->Builder->SelectInstructions()
 
 	TFA->Builder->PrintGraphViz("reg0", "Registers tied")
 	TFA->Builder->RenumberInstructions()
-	TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
+	;TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
 	TFA->Builder->BuildIntervals()
 	TFA->Builder->LinearScan()
-	TFA->Builder->PrintGraphViz("reg1", "Registers allocated")
+	;TFA->Builder->PrintGraphViz("reg1", "Registers allocated")
 	TFA->Builder->LinearScanCleanup()
 	TFA->Builder->PrintGraphViz("reg2", "Register allocation helpers cleanup")
 	Print("}\n")

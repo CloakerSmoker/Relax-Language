@@ -1,0 +1,57 @@
+
+define i32 ALU(i32 Operator) {
+    return TAC_ALU_FIRST + Operator
+}
+
+i32 X64_NO_EMIT := 0
+i32 X64_CQO_DIV_RAX_R := 1
+i32 X64_MUL_RAX_R := 2
+i32 X64_SAR_I8 := 3
+i32 X64_SAR_CL := 4
+i32 X64_MOV_R_I := 5
+i32 X64_MOV_R_R := 6
+i32 X64_RET := 7
+
+define void X64SelectInstruction(TACBuilder* this) {
+    if (this->Match(ALU(OPERATOR_SLASH))) {
+        ; / temp (temp|integer)
+
+        this->ForceRegisterOperand(1)
+        this->ResultOperandClobber(RAX, RAX, RDX)
+
+        this->Select(X64_CQO_DIV_RAX_R)
+    }
+    else if (this->Match(ALU(OPERATOR_STAR))) {
+        this->ForceRegisterOperand(1)
+        this->ResultOperandClobber(RAX, RAX, RDX)
+
+        this->Select(X64_MUL_RAX_R)
+    }
+    else if (this->Match(ALU(OPERATOR_GREATER_GREATER))) {
+        if (this->MatchOperand(1, TACAddressKind:Integer) && this->Integer(1) < 0xFF) {
+            this->Select(X64_SAR_I8)
+        }
+        else {
+            this->TieOperandRegister(1, RCX)
+            this->TieResultOperand(0)
+
+            this->Select(X64_SAR_CL)
+        }
+    }
+    else if (this->Match(TAC_MOVE)) {
+        if (this->MatchOperand(1, TACAddressKind:Integer)) {
+            this->Select(X64_MOV_R_I)
+        }
+        else {
+            this->Select(X64_MOV_R_R)
+        }
+    }
+    else if (this->Match(TAC_RETURN)) {
+        this->TieOperandRegister(0, RAX)
+
+        this->Select(X64_RET)
+    }
+    else {
+        this->Select(X64_NO_EMIT)
+    }
+}

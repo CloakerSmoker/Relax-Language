@@ -1,0 +1,90 @@
+    void(TACBuilder*) SelectInstruction
+
+    TACBlock* RegisterSelectionBlock
+    i32 RegisterSelectionIndex
+
+    define i8 End() {
+		return this->RegisterSelectionIndex + 1 >= this->RegisterSelectionBlock->Count()
+	}
+
+    define TACTriple* CurrentTriple() {
+        return this->RegisterSelectionBlock->At(this->RegisterSelectionIndex)
+    }
+
+	define i64 Integer(i32 Index) {
+		return this->CurrentTriple()->Operands[Index]->Integer
+	}
+
+	define TACTriple* Temporary(i32 Index) {
+		return this->CurrentTriple()->Operands[Index]->TemporaryTriple
+	}
+
+	define TACAddress Operand(i32 Index) {
+		return this->CurrentTriple()->Operands[Index]
+	}
+
+	define TACAddress Current() {
+		return this->CurrentTriple()->Address()
+	}
+
+	define i8 MatchRange(i32 FirstOpcode, i32 LastOpcode) {
+        return true
+	}
+
+    define i8 Match(i32 Opcode) {
+        return this->CurrentTriple()->Is(Opcode)
+    }
+    define i8 MatchOperand(i32 Index, TACAddressKind Kind) {
+        return this->Operand(Index)->Is(Kind)
+    }
+
+    define void ForceRegisterOperand(i32 Index) {
+		TACAddress Operand := this->Operand(Index)
+
+		if !(Operand.Is(TACAddressKind:Temporary)) {
+			this->TieOperandRegister(this->Current(), Index, -1)
+		}
+	}
+
+    define void TieResultRegister(i32 RegisterNumber) {
+        this->TieResultRegister(this->Current(), RegisterNumber)
+    }
+    define void TieOperandRegister(i32 Index, i32 RegisterNumber) {
+        this->TieOperandRegister(this->Current(), Index, RegisterNumber)
+    }
+
+    define void TieResultOperand(i32 Index) {
+        this->TieOperandRegister(Index, -1)
+    }
+
+	define void ResultOperandClobber(i32 Result, i32 Operand, i32 Clobber) {
+		this->TieResultRegister(this->Current(), Result)
+        this->TieOperandRegister(this->Current(), 0, Operand)
+        this->ClobberRegister(this->Current(), Clobber)
+	}
+
+    define void Select(i32 InstructionCode) {
+        this->CurrentTriple()->InstructionCode := InstructionCode
+    }
+    
+    define void SelectInstructions() {
+        i32 BlockCount := this->Blocks->Count()
+
+        for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
+            TACBlock* Next := this->Blocks->At(BlockIndex)
+
+            this->RegisterSelectionBlock := Next
+            i32 Selected := 0
+            
+            while (Selected < Next->Count()) {
+                for (i32 Index := 0, Index < Next->Count(), Index++) {
+                    if (Next->At(Index)->InstructionCode = 0) {
+                        this->RegisterSelectionIndex := Index
+                        this->SelectInstruction()
+                        Selected += 1
+                        break
+                    }
+                }
+            }
+        }
+    }

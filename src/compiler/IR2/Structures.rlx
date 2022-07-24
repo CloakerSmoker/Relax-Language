@@ -178,7 +178,7 @@ PrintFormatPrototype OperandAddressPrintPrototype {
 
 i32 OPERAND_ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&OperandAddressPrintPrototype)
 
-i32 TAC_MOVE := 0
+;i32 TAC_MOVE := 0
 
 i32 TAC_LOAD_INDIRECT_1 := 1
 i32 TAC_LOAD_INDIRECT_2 := 2
@@ -193,13 +193,14 @@ i32 TAC_LOAD_ADDRESS := 9
 i32 TAC_JUMP_TRUE := 10
 i32 TAC_JUMP_FALSE := 11
 i32 TAC_JUMP := 12
+i32 TAC_LOAD_PARAMETER := 13
 
-i32 TAC_RETURN := 13
-i32 TAC_MOVE := 14
-i32 TAC_PHI := 15
-i32 TAC_CLOBBER := 16
+i32 TAC_RETURN := 14
+i32 TAC_MOVE := 15
+i32 TAC_PHI := 16
+i32 TAC_CLOBBER := 17
 
-i32 TAC_REMOVED := 17
+i32 TAC_REMOVED := 18
 
 i32 TAC_ALU_FIRST := 20
 i32 TAC_ALU_LAST := 60
@@ -240,7 +241,7 @@ define i8* GetOperatorName(i32 Operator) {
 }
 
 define i8* GetOpcodeName(i32 Opcode) {
-	i8*[17] Names {
+	i8*[18] Names {
 		":=",
 		"* As i8",
 		"* As i16",
@@ -254,6 +255,7 @@ define i8* GetOpcodeName(i32 Opcode) {
 		"jnz",
 		"jez",
 		"jmp",
+		"param",
 		"return",
 		"move",
 		"phi",
@@ -444,6 +446,7 @@ struct TACInterval {
 
 struct TACTriple {
 	i32 Opcode
+	i32 InstructionCode
 	
 	union {
 		TACAddress[0] Operands

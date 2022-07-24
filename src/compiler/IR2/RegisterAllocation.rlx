@@ -156,8 +156,8 @@
 
 					TACPhiDefinition* ChildPhiParent := ChildPhi->Phi->FindDefinition(Block->Number)
 
-					if (ChildPhiParent) {
-						Live->Clear(ChildPhiParent->Address->TemporaryTriple->Number)
+					if (ChildPhiParent && ChildPhiParent->Address.Is(TACAddressKind:Temporary)) {
+						Live->Clear(ChildPhiParent->Address.TemporaryTriple->Number)
 					}
 				}
 			}
