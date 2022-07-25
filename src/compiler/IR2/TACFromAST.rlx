@@ -20,11 +20,11 @@ struct TACFromAST {
 		return this->Builder->Emit(Opcode, Operand)
 	}
 	
-	define TACAddress EmitOperator(i32 Opcode, TACAddress Left, TACAddress Right) {
-		return this->Builder->Emit(TAC_ALU_FIRST + Opcode, Left, Right)
+	define TACAddress EmitBinary(i32 Opcode, TACAddress Left, TACAddress Right) {
+		return this->Builder->Emit(TAC_BINARY_FIRST + Opcode, Left, Right)
 	}
-	define TACAddress EmitOperator(i32 Opcode, TACAddress Operand) {
-		return this->Builder->Emit(TAC_ALU_FIRST + Opcode, Operand)
+	define TACAddress EmitUnary(i32 Opcode, TACAddress Operand) {
+		return this->Builder->Emit(TAC_UNARY_FIRST + Opcode, Operand)
 	}
 	
 	define i32 ReserveLabel() {
@@ -88,7 +88,7 @@ struct TACFromAST {
 			return Left
 		}
 		else {
-			return this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
+			return this->EmitBinary(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
 		}
 	}
 	
@@ -99,7 +99,7 @@ struct TACFromAST {
 		
 		TACAddress Left := this->CompileStructAccessLeft(Access)
 		
-		Left := this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
+		Left := this->EmitBinary(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
 		
 		return this->Emit(SizedOpcode(TAC_LOAD_INDIRECT_1, FieldSize), Left)
 	}
@@ -111,7 +111,7 @@ struct TACFromAST {
 		
 		TACAddress Left := this->CompileStructAccessLeft(Access)
 		
-		Left := this->EmitOperator(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
+		Left := this->EmitBinary(OPERATOR_PLUS, Left, TACAddress:Integer(FieldOffset))
 		
 		this->Emit(SizedOpcode(TAC_LOAD_INDIRECT_1, FieldSize), Left, Value)
 		
@@ -184,7 +184,7 @@ struct TACFromAST {
 					return this->Emit(SizedOpcode(TAC_LOAD_INDIRECT_1, ResultSize), Operand)
 				}
 				else {
-					return this->EmitOperator(UnaryOperator, Operand)
+					return this->EmitUnary(UnaryOperator, Operand)
 				}
 			}
 		}
@@ -220,7 +220,7 @@ struct TACFromAST {
 					if (LeftNode->NodeType = NODE_TYPE_VARIABLE) {
 						TACAddress VariableRegister := this->FindOrAddVariable(LeftNode->VariableValue)
 						
-						TACAddress CompoundResult := this->EmitOperator(BinaryOperator, VariableRegister, AssignmentRight)
+						TACAddress CompoundResult := this->EmitBinary(BinaryOperator, VariableRegister, AssignmentRight)
 						
 						this->Emit(TAC_MOVE, VariableRegister, CompoundResult)
 					}
@@ -230,7 +230,7 @@ struct TACFromAST {
 				TACAddress Left := this->CompileExpression(Binary->Left)
 				TACAddress Right := this->CompileExpression(Binary->Right)
 				
-				return this->EmitOperator(BinaryOperator, Left, Right)
+				return this->EmitBinary(BinaryOperator, Left, Right)
 			}
 		}
 		
@@ -439,6 +439,13 @@ struct TACFromAST {
 			i32 Label := this->SetLabel()
 
 			this->Seal(Label)
+
+			for (i32 Index := 0, Index < Function->ParameterCount, Index++) {
+				VariableInfo* NextParameter := Function->Parameters[Index]
+
+				TACAddress ParameterValue := this->Emit(TAC_LOAD_PARAMETER, TACAddress:Integer(Index))
+				this->Builder->SetName(NextParameter->Name->Buffer, ParameterValue)
+			}
 			
 			this->CompileBlock(Function->Body)
 		;}

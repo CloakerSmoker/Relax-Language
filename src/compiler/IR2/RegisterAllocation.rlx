@@ -218,9 +218,13 @@
 
 		BitSet* Free := BitSet:New()
 
-		for (i32 Index := 0, Index < RegisterCount, Index++) {
+		for (i32 Index := 0, Index < 16, Index++) {
 			Free->Set(Index)
 		}
+
+		Free->Clear(4)
+		Free->Clear(5)
+		Free->Clear(3)
 
 		i32* RegisterWeights := Alloc(RegisterCount * 4)
 

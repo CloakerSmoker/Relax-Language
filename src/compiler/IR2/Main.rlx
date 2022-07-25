@@ -211,15 +211,6 @@ bits LoopLables As i64 {
 
 #Require "./src/compiler/IR2/TACFromAST.rlx"
 
-i8 RAX := 0
-i8 RBX := 3
-i8 RCX := 1
-i8 RDX := 2
-i8 RSP := 4
-i8 RBP := 5
-i8 RSI := 6
-i8 RDI := 7
-
 #Require "./src/compiler/IR2/X64InstructionSelector.rlx"
 
 define void Main(i64 ArgC, i8** ArgV) {
@@ -276,6 +267,14 @@ define void Main(i64 ArgC, i8** ArgV) {
 	Print("}\n")
 
 	TFA->Builder->PrintLiveIntervals()
+
+	X64Generator* Gen := X64GenerateCode(TFA->Builder->Blocks->At(0))
+
+	for (i32 Index := 0, Index < Gen->CodeBufferIndex, Index++) {
+		Print("%B ", Gen->CodeBufferBytes[Index])
+	}
+
+	Print("\n")
 
 	;*/
 }

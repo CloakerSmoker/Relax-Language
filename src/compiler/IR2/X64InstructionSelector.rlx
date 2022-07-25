@@ -1,19 +1,57 @@
 
-define i32 ALU(i32 Operator) {
-    return TAC_ALU_FIRST + Operator
+define i32 Unary(i32 Operator) {
+    return TAC_UNARY_FIRST + Operator
+}
+define i32 Binary(i32 Operator) {
+    return TAC_BINARY_FIRST + Operator
 }
 
-i32 X64_NO_EMIT := 0
-i32 X64_CQO_DIV_RAX_R := 1
-i32 X64_MUL_RAX_R := 2
-i32 X64_SAR_I8 := 3
-i32 X64_SAR_CL := 4
-i32 X64_MOV_R_I := 5
-i32 X64_MOV_R_R := 6
-i32 X64_RET := 7
+#Require "./src/compiler/IR2/X64Generator.rlx"
+
+define i8 GetSystemVRegister(i64 Index) {
+	/* Translates a parameter number into which register (should) contain said parameter according to the SystemV ABI */
+	
+	if (Index = 5) {return R9}
+	else if (Index = 4) {return R8}
+	else if (Index = 3) {return RCX}
+	else if (Index = 2) {return RDX}
+	else if (Index = 1) {return RSI}
+	else if (Index = 0) {return RDI}
+	
+	return RBX
+}
+
+i32 X64_NO_EMIT := 1
+i32 X64_CQO_DIV_RAX_R := 2
+i32 X64_MUL_RAX_R := 3
+i32 X64_SAR_I8 := 4
+i32 X64_SAR_CL := 5
+i32 X64_MOV_R_I := 6
+i32 X64_MOV_R_R := 7
+i32 X64_SUB_R_R := 8
+i32 X64_RET := 9
+i32 X64_ADD_R_R := 10
+i32 X64_MOV_R_P := 11
+
+struct OperatorInstructionEntry {
+    i32 Operator
+    i32 InstructionCode
+}
+
+i32 PLAIN_BINARY_COUNT := 2
+
+OperatorInstructionEntry[2] PlainBinaryOperators {
+    {Operator: OPERATOR_PLUS, InstructionCode: X64_ADD_R_R},
+    {Operator: OPERATOR_MINUS, InstructionCode: X64_SUB_R_R}
+}
 
 define void X64SelectInstruction(TACBuilder* this) {
-    if (this->Match(ALU(OPERATOR_SLASH))) {
+    if (this->Match(TAC_LOAD_PARAMETER)) {
+        this->CurrentTriple()->Interval()->RegisterNumber := GetSystemVRegister(this->Integer(0))
+
+        this->Select(X64_NO_EMIT)
+    }
+    else if (this->Match(Binary(OPERATOR_SLASH))) {
         ; / temp (temp|integer)
 
         this->ForceRegisterOperand(1)
@@ -21,13 +59,13 @@ define void X64SelectInstruction(TACBuilder* this) {
 
         this->Select(X64_CQO_DIV_RAX_R)
     }
-    else if (this->Match(ALU(OPERATOR_STAR))) {
+    else if (this->Match(Binary(OPERATOR_STAR))) {
         this->ForceRegisterOperand(1)
         this->ResultOperandClobber(RAX, RAX, RDX)
 
         this->Select(X64_MUL_RAX_R)
     }
-    else if (this->Match(ALU(OPERATOR_GREATER_GREATER))) {
+    else if (this->Match(Binary(OPERATOR_GREATER_GREATER))) {
         if (this->MatchOperand(1, TACAddressKind:Integer) && this->Integer(1) < 0xFF) {
             this->Select(X64_SAR_I8)
         }
@@ -39,7 +77,7 @@ define void X64SelectInstruction(TACBuilder* this) {
         }
     }
     else if (this->Match(TAC_MOVE)) {
-        if (this->MatchOperand(1, TACAddressKind:Integer)) {
+        if (this->MatchOperand(0, TACAddressKind:Integer)) {
             this->Select(X64_MOV_R_I)
         }
         else {
@@ -52,6 +90,42 @@ define void X64SelectInstruction(TACBuilder* this) {
         this->Select(X64_RET)
     }
     else {
+        for (i32 Index := 0, Index < PLAIN_BINARY_COUNT, Index++) {
+            OperatorInstructionEntry* Entry := PlainBinaryOperators[Index]
+
+            if (this->Match(Binary(Entry->Operator))) {
+                this->ForceRegisterOperand(0)
+                this->ForceRegisterOperand(1)
+                this->TieResultOperand(0)
+
+                this->Select(Entry->InstructionCode)
+
+                return
+            }
+        }
+
         this->Select(X64_NO_EMIT)
     }
+}
+
+define X64Generator* X64GenerateCode(TACBlock* Block) {
+    X64Generator* Result := X64Generator:New()
+
+    for (i32 Index := 0, Index < Block->Count(), Index++) {
+        TACTriple* Next := Block->At(Index)
+
+        i8 ResultRegister := Next->ResultRegister()
+
+        if (Next->InstructionCode = X64_MOV_R_R) {
+            Result->Move_RX_RX(8, ResultRegister, Next->LeftRegister())
+        }
+        else if (Next->InstructionCode = X64_ADD_R_R) {
+            Result->Add_RX_RX(8, ResultRegister, Next->RightRegister())
+        }
+        else if (Next->InstructionCode = X64_RET) {
+            Result->Ret()
+        }
+    }
+
+    return Result
 }

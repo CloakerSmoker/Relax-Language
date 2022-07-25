@@ -202,8 +202,10 @@ i32 TAC_CLOBBER := 17
 
 i32 TAC_REMOVED := 18
 
-i32 TAC_ALU_FIRST := 20
-i32 TAC_ALU_LAST := 60
+i32 TAC_UNARY_FIRST := 20
+i32 TAC_UNARY_LAST := 40
+i32 TAC_BINARY_FIRST := 60
+i32 TAC_BINARY_LAST := 100
 
 define i32 SizedOpcode(i32 Opcode, i32 Size) {
 	if (Size = 8) {
@@ -262,8 +264,11 @@ define i8* GetOpcodeName(i32 Opcode) {
 		"clobber"
 	}
 	
-	if (Opcode >= TAC_ALU_FIRST) {
-		return GetOperatorName(Opcode - TAC_ALU_FIRST)
+	if (Opcode >= TAC_BINARY_FIRST) {
+		return GetOperatorName(Opcode - TAC_BINARY_FIRST)
+	}
+	else if (Opcode >= TAC_UNARY_FIRST) {
+		return GetOperatorName(Opcode - TAC_UNARY_FIRST)
 	}
 	
 	return Names[Opcode]
@@ -533,7 +538,21 @@ struct TACTriple {
 		this->Opcode := TAC_REMOVED
 	}
 
+	define i8 ResultRegister() {
+		return this->Interval()->RegisterNumber As i8
+	}
+	define i8 LeftRegister() {
+		return this->Left->TemporaryTriple->ResultRegister() As i8
+	}
+	define i8 RightRegister() {
+		return this->Right->TemporaryTriple->ResultRegister() As i8
+	}
+
 	define void Print() {
+		if (this->InstructionCode != 0) {
+			Print("[%i] ", this->InstructionCode)
+		}
+
 		if (this->Interval()->RegisterNumber != -1) {
 			Print("r%i := ", this->Interval()->RegisterNumber)
 		}

@@ -1,39 +1,33 @@
     void(TACBuilder*) SelectInstruction
 
-    TACBlock* RegisterSelectionBlock
-    i32 RegisterSelectionIndex
-
-    define i8 End() {
-		return this->RegisterSelectionIndex + 1 >= this->RegisterSelectionBlock->Count()
-	}
+    TACTriple* SelectTriple
 
     define TACTriple* CurrentTriple() {
-        return this->RegisterSelectionBlock->At(this->RegisterSelectionIndex)
+        return this->SelectTriple
     }
 
 	define i64 Integer(i32 Index) {
-		return this->CurrentTriple()->Operands[Index]->Integer
+		return this->SelectTriple->Operands[Index]->Integer
 	}
 
 	define TACTriple* Temporary(i32 Index) {
-		return this->CurrentTriple()->Operands[Index]->TemporaryTriple
+		return this->SelectTriple->Operands[Index]->TemporaryTriple
 	}
 
 	define TACAddress Operand(i32 Index) {
-		return this->CurrentTriple()->Operands[Index]
+		return this->SelectTriple->Operands[Index]
 	}
 
 	define TACAddress Current() {
-		return this->CurrentTriple()->Address()
-	}
-
-	define i8 MatchRange(i32 FirstOpcode, i32 LastOpcode) {
-        return true
+		return this->SelectTriple->Address()
 	}
 
     define i8 Match(i32 Opcode) {
-        return this->CurrentTriple()->Is(Opcode)
+        return this->SelectTriple->Is(Opcode)
     }
+    define i8 MatchRange(i32 FirstOpcode, i32 LastOpcode) {
+        return FirstOpcode <= this->SelectTriple->Opcode && this->SelectTriple->Opcode <= LastOpcode
+	}
     define i8 MatchOperand(i32 Index, TACAddressKind Kind) {
         return this->Operand(Index)->Is(Kind)
     }
@@ -64,7 +58,7 @@
 	}
 
     define void Select(i32 InstructionCode) {
-        this->CurrentTriple()->InstructionCode := InstructionCode
+        this->SelectTriple->InstructionCode := InstructionCode
     }
     
     define void SelectInstructions() {
@@ -73,13 +67,12 @@
         for (i32 BlockIndex := 0, BlockIndex < BlockCount, BlockIndex++) {
             TACBlock* Next := this->Blocks->At(BlockIndex)
 
-            this->RegisterSelectionBlock := Next
             i32 Selected := 0
             
             while (Selected < Next->Count()) {
                 for (i32 Index := 0, Index < Next->Count(), Index++) {
                     if (Next->At(Index)->InstructionCode = 0) {
-                        this->RegisterSelectionIndex := Index
+                        this->SelectTriple := Next->At(Index)
                         this->SelectInstruction()
                         Selected += 1
                         break
