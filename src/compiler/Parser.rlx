@@ -1557,25 +1557,38 @@ struct ParserState {
 			if (Fields->Get(EnumVariableName->StringValue)) {
 				EnumVariableName->Error("Duplicate definition")
 			}
+
+			i32 Value := NextValue++
 			
 			StructField* MemberField := Alloc(#StructField)
 			
 			MemberField->DefinedAt := EnumVariableName~>Context
 			MemberField->Name := EnumVariableName->StringValue
 			MemberField->ValueType := EnumType
-			MemberField->EnumValue := NextValue++
-			
-			;VariableInfo* EnumVariable := Alloc(#VariableInfo)
-			;
-			;EnumVariable->Name := EnumVariableName->StringValue
-			;EnumVariable->Type := EnumType
-			;EnumVariable->LastValue := EnumValueNode
-			;EnumVariable->SetCount := 1
-			;EnumVariable->IsGlobal := true
-			;
-			;this->AddGlobal(EnumVariable, EnumVariableName)
-			
+			MemberField->EnumValue := Value
+
 			Fields->Set(EnumVariableName->StringValue, MemberField)
+			
+			i8* RawEnumGlobalName := Alloc(50)
+			i32 Length := FormatString(RawEnumGlobalName, 50, "%s_%s", NameToken->StringValue->Buffer, EnumVariableName->StringValue->Buffer)
+
+			RawEnumGlobalName[Length] := 0
+
+			for (i32 Index := 0, Index < Length, Index++) {
+				RawEnumGlobalName[Index] := Upper(RawEnumGlobalName[Index])
+			}
+
+			SafeString* EnumGlobalName := AToS(RawEnumGlobalName)
+			
+			VariableInfo* EnumVariable := Alloc(#VariableInfo)
+			
+			EnumVariable->Name := EnumGlobalName
+			EnumVariable->Type := EnumType
+			EnumVariable->LastValue := ASTNode:New(NODE_TYPE_INTEGER, Value, EnumType)
+			EnumVariable->SetCount := 1
+			EnumVariable->IsGlobal := true
+			
+			this->AddGlobal(EnumVariable, EnumVariableName)
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				continue

@@ -25,6 +25,17 @@ define i8 Lower(i8 Character) {
 	
 	return Character
 }
+;/*
+define i8 Upper(i8 Character) {
+	; Converts a-z to A-Z
+	
+	if ('a' <= Character && Character <= 'z') {
+		Character -= 32
+	}
+	
+	return Character
+}
+;*/
 define i16 Lower(i16 Character) {
 	return Lower(Character As i8) As i16
 }

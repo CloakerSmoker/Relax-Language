@@ -25,6 +25,8 @@ define i32 Main() {
 	PrintAnimalType(animal_kind:cat)
 	
 	Print("%i", starts_from_10:second)
+
+	PrintAnimalType(ANIMAL_KIND_DOG)
 	
 	return 0
 }
