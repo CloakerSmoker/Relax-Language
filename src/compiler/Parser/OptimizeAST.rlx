@@ -39,7 +39,7 @@ define i8 IsAssignment(Token* OperatorToken) {
 	return (OPERATOR_FIRST_ASSIGNMENT <= Operator && Operator <= OPERATOR_LAST_ASSIGNMENT)
 }
 
-define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
+define void* CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	i8 NodeType := Node->NodeType
 	
 	if (NodeType = NODE_TYPE_CALL) {
@@ -101,6 +101,8 @@ define void CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	else if (NodeType = NODE_TYPE_ASSEMBLY) {
 		CountReferencesVisitAssembly(Visitor, Node->AssemblyValue)
 	}
+
+	return null
 }
 
 define void CountReferences(ParserState* Parser) {
@@ -126,7 +128,7 @@ define void CountReferences(ParserState* Parser) {
 	Free(Visitor)
 }
 
-define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
+define void* NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 	i8 NodeType := Node->NodeType
 	
 	if (NodeType = NODE_TYPE_CALL || NodeType = NODE_TYPE_STRUCT_ACCESS) {
@@ -160,6 +162,8 @@ define void NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 	else if (NodeType = NODE_TYPE_VARIABLE && !Node->VariableValue->IsGlobal) {
 		Visitor->SetState(true)
 	}
+
+	return null
 }
 
 define i8 NodeHasSideEffects(ASTNode* Node) {

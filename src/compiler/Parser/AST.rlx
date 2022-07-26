@@ -673,13 +673,13 @@ struct ASTNode {
 i32 NextASTVisitorID := 1
 
 struct ASTVisitor {
-	void* VisitFunction
-	void* BlockVisitFunction
+	void*(ASTVisitor*, ASTNode*) VisitFunction
+	void*(ASTVisitor*, CodeBlock*) BlockVisitFunction
 	i64 State
 	i32 NodeTypeMask
 	i32 ID
 	
-	static ASTVisitor* New(void* VisitFunction) {
+	static ASTVisitor* New(void*(ASTVisitor*, ASTNode*) VisitFunction) {
 		ASTVisitor* this := Alloc(#ASTVisitor)
 		
 		this->VisitFunction := VisitFunction
@@ -710,9 +710,6 @@ struct ASTVisitor {
 	define void SetBlockVisitFunction(void* Function) {
 		this->BlockVisitFunction := Function
 	}
-	define void CallVisitor(void* Node, void* VisitFunction) asm {
-		jmp, rdx
-	}
 	
 	declare void VisitNodes(...),
 	declare void RawVisitNodes(i64, ASTNode**),
@@ -724,7 +721,7 @@ struct ASTVisitor {
 			this->RawVisitNodes(Next->StatementCount, Next->Statements)
 
 			if (this->BlockVisitFunction != null) {
-				this->CallVisitor(Next, this->BlockVisitFunction)
+				this->BlockVisitFunction(Next)
 			}
 		}
 	}
@@ -796,7 +793,7 @@ struct ASTVisitor {
 			Node->LastVisitor := this->ID
 			
 			if (this->IsTypeAllowed(Node->NodeType)) {
-				this->CallVisitor(Node, this->VisitFunction)
+				this->VisitFunction(Node)
 			}
 			else {
 				this->VisitChildren(Node)
