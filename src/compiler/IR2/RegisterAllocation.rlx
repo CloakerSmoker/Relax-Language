@@ -194,6 +194,58 @@
 	}
 
 	define void PrintLiveIntervals() {
+		Print("    \t")
+		i32 Triples := this->Triples->Count()
+		i32 Blocks := this->Blocks->Count()
+
+		for (i32 Outer := 0, Outer < Triples, Outer++) {
+			TACBlock* Last := null
+
+			for (i32 Inner := 0, Inner < Blocks, Inner++) {
+				TACBlock* NextBlock := this->Blocks->At(Inner)
+
+				if (NextBlock->First = Outer) {
+					Last := NextBlock
+				}
+			}
+
+			if !(Last) {
+				continue
+			}
+
+			i8[40] Buffer
+			i32 Length := FormatString(Buffer, 40, "│ Block %i", Last->Number)
+			Buffer[Length] := 0
+
+			Print("%s", Buffer)
+
+			i32 Size := Last->Last - Last->First
+			i32 Slots := Size * 2
+
+			i32 Gap := Slots - Length
+
+			for (i32 Index := 0, Index < Gap, Index++) {
+				Print(" ")
+			}
+		}
+
+		Print("\n")
+		Print("    \t")
+
+		for (i32 Outer := 0, Outer < Triples, Outer += 3) {
+			i8[40] NewBuffer
+			i32 Length := FormatString(NewBuffer, 40, "│%i", Outer)
+			NewBuffer[Length] := 0
+
+			Print("%s", NewBuffer)
+
+			for (i32 Index := Length, Index < 8, Index++) {
+				Print(" ")
+			}
+		}
+
+		Print("\n")
+
 		for (i32 Index := 0, Index < this->NextInstructionNumber, Index++) {
 			TACTriple* Next := this->FindInstruction(Index)
 
