@@ -94,9 +94,8 @@ define void X64SelectInstruction(TACBuilder* this) {
             OperatorInstructionEntry* Entry := PlainBinaryOperators[Index]
 
             if (this->Match(Binary(Entry->Operator))) {
-                this->ForceRegisterOperand(0)
-                this->ForceRegisterOperand(1)
                 this->TieResultOperand(0)
+                this->ForceRegisterOperand(1)
 
                 this->Select(Entry->InstructionCode)
 

@@ -23,15 +23,6 @@ struct TACBuilder {
 	
 	PointerArray* Triples ; <TACTriple*>
 	PointerArray* Blocks ; <TACBlock*>
-	
-	static TACBuilder* New() {
-		self* this := Alloc(#self)
-		
-		this->Triples := PointerArray:New()
-		this->Blocks := PointerArray:New()
-		
-		return this
-	}
 
 	define TACTriple* GetTemporary(TACAddress Value) {
 		return Value.TemporaryTriple
@@ -64,6 +55,13 @@ struct TACBuilder {
 			Destination~>Parents->Add(Block)
 
 			return TAC_ADDRESS_NULL
+		}
+		else if (Opcode = TAC_MOVE && Left.Is(TACAddressKind:Temporary)) {
+			TACTriple* LeftTriple := Left.TemporaryTriple
+
+			if (LeftTriple->Is(TAC_MOVE)) {
+				return Left
+			}
 		}
 
 		TACTriple* New := TACTriple:New(Opcode, Left, Right)
@@ -199,9 +197,21 @@ struct TACBuilder {
 	#Require "./src/compiler/IR2/FlowOptimizations.rlx"
 
 	#Require "./src/compiler/IR2/RegisterConstraints.rlx"
+	
 	#Require "./src/compiler/IR2/InstructionSelection.rlx"
 
 	#Require "./src/compiler/IR2/RegisterAllocation.rlx"
+
+	static TACBuilder* New() {
+		self* this := Alloc(#self)
+		
+		this->Triples := PointerArray:New()
+		this->Blocks := PointerArray:New()
+
+		this->SetupRegisterConstraints()
+		
+		return this
+	}
 }
 
 bits LoopLables As i64 {
@@ -256,10 +266,11 @@ define void Main(i64 ArgC, i8** ArgV) {
 	TFA->Builder->SelectInstruction := &X64SelectInstruction
 	TFA->Builder->SelectInstructions()
 
-	TFA->Builder->PrintGraphViz("reg0", "Registers tied")
 	TFA->Builder->RenumberInstructions()
+	TFA->Builder->PrintGraphViz("reg0", "Registers tied")
 	;TFA->Builder->PrintGraphViz("ren", "Instructions renumbered")
 	TFA->Builder->BuildIntervals()
+	TFA->Builder->DoDeferredJoins()
 	TFA->Builder->LinearScan()
 	;TFA->Builder->PrintGraphViz("reg1", "Registers allocated")
 	TFA->Builder->LinearScanCleanup()

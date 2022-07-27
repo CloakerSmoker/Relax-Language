@@ -781,3 +781,8 @@ struct TACBlock {
 		Print("}\"];\n")
 	}
 }
+
+struct TACDeferredJoin {
+	TACTriple* Left
+	TACTriple* Right
+}

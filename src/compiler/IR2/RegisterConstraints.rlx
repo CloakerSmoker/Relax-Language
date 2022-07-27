@@ -17,6 +17,25 @@
 		Clone->Free()
 		Free(Clone)
 
+		if (Left->RegisterNumber != -1) {
+			for (i32 Index := 0, Index < Count, Index++) {
+				TACTriple* NextTriple := this->Triples->At(Index)
+				TACInterval* Next := NextTriple->Interval()
+
+				if (Next = Left || Next = Right) {
+					continue
+				}
+
+				if (Next->RegisterNumber = Left->RegisterNumber) {
+					if (Next->Overlaps(Right)) {
+						return false
+					}
+				}
+			}
+
+			return true
+		}
+
 		if (Count = 1) {
 			if (Left->End() != Edge || Right->Start() != Edge) {
 				return false
@@ -45,8 +64,29 @@
 			RawLeft->Join := Right
 		}
 	}
+
+	PointerArray* DeferredJoins ; <TACDeferredJoin>
+
+	define void DeferJoin(TACTriple* Left, TACTriple* Right) {
+		TACDeferredJoin* Join := Alloc(#TACDeferredJoin)
+
+		Join->Left := Left
+		Join->Right := Right
+
+		this->DeferredJoins->Push(Join)
+	}
+	define void DoDeferredJoins() {
+		i32 Count := this->DeferredJoins->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TACDeferredJoin* Join := this->DeferredJoins->At(Index)
+
+			this->TryJoin(Join->Left, Join->Right)
+		}
+	}
+ 
 	define void Join(TACAddress Left, TACAddress Right) {
-		this->TryJoin(Left.TemporaryTriple, Right.TemporaryTriple)
+		this->DeferJoin(Left.TemporaryTriple, Right.TemporaryTriple)
 	}
 	
 	define void TieOperandRegister(TACBlock* Block, TACTriple* Triple, TACAddress* Operand, i32 RegisterNumber) {
@@ -64,7 +104,7 @@
 		Block~>Body->RemoveValue(Move)
 		Block~>Body->Insert(Index, Move)
 
-		this->TryJoin(Move, Triple)
+		this->DeferJoin(Move, Triple)
 	}
 	define void TieOperandRegister(TACAddress Address, i32 Operand, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
@@ -87,6 +127,8 @@
 		Block~>Body->Insert(Index + 1, Move)
 
 		this->ReplaceUses(Triple, OldAddress, MoveAddress)
+
+		this->DeferJoin(Move, Triple)
 	}
 	define void TieResultRegister(TACAddress Address, i32 RegisterNumber) {
 		TACTriple* Triple := Address->TemporaryTriple
@@ -114,4 +156,8 @@
 
 		Block~>Body->RemoveValue(ClosingClobber)
 		Block~>Body->Insert(Index + 2, ClosingClobber)
+	}
+
+	define void SetupRegisterConstraints() {
+		this->DeferredJoins := PointerArray:New()
 	}

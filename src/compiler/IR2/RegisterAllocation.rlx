@@ -233,6 +233,7 @@
 		for (i32 OuterIndex := 0, OuterIndex < Count, OuterIndex++) {
 			for (i32 InnerIndex := 0, InnerIndex < Count, InnerIndex++) {
 				TACTriple* Triple := this->Triples->At(InnerIndex)
+				
 				TACInterval* Interval := Triple->Interval()
 
 				if (Unhandled->Has(Interval)) {
