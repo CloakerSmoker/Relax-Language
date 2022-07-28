@@ -12,6 +12,7 @@ i8 ELF_ABI_FREEBSD := 9
 i8 ELF_ABI_VERSION_FREEBSD := 0
 
 i16 ELF_FILETYPE_EXECUTABLE := 0x02
+i16 ELF_FILETYPE_DYNAMIC    := 0x03
 i16 ELF_MACHINE_AMD64       := 0x3E
 i32 ELF_VERSION             := 1
 
@@ -40,6 +41,7 @@ struct ELFProgramHeader {
 i32 ELF_SECTION_TYPE_DATA         := 0x01
 i32 ELF_SECTION_TYPE_SYMBOL_TABLE := 0x02
 i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
+i32 ELF_SECTION_TYPE_DYNAMIC      := 0x06
 i32 ELF_SECTION_TYPE_NODATA       := 0x08
 
 i64 ELF_SECTION_FLAGS_WRITE    := 0x01
@@ -466,18 +468,10 @@ struct ELFBuilder {
 		}
 		
 		i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
-		i32 HeadersSize := #ELFHeader + PHDRSize + StringSectionSize
+		i32 HeadersSize := #ELFHeader + PHDRSize
 		i32 CodePaddingSize := CodeOffset - HeadersSize
 		
-		i32 FinalSize := HeadersSize + CodePaddingSize + CodeSize + DataSize
-		
-		; Update the PHDR segment to contain the headers we are writing
-		this->PHDR->FileSize := PHDRSize
-		this->PHDR->MemorySize := PHDRSize
-		
-		; Update the segment which contains the program headers
-		this->LoadPHDR->FileSize := PHDRSize
-		this->LoadPHDR->MemorySize := PHDRSize
+		i32 FinalSize := HeadersSize + CodePaddingSize + CodeSize + DataSize + StringSectionSize
 		
 		this->BufferSize := FinalSize
 		this->Buffer := ReAlloc(this->Buffer, FinalSize)
@@ -488,19 +482,25 @@ struct ELFBuilder {
 		; Calculate the offset of each segment inside the file
 		i32 ProgramHeadersOffset := #ELFHeader
 		i32 SectionHeadersOffset := ProgramHeadersOffset + ProgramHeadersSize
-		i32 StringsOffset := SectionHeadersOffset + SectionHeadersSize
-		;i32 CodeOffset := StringsOffset + StringSectionSize
-		i32 DataOffset := CodeOffset + CodeSize
+		i32 StringsOffset := CodeOffset + CodeSize
+		i32 ExtraOffset := StringsOffset + StringSectionSize
 		
 		; Update the ELF header to contain the program/section header offsets, and entry-point
 		this->Header->ProgramHeadersOffset := ProgramHeadersOffset
 		this->Header->SectionHeadersOffset := SectionHeadersOffset
 		
-		; Update the offsets of each segment/section
+		this->PHDR->FileSize := PHDRSize
+		this->PHDR->MemorySize := PHDRSize
 		this->PHDR->FileOffset := ProgramHeadersOffset
-		this->PHDR->VirtualAddress := ProgramHeadersOffset
+		this->PHDR->VirtualAddress := ImageBase + ProgramHeadersOffset
+		this->PHDR->PhysicalAddress := this->PHDR->VirtualAddress + PhysicalImageBase
+		
+		this->LoadPHDR->FileSize := PHDRSize
+		this->LoadPHDR->MemorySize := PHDRSize
 		this->LoadPHDR->FileOffset := ProgramHeadersOffset
-		this->LoadPHDR->VirtualAddress := ProgramHeadersOffset
+		this->LoadPHDR->VirtualAddress := ImageBase + ProgramHeadersOffset
+		this->LoadPHDR->PhysicalAddress := this->LoadPHDR->VirtualAddress + PhysicalImageBase
+
 		this->StringSection->FileOffset := StringsOffset
 		
 		; Copy the bytes of all the program/section headers into the ELF buffer after the ELF header
@@ -519,15 +519,6 @@ struct ELFBuilder {
 			this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
 			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
 		}
-		
-		; Update the segments to be relative to the image base
-		this->PHDR->PhysicalAddress := this->PHDR->VirtualAddress + PhysicalImageBase
-		this->PHDR->VirtualAddress += ImageBase
-
-		this->LoadPHDR->PhysicalAddress := this->LoadPHDR->VirtualAddress + PhysicalImageBase
-		this->LoadPHDR->VirtualAddress += ImageBase
-
-		this->StringSection->VirtualAddress += ImageBase
 		
 		; Update the code segment+section with the code file offset, and entry-point
 		; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
@@ -549,47 +540,32 @@ struct ELFBuilder {
 		ELFProgramHeader* ProgramHeadersBuffer := (ByteBuffer + ProgramHeadersOffset) As ELFProgramHeader*
 		ELFSectionHeader* SectionHeadersBuffer := (ByteBuffer + SectionHeadersOffset) As ELFSectionHeader*
 		
+		i32 NextDataSectionOffset := ExtraOffset
+		
+		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
+			NextSectionHeader := this->SectionHeaders->At(Index)
+			
+			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
+				NextSectionHeader->FileOffset := NextDataSectionOffset
+	
+				MoveMemory(&ByteBuffer[NextDataSectionOffset], NextSectionHeader->VirtualAddress As void*, NextSectionHeader->FileSize As i32)
+				
+				NextSectionHeader->VirtualAddress := ImageBase + NextDataSectionOffset
+				NextSectionHeader->Flags := 0
+
+				NextDataSectionOffset += NextSectionHeader->FileSize As i32
+			}
+			
+			MoveMemory(SectionHeadersBuffer[Index], NextSectionHeader, #ELFSectionHeader)
+		}
+
 		for (Index := 0, Index < ProgramHeaderCount, Index += 1) {
 			ELFProgramHeader* NextProgramHeader := this->ProgramHeaders->At(Index)
 			
 			MoveMemory(ProgramHeadersBuffer[Index], NextProgramHeader, #ELFProgramHeader)
 		}
 		
-		i32 NextDataSectionOffset := DataOffset
-		
-		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
-			NextSectionHeader := this->SectionHeaders->At(Index)
-			
-			i64 OldVirtualAddress := NextSectionHeader->VirtualAddress
-			i64 OldFlags := NextSectionHeader->Flags
-			
-			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
-				NextSectionHeader->FileOffset := NextDataSectionOffset
-				NextDataSectionOffset += NextSectionHeader->FileSize As i32
-				
-				NextSectionHeader->VirtualAddress := 0
-				NextSectionHeader->Flags := 0
-			}
-			
-			MoveMemory(SectionHeadersBuffer[Index], NextSectionHeader, #ELFSectionHeader)
-			
-			NextSectionHeader->VirtualAddress := OldVirtualAddress
-			NextSectionHeader->Flags := OldFlags
-		}
-		
 		MoveMemory(&ByteBuffer[StringsOffset], this->StringBuffer, StringSectionSize)
 		MoveMemory(&ByteBuffer[CodeOffset], this->CodeBuffer, CodeSize)
-		
-		NextDataSectionOffset := DataOffset
-		
-		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
-			NextSectionHeader := this->SectionHeaders->At(Index)
-			
-			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
-				MoveMemory(&ByteBuffer[NextDataSectionOffset], NextSectionHeader->VirtualAddress As void*, NextSectionHeader->FileSize As i32)
-				
-				NextDataSectionOffset += NextSectionHeader->FileSize As i32
-			}
-		}
 	}
 }
