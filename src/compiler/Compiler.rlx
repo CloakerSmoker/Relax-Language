@@ -305,6 +305,7 @@ struct CompilerState {
 	}
 	
 	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
+		i64 FunctionAddress := this->Config->ImageBase + this->CodeBase + FunctionOffset
 		i32 FunctionSize := this->Index - FunctionOffset
 
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
@@ -321,7 +322,7 @@ struct CompilerState {
 			
 			Function->StringifyInto(NameBuffer, '.')
 
-			this->ELF->AddFunctionSymbol(NameBuffer, FunctionOffset, FunctionOffset + FunctionSize)
+			this->ELF->AddFunctionSymbol(NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
 
 			Free(NameBuffer)
 		}
@@ -502,7 +503,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 			GlobalPages += 1
 		}
 		
-		i32 ELFCodeOffset := 0x300
+		i32 ELFCodeOffset := 0x100
 		
 		Compiler->GlobalBase := Config->ImageBase + 0x1000
 		Compiler->CodeBase := (0x1000 + ELFCodeOffset + (GlobalPages * 0x1000)) As i32
@@ -656,6 +657,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Print("Error writing output file, error code: %i\nAborting\n", FileGetError(Result))
 		Exit(1)
 	}
+
+	FileTruncate(OutputFileHandle, FileTell(OutputFileHandle))
 	
 	Print("^10Done writing output file, %i bytes written, file format contains %i bytes of overhead^F0\n", BytesWritten, BytesWritten - Compiler->Index)
 	
