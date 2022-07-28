@@ -610,7 +610,7 @@ struct ELFBuilder {
 			i64 Score := 0x7FFF_FFFF
 			ELFProgramHeader* Best := null
 
-			for (i32 Inner := 0, Inner < ProgramHeaderCount, Inner += 1) {
+			for (i32 Inner := 0, Inner < this->ProgramHeaders->Count(), Inner += 1) {
 				ELFProgramHeader* Next := this->ProgramHeaders->At(Inner)
 
 				if (Next->SegmentType = ELF_SEGMENT_TYPE_PHDR) {
