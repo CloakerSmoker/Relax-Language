@@ -145,6 +145,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		
 		else if (StringEquals(NextOption, "--debug")) { Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES }
 		else if (StringEquals(NextOption, "--dwarf")) { Config->DebugMode |= DEBUG_EMIT_DWARF          }
+		else if (StringEquals(NextOption, "--global-symbols")) { Config->DebugMode |= DEBUG_EMIT_GLOBAL_SYMBOLS }
+		else if (StringEquals(NextOption, "--function-symbols")) { Config->DebugMode |= DEBUG_EMIT_FUNCTION_SYMBOLS }
+		else if (StringEquals(NextOption, "--symbols")) { Config->DebugMode |= DEBUG_EMIT_SYMBOLS }
 			
 		else if (StringEquals(NextOption, "--cr"  )) { Config->LineEnding := LINE_ENDING_CR   }
 		else if (StringEquals(NextOption, "--crlf")) { Config->LineEnding := LINE_ENDING_CRLF }

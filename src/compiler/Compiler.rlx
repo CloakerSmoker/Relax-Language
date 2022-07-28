@@ -139,31 +139,41 @@ struct CompilerState {
 			
 			this->DWARF->LineInfo->SetImageBase(Config->ImageBase)
 			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
-			
-			VariableHashMap* Globals := this->Parser~>Globals
-			HashMap* RawGlobals := Globals->Map
-			
-			void* Elements := RawGlobals->Elements
-			
-			i32 MaxOffset := Globals->NextOffset
-			
-			i32 MaxIndex := RawGlobals->BufferMaxCount As i32
-			
-			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
-				if (Elements[ElementIndex]) {
-					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+		}
+		
+		VariableHashMap* Globals := this->Parser~>Globals
+		HashMap* RawGlobals := Globals->Map
+		
+		void* Elements := RawGlobals->Elements
+		
+		i32 MaxOffset := Globals->NextOffset
+		
+		i32 MaxIndex := RawGlobals->BufferMaxCount As i32
+		
+		for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+			if (Elements[ElementIndex]) {
+				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+				
+				while (FoundElement) {
+					VariableInfo* NextGlobal := FoundElement->Value
 					
-					while (FoundElement) {
-						VariableInfo* NextGlobal := FoundElement->Value
-						
-						if (NextGlobal->IsGlobal != GLOBAL_IS_OPTIMIZED_AWAY) {
-							i32 TypeOffset := this->DWARF->FindOrTranslateType(NextGlobal->Type)
-							
-							this->DWARF->AddGlobalVariable(NextGlobal->Name->Buffer, TypeOffset, this->GlobalBase + NextGlobal->StackOffset)
-						}
-						
+					if (NextGlobal->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
 						FoundElement := FoundElement->NextElement
+						
+						continue
 					}
+
+					if (Config->DebugMode & DEBUG_EMIT_DWARF) {
+						i32 TypeOffset := this->DWARF->FindOrTranslateType(NextGlobal->Type)	
+						
+						this->DWARF->AddGlobalVariable(NextGlobal->Name->Buffer, TypeOffset, this->GlobalBase + NextGlobal->StackOffset)
+					}
+
+					if (Config->DebugMode & DEBUG_EMIT_GLOBAL_SYMBOLS) {
+						this->ELF->AddGlobalSymbol(NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
+					}
+					
+					FoundElement := FoundElement->NextElement
 				}
 			}
 		}
@@ -594,6 +604,10 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 
 		if (Config->PhysicalImageBase = 0) {
 			Config->PhysicalImageBase := Config->ImageBase
+		}
+
+		if (Config->DebugMode & DEBUG_EMIT_SYMBOLS) {
+			Compiler->ELF->FinalizeSymbolTable()
 		}
 		
 		Compiler->ELF->Finalize(ELFCodeOffset, MainOffset, Config->ImageBase, Config->PhysicalImageBase)

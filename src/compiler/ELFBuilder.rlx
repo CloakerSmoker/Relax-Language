@@ -22,6 +22,8 @@ i32 ELF_SEGMENT_FLAGS_WRITE   := 2
 i32 ELF_SEGMENT_FLAGS_READ    := 4
 
 i32 ELF_SEGMENT_TYPE_LOAD := 0x01
+i32 ELF_SEGMENT_TYPE_DYNAMIC := 0x2
+i32 ELF_SEGMENT_TYPE_INTERP := 0x3
 i32 ELF_SEGMENT_TYPE_PHDR := 0x06
 
 struct ELFProgramHeader {
@@ -36,6 +38,7 @@ struct ELFProgramHeader {
 }
 
 i32 ELF_SECTION_TYPE_DATA         := 0x01
+i32 ELF_SECTION_TYPE_SYMBOL_TABLE := 0x02
 i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
 i32 ELF_SECTION_TYPE_NODATA       := 0x08
 
@@ -62,6 +65,53 @@ struct ELFSectionHeader {
 	i64 EntrySize
 }
 
+i8 ELF_STB_LOCAL   := 0x00
+i8 ELF_STB_GLOBAL  := 0x10
+i8 ELF_STB_WEAK    := 0x20
+
+i8 ELF_STT_NONE    := 0x00
+i8 ELF_STT_OBJECT  := 0x01
+i8 ELF_STT_FUNC    := 0x02
+i8 ELF_STT_SECTION := 0x03
+i8 ELF_STT_FILE    := 0x04
+i8 ELF_STT_COMMON  := 0x05
+i8 ELF_STT_TLS     := 0x06
+
+i8 ELF_STV_DEFAULT   := 0
+i8 ELF_STV_INTERNAL  := 1
+i8 ELF_STV_HIDDEN    := 3
+i8 ELF_STV_PROTECTED := 4
+
+i16 ELF_SHN_UNDEF := 0
+i16 ELF_SHN_ABS := 0xFFF1 As i16
+i16 ELF_SHN_COMMON := 0xFFF2 As i16
+
+struct ELFSymbol unaligned {
+	i32 Name
+	i8 Info
+	i8 Other
+	i16 SectionIndex
+	i64 Value
+	i64 Size
+
+	static self* New() {
+		return Alloc(#self)
+	}
+
+	define void Binding(i8 Binding) {
+		this->Info := (this->Info & 0xF) | Binding
+	}
+	define void Type(i8 SymbolType) {
+		this->Info := ((this->Info & 0xF0) | SymbolType) As i8
+	}
+	define i8 Type() {
+		return this->Info & 0xF
+	}
+	define void Visibility(i8 Visibility) {
+		this->Other := Visibility
+	}
+}
+
 i32 ELF_NOTE_TYPE_FREEBSD_ABI_TAG := 1
 i32 ELF_NOTE_DATA_FREEBSD_ABI_TAG_13_1 :=  1301000
 
@@ -73,6 +123,34 @@ struct ELFNoteSection {
 	
 	define void* Body() {
 		return this~>Name +this->NameLength 
+	}
+}
+
+i64 ELF_DYNAMIC_TAG_NULL := 0
+i64 ELF_DYNAMIC_TAG_NEEDED := 1
+i64 ELF_DYNAMIC_TAG_HASH := 4
+i64 ELF_DYNAMIC_TAG_STRTAB := 5
+i64 ELF_DYNAMIC_TAG_SYMTAB := 6
+i64 ELF_DYNAMIC_TAG_RELA := 7
+i64 ELF_DYNAMIC_TAG_RELASZ := 8
+i64 ELF_DYNAMIC_TAG_RELAENT := 9
+i64 ELF_DYNAMIC_TAG_STRSZ := 10
+i64 ELF_DYNAMIC_TAG_SYMENT := 11
+i64 ELF_DYNAMIC_TAG_REL := 17
+i64 ELF_DYNAMIC_TAG_RELSZ := 18
+i64 ELF_DYNAMIC_TAG_RELENT := 19
+
+struct ELFDynamicSectionEntry {
+	i64 Tag
+	i64 Value
+
+	static self* New(i64 Tag, i64 Value) {
+		self* this := Alloc(#self)
+
+		this->Tag := Tag
+		this->Value := Value
+
+		return this
 	}
 }
 
@@ -130,6 +208,8 @@ struct ELFHeader unaligned {
 	}
 }
 
+#Require "$/PointerArray.rlx"
+
 ; For efficient mapping executable and shared object files must have segments whose file offsets and virtual addresses 
 ;  are congruent modulo the page size.
 ; From: https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
@@ -155,37 +235,14 @@ struct ELFBuilder {
 	i8* StringBuffer
 	i8* CodeBuffer
 	
-	ELFProgramHeader** ProgramHeaders
-	ELFSectionHeader** SectionHeaders
+	PointerArray* ProgramHeaders ; <ELFProgramHeader*>
+	PointerArray* SectionHeaders ; <ELFSectionHeader*>
+
+	define i16 SectionIndex(ELFSectionHeader* Header) {
+		return this->SectionHeaders->Find(Header) As i16
+	}
 	
 	i32 DataSize
-
-	define ELFProgramHeader* AppendProgramHeader() {
-		ELFHeader* Header := this->Header
-		
-		i32 NextIndex := Header->ProgramHeaderEntryCount
-		Header->ProgramHeaderEntryCount += 1
-		this->ProgramHeaders := ReAlloc(this->ProgramHeaders, Header->ProgramHeaderEntryCount * #ELFProgramHeader*)
-		
-		ELFProgramHeader* Result := Alloc(#ELFProgramHeader)
-		
-		this->ProgramHeaders[NextIndex] := Result
-		
-		return Result
-	}
-	define ELFSectionHeader* AppendSectionHeader() {
-		ELFHeader* Header := this->Header
-		
-		i32 NextIndex := Header->SectionHeaderEntryCount
-		Header->SectionHeaderEntryCount += 1
-		this->SectionHeaders := ReAlloc(this->SectionHeaders, Header->SectionHeaderEntryCount * #ELFSectionHeader*)
-		
-		ELFSectionHeader* Result := Alloc(#ELFSectionHeader)
-		
-		this->SectionHeaders[NextIndex] := Result
-		
-		return Result
-	}
 
 	define i32 AppendString(i8* String) {
 		i32 StringOffset := this->StringSection->FileSize As i32
@@ -202,6 +259,26 @@ struct ELFBuilder {
 		
 		return StringOffset
 	}
+
+	define ELFProgramHeader* AppendProgramHeader() {
+		this->Header->ProgramHeaderEntryCount += 1
+		
+		ELFProgramHeader* Result := Alloc(#ELFProgramHeader)
+		
+		this->ProgramHeaders->Push(Result)
+		
+		return Result
+	}
+	define ELFSectionHeader* AppendSectionHeader() {
+		this->Header->SectionHeaderEntryCount += 1
+		
+		ELFSectionHeader* Result := Alloc(#ELFSectionHeader)
+		
+		this->SectionHeaders->Push(Result)
+		
+		return Result
+	}
+
 	define ELFSectionHeader* AppendNamedSection(i8* Name) {
 		ELFSectionHeader* NewSection := this->AppendSectionHeader()
 		
@@ -250,7 +327,7 @@ struct ELFBuilder {
 		this->DataProgramHeader := LoadData
 		this->DataSectionHeader := DataSection
 	}
-	define void AddDataSection(i8* Name, void* Data, i32 Size) {
+	define ELFSectionHeader* AddDataSection(i8* Name, void* Data, i32 Size) {
 		ELFSectionHeader* DataSection := this->AppendNamedSection(Name)
 		
 		DataSection->Type           := ELF_SECTION_TYPE_DATA
@@ -258,16 +335,78 @@ struct ELFBuilder {
 		DataSection->Alignment      := ELF_ALIGN_NONE
 		DataSection->VirtualAddress := Data As i64
 		DataSection->FileSize       := Size
+
+		return DataSection
+	}
+
+	PointerArray* SymbolTable ; <ELFSymbol*>
+
+	define void SetupSymbolTable() {
+		this->SymbolTable := PointerArray:New()
+
+		ELFSymbol* First := ELFSymbol:New()
+
+		this->SymbolTable->Push(First)
+	}
+
+	define ELFSymbol* AddSymbol(i8* Name, i8 SymbolType, i64 Start, i64 End) {
+		i32 NameOffset := this->AppendString(Name)
+
+		ELFSymbol* Result := ELFSymbol:New()
+
+		this->SymbolTable->Push(Result)
+
+		Result->Name := NameOffset
+		Result->Type(SymbolType)
+		Result->Binding(ELF_STB_LOCAL)
+		Result->Visibility(ELF_STV_DEFAULT)
+
+		Result->Value := Start
+		Result->Size := End - Start
+
+		return Result
+	}
+	define ELFSymbol* AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
+		return this->AddSymbol(Name, ELF_STT_FUNC, Start, End)
+	}
+	define ELFSymbol* AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
+		return this->AddSymbol(Name, ELF_STT_OBJECT, Start, End)
+	}
+
+	define void FinalizeSymbolTable() {
+		i32 Size := this->SymbolTable->Count() * #ELFSymbol
+		ELFSymbol* SymbolTable := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->SymbolTable->Count(), Index++) {
+			ELFSymbol* Next := this->SymbolTable->At(Index)
+
+			if (Next->Type() = ELF_STT_FUNC) {
+				Next->SectionIndex := this->SectionIndex(this->CodeSectionHeader)
+			}
+			else if (Next->Type() = ELF_STT_OBJECT) {
+				Next->SectionIndex := this->SectionIndex(this->DataSectionHeader)
+			}
+
+			MoveMemory(SymbolTable[Index], Next, #ELFSymbol)
+		}
+
+		ELFSectionHeader* Section := this->AddDataSection(".symtab", SymbolTable, Size)
+
+		Section->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
+		Section->AssociatedSectionIndex := this->SectionIndex(this->StringSection)
+		Section->ExtraInfo := this->SymbolTable->Count()
 	}
 
 	static ELFBuilder* New(i8 ABI, i8 ABIVersion) {
 		ELFBuilder* this := Alloc(#ELFBuilder)
 
+		this->SetupSymbolTable()
+
 		this->BufferSize := #ELFHeader
 		this->Buffer := Alloc(this->BufferSize)
 		
-		this->ProgramHeaders := Alloc(8)
-		this->SectionHeaders := Alloc(8)
+		this->ProgramHeaders := PointerArray:New()
+		this->SectionHeaders := PointerArray:New()
 		
 		this->Header->Populate(ABI, ABIVersion)
 		
@@ -319,7 +458,7 @@ struct ELFBuilder {
 		i32 DataSize := 0
 		
 		for (i32 Index := 0, Index < SectionHeaderCount, Index += 1) {
-			ELFSectionHeader* NextSectionHeader := this->SectionHeaders[Index]
+			ELFSectionHeader* NextSectionHeader := this->SectionHeaders->At(Index)
 			
 			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
 				DataSize += NextSectionHeader->FileSize As i32
@@ -411,7 +550,7 @@ struct ELFBuilder {
 		ELFSectionHeader* SectionHeadersBuffer := (ByteBuffer + SectionHeadersOffset) As ELFSectionHeader*
 		
 		for (Index := 0, Index < ProgramHeaderCount, Index += 1) {
-			ELFProgramHeader* NextProgramHeader := this->ProgramHeaders[Index]
+			ELFProgramHeader* NextProgramHeader := this->ProgramHeaders->At(Index)
 			
 			MoveMemory(ProgramHeadersBuffer[Index], NextProgramHeader, #ELFProgramHeader)
 		}
@@ -419,7 +558,7 @@ struct ELFBuilder {
 		i32 NextDataSectionOffset := DataOffset
 		
 		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
-			NextSectionHeader := this->SectionHeaders[Index]
+			NextSectionHeader := this->SectionHeaders->At(Index)
 			
 			i64 OldVirtualAddress := NextSectionHeader->VirtualAddress
 			i64 OldFlags := NextSectionHeader->Flags
@@ -444,7 +583,7 @@ struct ELFBuilder {
 		NextDataSectionOffset := DataOffset
 		
 		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
-			NextSectionHeader := this->SectionHeaders[Index]
+			NextSectionHeader := this->SectionHeaders->At(Index)
 			
 			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
 				MoveMemory(&ByteBuffer[NextDataSectionOffset], NextSectionHeader->VirtualAddress As void*, NextSectionHeader->FileSize As i32)
