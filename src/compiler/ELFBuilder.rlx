@@ -208,7 +208,7 @@ struct ELFHeader unaligned {
 
 	i16 SectionNameSectionIndex
 
-	define void Populate(i8 ABI, i8 ABIVersion) {
+	define void Populate(i8 ABI, i8 ABIVersion, i16 FileType) {
 		; Default values for a statically linked little endian 64 bit x86-64 executable using the specified ABI
 		
 		this->Magic             := ELF_MAGIC
@@ -217,7 +217,7 @@ struct ELFHeader unaligned {
 		this->UseCurrentVersion := true
 		this->ABI               := ABI
 		this->ABIVersion        := ABIVersion
-		this->FileType          := ELF_FILETYPE_EXECUTABLE
+		this->FileType          := FileType
 		this->MachineType       := ELF_MACHINE_AMD64
 		this->ELFVersion        := ELF_VERSION
 		
@@ -363,21 +363,22 @@ struct ELFBuilder {
 	}
 
 	PointerArray* SymbolTable ; <ELFSymbol*>
+	PointerArray* DynamicSymbolTable ; <ELFSymbol*>
 
 	define void SetupSymbolTable() {
 		this->SymbolTable := PointerArray:New()
+		this->DynamicSymbolTable := PointerArray:New()
 
 		ELFSymbol* First := ELFSymbol:New()
 
 		this->SymbolTable->Push(First)
+		this->DynamicSymbolTable->Push(First)
 	}
 
-	define ELFSymbol* AddSymbol(i8* Name, i8 SymbolType, i64 Start, i64 End) {
-		i32 NameOffset := this->AppendString(Name)
-
+	define ELFSymbol* AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 SymbolType, i64 Start, i64 End) {
 		ELFSymbol* Result := ELFSymbol:New()
 
-		this->SymbolTable->Push(Result)
+		Symbols->Push(Result)
 
 		Result->Name := NameOffset
 		Result->Type(SymbolType)
@@ -389,17 +390,37 @@ struct ELFBuilder {
 
 		return Result
 	}
+
 	define ELFSymbol* AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
-		return this->AddSymbol(Name, ELF_STT_FUNC, Start, End)
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_FUNC, Start, End)
 	}
 	define ELFSymbol* AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
-		return this->AddSymbol(Name, ELF_STT_OBJECT, Start, End)
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_OBJECT, Start, End)
+	}
+
+	define void FinalizeSymbolTable(PointerArray* Symbols, i16 StringSection, i8* Name) {
+		i32 Size := Symbols->Count() * #ELFSymbol
+		ELFSymbol* SymbolTable := Alloc(Size)
+
+		for (i32 Index := 0, Index < Symbols->Count(), Index++) {
+			ELFSymbol* Next := Symbols->At(Index)
+
+			MoveMemory(SymbolTable[Index], Next, #ELFSymbol)
+		}
+
+		ELFSectionHeader* Section := this->AddDataSection(Name, SymbolTable, Size)
+
+		Section->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
+		Section->AssociatedSectionIndex := StringSection
+		Section->ExtraInfo := Symbols->Count()
+		Section->EntrySize := #ELFSymbol
 	}
 
 	define void FinalizeSymbolTable() {
-		i32 Size := this->SymbolTable->Count() * #ELFSymbol
-		ELFSymbol* SymbolTable := Alloc(Size)
-
 		for (i32 Index := 0, Index < this->SymbolTable->Count(), Index++) {
 			ELFSymbol* Next := this->SymbolTable->At(Index)
 
@@ -409,22 +430,140 @@ struct ELFBuilder {
 			else if (Next->Type() = ELF_STT_OBJECT) {
 				Next->SectionIndex := this->SectionIndex(this->DataSectionHeader)
 			}
-
-			MoveMemory(SymbolTable[Index], Next, #ELFSymbol)
 		}
 
-		ELFSectionHeader* Section := this->AddDataSection(".symtab", SymbolTable, Size)
+		i16 StringsIndex := this->SectionIndex(this->StringSection)
 
-		Section->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
-		Section->AssociatedSectionIndex := this->SectionIndex(this->StringSection)
-		Section->ExtraInfo := this->SymbolTable->Count()
-		Section->EntrySize := #ELFSymbol
+		this->FinalizeSymbolTable(this->SymbolTable, StringsIndex, ".symtab")
 	}
 
-	static ELFBuilder* New(i8 ABI, i8 ABIVersion) {
+	define void SetProgramInterpreter(i8* Interpreter) {
+		i32 Size := StringLength(Interpreter)
+
+		ELFProgramHeader* Interp := this->AppendProgramHeader()
+		
+		Interp->SegmentType := ELF_SEGMENT_TYPE_INTERP
+		Interp->Flags       := ELF_SEGMENT_FLAGS_READ
+		Interp->FileSize    := Size
+		Interp->MemorySize  := 0
+		
+		ELFSectionHeader* DotInterp := this->AddDataSection(".interp", Interpreter, Size)
+
+		Interp->Children->Push(DotInterp)
+		DotInterp->Parent := Interp
+		
+		DotInterp->Type := ELF_SECTION_TYPE_DATA
+	}
+
+	ELFProgramHeader* DynamicData
+	PointerArray* DynamicSectionEntries ; <ELFDynamicSectionEntry*>
+
+	i8* DynamicStrings
+	i32 DynamicStringsLength
+
+	define void SetupDynamicSection() {
+		this->DynamicData := this->AppendProgramHeader()
+
+		this->DynamicData->SegmentType := ELF_SEGMENT_TYPE_LOAD
+		this->DynamicData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+
+		this->DynamicSectionEntries := PointerArray:New()
+
+		this->DynamicStrings := Alloc(1)
+		this->DynamicStringsLength := 1
+	}
+
+	define void AddDynamicEntry(i64 Tag, i64 Value) {
+		this->DynamicSectionEntries->Push(ELFDynamicSectionEntry:New(Tag, Value))
+	}
+
+	define void AddDynamicDataSection(ELFSectionHeader* Section) {
+		this->DynamicData->Children->Push(Section)
+		Section->Parent := this->DynamicData
+	}
+
+	define i32 AddDynamicString(i8* String) {
+		i32 Length := StringLength(String)
+		i32 Offset := this->DynamicStringsLength
+
+		this->DynamicStringsLength += Length + 1
+		this->DynamicStrings := ReAlloc(this->DynamicStrings, this->DynamicStringsLength)
+
+		MoveMemory(&this->DynamicStrings[Offset], String, Length)
+
+		return Offset
+	}
+
+	define ELFSymbol* AddDynamicFunctionSymbol(i8* Name, i64 Start, i64 End) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_FUNC, Start, End)
+	}
+	define ELFSymbol* AddDynamicGlobalSymbol(i8* Name, i64 Start, i64 End) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_OBJECT, Start, End)
+	}
+
+	define i16 FinalizeDynamicStrings() {
+		ELFSectionHeader* Section := this->AddDataSection(".dynstr", this->DynamicStrings, this->DynamicStringsLength)
+
+		Section->Type := ELF_SECTION_TYPE_STRING_TABLE
+
+		i16 Index := this->SectionIndex(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_STRTAB, Index)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_STRSZ, this->DynamicStringsLength)
+
+		return Index
+	}
+
+	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
+		this->FinalizeSymbolTable(this->DynamicSymbolTable, DynamicStrings, ".dynsym")
+	}
+
+	define void FinalizeDynamicSection() {
+		i16 DynamicStringTable := this->FinalizeDynamicStrings()
+
+		this->FinalizeDynamicSymbols(DynamicStringTable)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_NULL, 0)
+
+		i32 Size := this->DynamicSectionEntries->Count() * #ELFDynamicSectionEntry
+
+		ELFProgramHeader* Dynamic := this->AppendProgramHeader()
+		
+		Dynamic->SegmentType := ELF_SEGMENT_TYPE_DYNAMIC
+		Dynamic->Flags       := ELF_SEGMENT_FLAGS_READ
+		Dynamic->FileSize    := Size
+		Dynamic->MemorySize  := Size
+
+		ELFDynamicSectionEntry* Entries := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->DynamicSectionEntries->Count(), Index++) {
+			MoveMemory(Entries[Index], this->DynamicSectionEntries->At(Index), #ELFDynamicSectionEntry)
+		}
+		
+		ELFSectionHeader* DotDynamic := this->AddDataSection(".dynamic", Entries, Size)
+
+		Dynamic->Children->Push(DotDynamic)
+		DotDynamic->Parent := Dynamic
+		
+		DotDynamic->Type := ELF_SECTION_TYPE_DYNAMIC
+		DotDynamic->AssociatedSectionIndex := DynamicStringTable
+	}
+
+	i32 Alignment
+
+	static ELFBuilder* New(i8 ABI, i8 ABIVersion, i16 ProgramType) {
 		ELFBuilder* this := Alloc(#ELFBuilder)
 
-		this->SetupSymbolTable()
+		if (ProgramType = ELF_FILETYPE_DYNAMIC) {
+			this->Alignment := 0x1000
+		}
+		else {
+			this->Alignment := 0x100
+		}
 
 		this->BufferSize := #ELFHeader
 		this->Buffer := Alloc(this->BufferSize)
@@ -432,7 +571,7 @@ struct ELFBuilder {
 		this->ProgramHeaders := PointerArray:New()
 		this->SectionHeaders := PointerArray:New()
 		
-		this->Header->Populate(ABI, ABIVersion)
+		this->Header->Populate(ABI, ABIVersion, ProgramType)
 		
 		ELFProgramHeader* PHDR := this->AppendProgramHeader()
 		this->PHDR := PHDR
@@ -464,13 +603,16 @@ struct ELFBuilder {
 		StringSection->FileSize := 1
 		
 		StringSection->NameOffset := this->AppendString(".strtab")
+
+		this->SetupSymbolTable()
+		this->SetupDynamicSection()
 		
 		return this
 	}
 
 	define i32 AlignmentNeeded(i32 Value) {
-		if (Value % 0x100) {
-			return 0x100 - (Value % 0x100)
+		if (Value % this->Alignment) {
+			return this->Alignment - (Value % this->Alignment)
 		}
 
 		return 0
@@ -618,28 +760,35 @@ struct ELFBuilder {
 					break
 				}
 
-				if (Next->VirtualAddress != 0 && Next->VirtualAddress < Score) {
-					Score := Next->VirtualAddress
+				i32 NextScore := Next->VirtualAddress As i32
+
+				if (NextScore = 0) {
+					NextScore := 0x7FFF_FFFE
+				}
+
+				if (NextScore < Score) {
+					Score := NextScore
 					Best := Next
 				}
 			}
 
 			this->ProgramHeaders->RemoveValue(Best)
 
-			ELFProgramHeader* NextProgramHeader := this->ProgramHeaders->At(Index)
-
 			if !(Best->VirtualAddress) {
-				i32 Before := NextDataSectionOffset
-
+				Best->FileOffset := NextDataSectionOffset
 				Best->VirtualAddress := NextDataSectionAddress
 
-				for (i32 ChildIndex := 0, ChildIndex < Best->Children->Count(), ChildIndex++) {
-					ELFSectionHeader* NextChild := Best->Children->At(Index)
+				i32 ChildCount := Best->Children->Count()
+
+				for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
+					ELFSectionHeader* NextChild := Best->Children->At(ChildIndex)
 
 					MoveMemory(&ByteBuffer[NextDataSectionOffset], NextChild->VirtualAddress As void*, NextChild->FileSize As i32)
 
 					NextChild->FileOffset := NextDataSectionOffset
 					NextChild->VirtualAddress := NextDataSectionAddress
+					NextChild->Flags ^= ELF_SECTION_FLAGS_HAS_DATA
+					NextChild->Alignment := 0
 
 					i32 AlignedSize := this->Align(NextChild->FileSize As i32)
 
@@ -647,7 +796,7 @@ struct ELFBuilder {
 					NextDataSectionAddress += AlignedSize					
 				}
 
-				Best->FileSize := NextDataSectionOffset - Before
+				Best->FileSize := NextDataSectionOffset - Best->FileOffset
 			}
 
 			Best->Alignment := 0
