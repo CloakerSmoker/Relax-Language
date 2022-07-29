@@ -495,13 +495,20 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		i16 ELFType := ELF_FILETYPE_EXECUTABLE
+		i32 ELFCodeOffset := 0x100
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
 			ELFType := ELF_FILETYPE_DYNAMIC
+			ELFCodeOffset := 0x1000
+
 			Config->ImageBase := 0
 		}
 
 		Compiler->ELF := ELFBuilder:New(Config->ELFABI, 0, ELFType)
+
+		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
+			Compiler->ELF->SetupDynamicSection()
+		}
 		
 		i64 GlobalBytes := Parser~>Globals->NextOffset
 		i64 GlobalPages := GlobalBytes / 0x1000
@@ -509,8 +516,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		if (GlobalBytes % 0x1000) {
 			GlobalPages += 1
 		}
-		
-		i32 ELFCodeOffset := 0x100
 		
 		Compiler->GlobalBase := Config->ImageBase + 0x1000
 		Compiler->CodeBase := (0x1000 + ELFCodeOffset + (GlobalPages * 0x1000)) As i32
@@ -631,7 +636,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		}
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
-			Compiler->ELF->SetProgramInterpreter("/lib64/ld-linux-x86-64.so.2")
+			Compiler->ELF->SetProgramInterpreter("/fake/libc/lib/ld-linux-x86-64.so.2")
 
 			i32 offs := Compiler->ELF->AddDynamicString("libfake.lib.so.2")
 
