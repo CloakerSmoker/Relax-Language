@@ -649,9 +649,15 @@ struct ASTNode {
 		else if (this->NodeType = NODE_TYPE_STRUCT_ACCESS) {
 			return this->AccessNode->Operator->Value != OPERATOR_TILDE_GREATER
 		}
-		else {
-			return this->NodeType = NODE_TYPE_VARIABLE
+		else if (this->NodeType = NODE_TYPE_VARIABLE) {
+			if (this->VariableValue->IsExternal) {
+				return false
+			}
+
+			return true
 		}
+
+		return false
 	}
 	
 	define void Error(i8* Message) {

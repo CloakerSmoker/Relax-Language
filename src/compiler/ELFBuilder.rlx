@@ -196,7 +196,7 @@ struct ELFRelocation {
 	}
 	define void Symbol(i64 SymbolIndex) {
 		this->Info &= 0xFFFF_FFFF
-		this->Info |= SymbolIndex
+		this->Info |= SymbolIndex << 32
 	}
 
 	static self* New(i64 Offset, i64 RelocationType, i64 SymbolIndex) {
@@ -396,7 +396,7 @@ struct ELFBuilder {
 
 			i64* Where := Next->From->InitializedData + Next->Offset
 
-			*Where := Next->To->VirtualAddress
+			*Where += Next->To->VirtualAddress
 		}
 		
 	}
@@ -446,13 +446,11 @@ struct ELFBuilder {
 		return NewSection
 	}
 
-	define void AddCodeSection(i8* CodeBytes, i32 CodeLength) {
+	define void SetupCode() {
 		ELFProgramHeader* LoadCode := this->AppendProgramHeader()
 		
 		LoadCode->SegmentType := ELF_SEGMENT_TYPE_LOAD
 		LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE
-		LoadCode->FileSize    := CodeLength
-		LoadCode->MemorySize  := CodeLength
 		
 		ELFSectionHeader* TextSection := this->AppendNamedSection(".text")
 
@@ -462,11 +460,18 @@ struct ELFBuilder {
 		TextSection->Type  := ELF_SECTION_TYPE_DATA
 		TextSection->Flags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_EXECUTE
 		TextSection->Alignment    := ELF_ALIGN_NONE
-		TextSection->FileSize     := CodeLength
-		
-		this->CodeBuffer        := CodeBytes
+
 		this->CodeProgramHeader := LoadCode
 		this->CodeSectionHeader := TextSection
+	}
+
+	define void AddCodeSection(i8* CodeBytes, i32 CodeLength) {
+		this->CodeProgramHeader->FileSize := CodeLength
+		this->CodeProgramHeader->MemorySize := CodeLength
+		
+		this->CodeSectionHeader->FileSize := CodeLength
+		
+		this->CodeBuffer        := CodeBytes
 	}
 
 	define void AddEmptyDataSection(i32 ReserveBytes) {
@@ -515,7 +520,7 @@ struct ELFBuilder {
 		this->DynamicSymbolTable->Push(First)
 	}
 
-	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 SymbolType, i64 Start, i64 End) {
+	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
 		i32 Index := Symbols->Count()
 		
 		ELFSymbol* Result := ELFSymbol:New()
@@ -524,7 +529,7 @@ struct ELFBuilder {
 
 		Result->NameOffset := NameOffset
 		Result->Type(SymbolType)
-		Result->Binding(ELF_STB_LOCAL)
+		Result->Binding(Binding)
 		Result->Visibility(ELF_STV_DEFAULT)
 
 		Result->Value := Start
@@ -536,12 +541,12 @@ struct ELFBuilder {
 	define i32 AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
-		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_FUNC, Start, End)
+		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STB_LOCAL, ELF_STT_FUNC, Start, End)
 	}
 	define i32 AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
-		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_OBJECT, Start, End)
+		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STB_LOCAL, ELF_STT_OBJECT, Start, End)
 	}
 
 	define ELFSectionHeader* FinalizeSymbolTable(PointerArray* Symbols, i16 StringSection, i8* Name) {
@@ -611,10 +616,20 @@ struct ELFBuilder {
 	ELFSectionHeader* DotDynamic
 	PointerArray* DynamicSectionEntries ; <ELFDynamicSectionEntry*>
 
+	ELFSectionHeader* DynamicRelocationSection
 	PointerArray* DynamicRelocations ; <ELFRelocation*>
 
 	i8* DynamicStrings
 	i32 DynamicStringsLength
+
+	define void SetupDynamicRelocations() {
+		ELFSectionHeader* Section := this->AddDataSection(".rel.text", null, 0)
+
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS
+
+		this->DynamicRelocationSection := Section
+		this->DynamicRelocations := PointerArray:New()
+	}
 
 	define void SetupDynamicSection() {
 		this->DynamicData := this->AppendProgramHeader()
@@ -625,7 +640,7 @@ struct ELFBuilder {
 
 		this->DynamicSectionEntries := PointerArray:New()
 
-		this->DynamicRelocations := PointerArray:New()
+		this->SetupDynamicRelocations()
 
 		this->DynamicStrings := Alloc(1)
 		this->DynamicStringsLength := 1
@@ -667,19 +682,21 @@ struct ELFBuilder {
 		return Offset
 	}
 
+	define void RequireDynamicLibrary(i8* Name) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_NEEDED, NameOffset)
+	}
+
 	define i32 AddDynamicFunctionSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
-		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_FUNC, 0, 0)
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_FUNC, 0, 0)
 	}
 	define i32 AddDynamicGlobalSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
-		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_OBJECT, 0, 0)
-	}
-
-	define void ReferenceDynamicSymbol(i32 CodeOffset, i32 SymbolIndex) {
-		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL, SymbolIndex))
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_OBJECT, 0, 0)
 	}
 
 	define i16 FinalizeDynamicStrings() {
@@ -724,6 +741,14 @@ struct ELFBuilder {
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_HASH, HashSection)
 	}
 
+	define void ReferenceDynamicSymbol(i32 CodeOffset, i32 SymbolIndex) {
+		i32 Index := this->DynamicRelocations->Count()
+
+		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL, SymbolIndex))
+
+		this->ReferenceSection(this->DynamicRelocationSection, Index * #ELFRelocation, this->CodeSectionHeader)
+	}
+
 	define void FinalizeDynamicRelocations(i16 SymbolTableSectionIndex) {
 		i32 Size := this->DynamicRelocations->Count() * #ELFRelocation
 		ELFRelocation* Relocations := Alloc(Size)
@@ -732,9 +757,10 @@ struct ELFBuilder {
 			MoveMemory(Relocations[Index], this->DynamicRelocations->At(Index), #ELFRelocation)
 		}
 
-		ELFSectionHeader* Section := this->AddDataSection(".rel.text", Relocations, Size)
+		ELFSectionHeader* Section := this->DynamicRelocationSection
 
-		Section->Type := ELF_SECTION_TYPE_RELOCATIONS
+		Section->VirtualAddress := Relocations As i64
+		Section->FileSize := Size
 		Section->AssociatedSectionIndex := SymbolTableSectionIndex
 
 		this->AddDynamicDataSection(Section)
@@ -848,6 +874,8 @@ struct ELFBuilder {
 		StringSection->NameOffset := this->AppendString(".strtab")
 
 		this->SetupSymbolTable()
+
+		this->SetupCode()
 		
 		return this
 	}

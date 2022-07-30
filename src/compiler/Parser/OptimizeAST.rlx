@@ -215,6 +215,13 @@ define void EliminateGlobals(ParserState* Parser) {
 			
 			while (FoundElement) {
 				VariableInfo* NextGlobal := FoundElement->Value
+
+				if (NextGlobal->IsExternal) {
+					NextGlobal->SymbolNumber := -1
+
+					FoundElement := FoundElement->NextElement
+					continue
+				}
 				
 				; If a global is only set once, and has a default value, and the default value has no
 				;  side-effects, then it can safely be optimized away.

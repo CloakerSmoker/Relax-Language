@@ -15,13 +15,22 @@ struct VariableInfo {
 	ASTNode* LastValue,
 	SafeString* Name,
 	Type Type,
-	i32 StackOffset,
+
+	union {
+		i32 StackOffset
+		i32 SymbolNumber
+	}
+
 	i16 GetCount,
 	i16 SetCount,
+
+	; whatre flags?
+
 	i8 IsGlobal,
 	i8 IsParameter,
 	i8 IsVariadic,
-	i8 IsThis
+	i8 IsThis,
+	i8 IsExternal
 }
 
 declare i16 GetTypeStorageSize(Type)
@@ -101,6 +110,8 @@ i8 TYPE_BITS := 8
 i8 TYPE_ARRAY := 16
 i8 TYPE_ENUM := 32
 
+#Require "$/PointerArray.rlx"
+
 ; Holds the entire state of the parser
 
 struct ParserState {
@@ -118,6 +129,9 @@ struct ParserState {
 	HashMap Types,
 	
 	HashMap NameReplacements,
+
+	PointerArray* ExternalSources ; <Token*>
+	PointerArray* ExternalDefinitions ; <VariableInfo*>
 	
 	/* Builtin types, actually added to the type list in CreateDefaultTypes */
 	
@@ -150,6 +164,9 @@ struct ParserState {
 		this~>Functions->Initialize()
 		this~>Types->Initialize()
 		this~>NameReplacements->Initialize()
+
+		this->ExternalSources := PointerArray:New()
+		this->ExternalDefinitions := PointerArray:New()
 		
 		this->GlobalDefaults := AllocArray(8, 0)
 		this->GlobalConstantsBuffer := Alloc(4)
@@ -1639,6 +1656,44 @@ struct ParserState {
 					while !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 						this->ParseProgramStatement()
 					}
+				}
+			}
+			else if (NextTokenValue = KEYWORD_EXTERNAL) {
+				Token* ExternalSource := this->Consume(TOKEN_TYPE_STRING, "Expected 'external' declaration source name")
+
+				i8 Exists := false
+
+				for (i32 Index := 0, Index < this->ExternalSources->Count(), Index++) {
+					Token* Last := this->ExternalSources->At(Index)
+
+					if (ExternalSource->StringValue->Equals(Last->StringValue)) {
+						Exists := true
+						break
+					}
+				}
+
+				if !(Exists) {
+					this->ExternalSources->Push(ExternalSource)
+				}
+
+				Type ExternalType := this->ParseType(false)
+				Token* ExternalName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected 'external' name")
+
+				VariableInfo* External := Alloc(#VariableInfo)
+
+				External->Name := ExternalName->StringValue
+				External->Type := ExternalType
+				External->IsGlobal := true
+				External->IsExternal := true
+
+				; Artificial because I really don't want to have to deal with this
+				External->GetCount := 2
+				External->SetCount := 2
+				
+				this->AddVariable(External, ExternalName)
+
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+					this->GetCurrentTokenContext()->Error("'external' variables cannot be assigned")
 				}
 			}
 			else {

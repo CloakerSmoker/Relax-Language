@@ -141,6 +141,8 @@ i8 KEYWORD_STATIC := 21
 i8 KEYWORD_USING := 22
 i8 KEYWORD_ENUM := 23
 
+i8 KEYWORD_EXTERNAL := 24
+
 struct Token {
 	ErrorContext Context
 	
@@ -256,6 +258,7 @@ struct LexerState {
 		Keywords->Set("static", 	KEYWORD_STATIC)
 		Keywords->Set("using", 		KEYWORD_USING)
 		Keywords->Set("enum", 		KEYWORD_ENUM)
+		Keywords->Set("external",   KEYWORD_EXTERNAL)
 		
 		return this
 	}

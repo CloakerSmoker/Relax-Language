@@ -508,6 +508,12 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
 			Compiler->ELF->SetupDynamicSection()
+
+			for (i32 Index := 0, Index < Parser->ExternalSources->Count(), Index++) {
+				Token* Source := Parser->ExternalSources->At(Index)
+
+				Compiler->ELF->RequireDynamicLibrary(Source->StringValue->Buffer)
+			}
 		}
 		
 		i64 GlobalBytes := Parser~>Globals->NextOffset
@@ -637,12 +643,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
 			Compiler->ELF->SetProgramInterpreter("/home/connor/libc/home/connor/libc/lib/ld-2.31.so")
-
-			i32 offs := Compiler->ELF->AddDynamicString("/lib/x86_64-linux-gnu/libc.so.6")
-
-			Compiler->ELF->AddDynamicEntry(ELF_DYNAMIC_TAG_NEEDED, offs)
-
-			Compiler->ELF->AddDynamicFunctionSymbol("raise")
 
 			Compiler->ELF->FinalizeDynamicSection()
 		}
@@ -819,6 +819,20 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 	
 	if (TargetVariable->Type.IsArray) {
 		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
+	}
+	else if (TargetVariable->IsExternal) {
+		if (TargetVariable->SymbolNumber = -1) {
+			if (TypeIsCallable(TargetVariable->Type)) {
+				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicFunctionSymbol(TargetVariable->Name->Buffer)
+			}
+			else {
+				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicGlobalSymbol(TargetVariable->Name->Buffer)
+			}
+		}
+
+		EmitMove_R64_I64(Compiler, ResultRegister, 0)
+
+		Compiler->ELF->ReferenceDynamicSymbol(Compiler->Index - 8, TargetVariable->SymbolNumber)
 	}
 	else if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
 		; Node: I have no idea why this still needs to exist, FoldConstants should replace uses of these variables
