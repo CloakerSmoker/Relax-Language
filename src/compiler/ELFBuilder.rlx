@@ -63,6 +63,7 @@ i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
 i32 ELF_SECTION_TYPE_HASH_TABLE   := 0x05
 i32 ELF_SECTION_TYPE_DYNAMIC      := 0x06
 i32 ELF_SECTION_TYPE_NODATA       := 0x08
+i32 ELF_SECTION_TYPE_RELOCATIONS  := 0x09
 i32 ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE := 0x0B
 
 i64 ELF_SECTION_FLAGS_WRITE    := 0x01
@@ -178,6 +179,32 @@ struct ELFDynamicSectionEntry {
 
 		this->Tag := Tag
 		this->Value := Value
+
+		return this
+	}
+}
+
+i64 ELF_RELOCATION_TYPE_X64_GLOBAL := 6
+
+struct ELFRelocation {
+	i64 Offset
+	i64 Info
+
+	define void Type(i64 RelocationType) {
+		this->Info &= 0x7FFF_FFFF_0000_0000
+		this->Info |= RelocationType
+	}
+	define void Symbol(i64 SymbolIndex) {
+		this->Info &= 0xFFFF_FFFF
+		this->Info |= SymbolIndex
+	}
+
+	static self* New(i64 Offset, i64 RelocationType, i64 SymbolIndex) {
+		self* this := Alloc(#self)
+
+		this->Offset := Offset
+		this->Type(RelocationType)
+		this->Symbol(SymbolIndex)
 
 		return this
 	}
@@ -488,7 +515,9 @@ struct ELFBuilder {
 		this->DynamicSymbolTable->Push(First)
 	}
 
-	define ELFSymbol* AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 SymbolType, i64 Start, i64 End) {
+	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 SymbolType, i64 Start, i64 End) {
+		i32 Index := Symbols->Count()
+		
 		ELFSymbol* Result := ELFSymbol:New()
 
 		Symbols->Push(Result)
@@ -501,15 +530,15 @@ struct ELFBuilder {
 		Result->Value := Start
 		Result->Size := End - Start
 
-		return Result
+		return Index
 	}
 
-	define ELFSymbol* AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
+	define i32 AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
 		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_FUNC, Start, End)
 	}
-	define ELFSymbol* AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
+	define i32 AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
 		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STT_OBJECT, Start, End)
@@ -582,6 +611,8 @@ struct ELFBuilder {
 	ELFSectionHeader* DotDynamic
 	PointerArray* DynamicSectionEntries ; <ELFDynamicSectionEntry*>
 
+	PointerArray* DynamicRelocations ; <ELFRelocation*>
+
 	i8* DynamicStrings
 	i32 DynamicStringsLength
 
@@ -593,6 +624,8 @@ struct ELFBuilder {
 		this->DynamicData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
 
 		this->DynamicSectionEntries := PointerArray:New()
+
+		this->DynamicRelocations := PointerArray:New()
 
 		this->DynamicStrings := Alloc(1)
 		this->DynamicStringsLength := 1
@@ -634,15 +667,19 @@ struct ELFBuilder {
 		return Offset
 	}
 
-	define ELFSymbol* AddDynamicFunctionSymbol(i8* Name, i64 Start, i64 End) {
+	define i32 AddDynamicFunctionSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
-		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_FUNC, Start, End)
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_FUNC, 0, 0)
 	}
-	define ELFSymbol* AddDynamicGlobalSymbol(i8* Name, i64 Start, i64 End) {
+	define i32 AddDynamicGlobalSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
-		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_OBJECT, Start, End)
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STT_OBJECT, 0, 0)
+	}
+
+	define void ReferenceDynamicSymbol(i32 CodeOffset, i32 SymbolIndex) {
+		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL, SymbolIndex))
 	}
 
 	define i16 FinalizeDynamicStrings() {
@@ -660,19 +697,8 @@ struct ELFBuilder {
 		return Index
 	}
 
-	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
-		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->DynamicSymbolTable, DynamicStrings, ".dynsym")
-
-		Section->Type := ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE
-
-		i32 SymbolCount := Section->ExtraInfo
-
-		this->AddDynamicDataSection(Section)
-
-		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMTAB, Section)
-		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMENT, Section->ExtraInfo)
-
-		
+	define void FinalizeDynamicSymbolHashTable(i16 SymbolTableSectionIndex) {
+		i32 SymbolCount := this->DynamicSymbolTable->Count()
 		ELFSymbolHashTable* Hash := ELFSymbolHashTable:New(SymbolCount, SymbolCount)
 
 		for (i32 Index := 0, Index < SymbolCount, Index++) {
@@ -691,11 +717,47 @@ struct ELFBuilder {
 		ELFSectionHeader* HashSection := this->AddDataSection(".hash", Buffer, Size)
 
 		HashSection->Type := ELF_SECTION_TYPE_HASH_TABLE
-		HashSection->AssociatedSectionIndex := this->SectionIndex(Section)
+		HashSection->AssociatedSectionIndex := SymbolTableSectionIndex
 
 		this->AddDynamicDataSection(HashSection)
 
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_HASH, HashSection)
+	}
+
+	define void FinalizeDynamicRelocations(i16 SymbolTableSectionIndex) {
+		i32 Size := this->DynamicRelocations->Count() * #ELFRelocation
+		ELFRelocation* Relocations := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->DynamicRelocations->Count(), Index++) {
+			MoveMemory(Relocations[Index], this->DynamicRelocations->At(Index), #ELFRelocation)
+		}
+
+		ELFSectionHeader* Section := this->AddDataSection(".rel.text", Relocations, Size)
+
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS
+		Section->AssociatedSectionIndex := SymbolTableSectionIndex
+
+		this->AddDynamicDataSection(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_REL, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELENT, #ELFRelocation)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELSZ, Size)
+	}
+
+	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
+		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->DynamicSymbolTable, DynamicStrings, ".dynsym")
+
+		Section->Type := ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE
+
+		this->AddDynamicDataSection(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMTAB, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMENT, Section->ExtraInfo)
+
+		i16 SectionIndex := this->SectionIndex(Section)
+
+		this->FinalizeDynamicSymbolHashTable(SectionIndex)
+		this->FinalizeDynamicRelocations(SectionIndex)
 	}
 
 	define void FinalizeDynamicSection() {
@@ -710,7 +772,7 @@ struct ELFBuilder {
 		ELFProgramHeader* LoadDynamic := this->AppendProgramHeader()
 
 		LoadDynamic->SegmentType := ELF_SEGMENT_TYPE_LOAD
-		LoadDynamic->Flags       := ELF_SEGMENT_FLAGS_READ
+		LoadDynamic->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
 
 		ELFProgramHeader* Dynamic := this->AppendProgramHeader()
 		
