@@ -157,7 +157,7 @@ struct CompilerState {
 				while (FoundElement) {
 					VariableInfo* NextGlobal := FoundElement->Value
 					
-					if (NextGlobal->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
+					if (NextGlobal->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY || NextGlobal->IsExternal) {
 						FoundElement := FoundElement->NextElement
 						
 						continue
@@ -642,7 +642,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		}
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
-			Compiler->ELF->SetProgramInterpreter("/home/connor/libc/home/connor/libc/lib/ld-2.31.so")
+			Compiler->ELF->SetProgramInterpreter("/lib64/ld-linux-x86-64.so.2")
 
 			Compiler->ELF->FinalizeDynamicSection()
 		}
@@ -833,6 +833,10 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 		EmitMove_R64_I64(Compiler, ResultRegister, 0)
 
 		Compiler->ELF->ReferenceDynamicSymbol(Compiler->Index - 8, TargetVariable->SymbolNumber)
+
+		if !(TypeIsCallable(TargetVariable->Type)) {
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, 8)
+		}
 	}
 	else if (TargetVariable->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
 		; Node: I have no idea why this still needs to exist, FoldConstants should replace uses of these variables

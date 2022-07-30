@@ -60,6 +60,7 @@ struct ELFProgramHeader {
 i32 ELF_SECTION_TYPE_DATA         := 0x01
 i32 ELF_SECTION_TYPE_SYMBOL_TABLE := 0x02
 i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
+i32 ELF_SECTION_TYPE_RELOCATIONS_ADDEND  := 0x04
 i32 ELF_SECTION_TYPE_HASH_TABLE   := 0x05
 i32 ELF_SECTION_TYPE_DYNAMIC      := 0x06
 i32 ELF_SECTION_TYPE_NODATA       := 0x08
@@ -189,6 +190,7 @@ i64 ELF_RELOCATION_TYPE_X64_GLOBAL := 6
 struct ELFRelocation {
 	i64 Offset
 	i64 Info
+	i64 Addend
 
 	define void Type(i64 RelocationType) {
 		this->Info &= 0x7FFF_FFFF_0000_0000
@@ -450,7 +452,7 @@ struct ELFBuilder {
 		ELFProgramHeader* LoadCode := this->AppendProgramHeader()
 		
 		LoadCode->SegmentType := ELF_SEGMENT_TYPE_LOAD
-		LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE
+		LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE | ELF_SEGMENT_FLAGS_WRITE
 		
 		ELFSectionHeader* TextSection := this->AppendNamedSection(".text")
 
@@ -623,9 +625,9 @@ struct ELFBuilder {
 	i32 DynamicStringsLength
 
 	define void SetupDynamicRelocations() {
-		ELFSectionHeader* Section := this->AddDataSection(".rel.text", null, 0)
+		ELFSectionHeader* Section := this->AddDataSection(".rela.dyn", null, 0)
 
-		Section->Type := ELF_SECTION_TYPE_RELOCATIONS
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
 
 		this->DynamicRelocationSection := Section
 		this->DynamicRelocations := PointerArray:New()
@@ -761,13 +763,14 @@ struct ELFBuilder {
 
 		Section->VirtualAddress := Relocations As i64
 		Section->FileSize := Size
+		Section->EntrySize := #ELFRelocation
 		Section->AssociatedSectionIndex := SymbolTableSectionIndex
 
 		this->AddDynamicDataSection(Section)
 
-		this->AddDynamicEntry(ELF_DYNAMIC_TAG_REL, Section)
-		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELENT, #ELFRelocation)
-		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELSZ, Size)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELA, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELAENT, #ELFRelocation)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELASZ, Size)
 	}
 
 	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
