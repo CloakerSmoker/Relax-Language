@@ -636,7 +636,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		}
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
-			Compiler->ELF->SetProgramInterpreter("/fake/libc/lib/ld-linux-x86-64.so.2")
+			Compiler->ELF->SetProgramInterpreter("/home/connor/libc/home/connor/libc/lib/ld-2.31.so")
 
 			i32 offs := Compiler->ELF->AddDynamicString("libfake.lib.so.2")
 

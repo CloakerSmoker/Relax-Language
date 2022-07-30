@@ -60,8 +60,10 @@ struct ELFProgramHeader {
 i32 ELF_SECTION_TYPE_DATA         := 0x01
 i32 ELF_SECTION_TYPE_SYMBOL_TABLE := 0x02
 i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
+i32 ELF_SECTION_TYPE_HASH_TABLE   := 0x05
 i32 ELF_SECTION_TYPE_DYNAMIC      := 0x06
 i32 ELF_SECTION_TYPE_NODATA       := 0x08
+i32 ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE := 0x0B
 
 i64 ELF_SECTION_FLAGS_WRITE    := 0x01
 i64 ELF_SECTION_FLAGS_ALLOCATE := 0x02
@@ -114,7 +116,7 @@ i16 ELF_SHN_ABS := 0xFFF1 As i16
 i16 ELF_SHN_COMMON := 0xFFF2 As i16
 
 struct ELFSymbol unaligned {
-	i32 Name
+	i32 NameOffset
 	i8 Info
 	i8 Other
 	i16 SectionIndex
@@ -248,6 +250,63 @@ struct ELFSectionReference {
 		this->To := To
 
 		return this
+	}
+}
+
+define i32 ELFHash(i8* Name) {
+	i64 Result := 0
+	i64 Temporary := 0
+
+	for (i32 Index := 0, Index < StringLength(Name), Index++) {
+		Result := (Result << 4) + Name[Index]
+		Temporary := Result & 0xF000_0000
+
+		if (Temporary) {
+			Result ^= Temporary >> 24
+		}
+
+		Result &= ~Temporary
+	}
+
+	return (Result & 0xFFFF_FFFF) As i32
+}
+
+struct ELFSymbolHashTable {
+	i32 BucketCount
+	i32 ChainCount
+	i32* Buckets
+	i32* Chains
+
+	static self* New(i32 BucketCount, i32 ChainCount) {
+		self* this := Alloc(#self)
+
+		this->BucketCount := BucketCount
+		this->Buckets := Alloc(BucketCount * #i32)
+
+		this->ChainCount := ChainCount
+		this->Chains := Alloc(ChainCount * #i32)
+
+		return this
+	}
+
+	define void AddSymbol(i8* Name, i32 Index) {
+		i32 Hash := ELFHash(Name)
+		i32 Bucket := Hash % this->BucketCount
+
+		if (this->Buckets[Bucket]) {
+			this->Chains[Index] := this->Buckets[Bucket]
+		}
+
+		this->Buckets[Bucket] := Index
+	}
+
+	define i32 Size() {
+		return 4 + 4 + (this->BucketCount * 4) + (this->ChainCount * 4)
+	}
+	define void Serialize(void* Buffer) {
+		MoveMemory(Buffer, this, 8)
+		MoveMemory(Buffer + 8, this->Buckets, this->BucketCount * 4)
+		MoveMemory(Buffer + 8 + (this->BucketCount * 4), this->Chains, this->ChainCount * 4)
 	}
 }
 
@@ -434,7 +493,7 @@ struct ELFBuilder {
 
 		Symbols->Push(Result)
 
-		Result->Name := NameOffset
+		Result->NameOffset := NameOffset
 		Result->Type(SymbolType)
 		Result->Binding(ELF_STB_LOCAL)
 		Result->Visibility(ELF_STV_DEFAULT)
@@ -604,10 +663,39 @@ struct ELFBuilder {
 	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
 		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->DynamicSymbolTable, DynamicStrings, ".dynsym")
 
+		Section->Type := ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE
+
+		i32 SymbolCount := Section->ExtraInfo
+
 		this->AddDynamicDataSection(Section)
 
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMTAB, Section)
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMENT, Section->ExtraInfo)
+
+		
+		ELFSymbolHashTable* Hash := ELFSymbolHashTable:New(SymbolCount, SymbolCount)
+
+		for (i32 Index := 0, Index < SymbolCount, Index++) {
+			ELFSymbol* Next := this->DynamicSymbolTable->At(Index)
+
+			i8* Name := &this->DynamicStrings[Next->NameOffset]
+
+			Hash->AddSymbol(Name, Index)
+		}
+
+		i32 Size := Hash->Size()
+		void* Buffer := Alloc(Size)
+
+		Hash->Serialize(Buffer)
+
+		ELFSectionHeader* HashSection := this->AddDataSection(".hash", Buffer, Size)
+
+		HashSection->Type := ELF_SECTION_TYPE_HASH_TABLE
+		HashSection->AssociatedSectionIndex := this->SectionIndex(Section)
+
+		this->AddDynamicDataSection(HashSection)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_HASH, HashSection)
 	}
 
 	define void FinalizeDynamicSection() {
@@ -619,12 +707,16 @@ struct ELFBuilder {
 
 		i32 Size := this->DynamicSectionEntries->Count() * #ELFDynamicSectionEntry
 
+		ELFProgramHeader* LoadDynamic := this->AppendProgramHeader()
+
+		LoadDynamic->SegmentType := ELF_SEGMENT_TYPE_LOAD
+		LoadDynamic->Flags       := ELF_SEGMENT_FLAGS_READ
+
 		ELFProgramHeader* Dynamic := this->AppendProgramHeader()
 		
 		Dynamic->SegmentType := ELF_SEGMENT_TYPE_DYNAMIC
 		Dynamic->Flags       := ELF_SEGMENT_FLAGS_READ
-		Dynamic->FileSize    := Size
-		Dynamic->MemorySize  := Size
+		Dynamic->Sibling     := LoadDynamic
 
 		ELFDynamicSectionEntry* Entries := Alloc(Size)
 
@@ -634,8 +726,8 @@ struct ELFBuilder {
 		
 		ELFSectionHeader* DotDynamic := this->DotDynamic
 
-		Dynamic->Children->Push(DotDynamic)
-		DotDynamic->Parent := Dynamic
+		LoadDynamic->Children->Push(DotDynamic)
+		DotDynamic->Parent := LoadDynamic
 		
 		DotDynamic->VirtualAddress := Entries As i64
 		DotDynamic->FileSize := Size
