@@ -368,11 +368,9 @@ struct ELFBuilder {
 	PointerArray* ProgramHeaders ; <ELFProgramHeader*>
 	PointerArray* SectionHeaders ; <ELFSectionHeader*>
 
-	i32 Alignment
-
 	define i32 AlignmentNeeded(i32 Value) {
-		if (Value % this->Alignment) {
-			return this->Alignment - (Value % this->Alignment)
+		if (Value % 0x1000) {
+			return 0x1000 - (Value % 0x1000)
 		}
 
 		return 0
@@ -829,13 +827,6 @@ struct ELFBuilder {
 
 	static ELFBuilder* New(i8 ABI, i8 ABIVersion, i16 ProgramType) {
 		ELFBuilder* this := Alloc(#ELFBuilder)
-
-		if (ProgramType = ELF_FILETYPE_DYNAMIC) {
-			this->Alignment := 0x1000
-		}
-		else {
-			this->Alignment := 0x100
-		}
 
 		this->BufferSize := #ELFHeader
 		this->Buffer := Alloc(this->BufferSize)
