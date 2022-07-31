@@ -191,6 +191,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Config->ELFABI       := ELF_ABI_SYSTEMV
 			Config->LineEnding   := LINE_ENDING_CR
 		}
+		else if (StringEquals(NextOption, "--platform")) {
+			Config->PlatformName := ArgV[++Index]
+		}
 
 		
 		else if (StringEquals(NextOption, "--no-colors")) {

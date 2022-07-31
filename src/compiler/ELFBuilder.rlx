@@ -185,7 +185,8 @@ struct ELFDynamicSectionEntry {
 	}
 }
 
-i64 ELF_RELOCATION_TYPE_X64_GLOBAL := 6
+i64 ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE := 6
+i64 ELF_RELOCATION_TYPE_X64_BASE_RELATIVE := 8
 
 struct ELFRelocation {
 	i64 Offset
@@ -746,7 +747,7 @@ struct ELFBuilder {
 	define void ReferenceDynamicSymbol(i32 CodeOffset, i32 SymbolIndex) {
 		i32 Index := this->DynamicRelocations->Count()
 
-		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL, SymbolIndex))
+		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE, SymbolIndex))
 
 		this->ReferenceSection(this->DynamicRelocationSection, Index * #ELFRelocation, this->CodeSectionHeader)
 	}

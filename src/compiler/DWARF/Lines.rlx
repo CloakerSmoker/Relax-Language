@@ -182,7 +182,9 @@ struct DWARFLineProgramBuilder {
 		this->CurrentFileIndex := 1
 		this->CurrentOffset := 0
 		
-		this->EmitSetAddress(this->ImageBase)
+		if (this->ImageBase != 0) {
+			this->EmitSetAddress(this->ImageBase)
+		}
 	}
 	
 	define void Serialize(DWARFStream* Stream) {

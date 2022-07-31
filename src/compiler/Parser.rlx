@@ -12,7 +12,12 @@ i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
 struct VariableInfo {
 	ErrorContext* DefinedAt,
-	ASTNode* LastValue,
+	
+	union {
+		ASTNode* LastValue
+		SafeString* ExternalSymbolName
+	}
+
 	SafeString* Name,
 	Type Type,
 
@@ -1676,24 +1681,56 @@ struct ParserState {
 					this->ExternalSources->Push(ExternalSource)
 				}
 
-				Type ExternalType := this->ParseType(false)
-				Token* ExternalName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected 'external' name")
+				i8 Multiple := false
 
-				VariableInfo* External := Alloc(#VariableInfo)
+				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+					Multiple := true
+				}
 
-				External->Name := ExternalName->StringValue
-				External->Type := ExternalType
-				External->IsGlobal := true
-				External->IsExternal := true
+				loop {
+					Token* SymbolName := this->PeekNextToken()
 
-				; Artificial because I really don't want to have to deal with this
-				External->GetCount := 2
-				External->SetCount := 2
-				
-				this->AddVariable(External, ExternalName)
+					if (SymbolName->Is(TOKEN_TYPE_STRING)) {
+						this->GetNextToken()
+					}
+					else {
+						SymbolName := null
+					}
 
-				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
-					this->GetCurrentTokenContext()->Error("'external' variables cannot be assigned")
+					Type ExternalType := this->ParseType(false)
+					Token* ExternalName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected 'external' name")
+
+					if !(SymbolName) {
+						SymbolName := ExternalName
+					}
+
+					VariableInfo* ExternalVariable := Alloc(#VariableInfo)
+
+					ExternalVariable->Name := ExternalName->StringValue
+					ExternalVariable->ExternalSymbolName := SymbolName->StringValue
+					ExternalVariable->Type := ExternalType
+					ExternalVariable->IsGlobal := true
+					ExternalVariable->IsExternal := true
+
+					; Artificial because I really don't want to have to deal with this
+					ExternalVariable->GetCount := 2
+					ExternalVariable->SetCount := 2
+					
+					this->AddVariable(ExternalVariable, ExternalName)
+
+					if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
+						this->GetCurrentTokenContext()->Error("'external' variables cannot be assigned")
+					}
+
+					if !(Multiple) {
+						break
+					}
+
+					if (Multiple && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+						break
+					}
+
+					this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 				}
 			}
 			else {

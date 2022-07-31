@@ -138,7 +138,10 @@ struct CompilerState {
 			this->DWARF->LineInfo->AddFile(AbsoluteSourceFile)
 			
 			this->DWARF->LineInfo->SetImageBase(Config->ImageBase)
-			this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
+
+			if (Config->ImageBase != 0) {
+				this->DWARF->LineInfo->EmitSetAddress(Config->ImageBase)
+			}
 		}
 		
 		VariableHashMap* Globals := this->Parser~>Globals
@@ -823,10 +826,10 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 	else if (TargetVariable->IsExternal) {
 		if (TargetVariable->SymbolNumber = -1) {
 			if (TypeIsCallable(TargetVariable->Type)) {
-				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicFunctionSymbol(TargetVariable->Name->Buffer)
+				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicFunctionSymbol(TargetVariable->ExternalSymbolName->Buffer)
 			}
 			else {
-				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicGlobalSymbol(TargetVariable->Name->Buffer)
+				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicGlobalSymbol(TargetVariable->ExternalSymbolName->Buffer)
 			}
 		}
 
