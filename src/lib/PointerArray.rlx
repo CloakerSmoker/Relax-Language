@@ -1,0 +1,145 @@
+#Require "$/Memory.rlx"
+
+struct PointerArray {
+	union {
+		void** Data
+		void* Buffer
+	}
+	
+	i32 Length
+	i32 Capacity
+	
+	define void Initialize() {
+		this->Buffer := Alloc(0x20)
+		this->Capacity := 4
+	}
+	
+	static PointerArray* New() {
+		PointerArray* this := Alloc(#PointerArray)
+		
+		this->Initialize()
+		
+		return this
+	}
+	
+	define void EnsureCapacity(i32 MaxIndex) {
+		if (MaxIndex > this->Capacity) {
+			this->Capacity := MaxIndex + 4
+			
+			this->Buffer := ReAlloc(this->Buffer, this->Capacity * #void*)
+		}
+	}
+	
+	define i32 Length() {
+		return this->Length
+	}
+	define i32 Count() {
+		return this->Length
+	}
+	define void* Get(i32 Index) {
+		return this->Data[Index]
+	}
+	define void* At(i32 Index) {
+		return this->Data[Index]
+	}
+	
+	define void Set(i32 Index, void* Value) {
+		this->Data[Index] := Value
+	}
+	define void Append(void* Value) {
+		this->EnsureCapacity(this->Length + 1)
+		this->Data[this->Length++] := Value
+	}
+	define void Push(void* Value) {
+		this->Append(Value)
+	}
+
+	define void Insert(i32 Index, void* Value) {
+		this->EnsureCapacity(this->Length + 1)
+
+		i32 Space := this->Length - Index
+
+		MoveMemory(&this->Data[Index + 1], &this->Data[Index], Space * #void*)
+
+		this->Data[Index] := Value
+		this->Length += 1
+	}
+	define void* Remove(i32 Index) {
+		i32 Space := this->Length - Index
+
+		void* Old := this->Data[Index]
+		MoveMemory(&this->Data[Index], &this->Data[Index + 1], Space * #void*)
+
+		this->Length -= 1
+
+		return Old
+	}
+
+	define void* Last() {
+		return this->At(this->Length - 1)
+	}
+	define void* Pop() {
+		i32 Index := this->Length - 1
+
+		void* Result := this->At(Index)
+		this->Remove(Index)
+
+		return Result
+	}
+	define void RemoveValue(void* Value) {
+		for (i32 Index := 0, Index < this->Length, Index++) {
+			if (this->Data[Index] = Value) {
+				this->Remove(Index)
+				break
+			}
+		}
+	}
+
+	define i32 Find(void* Value) {
+		for (i32 Index := 0, Index < this->Length, Index++) {
+			if (this->Data[Index] = Value) {
+				return Index
+			}
+		}
+
+		return -1
+	}
+
+	define i8 Has(void* Value) {
+		return this->Find(Value) != -1
+	}
+
+	define void Add(void* Value) {
+		if !(this->Has(Value)) {
+			this->Push(Value)
+		}
+	}
+
+	define void Swap(i32 Left, i32 Right) {
+		void* L := this->Data[Left]
+		void* R := this->Data[Right]
+
+		this->Data[Left] := R
+		this->Data[Right] := L
+	}
+
+	define void Clear() {
+		this->Length := 0
+	}
+
+	define PointerArray* Clone() {
+		PointerArray* Result := Alloc(#PointerArray)
+
+		Result->Length := this->Length
+		Result->Capacity := this->Length
+		Result->Buffer := Alloc(this->Length * 8)
+
+		MoveMemory(Result->Buffer, this->Buffer, this->Length * 8)
+
+		return Result
+	}
+
+	define void Free() {
+		Free(this->Buffer)
+	}
+}
