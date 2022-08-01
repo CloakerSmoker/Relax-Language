@@ -2,67 +2,108 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Compile",
+      "label": "Build Compiler",
       "type": "shell",
       "linux": {
-        "command": "build/compiler.elf",
+        "command": "build/linux_compiler.elf",
         "args": [
+          "--linux",
+          "-i",
+          "src/compiler/Main.rlx",
+          "-o",
+          "build/linux_compiler.elf"
+        ]
+      },
+      "windows": {
+        "command": "build\\windows_compiler.exe",
+        "args": [
+          "--windows",
+          "-i",
+          "src\\compiler\\Main.rlx",
+          "-o",
+          "build\\windows_compiler.exe"
+        ]
+      },
+      "group": "build"
+    },
+    {
+      "label": "Build Current File",
+      "type": "shell",
+      "linux": {
+        "command": "build/linux_compiler.elf",
+        "args": [
+          "--linux",
+          "-i",
           "${relativeFile}",
+          "-o",
           "${relativeFileDirname}/${fileBasenameNoExtension}"
         ]
       },
       "windows": {
-        "command": "build\\compiler.exe",
+        "command": "build\\windows_compiler.exe",
         "args": [
+          "--windows",
+          "-i",
           "${relativeFile}",
+          "-o",
           "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
         ]
       },
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": []
+      "group": "build",
     },
     {
-      "label": "Compile and run",
+      "label": "Build Current File, then Run It",
       "type": "shell",
-      "dependsOn": ["Compile"],
+      "dependsOn": [
+        "Compile Current File"
+      ],
       "linux": {
         "command": "${relativeFileDirname}/${fileBasenameNoExtension}"
       },
       "windows": {
         "command": "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
       },
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": []
+      "group": "build"
     },
     {
-      "label": "Compile and run with arguments",
+      "label": "Build Compiler, then Build Current File",
       "type": "shell",
-      "dependsOn": ["Compile"],
+      "dependsOn": "Build Compiler",
+      "linux": {
+        "command": "build/linux_compiler.elf",
+        "args": [
+          "--linux",
+          "-i",
+          "${relativeFile}",
+          "-o",
+          "${relativeFileDirname}/${fileBasenameNoExtension}"
+        ]
+      },
+      "windows": {
+        "command": "build\\windows_compiler.exe",
+        "args": [
+          "--windows",
+          "-i",
+          "${relativeFile}",
+          "-o",
+          "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
+        ]
+      },
+      "group": "build",
+    },
+    {
+      "label": "Build compiler, then Build Current File, then Run It",
+      "type": "shell",
+      "dependsOn": [
+        "Build Compiler, then Build Current File"
+      ],
       "linux": {
         "command": "${relativeFileDirname}/${fileBasenameNoExtension}"
       },
       "windows": {
         "command": "${relativeFileDirname}\\${fileBasenameNoExtension}.exe"
       },
-      "args": ["${input:args}"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": []
-    }
-  ],
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "args",
-      "description": "Additional commandline arguments."
-    }
+      "group": "build"
+    },
   ]
 }
