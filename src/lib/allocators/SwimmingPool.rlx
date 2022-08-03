@@ -84,7 +84,17 @@ struct SwimmingPoolAllocator {
 			}
 		}
 		
-		PageAllocation:Find(Where)->Free()
+		PageAllocation* Pages := PageAllocation:Find(Where)
+
+		if !(Pages) {
+			return
+		}
+
+		if (Pages = this->FirstPageAllocation) {
+			this->FirstPageAllocation := Pages->Next
+		}
+
+		Pages->Free()
 	}
 	
 	define void GetUsage(AllocatorUsage* Out) {
