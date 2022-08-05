@@ -967,7 +967,7 @@ struct ELFBuilder {
 		if (this->DataProgramHeader) {
 			; Update the data segment/section. Todo: If 1kb of globals are used, push the code segment back
 			this->DataProgramHeader->VirtualAddress := ImageBase + 0x1000
-			;this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
+			this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
 			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
 		}
 		
@@ -1001,7 +1001,7 @@ struct ELFBuilder {
 		this->Header->EntryPoint := EntryPoint
 		this->CodeProgramHeader->FileOffset := CodeOffset
 		this->CodeProgramHeader->VirtualAddress := CodeBase
-		;this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
+		this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
 		this->CodeSectionHeader->FileOffset := CodeOffset
 		this->CodeSectionHeader->VirtualAddress := CodeBase
 		
@@ -1025,7 +1025,7 @@ struct ELFBuilder {
 		i32 Index := 0
 
 		while (this->ProgramHeaders->Count() != 0) {
-			i64 Score := 0x7FFF_FFFF
+			i64 Score := 0x7FFF_FFFF_FFFF_FFFF
 			ELFProgramHeader* Best := null
 
 			for (i32 Inner := 0, Inner < this->ProgramHeaders->Count(), Inner += 1) {
@@ -1036,14 +1036,15 @@ struct ELFBuilder {
 					break
 				}
 
-				i32 NextScore := Next->VirtualAddress As i32
+				i64 NextScore := Next->VirtualAddress
 
 				if (NextScore = 0) {
-					NextScore := 0x3FFF_FFFF
-				}
-
-				if (Next->Sibling && Next->Sibling->VirtualAddress = 0) {
-					NextScore := 0x6FFF_FFFF
+					if (Next->Sibling && !Next->Sibling->VirtualAddress) {
+						NextScore := 0x6FFF_FFFF_FFFF_FFFF
+					}
+					else {
+						NextScore := 0x3FFF_FFFF_FFFF_FFFF
+					}
 				}
 
 				if (NextScore < Score) {
@@ -1061,11 +1062,12 @@ struct ELFBuilder {
 					Best->VirtualAddress := Best->Sibling->VirtualAddress
 					Best->MemorySize := Best->Sibling->MemorySize
 
-					Best->Sibling := null
+					Best->PhysicalAddress := Best->Sibling->PhysicalAddress
 				}
 				else {
 					Best->FileOffset := NextDataSectionOffset
 					Best->VirtualAddress := NextDataSectionAddress
+					Best->PhysicalAddress := Best->VirtualAddress - ImageBase + PhysicalImageBase
 				}
 
 				i32 ChildCount := Best->Children->Count()
