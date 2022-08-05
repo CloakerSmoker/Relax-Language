@@ -225,6 +225,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 	}
 
+	FileDelete(OutputFilePath)
+
 	if !(Config->DumpInfo & DUMP_SILENT) {
 		Print("Input File: '%s'\n", InputFilePath)
 		Print("Output File: '%s'\n", OutputFilePath)

@@ -1,4 +1,4 @@
-#Require ./src/lib/Console.rlx
+#Require "$/Console.rlx"
 
 /* E: 0 */
 define void Conflict(i32 Q) {

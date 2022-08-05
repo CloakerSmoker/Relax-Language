@@ -1,12 +1,19 @@
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
+
+/*
+ARGS: 123 -20 10000000000
+*/
 
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
-	i64 N := AToI(ArgV[1])
-	
-	Print(N + 1)
+	for (i32 Index := 1, Index < ArgC, Index++) {
+		i64 N := AToI(ArgV[Index])
+		
+		Print(N + 1)
+		Print(" ")
+	}
 	
 	return 0
 }

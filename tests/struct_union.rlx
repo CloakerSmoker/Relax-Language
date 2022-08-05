@@ -1,5 +1,9 @@
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
+
+/*
+ARGS: 1234567891112 1 -10 -1234567891011
+*/
 
 struct Test {
 	union {
@@ -10,21 +14,24 @@ struct Test {
 	}
 }
 
-
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
 	Test* T := Alloc(#Test)
 	
-	T->LL := AToI(ArgV[1])
+	for (i32 Index := 1, Index < ArgC, Index++) {
+		T->LL := AToI(ArgV[Index])
 	
-	Print(T->B)
-	PrintCharacter(' ')
-	Print(T->S)
-	PrintCharacter(' ')
-	Print(T->L)
-	PrintCharacter(' ')
-	Print(T->LL)
+		Print(T->B)
+		PrintCharacter(' ')
+		Print(T->S)
+		PrintCharacter(' ')
+		Print(T->L)
+		PrintCharacter(' ')
+		Print(T->LL)
+		
+		Print(" ")
+	}
 	
 	return 0
 }

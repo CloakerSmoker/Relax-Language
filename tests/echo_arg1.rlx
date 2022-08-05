@@ -1,4 +1,8 @@
-#Require ./src/lib/Console.rlx
+#Require "$/Console.rlx"
+
+/*
+ARGS: abc def
+*/
 
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)

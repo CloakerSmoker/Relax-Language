@@ -1,5 +1,5 @@
-#Require ./src/lib/Memory.rlx
-#Require ./src/lib/Console.rlx
+#Require "$/Memory.rlx"
+#Require "$/Console.rlx"
 
 struct Test {
 	i64 Value,

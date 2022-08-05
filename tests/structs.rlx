@@ -2,9 +2,13 @@ define void* Alloc(i64 A, void** B) {
 	return 0 as void*
 }
 
-#Require ./src/lib/Memory.rlx
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
+#Require "$/Memory.rlx"
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
+
+/*
+ARGS: 100 20 30000 400 0 0 -10 -10 -1000000 0
+*/
 
 struct Test {
 	i8 A,
@@ -28,27 +32,34 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
 	
 	Test* T := Alloc(#Test)
-	
-	T.C := AToI(ArgV[1])
-	
-	T.A := AToI(ArgV[2]) As i8
-	
-	i64 Dummy := 64
-	
-	Print("%i %i,", T->C, T.A)
-	
-	Test A
-	
-	A.B := T->A
-	A.D := T.C As i32
-	
-	i64 DummyTwo := 90
-	
-	Print("%i %i,%i", A.B, A.D, &T->C = T~>C)
-	
-	Test* Q := &A
-	
-	Print("%i%i", Q~>A = (&A)~>A, Q~>A = T~>A)
+
+	i64 Count := (ArgC - 1) / 2
+
+	for (i64 Index := 0, Index < Count, Index++) {
+		i64 Start := (Index * 2) + 1
+
+		T.C := AToI(ArgV[Start + 0])
+		T.A := AToI(ArgV[Start + 1]) As i8
+		
+		i64 Dummy := 64
+		
+		Print("%i %i,", T->C, T.A)
+		
+		Test A
+		
+		A.B := T->A
+		A.D := T.C As i32
+		
+		i64 DummyTwo := 90
+		
+		Print("%i %i,%i", A.B, A.D, &T->C = T~>C)
+		
+		Test* Q := &A
+		
+		Print("%i%i", Q~>A = (&A)~>A, Q~>A = T~>A)
+
+		Print(" ")
+	}
 	
 	return 0
 }

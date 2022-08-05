@@ -1,4 +1,4 @@
-#Require ./src/lib/Console.rlx
+#Require "$/Console.rlx"
 
 bits Example As i32 {
 	[0:10] test,

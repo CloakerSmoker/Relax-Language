@@ -1,14 +1,13 @@
-#Require ./src/lib/String.rlx
-#Require ./src/lib/Console.rlx
-#Require ./src/lib/File.rlx
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
+#Require "$/File.rlx"
+
+/*
+ARGS: test.txt "hello world!"
+*/
 
 define i32 Main(i64 ArgC, i8** ArgV) {
 	GetArgs(&ArgC, &ArgV)
-	
-	if (ArgC != 3) {
-		Print("Wrong argc")
-		return 0
-	}
 	
 	i8* FilePath := ArgV[1]
 	i8* TextToWrite := ArgV[2]

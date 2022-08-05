@@ -1,5 +1,9 @@
 #Require "$/ConsoleBase.rlx"
 
+/*
+ARGS: asdiuasodi asidohaowid sadkj blah blah
+*/
+
 define i32 Main() {
 	PrintCharacters("This is a basic test", StringLength("This is a basic test"))
 	

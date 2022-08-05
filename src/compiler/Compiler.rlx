@@ -591,8 +591,6 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Print("\t^10Globals use %i bytes\n\t%i total bytes of code generated.\n\t%i total functions compiled.^F0\n", Parser~>Globals->NextOffset, Compiler->Index, Compiler->FunctionCount)
 	}
 	
-	FileDelete(OutputFilePath)
-	
 	/* Actual compiling is done, time to build the output file */
 	
 	i64 OutputFileHandle := FileOpen(OutputFilePath, FILE_READ | FILE_WRITE | FILE_CREATE_NEW)
