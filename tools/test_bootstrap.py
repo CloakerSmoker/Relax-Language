@@ -8,6 +8,9 @@ from shutil import rmtree
 from shutil import move
 from colorama import init, Fore, Back, Style
 from difflib import SequenceMatcher
+
+from tap.parser import Parser as TAPParser
+
 import argparse
 
 # Uses stable_version.exe to compile the most recent version of the source, and then 
@@ -67,14 +70,37 @@ for i in range(0, recursion_count):
         sys.exit(1)
 
     test_script = path_join(tools_dir, 'test_compiler.py')
-    test_command = f'{python} {test_script} {compiler_output}'
+    test_command = f'{python} -m turnt -j -e {running_on.lower()} tests/*.rlx'
 
-    test_result = subprocess.run(test_command, cwd=cwd, shell=True, capture_output=True)
-    stderr_text = test_result.stderr.decode('UTF-8')
+    test_result = subprocess.run(test_command, cwd=cwd, shell=True, capture_output=True, env={**os.environ, 'RLX': compiler_output})
+    
+    stdout_text = test_result.stdout.decode('UTF-8')
 
-    if len(stderr_text):
-        print(f'{Fore.LIGHTRED_EX}Output file iteration {i + 1} failed 1+ test:\n{stderr_text}', file=sys.stderr)
-        #os.remove(compiler_output)
+    p = TAPParser()
+
+    fails = []
+    passes = []
+    
+    for line in p.parse_text(stdout_text):
+        if line.category == 'test':
+            if line.ok:
+                passes.append(line)
+            else:
+                fails.append(line)
+    
+    if len(fails) != 0:
+        print(f'{Fore.LIGHTRED_EX}While testing: {Fore.LIGHTWHITE_EX}{compile_command}{Fore.RESET}')
+
+        print(f'{Fore.LIGHTRED_EX}{len(passes)} / {len(passes) + len(fails)}{Fore.RESET} tests passed')
+
+        for fail in fails:
+            print(f'{Fore.LIGHTRED_EX}{fail.number} {fail.description}{Fore.RESET} failed')
+            
+            fail_file = fail.description[2:-len(running_on)-1]
+            compiler_rel = os.path.relpath(compiler_output, os.getcwd())
+
+            print(f'{Fore.LIGHTMAGENTA_EX}env RLX={compiler_rel} turnt -e {running_on.lower()} {fail_file} -p{Fore.RESET}')
+    
         sys.exit(1)
     
     safe_bytes = open(safe_compiler, "rb").read()
