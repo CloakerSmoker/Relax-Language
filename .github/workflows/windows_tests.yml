@@ -33,9 +33,8 @@ jobs:
         token: ${{ github.token }}
     - name: Install dependencies
       run: |
-        pip install colorama
-    # Apparently some fucking genius decided that $GITHUB_WORKSPACE shouldn't be correct, hopefully this is always on the D drive.
+        pip install colorama turnt tap.py
     - name: Run Tests
       run: |
         cd D:\a\Relax-Language\Relax-Language
-        python .\tools\test_bootstrap.py 5
+        python .\tools\bootstrap.py 5

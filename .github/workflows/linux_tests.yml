@@ -33,9 +33,9 @@ jobs:
         token: ${{ github.token }}
     - name: Install dependencies
       run: |
-        pip install colorama
+        pip install colorama turnt tap.py
     - name: Run Tests
       run: |
         cd $GITHUB_WORKSPACE
         chmod +x ./build/linux_compiler.elf
-        python ./tools/test_bootstrap.py 5
+        python ./tools/bootstrap.py 5
