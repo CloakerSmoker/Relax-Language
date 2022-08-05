@@ -1,2 +1,0 @@
-:Wrong argc
-"file_test.test" "abcdefg 123":abcdefg 123

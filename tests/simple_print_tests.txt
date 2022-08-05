@@ -1,3 +1,0 @@
-:This is a basic test
-It takes no input:This is a basic test
-It will ignore all of this:This is a basic test
