@@ -144,6 +144,43 @@ bits TACAddress As i64 {
 			;Print("_l")
 		}
 	}
+
+	define void PrintGraphViz(i8 ShowRegisterNumber) {
+		if (this = 0) {
+			return
+		}
+
+		if (this->Web) {
+			Print("[%i]", this->Web)
+		}
+		
+		if (this->Is(TACAddressKind:Integer)) {
+			Print("%i", this->Integer)
+		}
+		else {
+			if (this->Is(TACAddressKind:Variable)) {
+				this->Variable->Base->Name->Print()
+				
+			}
+			else if (this->Is(TACAddressKind:Temporary)) {
+				i32 RegisterNumber := GetTripleRegisterNumber(this->TemporaryTriple)
+
+				if (ShowRegisterNumber && RegisterNumber != -1) {
+					Print("r%i", RegisterNumber)
+				}
+				else {
+					Print("@%i", GetTripleNumber(this->TemporaryTriple))
+				}
+			}
+		}
+		
+		if (this->Size = TACAddressSize:Word) {
+			;Print("_w")
+		}
+		else {
+			;Print("_l")
+		}
+	}
 }
 
 TACAddress TAC_ADDRESS_NULL := 0 As TACAddress
@@ -163,6 +200,21 @@ PrintFormatPrototype AddressPrintPrototype {
 
 i32 ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&AddressPrintPrototype)
 
+define void DoGraphVizAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
+	
+	Address->PrintGraphViz(false)
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype GraphVizAddressPrintPrototype {
+	Name: "ga",
+	Format: &DoGraphVizAddressPrint
+}
+
+i32 GRAPH_VIZ_ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&GraphVizAddressPrintPrototype)
+
 define void DoOperandAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
 	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
 	
@@ -177,6 +229,22 @@ PrintFormatPrototype OperandAddressPrintPrototype {
 }
 
 i32 OPERAND_ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&OperandAddressPrintPrototype)
+
+define void DoGraphVizOperandAddressPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	TACAddress Address := Parameters[*ParameterIndex] As TACAddress
+	
+	Address->PrintGraphViz(true)
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype GraphVizOperandAddressPrintPrototype {
+	Name: "go",
+	Format: &DoGraphVizOperandAddressPrint
+}
+
+i32 GRAPH_VIZ_OPERAND_ADDRESS_PRINT_PROTOTYPE_ID := AddPrintFormat(&GraphVizOperandAddressPrintPrototype)
+
 
 ;i32 TAC_MOVE := 0
 
@@ -547,8 +615,42 @@ struct TACTriple {
 	define i8 RightRegister() {
 		return this->Right->TemporaryTriple->ResultRegister() As i8
 	}
-
+	
 	define void Print() {
+		if (this->InstructionCode != 0) {
+			Print("[%i] ", this->InstructionCode)
+		}
+
+		if (this->Interval()->RegisterNumber != -1) {
+			Print("r%i := ", this->Interval()->RegisterNumber)
+		}
+
+		if (this->Is(TAC_PHI)) {
+			Print("phi(%s)\t", this->Phi->Name)
+
+			if (this->Phi->Web) {
+				Print("[%i]", this->Phi->Web)
+			}
+
+			for (i32 Index := 0, Index < this->Phi->Count(), Index++) {
+				TACPhiDefinition* Next := this->Phi->At(Index)
+				
+				Print("\t%i: %a", Next->BlockNumber, Next->Address)
+
+				if (Index + 1 != this->Phi->Count()) {
+					Print(",")
+				}
+			}
+		}
+		else if (this->Right) {
+			Print("%s\t%o,\t%o", GetOpcodeName(this->Opcode), this->Left, this->Right)
+		}
+		else {
+			Print("%s\t%o", GetOpcodeName(this->Opcode), this->Left)
+		}
+	}
+
+	define void PrintGraphViz() {
 		if (this->InstructionCode != 0) {
 			Print("[%i] ", this->InstructionCode)
 		}
@@ -757,7 +859,7 @@ struct TACBlock {
 				for (i32 UseIndex := 0, UseIndex < UseCount, UseIndex++) {
 					TACAddress NextUse := Next~>Uses->At(UseIndex) As TACAddress
 
-					Print(" %a", NextUse)
+					Print(" %ga", NextUse)
 				}
 
 				Print("\\l")
@@ -774,7 +876,7 @@ struct TACBlock {
 			}
 
 			Print("\t%i:\t", Next->Number)
-			Next->Print()
+			Next->PrintGraphViz()
 			Print("\\l")
 		}
 

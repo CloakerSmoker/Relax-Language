@@ -10,8 +10,6 @@
 
 #Require "$/AVLTree.rlx"
 
-#Require "./src/compiler/IR2/PointerArray.rlx"
-
 #Require "./src/compiler/Utility.rlx"
 #Require "./src/compiler/Lexer.rlx"
 #Require "./src/compiler/Parser.rlx"
@@ -289,3 +287,153 @@ define void Main(i64 ArgC, i8** ArgV) {
 
 	;*/
 }
+
+
+/*
+
+function highlight(e, color) {
+	let bbox = e.getBBox();
+	
+	let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", bbox.x);
+    rect.setAttribute("y", bbox.y);
+    rect.setAttribute("width", bbox.width);
+    rect.setAttribute("height", bbox.height);
+    rect.setAttribute("fill", color);
+    e.parentElement.before(rect);
+	
+	return rect;
+}
+
+function unhighlight_all(selector) {
+	document.querySelectorAll(selector).forEach(e => {
+		if (e.highlight) {
+			e.highlight.remove();
+		}
+	})
+}
+
+const cyrb53 = function(str, seed = 0) {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0, ch; i < str.length; i++) {
+        ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1>>>0);
+};
+
+var stringToColour = function(str) {
+	var hash = cyrb53(str);
+	var colour = '#';
+	for (var i = 0; i < 3; i++) {
+		var value = (hash >> (i * 8)) & 0xFF;
+		colour += ('00' + value.toString(16)).substr(-2);
+	}
+	return colour;
+}
+
+function highlight_all(selector) {
+	document.querySelectorAll(selector).forEach(e => {
+		if (e.highlight) {
+			e.highlight.remove();
+		}
+	
+		e.highlight = highlight(e, stringToColour(selector))
+	})
+}
+
+let all_selectors = {};
+
+function highlight_hover(e, selector) {
+	all_selectors[selector] = true;
+
+	e.onmouseenter = function() {
+		highlight_all(selector);
+	};
+	e.onmouseleave = function() {
+		unhighlight_all(selector);
+	};
+}
+
+function highlight_hover_all(selector) {
+	document.querySelectorAll(selector).forEach(e => {
+		highlight_hover(e, selector);
+	})
+}
+
+function text_to_spans(e) {
+	let text = e.textContent;
+	e.textContent = '';
+
+	text.split(' ').forEach(s => {
+		e.appendChild(document.createTextNode(' '))
+
+		let tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+		tspan.textContent = s;
+		e.appendChild(tspan);
+	});
+}
+
+function classify(e) {
+	let text = e.textContent.trim();
+	let match;
+
+	if (match = text.match(/(\d+):/)) {
+		let cls = 't' + match[1]
+
+		e.classList.add(cls);
+		highlight_hover(e, '.' + cls);
+	}
+	else if (match = text.match(/(\w+):/)) {
+		let cls = 'v' + match[1]
+
+		e.classList.add(cls);
+		highlight_hover(e, '.' + cls);
+	}
+	else if (match = text.match(/@(\d+)/)) {
+		let cls = 't' + match[1]
+
+		e.classList.add(cls);
+		highlight_hover(e, '.' + cls);
+	}
+	else if (match = text.match(/r(\d+)/)) {
+		let cls = 'r' + match[1]
+
+		e.classList.add(cls);
+		highlight_hover(e, '.' + cls);
+	}
+}
+
+function replace(e) {
+	text_to_spans(e);
+	
+	e.childNodes.forEach(e => {
+		classify(e);
+	});
+}
+
+function doit(e) {
+	let title = true;
+	let defs = false;
+	let defs_body = false;
+	let uses = false;
+	let uses_body = false;
+	let body = false;
+
+	e.childNodes.forEach(c => {
+		if (c.tagName == "text") {
+			let anchor = c.getAttribute('text-anchor');
+
+			if (anchor != 'middle') {
+				replace(c);
+			}
+		}
+	})
+}
+
+document.querySelectorAll('.node').forEach(doit);
+
+*/
