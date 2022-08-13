@@ -342,13 +342,13 @@
 					Active->Remove(Index)
 					Handled->Push(ActiveInterval)
 
-					Free->Set(ActiveInterval->RegisterNumber)
+					Free->Set(ActiveInterval->RegisterNumber())
 				}
 				else if !(ActiveInterval->Contains(Current->Start())) {
 					Active->Remove(Index)
 					Inactive->Push(ActiveInterval)
 
-					Free->Set(ActiveInterval->RegisterNumber)
+					Free->Set(ActiveInterval->RegisterNumber())
 				}
 			}
 
@@ -362,7 +362,7 @@
 					Inactive->Remove(Index)
 					Active->Push(InactiveInterval)
 
-					Free->Clear(InactiveInterval->RegisterNumber)
+					Free->Clear(InactiveInterval->RegisterNumber())
 				}
 			}
 
@@ -372,15 +372,15 @@
 				TACInterval* InactiveInterval := Inactive->At(Index)
 
 				if (InactiveInterval->Overlaps(Current)) {
-					Potential->Clear(InactiveInterval->RegisterNumber)
+					Potential->Clear(InactiveInterval->RegisterNumber())
 				}
 			}
 			
 			for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
 				TACInterval* UnhandledInterval := Unhandled->At(Index)
 
-				if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->Overlaps(Current)) {
-					Potential->Clear(UnhandledInterval->RegisterNumber)
+				if (UnhandledInterval->Storage->Is(TAC_PHYSICAL_STORAGE_KIND_REGISTER) && UnhandledInterval->Overlaps(Current)) {
+					Potential->Clear(UnhandledInterval->RegisterNumber())
 				}
 			}
 
@@ -393,7 +393,7 @@
 					TACInterval* Next := Active->At(Index)
 					
 					if (Next->Overlaps(Current)) {
-						RegisterWeights[Next->RegisterNumber] += Next->Weight
+						RegisterWeights[Next->RegisterNumber()] += Next->Weight
 					}
 				}
 
@@ -401,15 +401,15 @@
 					TACInterval* Next := Inactive->At(Index)
 
 					if (Next->Overlaps(Current)) {
-						RegisterWeights[Next->RegisterNumber] += Next->Weight
+						RegisterWeights[Next->RegisterNumber()] += Next->Weight
 					}
 				}
 
 				for (i32 Index := 0, Index < Unhandled->Count(), Index++) {
 					TACInterval* UnhandledInterval := Unhandled->At(Index)
 
-					if (UnhandledInterval->RegisterNumber != -1 && UnhandledInterval->Overlaps(Current)) {
-						RegisterWeights[Next->RegisterNumber] += Next->Weight
+					if (UnhandledInterval->Storage->Is(TAC_PHYSICAL_STORAGE_KIND_REGISTER) && UnhandledInterval->Overlaps(Current)) {
+						RegisterWeights[Next->RegisterNumber()] += Next->Weight
 					}
 				}
 
@@ -424,7 +424,7 @@
 				}
 
 				if (Best != -1 && Current->Weight < BestWeight) {
-					Current->RegisterNumber := NextMemorySlot++
+					Current->Storage := TACPhysicalStorage:Memory(NextMemorySlot++)
 					
 					Handled->Push(Current)
 				}
@@ -432,8 +432,8 @@
 					for (i32 Index := Active->Count() - 1, Index >= 0, Index--) {
 						TACInterval* Next := Active->At(Index)
 						
-						if (Next->RegisterNumber = Best) {
-							Next->RegisterNumber := NextMemorySlot++
+						if (Next->RegisterNumber() = Best) {
+							Next->Storage := TACPhysicalStorage:Memory(NextMemorySlot++)
 							
 							Active->Remove(Index)
 							Handled->Push(Next)
@@ -443,24 +443,24 @@
 					for (i32 Index := Inactive->Count() - 1, Index >= 0, Index--) {
 						TACInterval* Next := Inactive->At(Index)
 
-						if (Next->RegisterNumber = Best) {
-							Next->RegisterNumber := NextMemorySlot++
+						if (Next->RegisterNumber() = Best) {
+							Next->Storage := TACPhysicalStorage:Memory(NextMemorySlot++)
 
 							Inactive->Remove(Index)
 							Handled->Push(Next)
 						}
 					}
 
-					Current->RegisterNumber := Best
+					Current->Storage := TACPhysicalStorage:Register(Best)
 					Active->Push(Current)
 				}
 			}
 			else {
-				if (Current->RegisterNumber = -1) {
-					Current->RegisterNumber := Potential->First()
+				if !(Current->RegisterNumber()) {
+					Current->Storage := TACPhysicalStorage:Register(Potential->First())
 				}
 				
-				Free->Clear(Current->RegisterNumber)
+				Free->Clear(Current->RegisterNumber())
 				Active->Push(Current)
 			}
 		}
@@ -510,10 +510,10 @@
 					Block~>Body->RemoveValue(Triple)
 				}
 				else if (Triple->Is(TAC_MOVE) && Triple->Left->Is(TACAddressKind:Temporary)) {
-					i32 ResultRegister := Triple->Interval()->RegisterNumber
-					i32 OperandRegister := Triple->Left.TemporaryTriple->Interval()->RegisterNumber
+					TACPhysicalStorage Result := Triple->Storage()
+					TACPhysicalStorage Operand := Triple->Left.TemporaryTriple->Storage()
 
-					if (ResultRegister = OperandRegister) {
+					if (Result->Equals(Operand)) {
 						Block~>Body->RemoveValue(Triple)
 					}
 				}

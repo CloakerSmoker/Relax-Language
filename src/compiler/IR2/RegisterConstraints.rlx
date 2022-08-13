@@ -17,7 +17,7 @@
 		Clone->Free()
 		Free(Clone)
 
-		if (Left->RegisterNumber != -1) {
+		if (Left->Storage->HasValue()) {
 			for (i32 Index := 0, Index < Count, Index++) {
 				TACTriple* NextTriple := this->Triples->At(Index)
 				TACInterval* Next := NextTriple->Interval()
@@ -26,7 +26,7 @@
 					continue
 				}
 
-				if (Next->RegisterNumber = Left->RegisterNumber) {
+				if (Next->Storage->Equals(Left->Storage)) {
 					if (Next->Overlaps(Right)) {
 						return false
 					}
@@ -54,7 +54,7 @@
 		TACTriple* Left := this->Joined(RawLeft)
 		TACTriple* Right := this->Joined(RawRight)
 
-		if (Left->Interval()->RegisterNumber != Right->Interval()->RegisterNumber) {
+		if (Left->Storage()->Equals(Right->Storage())) {
 			return
 		}
 
@@ -97,7 +97,7 @@
 
 		TACTriple* Move := MoveAddress.TemporaryTriple
 
-		Move->Interval()->RegisterNumber := RegisterNumber
+		Move->Interval()->Storage := TACPhysicalStorage:Register(RegisterNumber)
 
 		i32 Index := Block~>Body->Find(Triple)
 
@@ -119,7 +119,7 @@
 		TACAddress MoveAddress := this->Emit(Block, TAC_MOVE, OldAddress)
 		TACTriple* Move := MoveAddress.TemporaryTriple
 
-		Triple->Interval()->RegisterNumber := RegisterNumber
+		Triple->Interval()->Storage := TACPhysicalStorage:Register(RegisterNumber)
 
 		i32 Index := Block~>Body->Find(Triple)
 		
@@ -144,7 +144,7 @@
 		TACAddress ClobberAddress := this->Emit(Block, TAC_CLOBBER, TAC_ADDRESS_NULL)
 		TACTriple* Clobber := ClobberAddress.TemporaryTriple
 
-		Clobber->Interval()->RegisterNumber := RegisterNumber
+		Clobber->Interval()->Storage := TACPhysicalStorage:Register(RegisterNumber)
 		
 		i32 Index := Block~>Body->Find(Triple)
 

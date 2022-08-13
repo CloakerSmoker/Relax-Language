@@ -25,8 +25,80 @@ struct TACVariable {
 	}
 }
 
+enum TAC_PHYSICAL_STORAGE_KIND {
+	NONE := 0,
+	REGISTER := 1,
+	MEMORY := 2
+}
+
+bits TACPhysicalStorage As i32 {
+	i32 [0:24] RegisterNumber
+	i32 [0:24] MemorySlot
+	TAC_PHYSICAL_STORAGE_KIND [24:25] Kind
+
+	static TACPhysicalStorage Register(i32 Number) {
+		TACPhysicalStorage this := 0 As TACPhysicalStorage
+
+		this->Kind := TAC_PHYSICAL_STORAGE_KIND_REGISTER
+		this->RegisterNumber := Number
+
+		return this
+	}
+
+	static TACPhysicalStorage Memory(i32 Slot) {
+		TACPhysicalStorage this := 0 As TACPhysicalStorage
+
+		this->Kind := TAC_PHYSICAL_STORAGE_KIND_MEMORY
+		this->MemorySlot := Slot
+
+		return this
+	}
+
+	define i8 HasValue() {
+		return this->Kind != TAC_PHYSICAL_STORAGE_KIND_NONE
+	}
+
+	define i8 Equals(TACPhysicalStorage Other) {
+		if (this->Kind != Other->Kind) { 
+			return true
+		}
+		
+		return this->RegisterNumber = Other->RegisterNumber
+	}
+
+	define i8 Is(TAC_PHYSICAL_STORAGE_KIND Kind) {
+		return this->Kind = Kind
+	}
+
+	define void Print() {
+		if (this->Kind = TAC_PHYSICAL_STORAGE_KIND_REGISTER) {
+			Print("r%i", this->RegisterNumber)
+		}
+		else if (this->Kind = TAC_PHYSICAL_STORAGE_KIND_MEMORY) {
+			Print("m%i", this->MemorySlot)
+		}
+	}
+}
+
+TACPhysicalStorage TAC_NO_STORAGE := 0 As TACPhysicalStorage
+
+define void DoStoragePrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	TACPhysicalStorage Storage := Parameters[*ParameterIndex] As TACPhysicalStorage
+	
+	Storage->Print()
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype StoragePrintPrototype {
+	Name: "ps",
+	Format: &DoStoragePrint
+}
+
+i32 STORAGE_PRINT_PROTOTYPE_ID := AddPrintFormat(&StoragePrintPrototype)
+
 declare i32 GetTripleNumber(TACTriple*)
-declare i32 GetTripleRegisterNumber(TACTriple*)
+declare TACPhysicalStorage GetTripleStorage(TACTriple*)
 
 bits TACAddress As i64 {
 	TACVariable* [0:47] Variable
@@ -108,7 +180,7 @@ bits TACAddress As i64 {
 		return true
 	}
 	
-	define void Print(i8 ShowRegisterNumber) {
+	define void Print(i8 ShowStorage) {
 		if (this = 0) {
 			return
 		}
@@ -126,10 +198,10 @@ bits TACAddress As i64 {
 				
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
-				i32 RegisterNumber := GetTripleRegisterNumber(this->TemporaryTriple)
+				TACPhysicalStorage Storage := GetTripleStorage(this->TemporaryTriple)
 
-				if (ShowRegisterNumber && RegisterNumber != -1) {
-					Print("r%i", RegisterNumber)
+				if (ShowStorage && Storage->HasValue()) {
+					Print("%ps", Storage)
 				}
 				else {
 					Print("@%i", GetTripleNumber(this->TemporaryTriple))
@@ -145,7 +217,7 @@ bits TACAddress As i64 {
 		}
 	}
 
-	define void PrintGraphViz(i8 ShowRegisterNumber) {
+	define void PrintGraphViz(i8 ShowStorage) {
 		if (this = 0) {
 			return
 		}
@@ -163,10 +235,10 @@ bits TACAddress As i64 {
 				
 			}
 			else if (this->Is(TACAddressKind:Temporary)) {
-				i32 RegisterNumber := GetTripleRegisterNumber(this->TemporaryTriple)
-
-				if (ShowRegisterNumber && RegisterNumber != -1) {
-					Print("r%i", RegisterNumber)
+				TACPhysicalStorage Storage := GetTripleStorage(this->TemporaryTriple)
+				
+				if (ShowStorage && Storage->HasValue()) {
+					Print("%ps", Storage)
 				}
 				else {
 					Print("@%i", GetTripleNumber(this->TemporaryTriple))
@@ -434,7 +506,7 @@ TACLiveRange TAC_RANGE_NULL := 0 As TACLiveRange
 
 struct TACInterval {
 	BitSet Range
-	i32 RegisterNumber
+	TACPhysicalStorage Storage
 	i32 Weight
 
 	define void Add(TACLiveRange New) {
@@ -464,6 +536,13 @@ struct TACInterval {
 		Free(Clone)
 
 		return Count != 0
+	}
+
+	define i32 RegisterNumber() {
+		return this->Storage->RegisterNumber
+	}
+	define i32 MemorySlot() {
+		return this->Storage->MemorySlot
 	}
 
 	define i32 Start() {
@@ -511,8 +590,8 @@ struct TACInterval {
 			ContainedLast := this->Contains(Index)
 		}
 
-		if (this->RegisterNumber != -1) {
-			Print(" = r%i", this->RegisterNumber)
+		if (this->Storage->HasValue()) {
+			Print(" = %ps", this->Storage)
 		}
 	}
 }
@@ -544,6 +623,9 @@ struct TACTriple {
 	define TACInterval* Interval() {
 		return this->Join~>LiveInterval
 	}
+	define TACPhysicalStorage Storage() {
+		return this->Interval()->Storage
+	}
 
 	static self* New(i32 Opcode, TACAddress Left, TACAddress Right) {
 		self* this := Alloc(#self)
@@ -555,8 +637,6 @@ struct TACTriple {
 		this~>Uses->Initialize()
 
 		this->Join := this
-
-		this->Interval()->RegisterNumber := -1
 		
 		return this
 	}
@@ -607,7 +687,7 @@ struct TACTriple {
 	}
 
 	define i8 ResultRegister() {
-		return this->Interval()->RegisterNumber As i8
+		return this->Interval()->Storage->RegisterNumber As i8
 	}
 	define i8 LeftRegister() {
 		return this->Left->TemporaryTriple->ResultRegister() As i8
@@ -621,8 +701,8 @@ struct TACTriple {
 			Print("[%i] ", this->InstructionCode)
 		}
 
-		if (this->Interval()->RegisterNumber != -1) {
-			Print("r%i := ", this->Interval()->RegisterNumber)
+		if (this->Interval()->Storage->HasValue()) {
+			Print("%ps := ", this->Interval()->Storage)
 		}
 
 		if (this->Is(TAC_PHI)) {
@@ -655,8 +735,8 @@ struct TACTriple {
 			Print("[%i] ", this->InstructionCode)
 		}
 
-		if (this->Interval()->RegisterNumber != -1) {
-			Print("r%i := ", this->Interval()->RegisterNumber)
+		if (this->Interval()->Storage->HasValue()) {
+			Print("%ps := ", this->Interval()->Storage)
 		}
 
 		if (this->Is(TAC_PHI)) {
@@ -689,8 +769,8 @@ define i32 GetTripleNumber(TACTriple* Triple) {
 	return Triple->Number
 }
 
-define i32 GetTripleRegisterNumber(TACTriple* Triple) {
-	return Triple->Interval()->RegisterNumber
+define TACPhysicalStorage GetTripleStorage(TACTriple* Triple) {
+	return Triple->Interval()->Storage
 }
 
 struct TACDefinition {

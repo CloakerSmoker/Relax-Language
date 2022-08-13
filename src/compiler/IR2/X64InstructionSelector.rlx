@@ -47,7 +47,7 @@ OperatorInstructionEntry[2] PlainBinaryOperators {
 
 define void X64SelectInstruction(TACBuilder* this) {
     if (this->Match(TAC_LOAD_PARAMETER)) {
-        this->CurrentTriple()->Interval()->RegisterNumber := GetSystemVRegister(this->Integer(0))
+        this->CurrentTriple()->Interval()->Storage := TACPhysicalStorage:Register(GetSystemVRegister(this->Integer(0)))
 
         this->Select(X64_NO_EMIT)
     }

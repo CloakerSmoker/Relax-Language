@@ -436,4 +436,6 @@ function doit(e) {
 
 document.querySelectorAll('.node').forEach(doit);
 
+keys(all_selectors).forEach(s => highlight_all(s));
+
 */
