@@ -332,7 +332,13 @@
 		}
 		;*/
 
+		i32 idex := -1
+
 		while (Unhandled->Count() != 0) {
+			idex += 1
+
+			Print("Iter %i\n", idex)
+
 			TACInterval* Current := Unhandled->Remove(0)
 
 			for (i32 Index := 0, Index < Active->Count(), Index++) {
@@ -342,11 +348,15 @@
 					Active->Remove(Index)
 					Handled->Push(ActiveInterval)
 
+					Print("Active->Free(%i)\n", ActiveInterval->RegisterNumber())
+
 					Free->Set(ActiveInterval->RegisterNumber())
 				}
 				else if !(ActiveInterval->Contains(Current->Start())) {
 					Active->Remove(Index)
 					Inactive->Push(ActiveInterval)
+
+					Print("Active->Free(%i)\n", ActiveInterval->RegisterNumber())
 
 					Free->Set(ActiveInterval->RegisterNumber())
 				}
@@ -355,12 +365,17 @@
 			for (i32 Index := 0, Index < Inactive->Count(), Index++) {
 				TACInterval* InactiveInterval := Inactive->At(Index)
 				
-				if (ActiveInterval->End() < Current->Start()) {
+				if (InactiveInterval->End() < Current->Start()) {
+					Inactive->Remove(Index)
 					Handled->Push(InactiveInterval)
+
+					Print("Inactive->Free(%i)\n", InactiveInterval->RegisterNumber())
 				}
-				else if (ActiveInterval->Contains(Current->Start())) {
+				else if (InactiveInterval->Contains(Current->Start())) {
 					Inactive->Remove(Index)
 					Active->Push(InactiveInterval)
+
+					Print("Inactive->Free(%i)\n", InactiveInterval->RegisterNumber())
 
 					Free->Clear(InactiveInterval->RegisterNumber())
 				}

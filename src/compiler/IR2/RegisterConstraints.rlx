@@ -97,7 +97,9 @@
 
 		TACTriple* Move := MoveAddress.TemporaryTriple
 
-		Move->Interval()->Storage := TACPhysicalStorage:Register(RegisterNumber)
+		if (RegisterNumber != -1) {
+			Move->Interval()->Storage := TACPhysicalStorage:Register(RegisterNumber)
+		}
 
 		i32 Index := Block~>Body->Find(Triple)
 
