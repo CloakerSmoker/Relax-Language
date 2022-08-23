@@ -519,6 +519,20 @@ struct DWARFBuilder {
 			
 			void* Elements := T~>Fields->Elements
 			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
+
+			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+				if (Elements[ElementIndex]) {
+					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
+					
+					while (FoundElement) {
+						StructField* NextField := FoundElement->Value
+						
+						NextField->DWARFTypeOffset := this->FindOrTranslateType(NextField->ValueType)
+						
+						FoundElement := FoundElement->NextElement
+					}
+				}
+			}
 			
 			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 				if (Elements[ElementIndex]) {

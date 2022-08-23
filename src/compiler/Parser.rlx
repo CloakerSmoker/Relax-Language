@@ -1664,6 +1664,11 @@ struct ParserState {
 				}
 			}
 			else if (NextTokenValue = KEYWORD_EXTERNAL) {
+				if !(this->Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
+					NextToken->Warn("'--dynamic' not specified, implicitly emitting a dynamic executable but bothering you about it anyways")
+					this->Config->DebugMode |= DEBUG_EMIT_DYNAMIC
+				}
+
 				Token* ExternalSource := this->Consume(TOKEN_TYPE_STRING, "Expected 'external' declaration source name")
 
 				i8 Exists := false
