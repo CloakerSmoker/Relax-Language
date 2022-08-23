@@ -368,6 +368,9 @@ define void DumpGlobals(CompilerState* Compiler) {
 	/* Walk the globals hashmap and print the offset/size of each */
 	ParserState* Parser := Compiler->Parser
 	
+	i8 DumpOptimized := Compiler->Config->DumpInfo & DUMP_OPTIMIZED_GLOBALS
+	i8 DumpPresent := Compiler->Config->DumpInfo & DUMP_PRESENT_GLOBALS
+
 	VariableHashMap* Globals := Parser~>Globals
 	HashMap* RawGlobals := Globals->Map
 	
@@ -386,21 +389,25 @@ define void DumpGlobals(CompilerState* Compiler) {
 				VariableInfo* NextGlobal := FoundElement->Value
 				
 				if (NextGlobal->IsGlobal = GLOBAL_IS_OPTIMIZED_AWAY) {
-					Print("^60     Opimized Away    = ")
+					if (DumpOptimized) {
+						Print("^60     Opimized Away    = ")
+						NextGlobal->Name->PrintLine()
+						ResetColors()
+					}
 				}
 				else {
-					i32 ThisOffset := NextGlobal->StackOffset
-					i32 ThisSize := GetTypeStorageSize(NextGlobal->Type)
-					
-					i64 Start := Base + ThisOffset
-					i64 End := Start + ThisSize
-					
-					Print("%x:%x = ", Start, End)
+					if (DumpPresent) {
+						i32 ThisOffset := NextGlobal->StackOffset
+						i32 ThisSize := GetTypeStorageSize(NextGlobal->Type)
+						
+						i64 Start := Base + ThisOffset
+						i64 End := Start + ThisSize
+						
+						Print("%x:%x = ", Start, End)
+						NextGlobal->Name->PrintLine()
+						ResetColors()
+					}
 				}
-				
-				NextGlobal->Name->PrintLine()
-				
-				ResetColors()
 				
 				FoundElement := FoundElement->NextElement
 			}

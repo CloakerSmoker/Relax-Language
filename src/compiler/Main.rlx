@@ -141,6 +141,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		
 		else if (StringEquals(NextOption, "--functions")) { Config->DumpInfo |= DUMP_FUNCTIONS }
 		else if (StringEquals(NextOption, "--globals"  )) { Config->DumpInfo |= DUMP_GLOBALS   }
+		else if (StringEquals(NextOption, "--present-globals"  )) { Config->DumpInfo |= DUMP_PRESENT_GLOBALS   }
+		else if (StringEquals(NextOption, "--optimized-globals"  )) { Config->DumpInfo |= DUMP_OPTIMIZED_GLOBALS   }
+
 		else if (StringEquals(NextOption, "--lines"    )) { Config->DumpInfo |= DUMP_LINES     }
 		
 		else if (StringEquals(NextOption, "--debug")) { Config->DebugMode |= DEBUG_EMIT_FUNCTION_NAMES }
