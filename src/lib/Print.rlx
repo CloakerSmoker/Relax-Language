@@ -133,9 +133,13 @@ struct PrintOutputAdapterPrototype {
 	
 	define void PrintByte(i64 Number) {
 		Number &= 0xFF
+
+		i8[2] Buffer
+
+		Buffer[0] := NumberToCharacter(((Number >> 4) & 0xF) As i8)
+		Buffer[1] := NumberToCharacter((Number & 0xF) As i8)
 		
-		this->PrintCharacter(NumberToCharacter(((Number >> 4) & 0xF) As i8))
-		this->PrintCharacter(NumberToCharacter((Number & 0xF) As i8))
+		this->DoPrintCharacters(Buffer, 2)
 	}
 	define void PrintLiteral(i64 PackedCharacters) {
 		i8* Characters := &PackedCharacters As i8*
@@ -197,7 +201,7 @@ struct PrintOutputAdapterPrototype {
 					this->PrintPrefixedHex(NextParameter As i64)
 				}
 				else if (Next = 'c') {
-					this->PrintCharacter(NextParameter As i8)
+					this->DoPrintCharacters(&NextParameter As i8*, 1)
 				}
 				else if (Next = 's') {
 					this->PrintString(NextParameter As i8*)
