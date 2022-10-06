@@ -230,7 +230,7 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	Print(" [^90 ")
 	PrintSafeString(At->SourceFilePath)
 	
-	Print(" ^F0]\n %s | ", LineNumberString)
+	Print(":%i ^F0]\n %s | ", At->LineNumber, LineNumberString)
 	
 	i32 OffsetInSource := At->PositionInSource
 	
