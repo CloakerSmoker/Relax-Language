@@ -197,6 +197,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextOption, "--platform")) {
 			Config->PlatformName := ArgV[++Index]
 		}
+		else if (StringEquals(NextOption, "--platform-dir")) {
+			Config->PlatformDirectory := ArgV[++Index]
+		}
 
 		
 		else if (StringEquals(NextOption, "--no-colors")) {
@@ -226,6 +229,14 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Print("No input+output file, aborting")
 			Exit(1)
 		}
+	}
+
+	if (Config->PlatformName && Config->PlatformDirectory = null) {
+		i32 PlatformDirectoryNameLength := StringLength(Config->LibraryDirectory) + StringLength(Config->PlatformName) + 2
+
+		Config->PlatformDirectory := Alloc(PlatformDirectoryNameLength)
+
+		FormatString(Config->PlatformDirectory, PlatformDirectoryNameLength, "%s/%s", Config->LibraryDirectory, Config->PlatformName)
 	}
 
 	FileDelete(OutputFilePath)

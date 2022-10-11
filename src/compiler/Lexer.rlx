@@ -892,15 +892,10 @@ struct LexerState {
 						IncludePathBlame.Error("Can't use platform relative include without specifying a platform")
 					}
 
-					i32 LibraryDirectoryPathLength := StringLength(this->Config->LibraryDirectory)
-					i32 PlatformNameLength := StringLength(this->Config->PlatformName)
+					i32 Size := FormatLength("%s%s", this->Config->PlatformDirectory, IncludePath->Buffer + 1)
+					IncludePathBuffer := Alloc(Size + 1)
 
-					IncludePathBuffer := Alloc(LibraryDirectoryPathLength + 1 + PlatformNameLength + IncludePath->Length) ; One extra for the path delimeter
-
-					MoveMemory(IncludePathBuffer, this->Config->LibraryDirectory, LibraryDirectoryPathLength)
-					IncludePathBuffer[LibraryDirectoryPathLength] := '/'
-					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1, this->Config->PlatformName, PlatformNameLength)
-					MoveMemory(IncludePathBuffer + LibraryDirectoryPathLength + 1 + PlatformNameLength, IncludePath->Buffer + 1, IncludePath->Length - 1)
+					FormatString(IncludePathBuffer, Size, "%s%s", this->Config->PlatformDirectory, IncludePath->Buffer + 1)
 				}
 				
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)

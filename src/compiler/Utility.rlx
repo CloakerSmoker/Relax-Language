@@ -81,6 +81,7 @@ struct BuildConfig {
 	LexerState* Lexer
 	i8* SourceFile
 	i8* LibraryDirectory
+	i8* PlatformDirectory
 	HashMap* IncludedFiles
 
 	i8* PlatformName
