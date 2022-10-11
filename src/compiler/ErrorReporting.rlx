@@ -1,0 +1,131 @@
+define i8* FindLastLine(i8* Base, i32 Offset) {
+	i32 Index := 0
+	i8* Needle := Base + Offset
+	
+	loop {
+		i16 NextCharacter := (Needle - Index)[0]
+		
+		if (NextCharacter = 13 || NextCharacter = 10) {
+			i32 LineEndLength := (NextCharacter = 13) + 1
+			
+			return (Needle - Index) + LineEndLength
+		}
+		else if ((Needle - Index) <= Base) {
+			break
+		}
+		
+		Index += 1
+	}
+	
+	return Base
+}
+
+define void PrintSpaces(i32 Count) {
+	while (Count != 0) {
+		PrintCharacter(' ')
+		Count -= 1
+	}
+}
+
+define void ManualErrorMessagePrelude() {
+	SwapOutputStream()
+	TextColor(Red | Bright)
+}
+
+define void PrintLexerBlame(LexerState* Blame) {
+    if (Blame->Parent) {
+        PrintLexerBlame(Blame->Parent)
+    }
+
+    Print(" [in ^90")
+    PrintSafeString(Blame->SourceFilePath)
+    Print(" ^F0]\n")
+}
+
+define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {	
+    if (At->Lexer->Parent) {
+        PrintLexerBlame(At->Lexer->Parent)
+    }
+
+	i8* LineNumberString := IToA(At->LineNumber)
+	i32 LineNumberLength := StringLength(LineNumberString)
+	
+	if (Message) {
+		TextColor(Color)
+		Print(Message)
+		PrintNewLine()
+	}
+	
+	ResetColors()
+	
+	PrintSpaces(LineNumberLength + 1) 
+	Print(" [^90 ")
+	PrintSafeString(At->Lexer->SourceFilePath)
+	
+	Print(":%i ^F0]\n %s | ", At->LineNumber, LineNumberString)
+	
+	i32 OffsetInSource := At->PositionInSource
+	
+	i8* SourceLine := FindLastLine(At->Lexer->SourceText, OffsetInSource)
+	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Lexer->SourceText As i32))
+	
+	i32 DashCount := 0
+	
+	for (i32 LeftIndex := 0, LeftIndex < PositionInLine, LeftIndex += 1) {
+		i8 NextLeftCharacter := SourceLine[LeftIndex]
+		
+		if (NextLeftCharacter = '	') {
+			PrintSpaces(4)
+			DashCount += 4
+		}
+		else {
+			PrintCharacter(NextLeftCharacter)
+			DashCount += 1
+		}
+	}
+	
+	i32 RightIndex := LeftIndex
+	
+	loop {
+		i8 NextCharacter := SourceLine[RightIndex]
+		
+		if (NextCharacter = 10 || NextCharacter = 13 || NextCharacter = 0) {
+			break
+		}
+		
+		PrintCharacter(NextCharacter)
+		RightIndex += 1
+	}
+	
+	PrintNewLine()
+	
+	PrintSpaces(LineNumberLength + 1)
+	
+	Print(" |-")
+	
+	for (i32 DashIndex := 0, DashIndex < DashCount, DashIndex += 1) {
+		PrintCharacter('-')
+	}
+	
+	TextColor(Color)
+	
+	for (i32 ArrowIndex := 0, ArrowIndex < At->LengthInSource, ArrowIndex += 1) {
+		PrintCharacter('^')
+	}
+	
+	ResetColors()
+	
+	PrintNewLine()
+}
+define void PrettyError(ErrorContext* At, i8 Color) {
+	PrettyError(At, null, Color)
+}
+
+define void ContextError(ErrorContext* At, i8* Message) {
+	if (Message) {
+		SwapOutputStream()
+	}
+	
+	PrettyError(At, Message, Red | Bright)
+	Exit(1)
+}

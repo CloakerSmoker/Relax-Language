@@ -212,20 +212,20 @@ struct CompilerState {
 	i32 LineNumberHighWaterMark
 	
 	define void MarkLineNumber(ErrorContext* Context) {
-		if (Context->SourceFilePath = null) {
+		if (Context->Lexer = null) {
 			return
 		}
 		
 		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
 			i64 Offset := this->CodeBase + this->Index
 			
-			i8* AbsoluteSourceFile := this->SourcePathToAbsolutePath(Context->SourceFilePath->Buffer)
+			i8* AbsoluteSourceFile := this->SourcePathToAbsolutePath(Context->Lexer->SourceFilePath->Buffer)
 			
 			this->DWARF->LineInfo->AddLine(Offset As i32, Context->LineNumber, AbsoluteSourceFile)
 		}
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {
-			if (Context->SourceFilePath = this->CurrentSourceFile) {
+			if (Context->Lexer->SourceFilePath = this->CurrentSourceFile) {
 				if (Context->LineNumber > this->LineNumberHighWaterMark) {
 					Print("\t%i:	%x\n", Context->LineNumber, this->CodeBase + this->Index)
 					this->LineNumberHighWaterMark := Context->LineNumber
@@ -300,7 +300,7 @@ struct CompilerState {
 		
 		if (this->Config->DumpInfo & DUMP_LINES) {
 			Print("[ ^80")
-			Function~>Context->SourceFilePath->Print()
+			Function~>Context->Lexer->SourceFilePath->Print()
 			Print("^F0: ")
 			
 			i8* Buffer := Alloc(Function->GetStringLength())
@@ -310,7 +310,7 @@ struct CompilerState {
 			
 			Free(Buffer)
 			
-			this->CurrentSourceFile := Function~>Context->SourceFilePath
+			this->CurrentSourceFile := Function~>Context->Lexer->SourceFilePath
 			this->LineNumberHighWaterMark := Function~>Context->LineNumber
 		}
 		
@@ -1277,10 +1277,6 @@ declare void CompileUnwindTry(CompilerState*, i8)
 
 define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
-	
-	if (NodeToCompile~>Context->SourceFilePath != null) {
-		Compiler->MarkLineNumber(NodeToCompile~>Context)
-	}
 	
 	i8 NodeType := NodeToCompile->NodeType
 	

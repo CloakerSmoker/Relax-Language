@@ -320,45 +320,47 @@ struct LexerState {
 	define Token* GetToken(i32 TokenIndex) {
 		return this->Tokens[TokenIndex]
 	}
+
+	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Position, i16 Length) {
+		Token* NewToken := Alloc(#Token)
+
+		NewToken->Type := TokenType
+		NewToken->Value := TokenValue
+		
+		ErrorContext* Context := NewToken~>Context
+		
+		Context->Lexer := this
+		Context->LineNumber := this->CurrentLineNumber
+		Context->PositionInSource := Position
+		Context->LengthInSource := Length
+
+		return NewToken
+	}
+
+	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Position) {
+		return this->MakeToken(TokenType, TokenValue, Position, (this->SourceIndex - Position) As i16)
+	}
 	
-	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 LineNumber, i32 Position, i16 Length, i8* SourceText, SafeString* SourceFilePath) {
+	define Token* AppendToken(Token* NewToken) {
 		if (this->Parent != null) {
-			return this->Parent->AppendToken(TokenType, TokenValue, LineNumber, Position, Length, SourceText, SourceFilePath)
+			return this->Parent->AppendToken(NewToken)
 		}
 		else {
 			this->EnsureCapacity(1)
-			
-			Token* NewToken := Alloc(#Token)
-			this->Tokens[this->MaxTokenIndex] := NewToken
-			
-			NewToken->Type := TokenType
-			NewToken->Value := TokenValue
-			
-			ErrorContext* Context := NewToken~>Context
-			
-			Context->SourceFilePath := SourceFilePath
-			Context->Source := SourceText
-			Context->LineNumber := LineNumber
-			Context->PositionInSource := Position
-			Context->LengthInSource := Length
-			
-			this->MaxTokenIndex += 1
+			this->Tokens[this->MaxTokenIndex++] := NewToken
 			
 			return NewToken
 		}
 	}
 	
 	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position, i16 Length) {
-		return this->AppendToken(TokenType, TokenValue, this->CurrentLineNumber, Position, Length, this->SourceText, this->SourceFilePath)
-	}
-	define Token* AppendToken(i8 TokenType, void* TokenValue, i32 Position) {
-		return this->AppendToken(TokenType, TokenValue, Position, (this->SourceIndex - Position) As i16)
+		return this->AppendToken(this->MakeToken(TokenType, TokenValue, Position, Length))
 	}
 	define Token* AppendToken(i8 TokenType, void* TokenValue) {
-		return this->AppendToken(TokenType, TokenValue, this->CurrentTokenStart)
+		return this->AppendToken(this->MakeToken(TokenType, TokenValue, this->CurrentTokenStart))
 	}
 	define Token* AppendToken(i8 TokenType, i64 TokenValue) {
-		return this->AppendToken(TokenType, TokenValue As void*, this->CurrentTokenStart)
+		return this->AppendToken(this->MakeToken(TokenType, TokenValue As void*, this->CurrentTokenStart))
 	}
 	
 	define Token* AppendOperator(i8 OperatorValue) {
@@ -468,7 +470,6 @@ struct LexerState {
 				return Result
 			}
 			else {
-				Free(this->Child)
 				this->Child := null
 			}
 		}
@@ -863,8 +864,7 @@ struct LexerState {
 				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 
 				ErrorContext IncludePathBlame {
-					SourceFilePath: this->SourceFilePath,
-					Source: this->SourceText,
+					Lexer: this,
 					LineNumber: this->CurrentLineNumber,
 					PositionInSource: StartingIndex,
 					LengthInSource: EndIndex As i16
