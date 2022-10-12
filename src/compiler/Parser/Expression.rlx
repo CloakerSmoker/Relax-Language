@@ -703,10 +703,15 @@
 				; Allow for `#(TypeName)` to force `#` to behave independent of precedence
 				i8 ConsumeClosingParan := this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)
 				
+				Token* BlameToken := this->PeekNextToken()
 				Type GetSizeOfType := this->ParseType()
 				
 				if (ConsumeClosingParan) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing ')' around type name")
+				}
+
+				if (GetBaseType(GetSizeOfType)->IsIncomplete) {
+					BlameToken->Error("Undefined type")
 				}
 				
 				; Since type sizes can change at parse-time (ex: inside of a class method which is followed
