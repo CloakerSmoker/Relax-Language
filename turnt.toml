@@ -1,8 +1,6 @@
 
 [envs.windows]
-command = "{RLX} -i tests/{base}.rlx -o tests/{base}.exe --windows > NUL || tests\\{base}.exe {args}"
-env_vars = {RLX = "build\\windows_compiler.exe"}
+command = "build\\windows_test_compiler.exe -i tests/{base}.rlx -o tests/{base}.exe --windows > NUL || tests\\{base}.exe {args}"
 
 [envs.linux]
-command = "{RLX} -i tests/{base}.rlx -o tests/{base}.elf --linux > /dev/null && tests/{base}.elf {args}"
-env_vars = {RLX = "build/linux_compiler.elf"}
+command = "./build/linux_test_compiler.elf -i tests/{base}.rlx -o tests/{base}.elf --linux > /dev/null && tests/{base}.elf {args}"

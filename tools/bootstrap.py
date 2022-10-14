@@ -29,7 +29,6 @@ all_platforms = [('windows', 'exe'), ('linux', 'elf'), ('freebsd', 'elf')]
 
 running_on = platform.system()
 
-compile_command_format = '{} -i "./src/compiler/Main.rlx" -o "{}" --debug --' + running_on.lower()
 platform_extension = 'exe'
 python =  '"' + sys.executable + '"' if running_on == 'Windows' else sys.executable
 expected_returncode = 1
@@ -40,6 +39,17 @@ if running_on == 'Linux' or running_on == 'FreeBSD':
 elif running_on != 'Windows':
     print('Unsupported platform.', file=sys.stderr)
     sys.exit(1)
+
+compiler_link = f'build/{running_on.lower()}_test_compiler.{platform_extension}'
+compile_command_format = compiler_link + ' -i "./src/compiler/Main.rlx" -o "{}" --debug --' + running_on.lower()
+
+def use_compiler(new):
+    try:
+        os.unlink(compiler_link)
+    except:
+        pass
+
+    os.link(new, compiler_link)
 
 parser = argparse.ArgumentParser(description='Test lots of compiler builds')
 parser.add_argument('iterations', type=int, nargs='?', default=3, help='number of times to have the compiler compile the compiler')
@@ -57,7 +67,9 @@ safe_compiler = path_join(bin_dir, f'{running_on.lower()}_compiler.{platform_ext
 
 for i in range(0, recursion_count):
     compiler_output = path_join(bin_dir, f'testing{i}.{platform_extension}')
-    compile_command = compile_command_format.format(safe_compiler, compiler_output)
+
+    use_compiler(safe_compiler)
+    compile_command = compile_command_format.format(compiler_output)
 	
     compile_result = subprocess.run(compile_command, cwd=cwd, shell=True, capture_output=True)
 
@@ -65,7 +77,7 @@ for i in range(0, recursion_count):
     stdout_text = compile_result.stdout.decode('UTF-8')
 
     if compile_result.returncode != expected_returncode or len(stderr_text) != 0:
-        print(f'{Fore.LIGHTRED_EX}When running: {Fore.LIGHTWHITE_EX}{compile_command}')
+        print(f'{Fore.LIGHTRED_EX}When running: {Fore.LIGHTWHITE_EX}{compile_command.replace(compiler_link, safe_compiler)}')
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stdout_text}\n\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
@@ -99,7 +111,7 @@ for i in range(0, recursion_count):
             fail_file = fail.description[2:-len(running_on)-1]
             compiler_rel = os.path.relpath(compiler_output, os.getcwd())
 
-            print(f'{Fore.LIGHTMAGENTA_EX}env RLX={compiler_rel} turnt -e {running_on.lower()} {fail_file} -p{Fore.RESET}')
+            print(f'{Fore.LIGHTMAGENTA_EX}turnt -e {running_on.lower()} {fail_file} -p{Fore.RESET}')
     
         sys.exit(1)
     
@@ -123,7 +135,8 @@ move(compiler_output, safe_compiler)
 
 for platform, extension in all_platforms:
     output = path_join(bin_dir, f'{platform}_new_compiler.{extension}')
-    command = compile_command_format.format(safe_compiler, output) + ' --elf --debug --' + platform
+    use_compiler(safe_compiler)
+    command = compile_command_format.format(output) + ' --elf --debug --' + platform
 
     result = subprocess.run(command, cwd=cwd, shell=True, capture_output=True)
     stderr_text = result.stderr.decode('UTF-8')
