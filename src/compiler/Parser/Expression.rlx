@@ -195,7 +195,7 @@
 			
 			ManualErrorMessagePrelude()
 			
-			Print("No matching overload found for:\n")
+			Print("No matching overload found for:^R\n")
 			PrettyError(BlameContext, Red | Bright)
 			
 			Next := FoundDefine
