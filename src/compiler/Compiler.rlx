@@ -1499,10 +1499,10 @@ define i64 EnterLoop(CompilerState* Compiler, i32 ContinueLabel, i32 BreakLabel)
 	return Result As i64
 }
 define void ExitLoop(CompilerState* Compiler, i64 PackedLooParser) {
-	LoopLables LooParser := PackedLooParser As LoopLables
+	LoopLables LoopState := PackedLooParser As LoopLables
 	
-	Compiler->CurrentLoopContinueLabel := LooParser.ContinueLabel
-	Compiler->CurrentLoopBreakLabel := LooParser.BreakLabel
+	Compiler->CurrentLoopContinueLabel := LoopState.ContinueLabel
+	Compiler->CurrentLoopBreakLabel := LoopState.BreakLabel
 }
 
 
@@ -1521,7 +1521,7 @@ define void CompileFor(CompilerState* Compiler, ForLoop* ForToCompile) {
 	
 	i32 TryDepth := Compiler->ScopedTryDepth
 	Compiler->ScopedTryDepth := 0
-	i64 LooParser := EnterLoop(Compiler, ContinueLabel, EndLabel)
+	i64 LoopState := EnterLoop(Compiler, ContinueLabel, EndLabel)
 
 	/* Prelude stuff done, condition is checked, so now we can compile the body */	
 	
@@ -1534,7 +1534,7 @@ define void CompileFor(CompilerState* Compiler, ForLoop* ForToCompile) {
 	
 	SetLabel(Compiler, EndLabel) /* Jumped to on ForToCompile->Condition being false, or a break statement */
 	
-	ExitLoop(Compiler, LooParser)
+	ExitLoop(Compiler, LoopState)
 	Compiler->ScopedTryDepth := TryDepth
 }
 
@@ -1544,7 +1544,7 @@ define void CompileLoop(CompilerState* Compiler, CodeBlock* LoopBody) {
 	
 	i32 TryDepth := Compiler->ScopedTryDepth
 	Compiler->ScopedTryDepth := 0
-	i64 LooParser := EnterLoop(Compiler, StartLabel, EndLabel)
+	i64 LoopState := EnterLoop(Compiler, StartLabel, EndLabel)
 	
 	SetLabel(Compiler, StartLabel)
 	
@@ -1553,7 +1553,7 @@ define void CompileLoop(CompilerState* Compiler, CodeBlock* LoopBody) {
 	EmitJump_Label(Compiler, StartLabel)
 	SetLabel(Compiler, EndLabel)
 	
-	ExitLoop(Compiler, LooParser)
+	ExitLoop(Compiler, LoopState)
 	Compiler->ScopedTryDepth := TryDepth
 }
 
@@ -1563,7 +1563,7 @@ define void CompileWhile(CompilerState* Compiler, WhileLoop* WhileToCompile) {
 	
 	i32 TryDepth := Compiler->ScopedTryDepth
 	Compiler->ScopedTryDepth := 0
-	i64 LooParser := EnterLoop(Compiler, StartLabel, EndLabel)
+	i64 LoopState := EnterLoop(Compiler, StartLabel, EndLabel)
 	
 	SetLabel(Compiler, StartLabel)
 	
@@ -1573,7 +1573,7 @@ define void CompileWhile(CompilerState* Compiler, WhileLoop* WhileToCompile) {
 	EmitJump_Label(Compiler, StartLabel)
 	SetLabel(Compiler, EndLabel)
 	
-	ExitLoop(Compiler, LooParser)
+	ExitLoop(Compiler, LoopState)
 	Compiler->ScopedTryDepth := TryDepth
 }
 
