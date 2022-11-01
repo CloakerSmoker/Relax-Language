@@ -111,7 +111,11 @@ define i16 GetPointerDepth(Type T) {
 }
 
 define i32 GetTypeStringLength(Type T) {
-	return GetBaseType(T)->Name->Length + GetPointerDepth(T)
+	; wow, this is a hard problem to solve. how about I: don't
+
+	return 127
+
+	; return GetBaseType(T)->Name->Length + GetPointerDepth(T)
 }
 define i32 StringifyType(void* RawBuffer, Type T) {
 	i8* Buffer := RawBuffer
@@ -123,7 +127,7 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 		FunctionPointerInfo* FunctionPointer := Base~>FunctionPointer
 		
 		Buffer[Index++] := '('
-		Index := StringifyType(&Buffer[Index], FunctionPointer->ReturnType)
+		Index += StringifyType(&Buffer[Index], FunctionPointer->ReturnType)
 		Buffer[Index++] := ')'
 		Buffer[Index++] := '('
 		
@@ -196,6 +200,7 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 	
 	Print(", got ")
 	PrintType(AtNode->ValueType)
+	Print("\n")
 	
 	AtNode->Error(null)
 	
