@@ -82,7 +82,7 @@ struct PoolAllocator {
 			PoolFreeListEntry* Entry := Where
 			
 			if (this->FreeListHead) {
-				Entry->Next := this->FreeListHead->Next
+				Entry->Next := this->FreeListHead
 			}
 			
 			this->FreeListHead := Entry

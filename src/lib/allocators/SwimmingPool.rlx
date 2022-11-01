@@ -3,6 +3,7 @@
 #Require "$/allocators/PageAllocator.rlx"
 
 ;declare void Print(i8*, ...)
+;#Require "$/Debug.rlx"
 
 struct SwimmingPoolAllocator {
 	AllocatorArena Arena
@@ -44,7 +45,7 @@ struct SwimmingPoolAllocator {
 			RankIndex += 1
 		}
 		
-		;Print("Allocate(%x) = Rank[%i] = %x\n", Size, RankIndex, this->RankValue(RankIndex))
+		;Print("Allocate(%x) = Rank[%i]", Size, RankIndex)
 		
 		;Print("Rank[%i] = %x %x\n", RankIndex, this, &DoAllocatorPanic)
 		
@@ -57,6 +58,7 @@ struct SwimmingPoolAllocator {
 		void* R := this->Ranks[RankIndex]->Allocate()
 		
 		;Print(" = %x\n", R)
+		;PrintStackDump(1)
 		
 		return R
 	}
@@ -78,6 +80,8 @@ struct SwimmingPoolAllocator {
 			PoolAllocator* Rank := this->Ranks[RankIndex]
 			
 			if (Rank && Rank->Contains(Where)) {
+				;Print("Free(%x) = Rank %i\n", Where, RankIndex)
+
 				Rank->Free(Where)
 				
 				return

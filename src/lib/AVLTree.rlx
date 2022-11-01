@@ -151,9 +151,7 @@ struct AVLTreeNode {
 
 				this->InsertHelper(this~>Left, Key, Value)
 
-				if (this->Left != OldLeft) {
-					this->LeftSize += 1
-				}
+				this->LeftSize += 1
 			}
 			
 			return this->Balance()
@@ -410,6 +408,7 @@ struct AVLTree {
 
 	define void Free() {
 		this->Root->Free()
+		Free(this->Root)
 	}
 
 	define void Print() {
