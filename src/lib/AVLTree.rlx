@@ -284,6 +284,18 @@ struct AVLTreeNode {
 		return this->LeftSize + this->Right->Count() + 1
 	}
 
+	define void Free() {
+		if (this->Left) {
+			this->Left->Free()
+			Free(this->Left)
+		}
+
+		if (this->Right) {
+			this->Right->Free()
+			Free(this->Right)
+		}
+	}
+
 	define void Print(i32 Depth) {
 		for (i32 Index := 0, Index < Depth, Index++) {
 			Print("    ")
@@ -394,6 +406,10 @@ struct AVLTree {
 	}
 	define void* GetPointer(i64 Key) {
 		return *(this->Get(Key) As void**)
+	}
+
+	define void Free() {
+		this->Root->Free()
 	}
 
 	define void Print() {
