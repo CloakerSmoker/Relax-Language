@@ -407,8 +407,10 @@ struct AVLTree {
 	}
 
 	define void Free() {
-		this->Root->Free()
-		Free(this->Root)
+		if (this->Root) {
+			this->Root->Free()
+			Free(this->Root)
+		}
 	}
 
 	define void Print() {
