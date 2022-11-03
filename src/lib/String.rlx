@@ -65,3 +65,7 @@ define i8* Concatenate(i8* Left, i8* Right) {
 	
 	return NewString
 }
+
+define i8* CloneString(i8* String) {
+	return CloneMemory(String, StringLength(String) + 1)
+}
