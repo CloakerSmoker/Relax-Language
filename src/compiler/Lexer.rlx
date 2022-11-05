@@ -17,6 +17,8 @@ i8 TOKEN_TYPE_DEBUG_CHARACTER := 8
 
 i8 TOKEN_TYPE_COMMENT := 9
 i8 TOKEN_TYPE_DIRECTIVE := 10
+i8 TOKEN_TYPE_SYNTHETIC_INTEGER := 11
+i8 TOKEN_TYPE_SYNTHETIC_STRING := 12
 
 /* TODO: Bit shifts need to be higher precedence than bitwise operations */
 
@@ -899,7 +901,7 @@ struct LexerState {
 				}
 
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
-					this->AppendToken(this->MakeToken(TOKEN_TYPE_STRING, null, StartingIndex))
+					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_STRING, null, StartingIndex))
 				}
 				
 				i32 EndIndex := IncludePath->Length
@@ -1002,7 +1004,7 @@ struct LexerState {
 				}
 
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
-					this->AppendToken(this->MakeToken(TOKEN_TYPE_INTEGER, null, Start))
+					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_INTEGER, null, Start))
 				}
 				
 				return this->GetNextToken(false)
