@@ -848,6 +848,10 @@ struct LexerState {
 			i8 IsImageBase := DirectiveText->Equals("ImageBase")
 			
 			if (IsRequire || DirectiveText->Equals("include")) {
+				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+					this->AppendToken(TOKEN_TYPE_DIRECTIVE, null)
+				}
+
 				StartingIndex := this->SourceIndex + 1
 				
 				this->GetNextCharacter()
@@ -973,6 +977,10 @@ struct LexerState {
 				return this->GetNextToken(false)
 			}
 			else if (IsImageBase || DirectiveText->Equals("PhysicalImageBase")) {
+				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+					this->AppendToken(TOKEN_TYPE_DIRECTIVE, null)
+				}
+				
 				if !(IsWhiteSpace(this->GetNextCharacter())) {
 					Print("Expected whitespace after #ImageBase.")
 					Exit(1)
