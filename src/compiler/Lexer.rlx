@@ -897,6 +897,10 @@ struct LexerState {
 						this->AppendToken(0, null, StartingIndex, 1)->Error("Expected closing quote for include/require path.")
 					}
 				}
+
+				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+					this->AppendToken(this->MakeToken(TOKEN_TYPE_STRING, null, StartingIndex))
+				}
 				
 				i32 EndIndex := IncludePath->Length
 				i8 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
@@ -985,6 +989,8 @@ struct LexerState {
 					Print("Expected whitespace after #ImageBase.")
 					Exit(1)
 				}
+
+				i32 Start := this->SourceIndex
 				
 				this->GetNextCharacter()
 				
@@ -993,6 +999,10 @@ struct LexerState {
 				}
 				else {
 					this->Config->PhysicalImageBase := this->ProcessNumber(this->SourceIndex - 1)
+				}
+
+				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+					this->AppendToken(this->MakeToken(TOKEN_TYPE_INTEGER, null, Start))
 				}
 				
 				return this->GetNextToken(false)
