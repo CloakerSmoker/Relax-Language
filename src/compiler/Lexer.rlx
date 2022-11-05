@@ -13,6 +13,11 @@ i8 TOKEN_TYPE_PUNCTUATION := 6
 i8 TOKEN_TYPE_KEYWORD := 7
 i8 TOKEN_TYPE_DEBUG_CHARACTER := 8
 
+; "synthetic" token types, aka only useful for highlighting/formatting
+
+i8 TOKEN_TYPE_COMMENT := 9
+i8 TOKEN_TYPE_DIRECTIVE := 10
+
 /* TODO: Bit shifts need to be higher precedence than bitwise operations */
 
 i8 OPERATOR_FIRST_ASSIGNMENT := 0
@@ -321,7 +326,7 @@ struct LexerState {
 		return this->Tokens[TokenIndex]
 	}
 
-	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Position, i16 Length) {
+	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Line, i32 Position, i16 Length) {
 		Token* NewToken := Alloc(#Token)
 
 		NewToken->Type := TokenType
@@ -330,15 +335,19 @@ struct LexerState {
 		ErrorContext* Context := NewToken~>Context
 		
 		Context->Lexer := this
-		Context->LineNumber := this->CurrentLineNumber
+		Context->LineNumber := Line
 		Context->PositionInSource := Position
 		Context->LengthInSource := Length
 
 		return NewToken
 	}
 
+	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Position, i16 Length) {
+		return this->MakeToken(TokenType, TokenValue, this->CurrentLineNumber, Position, Length)
+	}
+
 	define Token* MakeToken(i8 TokenType, void* TokenValue, i32 Position) {
-		return this->MakeToken(TokenType, TokenValue, Position, (this->SourceIndex - Position) As i16)
+		return this->MakeToken(TokenType, TokenValue, this->CurrentLineNumber, Position, (this->SourceIndex - Position) As i16)
 	}
 	
 	define Token* AppendToken(Token* NewToken) {
@@ -525,9 +534,15 @@ struct LexerState {
 		}
 		else if (NextCharacter = ';') {
 			i32 StartingLine := this->CurrentLineNumber
+			i32 Length := 1
 			
 			while (this->CurrentLineNumber = StartingLine && !this->AtEnd()) {
 				this->GetNextCharacter()
+				Length++
+			}
+
+			if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+				this->AppendToken(this->MakeToken(TOKEN_TYPE_COMMENT, null, StartingLine, StartingIndex, Length As i16))
 			}
 			
 			return this->GetNextToken(false)
@@ -535,23 +550,44 @@ struct LexerState {
 		else if (NextCharacter = '/') {
 			if (this->NextCharacterMatches('*')) {
 				i8 Depth := 1
+
+				i32 Line := this->CurrentLineNumber
+				i32 Position := this->CurrentTokenStart
+				i32 Length := 2
 				
 				loop {
 					NextCharacter := this->GetNextCharacter()
+					Length++
 					
 					if (NextCharacter = '*' && this->PeekNextCharacter() = '/') {
 						this->GetNextCharacter()
 						
 						Depth -= 1
+						Length++
 					}
 					else if (NextCharacter = '/' && this->PeekNextCharacter() = '*') {
 						this->GetNextCharacter()
 						
 						Depth += 1
+						Length++
 					}
 					
 					if (Depth = 0) {
+						if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+							this->AppendToken(this->MakeToken(TOKEN_TYPE_COMMENT, null, Line, Position, Length As i16))
+						}
+
 						break
+					}
+
+					if (this->CurrentLineNumber != Line) {
+						if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
+							this->AppendToken(this->MakeToken(TOKEN_TYPE_COMMENT, null, Line, Position, Length As i16))
+						}
+
+						Line := this->CurrentLineNumber
+						Position := 0
+						Length := 0
 					}
 					
 					if (this->AtEnd()) {
