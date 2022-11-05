@@ -66,8 +66,8 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	
 	i32 OffsetInSource := At->PositionInSource
 	
-	i8* SourceLine := FindLastLine(At->Lexer->SourceText, OffsetInSource)
-	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Lexer->SourceText As i32))
+	i8* SourceLine := FindLastLine(At->Lexer->Source, OffsetInSource)
+	i32 PositionInLine := (OffsetInSource - (SourceLine - At->Lexer->Source As i32))
 	
 	i32 DashCount := 0
 	

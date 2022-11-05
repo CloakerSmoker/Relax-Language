@@ -1,3 +1,5 @@
+
+#Require "$/AVLTree.rlx"
 #Require "./src/compiler/Utility.rlx"
 
 ; Constants end around line 130
@@ -150,6 +152,13 @@ i8 KEYWORD_ENUM := 23
 
 i8 KEYWORD_EXTERNAL := 24
 
+; Should be zero, but somehow I used 0 as a regular value
+i8 KEYWORD_NONE := 127
+
+struct KeywordMapping {
+	i8 Value
+}
+
 struct Token {
 	ErrorContext Context
 	
@@ -187,27 +196,32 @@ struct Token {
 	define i8 Is(i8 Type) {
 		return this->Type = Type
 	}
+
+	define void Free() {
+		if (this->Type = TOKEN_TYPE_IDENTIFIER || this->Type = TOKEN_TYPE_STRING || this->Type = TOKEN_TYPE_WIDE_STRING) {
+			this->StringValue->Free()
+		}
+
+		Free(this)
+	}
 }
 
 struct LexerState {
-	BuildConfig* Config,
-	SafeString* SourceFilePath,
+	BuildConfig* Config
+	SafeString* SourceFilePath
 	
-	HashMap Keywords,
+	AVLTree Keywords
 	
-	union {
-		i8* Source,
-		i8* SourceText
-	}
+	i8* Source
+	i32 SourceIndex
+	i32 SourceLength
 	
-	i32 SourceIndex,
-	i32 SourceLength,
-	
-	i32 TokenIndex,
-	i32 MaxTokenIndex,
-	i32 CurrentLineNumber,
-	i16 CurrentLineStart,
+	i32 TokenIndex
+	i32 MaxTokenIndex
 	i32 TokenCapacity
+
+	i32 CurrentLineNumber
+	i32 CurrentTokenStart
 	
 	LexerState* Parent
 	LexerState* Child
@@ -217,7 +231,28 @@ struct LexerState {
 		Token** Tokens
 	}
 	
-	i32 CurrentTokenStart
+	define void DefineKeyword(i8* Name, i8 Value) {
+		KeywordMapping Mapping {
+			Value: Value
+		}
+
+		i64 Hash := FNV1A(Name, StringLength(Name), true)
+
+		this~>Keywords->Insert(Hash, &Mapping)
+	}
+
+	define i8 LookupKeyword(SafeString* Name) {
+		i64 Hash := FNV1A(Name->Buffer, Name->Length, true)
+
+		KeywordMapping* Mapping := this~>Keywords->Get(Hash)
+
+		if (Mapping) {
+			return Mapping->Value
+		}
+		else {
+			return KEYWORD_NONE
+		}
+	}
 	
 	static LexerState* New(BuildConfig* Config, LexerState* Parent, i8* Source, i32 SourceLength, SafeString* SourceFilePath) {
 		LexerState* this := Alloc(#LexerState)
@@ -235,37 +270,34 @@ struct LexerState {
 		}
 		
 		this->CurrentLineNumber := 1
+
+		this~>Keywords->ValueSize := #KeywordMapping
 		
-		HashMap* Keywords := this~>Keywords
-	
-		Keywords->Initialize()
-		Keywords->IgnoreCase := true
-		
-		Keywords->Set("declare", 	KEYWORD_DECLARE)
-		Keywords->Set("define", 	KEYWORD_DEFINE)
-		Keywords->Set("dllimport", 	KEYWORD_DLLIMPORT)
-		Keywords->Set("if", 		KEYWORD_IF)
-		Keywords->Set("else", 		KEYWORD_ELSE)
-		Keywords->Set("for", 		KEYWORD_FOR)
-		Keywords->Set("while",		KEYWORD_WHILE)
-		Keywords->Set("loop", 		KEYWORD_LOOP)
-		Keywords->Set("continue", 	KEYWORD_CONTINUE)
-		Keywords->Set("break", 		KEYWORD_BREAK)
-		Keywords->Set("struct", 	KEYWORD_STRUCT)
-		Keywords->Set("return", 	KEYWORD_RETURN)
-		Keywords->Set("union", 		KEYWORD_UNION)
-		Keywords->Set("bits", 		KEYWORD_BITS)
-		Keywords->Set("unaligned", 	KEYWORD_UNALIGNED)
-		Keywords->Set("windows", 	KEYWORD_WINDOWS)
-		Keywords->Set("linux", 		KEYWORD_LINUX)
-		Keywords->Set("asm", 		KEYWORD_ASSEMBLY)
-		Keywords->Set("try", 		KEYWORD_TRY)
-		Keywords->Set("catch", 		KEYWORD_CATCH)
-		Keywords->Set("x64", 		KEYWORD_X64)
-		Keywords->Set("static", 	KEYWORD_STATIC)
-		Keywords->Set("using", 		KEYWORD_USING)
-		Keywords->Set("enum", 		KEYWORD_ENUM)
-		Keywords->Set("external",   KEYWORD_EXTERNAL)
+		this->DefineKeyword("declare",   KEYWORD_DECLARE)
+		this->DefineKeyword("define",    KEYWORD_DEFINE)
+		this->DefineKeyword("dllimport", KEYWORD_DLLIMPORT)
+		this->DefineKeyword("if",        KEYWORD_IF)
+		this->DefineKeyword("else",      KEYWORD_ELSE)
+		this->DefineKeyword("for",       KEYWORD_FOR)
+		this->DefineKeyword("while",     KEYWORD_WHILE)
+		this->DefineKeyword("loop",      KEYWORD_LOOP)
+		this->DefineKeyword("continue",  KEYWORD_CONTINUE)
+		this->DefineKeyword("break",     KEYWORD_BREAK)
+		this->DefineKeyword("struct",    KEYWORD_STRUCT)
+		this->DefineKeyword("return",    KEYWORD_RETURN)
+		this->DefineKeyword("union",     KEYWORD_UNION)
+		this->DefineKeyword("bits",      KEYWORD_BITS)
+		this->DefineKeyword("unaligned", KEYWORD_UNALIGNED)
+		this->DefineKeyword("windows",   KEYWORD_WINDOWS)
+		this->DefineKeyword("linux",     KEYWORD_LINUX)
+		this->DefineKeyword("asm",       KEYWORD_ASSEMBLY)
+		this->DefineKeyword("try",       KEYWORD_TRY)
+		this->DefineKeyword("catch",     KEYWORD_CATCH)
+		this->DefineKeyword("x64",       KEYWORD_X64)
+		this->DefineKeyword("static",    KEYWORD_STATIC)
+		this->DefineKeyword("using",     KEYWORD_USING)
+		this->DefineKeyword("enum",      KEYWORD_ENUM)
+		this->DefineKeyword("external",  KEYWORD_EXTERNAL)
 		
 		return this
 	}
@@ -382,7 +414,11 @@ struct LexerState {
 	}
 	
 	define SafeString* GetString(i32 StartIndex, i32 EndIndex) {
-		return SafeString:New(EndIndex - StartIndex, this->SourceText + StartIndex)
+		i32 Length := EndIndex - StartIndex
+		i8* Clone := CloneMemory(this->Source + StartIndex, Length + 1)
+		Clone[Length] := 0
+
+		return SafeString:Adopt(Length, Clone)
 	}
 	define SafeString* GetString(i32 StartIndex) {
 		return this->GetString(StartIndex, this->SourceIndex)
@@ -413,11 +449,7 @@ struct LexerState {
 			}
 		}
 		
-		SafeString* RawNumericLiteral := this->GetString(StartIndex + (Base != 10) * 2)
-		
-		SafeString* NumericLiteral := RawNumericLiteral->Clone()
-		
-		RawNumericLiteral->Free()
+		SafeString* NumericLiteral := this->GetString(StartIndex + (Base != 10) * 2)
 		
 		for (i32 Index := 0, Index < NumericLiteral->Length, Index += 1) {
 			if (NumericLiteral->ASCIICharacterAt(Index) = '_') {
@@ -819,13 +851,13 @@ struct LexerState {
 			
 			SafeString* TokenText := this->GetString(StartingIndex)
 			
-			HashMapElement* FoundKeyword := this~>Keywords->Get(TokenText)
+			i8 FoundKeyword := this->LookupKeyword(TokenText)
 			
-			if (FoundKeyword) {
+			if (FoundKeyword != KEYWORD_NONE) {
 				/* If the characters make up a keyword, then free the string and make the keyword token */
 				TokenText->Free()
 				
-				return this->AppendToken(TOKEN_TYPE_KEYWORD, FoundKeyword->Value)
+				return this->AppendToken(TOKEN_TYPE_KEYWORD, FoundKeyword)
 			}
 			else {
 				/* Otherwise, make an identifier token */
@@ -903,17 +935,12 @@ struct LexerState {
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
 					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_STRING, null, StartingIndex))
 				}
-				
-				i32 EndIndex := IncludePath->Length
-				i8 OldFollowingCharacter := IncludePath->Buffer[EndIndex]
-				
-				IncludePath->Buffer[EndIndex] := 0 /* Insert a null terminator into the source */
 
 				ErrorContext IncludePathBlame {
 					Lexer: this,
 					LineNumber: this->CurrentLineNumber,
 					PositionInSource: StartingIndex,
-					LengthInSource: EndIndex As i16
+					LengthInSource: IncludePath->Length As i16
 				}
 				
 				i8* IncludePathBuffer := IncludePath->Buffer
@@ -945,17 +972,19 @@ struct LexerState {
 				}
 				
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
-				
+
+				if (IsLibraryInclude || IsPlatformInclude) {
+					Free(IncludePathBuffer)
+				}
+
 				;Print("Expanded '%s' to '%s'\n", IncludePathBuffer, AbsoluteIncludePath)
 				
 				if (IsRequire) {
 					HashMapElement* FoundFile := this->Config->IncludedFiles->Get(AbsoluteIncludePath)
 					
 					if (FoundFile) {
-						if (IsLibraryInclude) {
-							Free(IncludePathBuffer)
-						}
-						
+						IncludePath->Free()
+
 						return this->GetNextToken(false)
 					}
 				}
@@ -970,13 +999,7 @@ struct LexerState {
 				}
 				
 				i32 IncludeFileSize := 0
-				i8* IncludeFileText := OpenAndRead(IncludePathBuffer, &IncludeFileSize, &IncludePathBlame)
-				
-				if (IsLibraryInclude) {
-					Free(IncludePathBuffer)
-				}
-				
-				IncludePath->Buffer[EndIndex] := OldFollowingCharacter /* Restore the old character */
+				i8* IncludeFileText := OpenAndRead(AbsoluteIncludePath, &IncludeFileSize, &IncludePathBlame)
 				
 				this->Child := LexerState:New(this, IncludeFileText, IncludeFileSize, IncludePath)
 				
@@ -1098,6 +1121,16 @@ struct LexerState {
 	}
 	define Token* Consume(i8 TokenType, i8* Reason) {
 		return this->Consume(TokenType, 0, Reason)
+	}
+
+	define void Free() {
+		for (i32 Index := 0, Index < this->MaxTokenIndex, Index++) {
+			this->Tokens[Index]->Free()
+		}
+
+		Free(this->Tokens)
+
+		this~>Keywords->Free()
 	}
 }
 
