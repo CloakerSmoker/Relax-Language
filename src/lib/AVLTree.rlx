@@ -360,6 +360,9 @@ struct AVLTree {
 	define void* ValueAt(i32 Index) {
 		return this->Root->At(Index)->Value
 	}
+	define void* At(i32 Index) {
+		return this->ValueAt(Index)
+	}
 	define void* PointerValueAt(i32 Index) {
 		return *(this->Root->At(Index)->Value As void**)
 	}

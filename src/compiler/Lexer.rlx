@@ -980,17 +980,15 @@ struct LexerState {
 				;Print("Expanded '%s' to '%s'\n", IncludePathBuffer, AbsoluteIncludePath)
 				
 				if (IsRequire) {
-					HashMapElement* FoundFile := this->Config->IncludedFiles->Get(AbsoluteIncludePath)
-					
-					if (FoundFile) {
+					if (this->Config->HasIncludedPath(AbsoluteIncludePath)) {
 						IncludePath->Free()
 
 						return this->GetNextToken(false)
 					}
 				}
 				
-				this->Config->IncludedFiles->Set(AbsoluteIncludePath, AbsoluteIncludePath)
-				this->Config->IncludedFiles->Set(IncludePath, AbsoluteIncludePath)
+				this->Config->DefineIncludedPath(AbsoluteIncludePath, AbsoluteIncludePath)
+				this->Config->DefineIncludedPath(IncludePath, AbsoluteIncludePath)
 				
 				if !(this->Config->DumpInfo & DUMP_SILENT) {
 					Print("Including file: '")
@@ -1131,6 +1129,8 @@ struct LexerState {
 		Free(this->Tokens)
 
 		this~>Keywords->Free()
+
+		Free(this)
 	}
 }
 

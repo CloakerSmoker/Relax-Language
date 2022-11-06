@@ -103,10 +103,9 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	
 	i8* ProgramDirectory := GetAbsolutePath(Concatenate(ArgV[0], "/../../"))
 	
-	BuildConfig* Config := Alloc(#BuildConfig)
+	BuildConfig* Config := BuildConfig:New()
 	
 	Config->LibraryDirectory := Concatenate(ProgramDirectory, "src/lib")
-	Config->IncludedFiles := HashMap:New()
 	
 	Config->DumpInfo := 0
 	Config->LineEnding := LINE_ENDING_DEFAULT
@@ -266,7 +265,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	Config->TargetABI := ABI_SYSTEMV
 	Config->ImageBase := DEFAULT_IMAGE_BASE
 	
-	Config->IncludedFiles->Set(InputFilePath, GetAbsolutePath(InputFilePath))
+	Config->DefineIncludedPath(InputFilePath, GetAbsolutePath(InputFilePath))
 	
 	i32 SourceLength := 0
 	i8* Source := OpenAndRead(InputFilePath, &SourceLength)
@@ -281,23 +280,25 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		FileDelete(OutputFilePath)
 		i64 MakeDep := FileOpen(OutputFilePath, FILE_CREATE_NEW | FILE_WRITE)
 
-		void* Elements := Config->IncludedFiles->Elements
+		AVLTree* AlreadyListed := AVLTree:New(0)
+
+		i32 Count := Config~>IncludedFiles->Count()
 	
-		for (i32 ElementIndex := 0, ElementIndex < (Config->IncludedFiles->BufferMaxCount), ElementIndex += 1) {
-			if (Elements[ElementIndex]) {
-				HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-				
-				while (FoundElement) {
-					i8* NextFile := FoundElement->Value
-					
-					FileWrite(MakeDep, NextFile, StringLength(NextFile))
-					FileWrite(MakeDep, " ", 1)
-					
-					/* Update the current element to be the next element in the linked list */
-					FoundElement := FoundElement->NextElement
-				}
+		for (i32 Index := 0, Index < Count, Index++) {
+			IncludeEntry* Entry := Config~>IncludedFiles->At(Index)
+			i8* Path := Entry->AbsolutePath
+
+			if (AlreadyListed->Has(FNV1A(Path))) {
+				continue
 			}
+
+			FileWrite(MakeDep, Path, StringLength(Path))
+			FileWrite(MakeDep, " ", 1)
+
+			AlreadyListed->Insert(FNV1A(Path), null)
 		}
+
+		AlreadyListed->Free()
 
 		FileTruncate(MakeDep, FileTell(MakeDep) - 1)
 

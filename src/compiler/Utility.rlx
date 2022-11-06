@@ -78,12 +78,18 @@ i8 LINE_ENDING_DEFAULT := 0
 i8 LINE_ENDING_CR := 1
 i8 LINE_ENDING_CRLF := 2
 
+struct IncludeEntry {
+	; Maps misc. forms of a path to a resolved/included absolute path
+
+	i8* AbsolutePath
+}
+
 struct BuildConfig {
 	LexerState* Lexer
 	i8* SourceFile
 	i8* LibraryDirectory
 	i8* PlatformDirectory
-	HashMap* IncludedFiles
+	AVLTree IncludedFiles
 
 	i8* PlatformName
 	
@@ -98,6 +104,39 @@ struct BuildConfig {
 	union {
 		i16 PESubsystem
 		i8 ELFABI
+	}
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this~>IncludedFiles->ValueSize := #IncludeEntry
+
+		return this
+	}
+
+	define void DefineIncludedPath(i64 Hash, i8* Absolute) {
+		IncludeEntry Entry {
+			AbsolutePath: Absolute
+		}
+
+		this~>IncludedFiles->Insert(Hash, &Absolute)
+	}
+
+	define void DefineIncludedPath(i8* Path, i8* Absolute) {
+		this->DefineIncludedPath(FNV1A(Path), Absolute)
+	}
+	define void DefineIncludedPath(SafeString* Path, i8* Absolute) {
+		this->DefineIncludedPath(FNV1A(Path->Buffer, Path->Length), Absolute)
+	}
+
+	define i8 HasIncludedPath(i8* Path) {
+		return this~>IncludedFiles->Has(FNV1A(Path))
+	}
+
+	define i8* LookupIncludedPath(i8* Path) {
+		IncludeEntry* Entry := this~>IncludedFiles->Get(FNV1A(Path))
+
+		return Entry->AbsolutePath
 	}
 }
 

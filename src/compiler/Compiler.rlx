@@ -112,9 +112,7 @@ struct CompilerState {
 	}
 	
 	define i8* SourcePathToAbsolutePath(i8* Path) {
-		HashMapElement* AbsolutePathElement := this->Config->IncludedFiles->Get(Path)
-		
-		return AbsolutePathElement->Value
+		return this->Config->LookupIncludedPath(Path)
 	}
 	
 	define void InitializeDebugInfo() {
