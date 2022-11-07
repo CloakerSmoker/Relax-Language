@@ -6,8 +6,6 @@
 ;#Require "$/Debug.rlx"
 
 struct SwimmingPoolAllocator {
-	AllocatorArena Arena
-	
 	PoolAllocator*[9] Ranks
 	
 	PageAllocation* FirstPageAllocation
@@ -99,6 +97,22 @@ struct SwimmingPoolAllocator {
 		}
 
 		Pages->Free()
+	}
+
+	define void* Extend(void* Memory, i32 NewSize) {
+		i32 OldSize := this->AllocationSize(Memory)
+		
+		if (OldSize >= NewSize) {
+			return Memory
+		}
+		
+		void* New := this->Allocate(NewSize)
+		
+		FastMoveMemory(New, Memory, OldSize)
+		
+		this->Free(Memory)
+		
+		return New
 	}
 	
 	define void GetUsage(AllocatorUsage* Out) {

@@ -1,5 +1,39 @@
+struct MemoryAllocator {
+    void* State
+
+    void*(void*, i64) Allocate
+    void*(void*, void*, i64) Extend
+    void(void*, void*) Free
+}
+
 #Require "$/MemoryBase.rlx"
 #Require "@/Memory.rlx"
+
+MemoryAllocator* CurrentAllocator := &DefaultAllocator
+
+define void* Alloc(i64 Size) {
+    return DefaultAllocator->Allocate(CurrentAllocator->State, Size)
+}
+
+define void* ReAlloc(void* Memory, i64 NewSize) {
+    return CurrentAllocator->Extend(CurrentAllocator->State, Memory, NewSize)
+}
+
+define void Free(void* Memory) {
+    CurrentAllocator->Free(CurrentAllocator->State, Memory)
+}
+
+define MemoryAllocator* WithAllocator(MemoryAllocator* New) {
+	MemoryAllocator* Old := CurrentAllocator
+
+	CurrentAllocator := New
+
+	return Old
+}
+
+define void RestoreAllocator(MemoryAllocator* Old) {
+	CurrentAllocator := Old
+}
 
 define void* CloneMemory(void* Memory, i32 Size) {
 	void* NewBuffer := Alloc(Size)
