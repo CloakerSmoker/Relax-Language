@@ -33,7 +33,7 @@ SwimmingPoolAllocator DefaultSwimmingPoolAllocator
 
 MemoryAllocator DefaultAllocator {
     State: &DefaultSwimmingPoolAllocator,
-    Allocate: &SwimmingPoolAllocator.Allocate,
-    Extend: &SwimmingPoolAllocator.Extend,
-    Free: &SwimmingPoolAllocator.Free
+    DoAllocate: &SwimmingPoolAllocator.Allocate,
+    DoExtend: &SwimmingPoolAllocator.Extend,
+    DoFree: &SwimmingPoolAllocator.Free
 }

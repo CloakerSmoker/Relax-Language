@@ -28,9 +28,9 @@ WindowsHeapAllocator DefaultWindowsHeap {
 
 MemoryAllocator DefaultAllocator {
     State: &DefaultWindowsHeap,
-    Allocate: &WindowsHeapAllocator.Alloc,
-    Extend: &WindowsHeapAllocator.ReAlloc,
-    Free: &WindowsHeapAllocator.Free
+    DoAllocate: &WindowsHeapAllocator.Alloc,
+    DoExtend: &WindowsHeapAllocator.ReAlloc,
+    DoFree: &WindowsHeapAllocator.Free
 }
 
 define i32 SetAllocatorPanicHandler(i32 Priority, void(i8*, void*) Handler) {

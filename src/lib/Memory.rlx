@@ -1,9 +1,19 @@
 struct MemoryAllocator {
     void* State
 
-    void*(void*, i64) Allocate
-    void*(void*, void*, i64) Extend
-    void(void*, void*) Free
+    void*(void*, i64) DoAllocate
+    void*(void*, void*, i64) DoExtend
+    void(void*, void*) DoFree
+
+	define void* Allocate(i64 Size) {
+		return this->DoAllocate(this->State, Size)
+	}
+	define void* Extend(void* Where, i64 Size) {
+		return this->DoExtend(this->State, Where, Size)
+	}
+	define void Free(void* Where) {
+		this->DoFree(this->State, Where)
+	}
 }
 
 #Require "$/MemoryBase.rlx"
@@ -12,15 +22,15 @@ struct MemoryAllocator {
 MemoryAllocator* CurrentAllocator := &DefaultAllocator
 
 define void* Alloc(i64 Size) {
-    return DefaultAllocator->Allocate(CurrentAllocator->State, Size)
+    return CurrentAllocator->Allocate(Size)
 }
 
 define void* ReAlloc(void* Memory, i64 NewSize) {
-    return CurrentAllocator->Extend(CurrentAllocator->State, Memory, NewSize)
+    return CurrentAllocator->Extend(Memory, NewSize)
 }
 
 define void Free(void* Memory) {
-    CurrentAllocator->Free(CurrentAllocator->State, Memory)
+    CurrentAllocator->Free(Memory)
 }
 
 define MemoryAllocator* WithAllocator(MemoryAllocator* New) {
