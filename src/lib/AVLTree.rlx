@@ -175,7 +175,7 @@ struct AVLTreeNode {
 				}
 				
 				if (Survivor) {
-					MoveMemory(this, Survivor, #AVLTreeNode)
+					MoveMemory(this, Survivor, #AVLTreeNode + this->ValueSize)
 					Free(Survivor)
 
 					return this
@@ -193,7 +193,7 @@ struct AVLTreeNode {
 					SmallestRightNode := SmallestRightNode->Left
 				}
 
-				this->Key := SmallestRightNode->Key
+				MoveMemory(this->Value, SmallestRightNode->Value, this->ValueSize)
 				this->Right := this->Right->Remove(SmallestRightNode->Key)
 			}
 		}

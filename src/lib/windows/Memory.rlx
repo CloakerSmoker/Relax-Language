@@ -10,14 +10,24 @@ struct WindowsHeapAllocator {
     i64 Handle
 
     define void* Alloc(i64 Size) {
-        return HeapAlloc(this->Handle, HEAP_ZERO_MEMORY, Size)
+        void* R := HeapAlloc(this->Handle, HEAP_ZERO_MEMORY, Size)
+
+        Print("Alloc  [%x\t](%i) = %x\n", this->Handle, Size, R)
+
+        return R
     }
 
     define void* ReAlloc(void* Memory, i64 NewSize) {
-        return HeapReAlloc(this->Handle, HEAP_ZERO_MEMORY, Memory, NewSize)
+        void* R := HeapReAlloc(this->Handle, HEAP_ZERO_MEMORY, Memory, NewSize)
+
+        Print("ReAlloc[%x\t](%x, %i) = %x\n", this->Handle, Memory, NewSize, R)
+
+        return R
     }
 
     define void Free(void* Memory) {
+        Print("Free   [%x\t](%x)\n", this->Handle, Memory)
+        
         HeapFree(this->Handle, 0, Memory)
     }
 }
