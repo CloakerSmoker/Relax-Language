@@ -282,6 +282,20 @@ struct AVLTreeNode {
 		return this->LeftSize + this->Right->Count() + 1
 	}
 
+	define self* Clone() {
+		self* Result := CloneMemory(this, #AVLTreeNode + this->ValueSize)
+
+		if (this->Left) {
+			Result->Left := this->Left->Clone()
+		}
+
+		if (this->Right) {
+			Result->Right := this->Right->Clone()
+		}
+
+		return Result
+	}
+
 	define void Free() {
 		if (this->Left) {
 			this->Left->Free()
@@ -414,6 +428,16 @@ struct AVLTree {
 			this->Root->Free()
 			Free(this->Root)
 		}
+	}
+
+	define self* Clone() {
+		self* Result := self:New(this->ValueSize)
+
+		if (this->Root) {
+			Result->Root := this->Root->Clone()
+		}
+
+		return Result
 	}
 
 	define void Print() {
