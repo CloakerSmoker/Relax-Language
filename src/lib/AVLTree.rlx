@@ -26,8 +26,8 @@ struct AVLTreeNode {
 
 	define i32 CalculateHeight() {
 		if (this != null) {
-			i32 LeftHeight := this->Left->GetHeight()
-			i32 RightHeight := this->Right->GetHeight()
+			i32 LeftHeight := this->Left->CalculateHeight()
+			i32 RightHeight := this->Right->CalculateHeight()
 	
 			if (LeftHeight < RightHeight) {
 				return RightHeight + 1
@@ -67,7 +67,19 @@ struct AVLTreeNode {
 
 	define i32 GetBalance() {
 		if (this != null) {
-			return this->Right->Height - this->Left->Height
+			i32 LeftHeight := 0
+
+			if (this->Left) {
+				LeftHeight := this->Left->Height
+			}
+
+			i32 RightHeight := 0
+
+			if (this->Right) {
+				RightHeight := this->Right->Height
+			}
+
+			return RightHeight - LeftHeight
 		}
 		else {
 			return 0
@@ -160,6 +172,7 @@ struct AVLTreeNode {
 			NewChild->SetValue(Value)
 
 			NewChild->Key := Key
+			NewChild->UpdateDimensions()
 
 			*Destination := NewChild
 		}
@@ -190,16 +203,16 @@ struct AVLTreeNode {
 		return this->Insert(Key, null)
 	}
 
-	define AVLTreeNode* RemoveMinimum() {
-		AVLTreeNode* Result := null
-
-		if (this->Left) {
-			Result := this->Left->RemoveMinimum()
-		}
-		else {
-			
-		}
-	}
+	;define AVLTreeNode* RemoveMinimum() {
+	;	AVLTreeNode* Result := null
+	;
+	;	if (this->Left) {
+	;		Result := this->Left->RemoveMinimum()
+	;	}
+	;	else {
+	;		
+	;	}
+	;}
 
 	define AVLTreeNode* Remove(i64 Key) {
 		if (this->Key = Key) {
@@ -237,9 +250,10 @@ struct AVLTreeNode {
 			this->Right := this->Right->Remove(Key)
 		}
 		else {
-			this->LeftSize -= 1
 			this->Left := this->Left->Remove(Key)
 		}
+
+		this->UpdateDimensions()
 		
 		return this->Balance()
 	}
@@ -279,29 +293,35 @@ struct AVLTreeNode {
 	}
 
 	define AVLTreeNode* At(i32 Index) {
-		if (Index = this->LeftSize) {
+		i32 LeftSize := 0
+
+		if (this->Left) {
+			LeftSize := this->Left->Size
+		}
+
+		if (Index = LeftSize) {
 			return this
 		}
 		else {
-			if (Index < this->LeftSize) {
+			if (Index < LeftSize) {
 				return this->Left->At(Index)
 			}
 			else {
-				return this->Right->At(Index - this->LeftSize - 1)
+				return this->Right->At(Index - LeftSize - 1)
 			}
 		}
 	}
 
 	define i32 IndexOf(i32 TotalLeftSize, i64 Key) {
 		if (this->Key = Key ) {
-			return TotalLeftSize + this->LeftSize
+			return TotalLeftSize + this->Left->Size
 		}
 		else {
 			if (Key < this->Key) {
 				return this->Left->IndexOf(TotalLeftSize, Key)
 			}
 			else {
-				return this->Right->IndexOf(TotalLeftSize + this->LeftSize + 1, Key)
+				return this->Right->IndexOf(TotalLeftSize + this->Left->Size + 1, Key)
 			}
 		}
 	}
@@ -315,7 +335,7 @@ struct AVLTreeNode {
 			return 0
 		}
 
-		return this->LeftSize + this->Right->Count() + 1
+		return this->Left->Size + this->Right->Size + 1
 	}
 
 	define self* Clone() {
@@ -353,12 +373,31 @@ struct AVLTreeNode {
 			Print("nil\n")
 		}
 		else {
-			Print("%x %x (%i, %i) [%i]:\n", this->Key, *(this->Value As void**), this->GetBalance(), this->GetHeight(), this->LeftSize)
+			Print("%x %x (%i, %i) [%i]:\n", this->Key, *(this->Value As void**), this->GetBalance(), this->Height, this->Left->Size)
 
 			this->Left->Print(Depth + 1)
 			this->Right->Print(Depth + 1)
 		}
+	}
 
+	define void PrintGraphViz() {
+		Print("\tn%i[label=\"%l\\nB%i, S%i, H%i\"];\n", this->Key, this->Key, this->GetBalance(), this->Size, this->Height)
+
+		if (this->Left) {
+			Print("\tn%i -- n%i [label=\"L\"];\n", this->Key, this->Left->Key)
+		}
+
+		if (this->Right) {
+			Print("\tn%i -- n%i [label=\"R\"];\n", this->Key, this->Right->Key)
+		}
+
+		if (this->Left) {
+			this->Left->PrintGraphViz()
+		}
+
+		if (this->Right) {
+			this->Right->PrintGraphViz()
+		}
 	}
 }
 
@@ -478,6 +517,14 @@ struct AVLTree {
 
 	define void Print() {
 		this->Root->Print(0)
+	}
+
+	define void PrintGraphViz() {
+		Print("graph {\n")
+
+		this->Root->PrintGraphViz()
+
+		Print("}\n")
 	}
 }
 
