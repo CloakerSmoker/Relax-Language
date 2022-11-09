@@ -8,7 +8,10 @@ struct AVLTreeNode {
 	AVLTreeNode* Left
 	AVLTreeNode* Right
 	i64 Key
-	i32 LeftSize
+	
+	i32 Height
+	i32 Size
+
 	i32 ValueSize
 	
 	void[0] Value
@@ -21,7 +24,7 @@ struct AVLTreeNode {
 		return null
 	}
 
-	define i32 GetHeight() {
+	define i32 CalculateHeight() {
 		if (this != null) {
 			i32 LeftHeight := this->Left->GetHeight()
 			i32 RightHeight := this->Right->GetHeight()
@@ -38,9 +41,33 @@ struct AVLTreeNode {
 		}
 	}
 
+	define i32 CaclulateSize() {
+		if (this != null) {
+			i32 Size := 1
+
+			if (this->Left) {
+				Size += this->Left->Size
+			}
+			
+			if (this->Right) {
+				Size += this->Right->Size
+			}
+
+			return Size
+		}
+		else {
+			return 0
+		}
+	}
+
+	define void UpdateDimensions() {
+		this->Height := this->CalculateHeight()
+		this->Size  := this->CaclulateSize()
+	}
+
 	define i32 GetBalance() {
 		if (this != null) {
-			return this->Right->GetHeight() - this->Left->GetHeight()
+			return this->Right->Height - this->Left->Height
 		}
 		else {
 			return 0
@@ -58,8 +85,8 @@ struct AVLTreeNode {
 		NewRoot->Right := this
 		this->Left := OldRight
 
-		this->LeftSize := this->Left->Count()
-		NewRoot->LeftSize := NewRoot->Left->Count()
+		this->UpdateDimensions()
+		NewRoot->UpdateDimensions()
 
 		return NewRoot
 	}
@@ -73,8 +100,8 @@ struct AVLTreeNode {
 		NewRoot->Left := this
 		this->Right := OldLeft
 
-		this->LeftSize := this->Left->Count()
-		NewRoot->LeftSize := NewRoot->Left->Count()
+		this->UpdateDimensions()
+		NewRoot->UpdateDimensions()
 
 		return NewRoot
 	}
@@ -147,12 +174,10 @@ struct AVLTreeNode {
 				this->InsertHelper(this~>Right, Key, Value)
 			}
 			else {
-				AVLTreeNode* OldLeft := this->Left
-
 				this->InsertHelper(this~>Left, Key, Value)
-
-				this->LeftSize += 1
 			}
+
+			this->UpdateDimensions()
 			
 			return this->Balance()
 		}
@@ -163,6 +188,17 @@ struct AVLTreeNode {
 	}
 	define AVLTreeNode* Insert(i64 Key) {
 		return this->Insert(Key, null)
+	}
+
+	define AVLTreeNode* RemoveMinimum() {
+		AVLTreeNode* Result := null
+
+		if (this->Left) {
+			Result := this->Left->RemoveMinimum()
+		}
+		else {
+			
+		}
 	}
 
 	define AVLTreeNode* Remove(i64 Key) {
