@@ -133,20 +133,24 @@ struct AVLTreeNode {
 	define AVLTreeNode* Balance() {
 		i32 Balance := this->GetBalance()
 
-		if (Balance < -1) {
-			if (this->Left->GetBalance() < 0) {
-				return this->RightRotate()
-			}
-			else {
-				return this->LeftRightRotate()
-			}
-		}
-		else if (Balance > 1) {
+		if (Balance >= 2) {
+			; Right > left
+
 			if (this->Right->GetBalance() >= 0) {
 				return this->LeftRotate()
 			}
 			else {
 				return this->RightLeftRotate()
+			}
+		}
+		else if (Balance <= -2) {
+			; Left > right
+
+			if (this->Left->GetBalance() <= 0) {
+				return this->RightRotate()
+			}
+			else {
+				return this->LeftRightRotate()
 			}
 		}
 		
@@ -217,7 +221,7 @@ struct AVLTreeNode {
 
 		if (*pThis) {
 			(*pThis)->UpdateDimensions()
-			(*pThis)->Balance()
+			*pThis := (*pThis)->Balance()
 		}
 
 		return Result
@@ -337,7 +341,17 @@ struct AVLTreeNode {
 			return 0
 		}
 
-		return this->Left->Size + this->Right->Size + 1
+		i32 Result := 1
+
+		if (this->Left) {
+			Result += this->Left->Size
+		}
+
+		if (this->Right) {
+			Result += this->Right->Size
+		}
+
+		return Result
 	}
 
 	define self* Clone() {
