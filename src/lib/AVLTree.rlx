@@ -203,47 +203,42 @@ struct AVLTreeNode {
 		return this->Insert(Key, null)
 	}
 
-	;define AVLTreeNode* RemoveMinimum() {
-	;	AVLTreeNode* Result := null
-	;
-	;	if (this->Left) {
-	;		Result := this->Left->RemoveMinimum()
-	;	}
-	;	else {
-	;		
-	;	}
-	;}
+	define AVLTreeNode* RemoveMinimum(AVLTreeNode** pThis) {
+		AVLTreeNode* Result := null
+	
+		if (this->Left) {
+			Result := this->Left->RemoveMinimum(this~>Left)
+		}
+		else {
+			*pThis := this->Right
+
+			Result := this
+		}
+
+		if (*pThis) {
+			(*pThis)->UpdateDimensions()
+			(*pThis)->Balance()
+		}
+
+		return Result
+	}
 
 	define AVLTreeNode* Remove(i64 Key) {
 		if (this->Key = Key) {
-			if (this->Left = null || this->Right = null) {
-				AVLTreeNode* Survivor := this->Left
+			if (this->Right) {
+				AVLTreeNode* RightMinimum := this->Right->RemoveMinimum(this~>Right)
 
-				if (Survivor = null) {
-					Survivor := this->Right
-				}
-				
-				if (Survivor) {
-					MoveMemory(this, Survivor, #AVLTreeNode + this->ValueSize)
-					Free(Survivor)
+				MoveMemory(this->Value, RightMinimum->Value, this->ValueSize)
+				this->Key := RightMinimum->Key
 
-					return this
-				}
-				else {
-					Free(this)
-
-					return null
-				}
+				Free(RightMinimum)
 			}
 			else {
-				AVLTreeNode* SmallestRightNode := this->Right
+				AVLTreeNode* Left := this->Left
 
-				while (SmallestRightNode->Left != null) {
-					SmallestRightNode := SmallestRightNode->Left
-				}
+				Free(this)
 
-				MoveMemory(this->Value, SmallestRightNode->Value, this->ValueSize)
-				this->Right := this->Right->Remove(SmallestRightNode->Key)
+				return Left
 			}
 		}
 		else if (Key > this->Key) {
@@ -292,12 +287,17 @@ struct AVLTreeNode {
 		}
 	}
 
-	define AVLTreeNode* At(i32 Index) {
-		i32 LeftSize := 0
-
+	define i32 LeftSize() {
 		if (this->Left) {
-			LeftSize := this->Left->Size
+			return this->Left->Size
 		}
+		else {
+			return 0
+		}
+	}
+
+	define AVLTreeNode* At(i32 Index) {
+		i32 LeftSize := this->LeftSize()
 
 		if (Index = LeftSize) {
 			return this
@@ -313,15 +313,17 @@ struct AVLTreeNode {
 	}
 
 	define i32 IndexOf(i32 TotalLeftSize, i64 Key) {
+		i32 LeftSize := this->LeftSize()
+
 		if (this->Key = Key ) {
-			return TotalLeftSize + this->Left->Size
+			return TotalLeftSize + LeftSize
 		}
 		else {
 			if (Key < this->Key) {
 				return this->Left->IndexOf(TotalLeftSize, Key)
 			}
 			else {
-				return this->Right->IndexOf(TotalLeftSize + this->Left->Size + 1, Key)
+				return this->Right->IndexOf(TotalLeftSize + LeftSize + 1, Key)
 			}
 		}
 	}
@@ -380,8 +382,10 @@ struct AVLTreeNode {
 		}
 	}
 
-	define void PrintGraphViz() {
-		Print("\tn%i[label=\"%l\\nB%i, S%i, H%i\"];\n", this->Key, this->Key, this->GetBalance(), this->Size, this->Height)
+	define void PrintGraphViz(void(AVLTreeNode*) PrintNode) {
+		Print("\tn%i[label=\"", this->Key)
+		PrintNode(this)
+		Print("\"];\n")
 
 		if (this->Left) {
 			Print("\tn%i -- n%i [label=\"L\"];\n", this->Key, this->Left->Key)
@@ -392,11 +396,11 @@ struct AVLTreeNode {
 		}
 
 		if (this->Left) {
-			this->Left->PrintGraphViz()
+			this->Left->PrintGraphViz(PrintNode)
 		}
 
 		if (this->Right) {
-			this->Right->PrintGraphViz()
+			this->Right->PrintGraphViz(PrintNode)
 		}
 	}
 }
@@ -519,12 +523,20 @@ struct AVLTree {
 		this->Root->Print(0)
 	}
 
-	define void PrintGraphViz() {
+	static void DefaultPrintNode(AVLTreeNode* this) {
+		Print("%l\\nB%i, S%i, H%i", this->Key, this->GetBalance(), this->Size, this->Height)
+	}
+
+	define void PrintGraphViz(void(AVLTreeNode*) PrintNode) {
 		Print("graph {\n")
 
-		this->Root->PrintGraphViz()
+		this->Root->PrintGraphViz(PrintNode)
 
 		Print("}\n")
+	}
+
+	define void PrintGraphViz() {
+		this->PrintGraphViz(&AVLTree:DefaultPrintNode)
 	}
 }
 
