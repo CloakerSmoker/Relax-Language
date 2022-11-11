@@ -110,13 +110,6 @@ define i16 GetPointerDepth(Type T) {
 	return T.PointerDepth
 }
 
-define i32 GetTypeStringLength(Type T) {
-	; wow, this is a hard problem to solve. how about I: don't
-
-	return 127
-
-	; return GetBaseType(T)->Name->Length + GetPointerDepth(T)
-}
 define i32 StringifyType(void* RawBuffer, Type T) {
 	i8* Buffer := RawBuffer
 	i32 Index := 0
@@ -126,6 +119,10 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 	if (Base->IsFunctionPointer) {
 		FunctionPointerInfo* FunctionPointer := Base~>FunctionPointer
 		
+		if (FunctionPointer->Attributes & FUNCTION_ATTRIBUTE_USE_X64) {
+			Buffer[Index++] := '('
+		}
+
 		Buffer[Index++] := '('
 		Index += StringifyType(&Buffer[Index], FunctionPointer->ReturnType)
 		Buffer[Index++] := ')'
@@ -149,9 +146,8 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 			Buffer[Index++] := 'x'
 			Buffer[Index++] := '6'
 			Buffer[Index++] := '4'
+			Buffer[Index++] := ')'
 		}
-		
-		Buffer[Index++] := ')'
 	}
 	else {
 		SafeString* Name := Base->Name
@@ -166,8 +162,22 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 	}
 	
 	Buffer[Index] := 0
+
+	;Print("ST = %s\n", Buffer)
 	
 	return Index
+}
+
+define i32 GetTypeStringLength(Type T) {
+	i8[100] Buffer
+
+	for (i32 Index := 0, Index < 100, Index++) {
+		Buffer[Index] := 0
+	}
+
+	StringifyType(Buffer, T)
+
+	return StringLength(Buffer)
 }
 
 define i8 TypeIsCallable(Type T) {

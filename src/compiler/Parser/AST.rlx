@@ -552,7 +552,7 @@ struct FunctionDefine {
 		
 		Buffer[Offset] := 0
 		
-		;Print("%s\n", Buffer)
+		;Print("SINTO %s\n", Buffer)
 	}
 	define void StringifyInto(void* IntoRawBuffer) {
 		this->StringifyInto(IntoRawBuffer, ':')
