@@ -138,6 +138,11 @@ struct BuildConfig {
 
 		return Entry->AbsolutePath
 	}
+
+	define void Free() {
+		this~>IncludedFiles->Free()
+		Free(this)
+	}
 }
 
 declare void PrettyError(ErrorContext*, i8*, i8)
