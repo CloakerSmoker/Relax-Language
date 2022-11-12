@@ -359,12 +359,14 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 		
 		if (CallNode->BuiltinID = BUILTIN_NONE) {
 			FunctionDefine* TargetFunction := CallNode->TargetFunction
-			
-			if (TargetFunction->IsImported = false && !(TargetFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY)) {
-				Visitor->VisitBlocks(TargetFunction->Body)
+
+			if (TargetFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
+				; Dummy branch
 			}
-			
-			if (TargetFunction->Body->StatementCount = 0) {
+			else if (TargetFunction->IsImported) {
+				; Dummy branch
+			}
+			else if (TargetFunction->Body->StatementCount = 0) {
 				; A call to an empty function
 				
 				ASTNode** NewParameters := Alloc(CallNode->ParameterCount * #ASTNode*)
@@ -399,6 +401,9 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 					Root->NodeType := NODE_TYPE_EXPRESSION_BLOCK
 					Root->BlockValue := ParametersBlock
 				}
+			}
+			else {
+				Visitor->VisitBlocks(TargetFunction->Body)
 			}
 		}
 		
