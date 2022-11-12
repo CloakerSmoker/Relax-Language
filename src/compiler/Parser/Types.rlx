@@ -171,14 +171,28 @@ define i32 StringifyType(void* RawBuffer, Type T) {
 define i32 GetTypeStringLength(Type T) {
 	i8[100] Buffer
 
-	for (i32 Index := 0, Index < 100, Index++) {
-		Buffer[Index] := 0
-	}
-
-	StringifyType(Buffer, T)
-
-	return StringLength(Buffer)
+	return StringifyType(Buffer, T)
 }
+
+define void DoTypePrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	Type T := Parameters[*ParameterIndex] As Type
+	
+	i8[100] Buffer
+	i32 Length := StringifyType(Buffer, T)
+
+	for (i32 Index := 0, Index < Length, Index++) {
+		this->Print("%c", Buffer[Index])
+	}
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype TypeFormatPrototype {
+	Name: "t",
+	Format: &DoTypePrint
+}
+
+i32 TYPE_FORMAT_PROTOTYPE_ID := AddPrintFormat(&TypeFormatPrototype)
 
 define i8 TypeIsCallable(Type T) {
 	return GetPointerDepth(T) = 0 && GetBaseType(T)->IsFunctionPointer
@@ -191,7 +205,7 @@ define void PrintType(Type TypeToPrint) {
 	
 	StringifyType(PrintTypeBuffer, TypeToPrint)
 	
-	Print("%s", PrintTypeBuffer)
+	Print("%t", TypeToPrint)
 }
 
 define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
