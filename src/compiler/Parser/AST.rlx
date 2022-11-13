@@ -167,7 +167,7 @@ struct BinaryExpression {
 ; Struct Access
 
 struct StructField {
-	ErrorContext* DefinedAt,
+	SourceContext* DefinedAt,
 	SafeString* Name,
 	Type ValueType,
 	
@@ -330,7 +330,7 @@ struct SIBInfo {
 }
 
 struct InstructionOperand {
-	ErrorContext Context,
+	SourceContext Context,
 	
 	i32 Type,
 	i32 Size,
@@ -373,7 +373,7 @@ i8 INSTRUCTION_LABEL := 1
 i8 INSTRUCTION_LABEL_INCOMPLETE := 2
 
 struct InstructionNode {
-	ErrorContext Context,
+	SourceContext Context,
 	i8 Type,
 	
 	union {
@@ -410,7 +410,7 @@ declare void StringifyType(void*, Type)
 declare void PrintType(Type)
 
 struct FunctionDefine {
-	ErrorContext Context,
+	SourceContext Context,
 	
 	FunctionDefine* Next,
 	SafeString* Name,
@@ -564,7 +564,7 @@ struct FunctionDefine {
 ; Actual ASTNode struct region
 
 struct ASTNode {	
-	ErrorContext Context,
+	SourceContext Context,
 	
 	union {
 		void* TrueNode,
@@ -623,7 +623,7 @@ struct ASTNode {
 		return ASTNode:New(NewNodeType, NewNodeTrueNode As void*, TYPE_NONE)
 	}
 	
-	static ASTNode* NewCallNode(ASTNode** Parameters, i32 ParameterCount, CallExpression** OutResult, ErrorContext* StartContext, ErrorContext* EndContext) {
+	static ASTNode* NewCallNode(ASTNode** Parameters, i32 ParameterCount, CallExpression** OutResult, SourceContext* StartContext, SourceContext* EndContext) {
 		CallExpression* Result := Alloc(#CallExpression) As CallExpression*
 		Result->Parameters := Parameters
 		Result->ParameterCount := ParameterCount

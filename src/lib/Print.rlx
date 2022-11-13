@@ -320,10 +320,13 @@ PrintOutputAdapterPrototype FormatLengthPrinter {
 	PrintCharacter: &FormatLengthPrintCharacter
 }
 
-define i32 FormatLength(i8* Format, ... Parameters) {
+define i32 RawFormatLength(i8* Format, void* Parameters) {
 	FormatLengthPrinter.Index := 0
 	FormatLengthPrinter.RawPrint(Format, Parameters)
 	return FormatLengthPrinter.Index
+}
+define i32 FormatLength(i8* Format, ... Parameters) {
+	return RawFormatLength(Format, Parameters)
 }
 
 define void* StartCountingCharactersPrinted() {
@@ -353,12 +356,15 @@ PrintOutputAdapterPrototype RawFormatStringPrinter {
 }
 PrintOutputAdapterPrototype* FormatStringPrinter := &RawFormatStringPrinter
 
-define i32 FormatString(i8* String, i32 Length, i8* Format, ... Parameters) {
+define i32 RawFormatString(i8* String, i32 Length, i8* Format, void* Parameters) {
 	FormatStringPrinter->Index := 0
 	FormatStringPrinter->Buffer := String
 	FormatStringPrinter->Length := Length
 	FormatStringPrinter->RawPrint(Format, Parameters)
 	return FormatStringPrinter->Index
+}
+define i32 FormatString(i8* String, i32 Length, i8* Format, ... Parameters) {
+	return RawFormatString(String, Length, Format, Parameters)
 }
 
 define void* StartCapturingCharactersPrinted(void* Buffer, i32 Length) {

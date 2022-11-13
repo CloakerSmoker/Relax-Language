@@ -209,7 +209,7 @@ struct CompilerState {
 	SafeString* CurrentSourceFile
 	i32 LineNumberHighWaterMark
 	
-	define void MarkLineNumber(ErrorContext* Context) {
+	define void MarkLineNumber(SourceContext* Context) {
 		if (Context->Lexer = null) {
 			return
 		}
@@ -450,7 +450,7 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 		}
 	}
 	else if !(BaseFunction->HasFullDefinition) {
-		ContextError(BaseFunction~>Context, "Function is declared, but never defined.")
+		BaseFunction~>Context->Error("Function is declared, but never defined.")
 	}
 	else {
 		i8 IsMain := BaseFunction->Name->Equals("Main")
@@ -1237,7 +1237,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	if (Compiler->RegisterStackIndex != 0) {
-		ContextError(FunctionToCompile~>Context, "[INTERNAL] Register stack not empty")
+		FunctionToCompile~>Context->Error("Register stack not empty, good job")
 	}
 	
 	Compiler->CurrentFunction := null

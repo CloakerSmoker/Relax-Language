@@ -1,27 +1,63 @@
 #Require "$/Exit.rlx"
 
-declare void PrettyError(ErrorContext*, i8*, i8)
+i32 NOTIFY_ERROR := 1
+i32 NOTIFY_WARNING := 2
 
-define i8* OpenAndRead(i8* FilePath, i32* OutFileSize, ErrorContext* Blame) {
+i32 NOTIFY_EXIT := 0x1_0000
+
+i32 NOTIFY_FATAL := NOTIFY_ERROR | NOTIFY_EXIT
+
+declare void NotifyAtContext(i32, SourceContext*, i8*)
+
+define void RawNotifyAtContext(i32 Level, SourceContext* Where, i8* Format, void* Parameters) {
+	i32 Length := RawFormatLength(Format, Parameters)
+	i8* Buffer := Alloc(Length + 1)
+	RawFormatString(Buffer, Length, Format, Parameters)
+
+	NotifyAtContext(Level, Where, Buffer)
+
+	Free(Buffer)
+}
+define void NotifyAtContext(i32 Level, SourceContext* Where, i8* Format, ... Parameters) {
+	RawNotifyAtContext(Level, Where, Format, Parameters)
+}
+
+define void ErrorAtContext(SourceContext* Where, i8* Message) {
+	NotifyAtContext(NOTIFY_FATAL, Where, Message)
+}
+define void RawErrorAtContext(SourceContext* Where, i8* Format, void* Parameters) {
+	RawNotifyAtContext(NOTIFY_FATAL, Where, Format, Parameters)
+}
+define void ErrorAtContext(SourceContext* Where, i8* Format, ... Parameters) {
+	RawNotifyAtContext(NOTIFY_FATAL, Where, Format, Parameters)
+}
+
+define void WarnAtContext(SourceContext* Where, i8* Message) {
+	NotifyAtContext(NOTIFY_WARNING, Where, Message)
+}
+define void RawWarnAtContext(SourceContext* Where, i8* Format, void* Parameters) {
+	RawNotifyAtContext(NOTIFY_WARNING, Where, Format, Parameters)
+}
+define void WarnAtContext(SourceContext* Where, i8* Format, ... Parameters) {
+	RawNotifyAtContext(NOTIFY_WARNING, Where, Format, Parameters)
+}
+
+define i8* OpenAndRead(i8* FilePath, i32* OutFileSize, SourceContext* Blame) {
 	i64 FileHandle := FileOpen(FilePath, FILE_READ)
 	
 	if (FileHandle < 0) {
-		SwapOutputStream()
-		
 		if (Blame) {
-			i8[200] Message
-			i32 Length := FormatString(Message, 200, "Could not open '%s'", FilePath)
-			Message[Length] := 0
-
-			PrettyError(Blame, Message, Red | Bright)
+			; Blame is opaque for now, defined below. Use the function instead of the method
+			
+			ErrorAtContext(Blame, "Could not open '%s', error code %i\n", FilePath, FileGetError(FileHandle))
 		}
 		else {
+			SwapOutputStream()
 			Print("Could not open file: '%s'\n", FilePath)
+			Print("Error code: %i\nAborting", FileGetError(FileHandle))
+			
+			Exit(1)
 		}
-		
-		Print("Error code: %i\nAborting", FileGetError(FileHandle))
-		
-		Exit(1)
 	}
 	
 	i32 FileSize := FileGetSize(FileHandle)
@@ -145,22 +181,19 @@ struct BuildConfig {
 	}
 }
 
-declare void PrettyError(ErrorContext*, i8*, i8)
-declare void ContextError(ErrorContext*, i8*)
-
-struct ErrorContext {
+struct SourceContext {
 	LexerState* Lexer
 
 	i32 LineNumber,
 	i32 PositionInSource,
 	i16 LengthInSource
 	
-	define ErrorContext* Clone(ErrorContext* Other) {
-		MoveMemory(this, Other, #ErrorContext)
+	define SourceContext* Clone(SourceContext* Other) {
+		MoveMemory(this, Other, #SourceContext)
 		
 		return this
 	}
-	define ErrorContext* Merge(ErrorContext* Other) {
+	define SourceContext* Merge(SourceContext* Other) {
 		if (this->PositionInSource > Other->PositionInSource) {
 			this->PositionInSource := Other->PositionInSource
 		}
@@ -177,37 +210,44 @@ struct ErrorContext {
 		
 		return this
 	}
-	define ErrorContext* Merge(... Others) {
+	define SourceContext* Merge(... Others) {
 		i32 Count := Others[0] As i32
 		
 		for (i32 Index := 1, Index <= Count, Index += 1) {
-			this->Merge(Others[Index] As ErrorContext*)
+			this->Merge(Others[Index] As SourceContext*)
 		}
 		
 		return this
 	}
 	
+	define void Notify(i32 Level, i8* Message) {
+		NotifyAtContext(Level, this, Message)
+	}
+	define void Notify(i32 Level, i8* Format, ... Parameters) {
+		RawNotifyAtContext(Level, this, Format, Parameters)
+	}
 	define void Error(i8* Message) {
-		if (Message) {
-			SwapOutputStream()
-		}
-		
-		PrettyError(this, Message, Red | Bright)
-		Exit(1)
+		ErrorAtContext(this, Message)
+	}
+	define void Error(i8* Format, ... Parameters) {
+		RawErrorAtContext(this, Format, Parameters)
 	}
 	define void Warn(i8* Message) {
-		PrettyError(this, Message, Red | Green)
+		WarnAtContext(this, Message)
+	}
+	define void Warn(i8* Format, ... Parameters) {
+		RawWarnAtContext(this, Format, Parameters)
 	}
 }
 
-define void CopyContext(ErrorContext* From, ErrorContext* To) {
+define void CopyContext(SourceContext* From, SourceContext* To) {
 	To->Lexer := From->Lexer
 	To->LineNumber := From->LineNumber
 	To->PositionInSource := From->PositionInSource
 	To->LengthInSource := From->LengthInSource
 }
 
-define void MergeContexts(ErrorContext* Left, ErrorContext* Right, ErrorContext* To) {
+define void MergeContexts(SourceContext* Left, SourceContext* Right, SourceContext* To) {
 	CopyContext(Left, To)
 	
 	if (Left->PositionInSource > Right->PositionInSource) {

@@ -20,7 +20,7 @@ struct FunctionPointerInfo {
 }
 
 struct TypeInfo {
-	ErrorContext* DefinedAt,
+	SourceContext* DefinedAt,
 	SafeString* Name,
 	
 	union {
@@ -213,20 +213,12 @@ define i8 TypeError(ASTNode* AtNode, Type Expected, i8* Message) {
 		return 1
 	}
 	
-	ManualErrorMessagePrelude()
-	
-	Print("%s", Message)
-	
 	if (Expected As i64) != 0 {
-		Print(", expected ")
-		PrintType(Expected)
+		AtNode~>Context->Error("%s, expected %t, got %t", Message, Expected, AtNode->ValueType)
 	}
-	
-	Print(", got ")
-	PrintType(AtNode->ValueType)
-	Print("\n")
-	
-	AtNode->Error(null)
+	else {
+		AtNode~>Context->Error("%s, got %t", Message, AtNode->ValueType)
+	}
 	
 	return 0
 }

@@ -569,11 +569,7 @@
 							Next->Type := OperandSize << OP_I_OFFSET
 						}
 						else {
-							ManualErrorMessagePrelude()
-							
-							Print("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
-							
-							Next->Error(null)
+							Next~>Context->Error(1, "Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
 						}
 					}
 					
@@ -595,11 +591,7 @@
 			Instruction* Found := this->LookupInstruction(InstructionName, OperandTypes)
 			
 			if !(Found) {
-				ManualErrorMessagePrelude()
-				
-				Print("No encoding for operand type(s)\n")
-				
-				Result->Error(null)
+				Result~>Context->Error("No encoding for operand type(s)\n")
 			}
 			
 			i32 LowType := OperandTypes & 0xFFFF

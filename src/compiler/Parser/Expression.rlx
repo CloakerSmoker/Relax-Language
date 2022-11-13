@@ -90,7 +90,7 @@
 		return Result
 	}
 	
-	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, ErrorContext* BlameContext) {
+	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, SourceContext* BlameContext) {
 		; We've found a function which has the correct name for this function call. However, since a
 		;  name can be defined multiple times as long as it takes a different number or set of parameter types
 		;   we need to go through and find which actual function to call.
@@ -192,45 +192,42 @@
 		if (BestFit = null || BestFitRating >= 200000) {
 			; If we didn't find any functions which fit our parameters, then we need to print out a nice
 			;  error message showing each definition, and why it didn't make the cut.
-			
-			ManualErrorMessagePrelude()
-			
-			Print("No matching overload found for:^R\n")
-			PrettyError(BlameContext, Red | Bright)
+
+			BlameContext->Notify(NOTIFY_ERROR, "No matching overload found")
 			
 			Next := FoundDefine
 			
 			while (Next) {
+				i8* Message := null
+
+				i32 Level := NOTIFY_ERROR
+
+				if (Next->Next = null) {
+					Level |= NOTIFY_FATAL
+				}
+				
 				if (ParameterCount < Next->ParameterCount) {
-					Print("^C0Is missing required parameters for overload^F0")
+					Next~>Context->Notify(Level, "Is missing required parameters for overload")
 				}
 				else if (ParameterCount > Next->ParameterCount) {
-					Print("^C0Has too many paramters for overload^F0")
+					Next~>Context->Notify(Level, "Has too many paramters for overload")
 				}
 				else {
 					; FunctionDefine.TempValue is set in the loop above to be the index of the parameter which 
 					; caused FunctionDefine itself not fit our parameters.
 					
 					i32 LastNonMatchingParameter := Next->TempValue
-					
-					Print("^C0Parameter %i should be an ", LastNonMatchingParameter + 1)
-					
-					PrintType(Next->Parameters[LastNonMatchingParameter]->Type)
-					
-					Print(" for overload, not ")
-					
+					Type BadMatchType := Next->Parameters[LastNonMatchingParameter]->Type
+
 					if (LastNonMatchingParameter < ParameterCount) {
-						PrintType(Parameters[LastNonMatchingParameter]->ValueType)
+						Type PassedType := Parameters[LastNonMatchingParameter]->ValueType
+
+						Next~>Context->Notify(Level, "Parameter %i should be an %t, not a %t", LastNonMatchingParameter + 1, BadMatchType, PassedType)
 					}
 					else {
-						Print("<none>")
+						Next~>Context->Notify(Level, "Parameter %i should be an %t", LastNonMatchingParameter + 1, BadMatchType)
 					}
-					
-					Print("^F0")
 				}
-				
-				PrintNewLine()
-				PrettyError(Next~>Context, Red | Bright)
 				
 				Next := Next->Next
 			}
@@ -267,7 +264,7 @@
 		
 		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
 		
-		ErrorContext* FirstTokenContext := NameToken~>Context
+		SourceContext* FirstTokenContext := NameToken~>Context
 		
 		if (ThisParameter != null) {
 			Parameters[0] := ThisParameter
@@ -329,12 +326,7 @@
 		Type FunctionPointerType := CallToFunctionPointer->ValueType
 		
 		if !(TypeIsCallable(FunctionPointerType)) {
-			ManualErrorMessagePrelude()
-			Print("Should be of a function pointer type, got ")
-			PrintType(FunctionPointerType)
-			Print(" instead\n")
-			
-			CallToFunctionPointer->Error(null)
+			CallToFunctionPointer~>Context->Error("Should be of a function pointer type, got %t instead", FunctionPointerType)
 		}
 		
 		TypeInfo* FunctionPointerBaseType := GetBaseType(FunctionPointerType)
@@ -508,9 +500,7 @@
 							i64 File := FileOpen(FilePathToken->StringValue->Buffer, FILE_READ)
 							
 							if (File < 0) {
-								ManualErrorMessagePrelude()
-								Print("\nCouldn't open file, error code %x\n", FileGetError(File))
-								FilePathToken->Error(null)
+								FilePathToken~>Context->Error("Couldn't open file, error code %x", FileGetError(File))
 							}
 							
 							i32 FileSize := FileGetSize(File)
@@ -951,9 +941,7 @@
 				File := FileOpen(FilePathToken->StringValue->Buffer, FILE_READ)
 				
 				if (File < 0) {
-					ManualErrorMessagePrelude()
-					Print("\nCouldn't open file, error code %x\n", FileGetError(File))
-					FilePathToken->Error(null)
+					FilePathToken~>Context->Error("Couldn't open file, error code %x\n", FileGetError(File))
 				}
 				
 				FileSize := FileGetSize(File)

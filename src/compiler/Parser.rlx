@@ -11,7 +11,7 @@ Type TYPE_NONE := 0 As Type
 i8 GLOBAL_IS_OPTIMIZED_AWAY := 2
 
 struct VariableInfo {
-	ErrorContext* DefinedAt,
+	SourceContext* DefinedAt,
 	
 	union {
 		ASTNode* LastValue
@@ -78,10 +78,8 @@ struct VariableHashMap {
 				return
 			}
 			
-			SwapOutputStream()
-			PrettyError(SourceToken~>Context, "Duplicate definition", Red | Bright)
-			PrettyError(LastDefinition->DefinedAt, "Previously defined at", Red | Bright)
-			Exit(1)
+			SourceToken~>Context->Notify(NOTIFY_ERROR, "Duplicate definition")
+			LastDefinition->DefinedAt->Notify(NOTIFY_FATAL, "Previously defined at")
 		}
 		
 		NewVariable->DefinedAt := SourceToken~>Context
@@ -187,7 +185,7 @@ struct ParserState {
 		return this
 	}
 	
-	define TypeInfo* AddType(ErrorContext* BlameContext, SafeString* Name, i16 Size, i8 Flags) {
+	define TypeInfo* AddType(SourceContext* BlameContext, SafeString* Name, i16 Size, i8 Flags) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
 		NewType->DefinedAt := BlameContext
@@ -261,7 +259,7 @@ struct ParserState {
 		return this~>Types->Get(NameToken->StringValue) != null
 	}
 	
-	define Type DereferencePointerType(Type TypeToDecrement, ErrorContext* BlameContext) {
+	define Type DereferencePointerType(Type TypeToDecrement, SourceContext* BlameContext) {
 		i16 PointerDepth := GetPointerDepth(TypeToDecrement)
 		
 		if (PointerDepth = 0) {
@@ -341,20 +339,24 @@ struct ParserState {
 		
 		return FoundVariable
 	}
+
+	define void DuplicateDefinitionError(SourceContext* New, SourceContext* Old) {
+		if (Old) {
+			New->Notify(NOTIFY_ERROR, "Name is already used")
+			Old->Notify(NOTIFY_FATAL, "Previously defined here")
+		}
+		else {
+			New->Error("Name is already used")
+		}
+	}
+
 	define void AddGlobal(VariableInfo* NewGlobal, Token* BlameToken) {
 		HashMapElement* DefinedTypeElement := this~>Types->Get(NewGlobal->Name)
 		
 		if (DefinedTypeElement) {
 			TypeInfo* DefinedType := DefinedTypeElement->Value
-			
-			SwapOutputStream()
-			PrettyError(BlameToken~>Context, "Name is already used by a type", Red | Bright)
-			
-			if (DefinedType->DefinedAt) {
-				PrettyError(DefinedType->DefinedAt, "Previously defined here", Red | Bright)
-			}
-			
-			Exit(1)
+
+			this->DuplicateDefinitionError(BlameToken~>Context, DefinedType->DefinedAt)
 		}
 		
 		this~>Globals->Add(NewGlobal, BlameToken)
@@ -366,20 +368,10 @@ struct ParserState {
 		if (DefinedTypeElement) {
 			TypeInfo* DefinedType := DefinedTypeElement->Value
 			
-			SwapOutputStream()
-			PrettyError(BlameToken~>Context, "Name is already used by a type", Red | Bright)
-			
-			if (DefinedType->DefinedAt) {
-				PrettyError(DefinedType->DefinedAt, "Previously defined here", Red | Bright)
-			}
-			
-			Exit(1)
+			this->DuplicateDefinitionError(BlameToken~>Context, DefinedType->DefinedAt)
 		}
 		else if (DefinedGlobal) {
-			SwapOutputStream()
-			PrettyError(BlameToken~>Context, "Local variable will shadow global variable", Red | Bright)
-			PrettyError(DefinedGlobal->DefinedAt, "Global variable was defined here", Red | Bright)
-			Exit(1)
+			this->DuplicateDefinitionError(BlameToken~>Context, DefinedGlobal->DefinedAt)
 		}
 		
 		this->CurrentFunction~>Locals->Add(NewLocal, BlameToken)
@@ -402,7 +394,7 @@ struct ParserState {
 	define Token* GetCurrentToken() {
 		return this->Lexer->GetCurrentToken()
 	}
-	define ErrorContext* GetCurrentTokenContext() {
+	define SourceContext* GetCurrentTokenContext() {
 		return this->Lexer->GetCurrentTokenContext()
 	}
 	define Token* GetNextToken() {
@@ -1020,7 +1012,7 @@ struct ParserState {
 				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_DOT)) {
 					ShouldBreak := true
 					
-					ErrorContext* Start := this->GetCurrentTokenContext()
+					SourceContext* Start := this->GetCurrentTokenContext()
 					
 					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
 					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
@@ -1085,10 +1077,7 @@ struct ParserState {
 						; Allow redefining a declared overload
 						
 						if (NextFunction->HasFullDefinition) {
-							SwapOutputStream()
-							PrettyError(NameToken~>Context, "Duplicate function definition", Red | Bright)
-							PrettyError(NextFunction~>Context, "Previously defined here", Red | Bright)
-							Exit(1)
+							this->DuplicateDefinitionError(NameToken~>Context, NextFunction~>Context)
 						}
 						
 						NewDefine := NextFunction
@@ -1236,14 +1225,7 @@ struct ParserState {
 			if !(NewType->IsIncomplete) {
 				; If the type we found isn't incomplete, then error out
 				
-				SwapOutputStream()
-				PrettyError(NameToken~>Context, "Duplicate type definition", Red | Bright)
-				
-				if (NewType->DefinedAt) {
-					PrettyError(NewType->DefinedAt, "Previously definition here", Red | Bright)
-				}
-				
-				Exit(1)
+				this->DuplicateDefinitionError(NameToken~>Context, NewType->DefinedAt)
 			}
 			
 			NewType->IsIncomplete := false
@@ -1338,10 +1320,7 @@ struct ParserState {
 			if (LastDefinitionElement) {
 				StructField* LastDefinition := LastDefinitionElement->Value
 				
-				SwapOutputStream()
-				PrettyError(FieldNameToken~>Context, "Duplicate field definition", Red | Bright)
-				PrettyError(LastDefinition->DefinedAt, "Previously defined here", Red | Bright)
-				Exit(1)
+				this->DuplicateDefinitionError(FieldNameToken~>Context, LastDefinition->DefinedAt)
 			}
 			
 			Fields->Set(FieldName, NextField)

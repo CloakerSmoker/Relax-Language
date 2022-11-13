@@ -160,7 +160,7 @@ struct KeywordMapping {
 }
 
 struct Token {
-	ErrorContext Context
+	SourceContext Context
 	
 	union {
 		void* Value
@@ -366,7 +366,7 @@ struct LexerState {
 		NewToken->Type := TokenType
 		NewToken->Value := TokenValue
 		
-		ErrorContext* Context := NewToken~>Context
+		SourceContext* Context := NewToken~>Context
 		
 		Context->Lexer := this
 		Context->LineNumber := Line
@@ -936,7 +936,7 @@ struct LexerState {
 					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_STRING, null, StartingIndex))
 				}
 
-				ErrorContext IncludePathBlame {
+				SourceContext IncludePathBlame {
 					Lexer: this,
 					LineNumber: this->CurrentLineNumber,
 					PositionInSource: StartingIndex,
@@ -1061,7 +1061,7 @@ struct LexerState {
 		
 		return this->GetNextToken()
 	}
-	define ErrorContext* GetCurrentTokenContext() {
+	define SourceContext* GetCurrentTokenContext() {
 		return this->GetCurrentToken()~>Context
 	}
 	define Token* PeekNextToken() {
@@ -1132,8 +1132,4 @@ struct LexerState {
 
 		Free(this)
 	}
-}
-
-define void TokenError(Token* AtToken, i8* Message) {
-	ContextError(AtToken~>Context, Message)
 }

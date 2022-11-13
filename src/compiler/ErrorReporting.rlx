@@ -27,11 +27,6 @@ define void PrintSpaces(i32 Count) {
 	}
 }
 
-define void ManualErrorMessagePrelude() {
-	SwapOutputStream()
-	TextColor(Red | Bright)
-}
-
 define void PrintLexerBlame(LexerState* Blame) {
     if (Blame->Parent) {
         PrintLexerBlame(Blame->Parent)
@@ -42,7 +37,13 @@ define void PrintLexerBlame(LexerState* Blame) {
     Print(" ^F0]\n")
 }
 
-define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {	
+define void NotifyAtContext(i32 Level, SourceContext* At, i8* Message) {	
+	i8 Color := Red | Bright
+
+	if (Level = NOTIFY_WARNING) {
+		Color := Red | Green
+	}
+
     if (At->Lexer->Parent) {
         PrintLexerBlame(At->Lexer->Parent)
     }
@@ -116,16 +117,8 @@ define void PrettyError(ErrorContext* At, i8* Message, i8 Color) {
 	ResetColors()
 	
 	PrintNewLine()
-}
-define void PrettyError(ErrorContext* At, i8 Color) {
-	PrettyError(At, null, Color)
-}
 
-define void ContextError(ErrorContext* At, i8* Message) {
-	if (Message) {
-		SwapOutputStream()
+	if (Level = NOTIFY_FATAL) {
+		Exit(1)
 	}
-	
-	PrettyError(At, Message, Red | Bright)
-	Exit(1)
 }
