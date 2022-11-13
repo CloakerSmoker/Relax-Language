@@ -887,6 +887,9 @@ struct LexerState {
 				}
 
 				StartingIndex := this->SourceIndex + 1
+
+				; Includes leading/trailing quote
+				i32 PathStartingIndex := StartingIndex
 				
 				this->GetNextCharacter()
 				
@@ -933,14 +936,14 @@ struct LexerState {
 				}
 
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
-					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_STRING, null, StartingIndex))
+					this->AppendToken(this->MakeToken(TOKEN_TYPE_SYNTHETIC_STRING, null, PathStartingIndex))
 				}
 
 				SourceContext IncludePathBlame {
 					Lexer: this,
 					LineNumber: this->CurrentLineNumber,
-					PositionInSource: StartingIndex,
-					LengthInSource: IncludePath->Length As i16
+					PositionInSource: PathStartingIndex,
+					LengthInSource: (this->SourceIndex - PathStartingIndex) As i16
 				}
 				
 				i8* IncludePathBuffer := IncludePath->Buffer
