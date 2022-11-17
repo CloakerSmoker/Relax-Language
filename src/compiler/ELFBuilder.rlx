@@ -11,8 +11,10 @@ i8 ELF_ABI_VERSION_LINUX := 0
 i8 ELF_ABI_FREEBSD := 9
 i8 ELF_ABI_VERSION_FREEBSD := 0
 
-i16 ELF_FILETYPE_EXECUTABLE := 0x02
-i16 ELF_FILETYPE_DYNAMIC    := 0x03
+i16 ELF_FILETYPE_RELOCATABLE := 0x01
+i16 ELF_FILETYPE_EXECUTABLE  := 0x02
+i16 ELF_FILETYPE_DYNAMIC     := 0x03
+
 i16 ELF_MACHINE_AMD64       := 0x3E
 i32 ELF_VERSION             := 1
 
@@ -131,6 +133,9 @@ struct ELFSymbol unaligned {
 
 	define void Binding(i8 Binding) {
 		this->Info := (this->Info & 0xF) | Binding
+	}
+	define i8 Binding() {
+		return (this->Info & 0xF0) As i8
 	}
 	define void Type(i8 SymbolType) {
 		this->Info := ((this->Info & 0xF0) | SymbolType) As i8
@@ -351,6 +356,8 @@ struct ELFBuilder {
 	}
 	
 	i32 BufferSize
+
+	i8 IsObjectFile
 	
 	ELFProgramHeader* PHDR                ; Segment for segment headers
 	ELFProgramHeader* LoadPHDR            ; Segment which loads the segment containing the segment headers
@@ -368,9 +375,11 @@ struct ELFBuilder {
 	PointerArray* ProgramHeaders ; <ELFProgramHeader*>
 	PointerArray* SectionHeaders ; <ELFSectionHeader*>
 
+	i32 Alignment
+
 	define i32 AlignmentNeeded(i32 Value) {
-		if (Value % 0x1000) {
-			return 0x1000 - (Value % 0x1000)
+		if (Value % this->Alignment) {
+			return this->Alignment - (Value % this->Alignment)
 		}
 
 		return 0
@@ -448,52 +457,59 @@ struct ELFBuilder {
 	}
 
 	define void SetupCode() {
-		ELFProgramHeader* LoadCode := this->AppendProgramHeader()
-		
-		LoadCode->SegmentType := ELF_SEGMENT_TYPE_LOAD
-		LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE | ELF_SEGMENT_FLAGS_WRITE
-		
 		ELFSectionHeader* TextSection := this->AppendNamedSection(".text")
 
-		LoadCode->Children->Push(TextSection)
-		TextSection->Parent := LoadCode
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			ELFProgramHeader* LoadCode := this->AppendProgramHeader()
+			
+			LoadCode->SegmentType := ELF_SEGMENT_TYPE_LOAD
+			LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE | ELF_SEGMENT_FLAGS_WRITE
+
+			LoadCode->Children->Push(TextSection)
+			TextSection->Parent := LoadCode
+
+			this->CodeProgramHeader := LoadCode
+		}
 		
 		TextSection->Type  := ELF_SECTION_TYPE_DATA
 		TextSection->Flags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_EXECUTE
 		TextSection->Alignment    := ELF_ALIGN_NONE
 
-		this->CodeProgramHeader := LoadCode
 		this->CodeSectionHeader := TextSection
 	}
 
 	define void AddCodeSection(i8* CodeBytes, i32 CodeLength) {
-		this->CodeProgramHeader->FileSize := CodeLength
-		this->CodeProgramHeader->MemorySize := CodeLength
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			this->CodeProgramHeader->FileSize := CodeLength
+			this->CodeProgramHeader->MemorySize := CodeLength
+		}
 		
 		this->CodeSectionHeader->FileSize := CodeLength
-		
-		this->CodeBuffer        := CodeBytes
+		this->CodeBuffer := CodeBytes
 	}
 
 	define void AddEmptyDataSection(i32 ReserveBytes) {
-		ELFProgramHeader* LoadData := this->AppendProgramHeader()
-		
-		LoadData->SegmentType := ELF_SEGMENT_TYPE_LOAD
-		LoadData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
-		LoadData->FileSize    := 0
-		LoadData->MemorySize  := ReserveBytes
-		
 		ELFSectionHeader* DataSection := this->AppendNamedSection(".bss")
 
-		LoadData->Children->Push(DataSection)
-		DataSection->Parent := LoadData
-		
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			ELFProgramHeader* LoadData := this->AppendProgramHeader()
+			
+			LoadData->SegmentType := ELF_SEGMENT_TYPE_LOAD
+			LoadData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+			LoadData->FileSize    := 0
+			LoadData->MemorySize  := ReserveBytes
+
+			LoadData->Children->Push(DataSection)
+			DataSection->Parent := LoadData
+			
+			this->DataProgramHeader := LoadData
+		}
+
 		DataSection->Type         := ELF_SECTION_TYPE_NODATA
 		DataSection->Flags        := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
 		DataSection->Alignment    := ELF_ALIGN_NONE
 		DataSection->FileSize     := ReserveBytes
 		
-		this->DataProgramHeader := LoadData
 		this->DataSectionHeader := DataSection
 	}
 	define ELFSectionHeader* AddDataSection(i8* Name, void* Data, i32 Size) {
@@ -521,14 +537,20 @@ struct ELFBuilder {
 		this->DynamicSymbolTable->Push(First)
 	}
 
-	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+	define i32 AddSymbol(PointerArray* Symbols, i16 SectionIndex, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
 		i32 Index := Symbols->Count()
 		
 		ELFSymbol* Result := ELFSymbol:New()
 
-		Symbols->Push(Result)
+		if (Binding = ELF_STB_GLOBAL) {
+			Symbols->Push(Result)
+		}
+		else {
+			Symbols->Insert(1, Result)
+		}
 
 		Result->NameOffset := NameOffset
+		Result->SectionIndex := SectionIndex
 		Result->Type(SymbolType)
 		Result->Binding(Binding)
 		Result->Visibility(ELF_STV_DEFAULT)
@@ -538,11 +560,17 @@ struct ELFBuilder {
 
 		return Index
 	}
+	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		return this->AddSymbol(Symbols, 0, NameOffset, Binding, SymbolType, Start, End)
+	}
 
-	define i32 AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
+	define i32 AddFunctionSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
-		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STB_LOCAL, ELF_STT_FUNC, Start, End)
+		return this->AddSymbol(this->SymbolTable, NameOffset, Binding, ELF_STT_FUNC, Start, End)
+	}
+	define i32 AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
+		return this->AddFunctionSymbol(ELF_STB_LOCAL, Name, Start, End)
 	}
 	define i32 AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
@@ -554,8 +582,14 @@ struct ELFBuilder {
 		i32 Size := Symbols->Count() * #ELFSymbol
 		ELFSymbol* SymbolTable := Alloc(Size)
 
+		i32 FirstNonLocalIndex := -1
+
 		for (i32 Index := 0, Index < Symbols->Count(), Index++) {
 			ELFSymbol* Next := Symbols->At(Index)
+
+			if (FirstNonLocalIndex = -1 && Next->Binding() = ELF_STB_GLOBAL) {
+				FirstNonLocalIndex := Index
+			}
 
 			MoveMemory(SymbolTable[Index], Next, #ELFSymbol)
 		}
@@ -564,7 +598,7 @@ struct ELFBuilder {
 
 		Section->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
 		Section->AssociatedSectionIndex := StringSection
-		Section->ExtraInfo := Symbols->Count()
+		Section->ExtraInfo := FirstNonLocalIndex
 		Section->EntrySize := #ELFSymbol
 
 		return Section
@@ -831,31 +865,39 @@ struct ELFBuilder {
 		this->BufferSize := #ELFHeader
 		this->Buffer := Alloc(this->BufferSize)
 
+		this->IsObjectFile := ProgramType = ELF_FILETYPE_RELOCATABLE
+
 		this->SectionReferences := PointerArray:New()
 		
 		this->ProgramHeaders := PointerArray:New()
 		this->SectionHeaders := PointerArray:New()
 		
 		this->Header->Populate(ABI, ABIVersion, ProgramType)
+
+		this->Alignment := 1
 		
-		ELFProgramHeader* PHDR := this->AppendProgramHeader()
-		this->PHDR := PHDR
-		
-		PHDR->SegmentType    := ELF_SEGMENT_TYPE_PHDR
-		PHDR->Flags          := ELF_SEGMENT_FLAGS_READ
-		PHDR->Alignment      := ELF_ALIGN_NONE
-		PHDR->FileOffset     := #ELFHeader
-		PHDR->VirtualAddress := #ELFHeader
-		
-		ELFProgramHeader* LoadPHDR := this->AppendProgramHeader()
-		this->LoadPHDR := LoadPHDR
-		
-		LoadPHDR->SegmentType    := ELF_SEGMENT_TYPE_LOAD
-		LoadPHDR->Flags          := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
-		LoadPHDR->Alignment      := ELF_ALIGN_NONE
-		LoadPHDR->FileOffset     := 0x00
-		LoadPHDR->VirtualAddress := 0x00
-		
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			this->Alignment := 0x1000
+
+			ELFProgramHeader* PHDR := this->AppendProgramHeader()
+			this->PHDR := PHDR
+			
+			PHDR->SegmentType    := ELF_SEGMENT_TYPE_PHDR
+			PHDR->Flags          := ELF_SEGMENT_FLAGS_READ
+			PHDR->Alignment      := ELF_ALIGN_NONE
+			PHDR->FileOffset     := #ELFHeader
+			PHDR->VirtualAddress := #ELFHeader
+			
+			ELFProgramHeader* LoadPHDR := this->AppendProgramHeader()
+			this->LoadPHDR := LoadPHDR
+			
+			LoadPHDR->SegmentType    := ELF_SEGMENT_TYPE_LOAD
+			LoadPHDR->Flags          := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+			LoadPHDR->Alignment      := ELF_ALIGN_NONE
+			LoadPHDR->FileOffset     := 0x00
+			LoadPHDR->VirtualAddress := 0x00
+		}
+
 		ELFSectionHeader* NullSection := this->AppendSectionHeader()
 		
 		ELFSectionHeader* StringSection := this->AppendSectionHeader()
@@ -874,6 +916,18 @@ struct ELFBuilder {
 		
 		return this
 	}
+
+	define void AddSectionSymbols() {
+		i32 SectionHeaderCount := this->Header->SectionHeaderEntryCount
+
+		for (i16 Index := 2, Index < SectionHeaderCount, Index += 1) {
+			ELFSectionHeader* NextSectionHeader := this->SectionHeaders->At(Index)
+			
+			; ELF_STB_LOCAL ELF_STT_SECTION ELF_STV_DEFAULT
+
+			this->AddSymbol(this->SymbolTable, Index, NextSectionHeader->NameOffset, ELF_STB_LOCAL, ELF_STT_SECTION, 0, 0)
+		}
+	}
 	
 	define void Finalize(i32 CodeOffset, i32 MainOffset, i64 ImageBase, i64 PhysicalImageBase) {
 		; Note: the data section is excluded from the size, since a program header with a FileSize of 0 and non-zero 
@@ -886,7 +940,7 @@ struct ELFBuilder {
 		i32 SectionHeadersSize := SectionHeaderCount * #ELFSectionHeader
 		i32 PaddingAfterPHDR := this->AlignmentNeeded(ProgramHeadersSize + SectionHeadersSize)
 		
-		i32 CodeSize := this->CodeProgramHeader->FileSize As i32
+		i32 CodeSize := this->CodeSectionHeader->FileSize As i32
 		i32 PaddingAfterCode := this->AlignmentNeeded(CodeSize)
 		
 		i32 StringSectionSize := this->StringSection->FileSize As i32
@@ -906,7 +960,12 @@ struct ELFBuilder {
 		i32 HeadersSize := #ELFHeader
 		i32 PaddingBeforeCode := CodeOffset - HeadersSize
 
-		i64 GlobalBytes := this->DataProgramHeader->MemorySize
+		i64 GlobalBytes := 0
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			GlobalBytes := this->DataProgramHeader->MemorySize
+		}
+		
 		i64 GlobalPages := GlobalBytes / 0x1000
 		
 		if (GlobalBytes % 0x1000) {
@@ -970,40 +1029,49 @@ struct ELFBuilder {
 			this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
 			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
 		}
-		
-		; Update the code segment+section with the code file offset, and entry-point
-		; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
-		;  and virtual address to be equal modulo 1024
-		i64 ImageBaseToCode := 0x1000 + (GlobalPages * 0x1000) + CodeOffset
 
-		i64 CodeBase := ImageBase + ImageBaseToCode
-		i64 AfterCode := CodeBase + CodeSize + PaddingAfterCode
-		i64 AfterPHDR := AfterCode + PHDRSize + PaddingAfterPHDR
-
-		this->PHDR->FileSize := PHDRSize
-		this->PHDR->MemorySize := PHDRSize
-		this->PHDR->FileOffset := ProgramHeadersOffset
-		this->PHDR->VirtualAddress := AfterCode
-		this->PHDR->PhysicalAddress := 0
+		i64 CodeBase := 0
 		
-		this->LoadPHDR->FileSize := PHDRSize
-		this->LoadPHDR->MemorySize := PHDRSize
-		this->LoadPHDR->FileOffset := ProgramHeadersOffset
-		this->LoadPHDR->VirtualAddress := AfterCode
-		this->LoadPHDR->PhysicalAddress := 0
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			; Update the code segment+section with the code file offset, and entry-point
+			; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
+			;  and virtual address to be equal modulo 1024
+			i64 ImageBaseToCode := 0x1000 + (GlobalPages * 0x1000) + CodeOffset
+
+			CodeBase := ImageBase + ImageBaseToCode
+			i64 AfterCode := CodeBase + CodeSize + PaddingAfterCode
+			i64 AfterPHDR := AfterCode + PHDRSize + PaddingAfterPHDR
+
+			this->PHDR->FileSize := PHDRSize
+			this->PHDR->MemorySize := PHDRSize
+			this->PHDR->FileOffset := ProgramHeadersOffset
+			this->PHDR->VirtualAddress := AfterCode
+			this->PHDR->PhysicalAddress := 0
+			
+			this->LoadPHDR->FileSize := PHDRSize
+			this->LoadPHDR->MemorySize := PHDRSize
+			this->LoadPHDR->FileOffset := ProgramHeadersOffset
+			this->LoadPHDR->VirtualAddress := AfterCode
+			this->LoadPHDR->PhysicalAddress := 0
+		}
 
 		this->StringSection->FileOffset := StringsOffset
 
-		i64 PhysicalCodeBase := PhysicalImageBase + ImageBaseToCode
-		
 		i64 EntryPoint := CodeBase + MainOffset
 		
 		this->Header->EntryPoint := EntryPoint
-		this->CodeProgramHeader->FileOffset := CodeOffset
-		this->CodeProgramHeader->VirtualAddress := CodeBase
-		this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			i64 PhysicalCodeBase := PhysicalImageBase + ImageBaseToCode
+
+			this->CodeProgramHeader->FileOffset := CodeOffset
+			this->CodeProgramHeader->VirtualAddress := CodeBase
+			this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
+			
+			this->CodeSectionHeader->VirtualAddress := CodeBase
+		}
+
 		this->CodeSectionHeader->FileOffset := CodeOffset
-		this->CodeSectionHeader->VirtualAddress := CodeBase
 		
 		ELFProgramHeader* ProgramHeadersBuffer := (ByteBuffer + ProgramHeadersOffset) As ELFProgramHeader*
 		ELFSectionHeader* SectionHeadersBuffer := (ByteBuffer + SectionHeadersOffset) As ELFSectionHeader*

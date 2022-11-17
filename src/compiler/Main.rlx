@@ -163,6 +163,10 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 			Config->DumpInfo |= DUMP_SILENT | DUMP_MAKEDEP
 		}
 
+		else if (StringEquals(NextOption, "--object")) {
+			Config->DebugMode |= DEBUG_EMIT_OBJECT | DEBUG_EMIT_SYMBOLS
+		}
+
 
 		else if (StringEquals(NextOption, "--windows")) {
 			Config->PlatformName := "windows"

@@ -569,7 +569,7 @@
 							Next->Type := OperandSize << OP_I_OFFSET
 						}
 						else {
-							Next~>Context->Error(1, "Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
+							Next~>Context->Error("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
 						}
 					}
 					
