@@ -190,6 +190,7 @@ struct ELFDynamicSectionEntry {
 	}
 }
 
+i64 ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32 := 2
 i64 ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE := 6
 i64 ELF_RELOCATION_TYPE_X64_BASE_RELATIVE := 8
 
@@ -542,12 +543,7 @@ struct ELFBuilder {
 		
 		ELFSymbol* Result := ELFSymbol:New()
 
-		if (Binding = ELF_STB_GLOBAL) {
-			Symbols->Push(Result)
-		}
-		else {
-			Symbols->Insert(1, Result)
-		}
+		Symbols->Push(Result)
 
 		Result->NameOffset := NameOffset
 		Result->SectionIndex := SectionIndex
@@ -604,7 +600,7 @@ struct ELFBuilder {
 		return Section
 	}
 
-	define void FinalizeSymbolTable() {
+	define i16 FinalizeSymbolTable() {
 		for (i32 Index := 0, Index < this->SymbolTable->Count(), Index++) {
 			ELFSymbol* Next := this->SymbolTable->At(Index)
 
@@ -618,7 +614,9 @@ struct ELFBuilder {
 
 		i16 StringsIndex := this->SectionIndex(this->StringSection)
 
-		this->FinalizeSymbolTable(this->SymbolTable, StringsIndex, ".symtab")
+		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->SymbolTable, StringsIndex, ".symtab")
+
+		return this->SectionIndex(Section)
 	}
 
 	define void SetProgramInterpreter(i8* Interpreter) {
@@ -859,6 +857,49 @@ struct ELFBuilder {
 		DotDynamic->AssociatedSectionIndex := DynamicStringTable
 	}
 
+	ELFSectionHeader* TextRelocationSection
+	PointerArray* TextRelocations ; <ELFRelocation*>
+
+	define void SetupTextRelocations() {
+		ELFSectionHeader* Section := this->AddDataSection(".rela.text", null, 0)
+
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
+		Section->ExtraInfo := this->SectionIndex(this->CodeSectionHeader)
+
+		this->TextRelocationSection := Section
+		this->TextRelocations := PointerArray:New()
+	}
+
+	define ELFRelocation* ReferenceSymbol(i32 CodeOffset, i32 SymbolIndex) {
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32, SymbolIndex)
+
+		this->TextRelocations->Push(Relocation)
+
+		return Relocation
+	}
+
+	define void ReferenceSymbol(i32 CodeOffset, i32 SymbolIndex, i64 Addend) {
+		ELFRelocation* Relocation := this->ReferenceSymbol(CodeOffset, SymbolIndex)
+
+		Relocation->Addend := Addend
+	}
+
+	define void FinalizeTextRelocations(i16 SymbolTableSectionIndex) {
+		i32 Size := this->TextRelocations->Count() * #ELFRelocation
+		ELFRelocation* Relocations := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->TextRelocations->Count(), Index++) {
+			MoveMemory(Relocations[Index], this->TextRelocations->At(Index), #ELFRelocation)
+		}
+
+		ELFSectionHeader* Section := this->TextRelocationSection
+
+		Section->VirtualAddress := Relocations As i64
+		Section->FileSize := Size
+		Section->EntrySize := #ELFRelocation
+		Section->AssociatedSectionIndex := SymbolTableSectionIndex
+	}
+
 	static ELFBuilder* New(i8 ABI, i8 ABIVersion, i16 ProgramType) {
 		ELFBuilder* this := Alloc(#ELFBuilder)
 
@@ -913,6 +954,10 @@ struct ELFBuilder {
 		this->SetupSymbolTable()
 
 		this->SetupCode()
+
+		if (this->Header->FileType = ELF_FILETYPE_RELOCATABLE) {
+			this->SetupTextRelocations()
+		}
 		
 		return this
 	}

@@ -439,6 +439,7 @@ struct FunctionDefine {
 	i8 Attributes,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
+	i32 SymbolNumber,
 	
 	union {
 		i32 StringBufferSize,

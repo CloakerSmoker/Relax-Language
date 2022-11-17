@@ -164,7 +164,7 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		}
 
 		else if (StringEquals(NextOption, "--object")) {
-			Config->DebugMode |= DEBUG_EMIT_OBJECT | DEBUG_EMIT_SYMBOLS
+			Config->DebugMode |= DEBUG_EMIT_OBJECT | DEBUG_EMIT_SYMBOLS | DEBUG_EMIT_RELOC
 		}
 
 

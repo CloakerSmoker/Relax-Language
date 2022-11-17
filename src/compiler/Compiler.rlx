@@ -64,6 +64,9 @@ struct CompilerState {
 	
 	/* Flags the correct return sequence for `Main()` is used when Config->OutputFormat = OUTPUT_ELF */
 	i8 CompilingMain,
+
+	i32 MainOffset
+	i32 MainEnd
 	
 	/* Count of `Try` statements logically 'wrapping' the current area in code 
 		With loops resetting ScopedTryDepth for Continue/Break
@@ -191,7 +194,7 @@ struct CompilerState {
 					}
 
 					if (Config->DebugMode & DEBUG_EMIT_GLOBAL_SYMBOLS) {
-						this->ELF->AddGlobalSymbol(NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
+						NextGlobal->SymbolNumber := this->ELF->AddGlobalSymbol(NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
 					}
 					
 					FoundElement := FoundElement->NextElement
@@ -324,6 +327,23 @@ struct CompilerState {
 			this->DWARF->LineInfo->EmitOpcode(DWARF_LINE_PROGRAM_OPCODE_SET_EPILOGUE_BEGIN)
 		}
 	}
+
+	define i32 FindOrAddFunctionSymbol(FunctionDefine* Function) {
+		if !(Function->SymbolNumber) {
+			i32 NameLength := Function->GetStringLength()
+			i8* NameBuffer := Alloc(NameLength + 1)
+			
+			Function->StringifyInto(NameBuffer, '.')
+
+			Function->SymbolNumber := this->ELF->AddFunctionSymbol(NameBuffer, 0, 0)
+
+			;Print("Partial symbol for %s at index %i\n", NameBuffer, Function->SymbolNumber)
+
+			Free(NameBuffer)
+		}
+
+		return Function->SymbolNumber
+	}
 	
 	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
 		i64 FunctionAddress := this->Config->ImageBase + FunctionOffset
@@ -348,7 +368,19 @@ struct CompilerState {
 			
 			Function->StringifyInto(NameBuffer, '.')
 
-			this->ELF->AddFunctionSymbol(NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
+			if (Function->SymbolNumber = 0) {
+				;Print("Created symbol %s\n", NameBuffer)
+
+				Function->SymbolNumber := this->ELF->AddFunctionSymbol(NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
+			}
+			else {
+				;Print("Completed symbol index %i for %s\n", Function->SymbolNumber, NameBuffer)
+
+				ELFSymbol* Symbol := this->ELF->SymbolTable->At(Function->SymbolNumber)
+
+				Symbol->Value := FunctionAddress
+				Symbol->Size := FunctionSize
+			}
 
 			Free(NameBuffer)
 		}
@@ -676,7 +708,15 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		}
 
 		if (Config->DebugMode & DEBUG_EMIT_SYMBOLS) {
-			Compiler->ELF->FinalizeSymbolTable()
+			; Global symbols need to come last
+
+			Compiler->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, "_start", Compiler->MainOffset, Compiler->MainEnd)
+
+			i16 SymbolTableIndex := Compiler->ELF->FinalizeSymbolTable()
+
+			if (Config->DebugMode & DEBUG_EMIT_RELOC) {
+				Compiler->ELF->FinalizeTextRelocations(SymbolTableIndex)
+			}
 		}
 
 		if (Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
@@ -834,7 +874,14 @@ define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVa
 
 define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		EmitLea_R64_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable))
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+		}
+		else {
+			EmitLea_R64_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable))
+		}
 	}
 	else {
 		i8 UseDisp8 := false
@@ -899,7 +946,14 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 	}
 	else {
 		if (TargetVariable->IsGlobal) {
-			EmitMove_RX_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable), TargetSize)
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+				EmitMove_RX_REL32(Compiler, ResultRegister, 0, TargetSize)
+
+				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+			}
+			else {
+				EmitMove_RX_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable), TargetSize)
+			}
 		}
 		else {
 			i8 UseDisp8 := false
@@ -913,7 +967,14 @@ define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* Targe
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->IsGlobal) {
-		EmitMove_Offset_RX(Compiler, GetGlobalMemoryOffset(Compiler, TargetVariable), SourceRegister, TargetSize)
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			EmitMove_REL32_RX(Compiler, 0, SourceRegister, TargetSize)
+
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+		}
+		else {
+			EmitMove_Offset_RX(Compiler, GetGlobalMemoryOffset(Compiler, TargetVariable), SourceRegister, TargetSize)
+		}
 	}
 	else {
 		i8 UseDisp8 := false
@@ -1255,8 +1316,9 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	Compiler->CurrentFunction := null
 
-	if (IsMain && Compiler->Config->DebugMode & DEBUG_EMIT_SYMBOLS) {
-		Compiler->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, "_start", FunctionOffset, Compiler->Index)
+	if (IsMain) {
+		Compiler->MainOffset := FunctionOffset
+		Compiler->MainEnd := Compiler->Index
 	}
 	
 	Compiler->AfterCompileFunction(FunctionToCompile, DebugData, FunctionOffset)
@@ -1889,6 +1951,13 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	else if (USE_SYSTEMV) {
 		if (IsFunctionPointerCall) {
 			EmitCall_R64(Compiler, RAX)
+		}
+		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			i32 SymbolIndex := Compiler->FindOrAddFunctionSymbol(TargetFunction)
+
+			EmitCall_REL32(Compiler, 0)
+
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolIndex)
 		}
 		else {
 			EmitCall_Label(Compiler, TargetFunction->LabelNumber)
