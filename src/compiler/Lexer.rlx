@@ -864,6 +864,25 @@ struct LexerState {
 				return this->AppendToken(TOKEN_TYPE_IDENTIFIER, TokenText)
 			}
 		}
+		else if (NextCharacter = '`') {
+			i32 Start := this->SourceIndex
+
+			while !(this->AtEnd()) {
+				if (this->NextCharacterMatches('`')) {
+					break
+				}
+
+				NextCharacter := this->GetNextCharacter()
+			}
+
+			if (this->AtEnd() && NextCharacter != '`') {
+				this->AppendToken(0, null, StartingIndex, 1)->Error("Expected close tilde before EOF")
+			}
+
+			SafeString* TokenText := this->GetString(Start, this->SourceIndex - 1)
+			
+			return this->AppendToken(TOKEN_TYPE_IDENTIFIER, TokenText)
+		}
 		else if (NextCharacter = '#') {
 			NextCharacter := this->PeekNextCharacter()
 			
