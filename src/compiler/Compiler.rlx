@@ -194,7 +194,7 @@ struct CompilerState {
 					}
 
 					if (Config->DebugMode & DEBUG_EMIT_GLOBAL_SYMBOLS) {
-						NextGlobal->SymbolNumber := this->ELF->AddGlobalSymbol(NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
+						NextGlobal->Symbol := this->ELF->AddGlobalSymbol(ELF_STB_LOCAL, NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
 					}
 					
 					FoundElement := FoundElement->NextElement
@@ -328,21 +328,21 @@ struct CompilerState {
 		}
 	}
 
-	define i32 FindOrAddFunctionSymbol(FunctionDefine* Function) {
-		if !(Function->SymbolNumber) {
+	define ELFSymbol* FindOrAddFunctionSymbol(FunctionDefine* Function) {
+		if !(Function->Symbol) {
 			i32 NameLength := Function->GetStringLength()
 			i8* NameBuffer := Alloc(NameLength + 1)
 			
 			Function->StringifyInto(NameBuffer, '.')
 
-			Function->SymbolNumber := this->ELF->AddFunctionSymbol(NameBuffer, 0, 0)
+			Function->Symbol := this->ELF->AddFunctionSymbol(ELF_STB_LOCAL, NameBuffer, 0, 0)
 
 			;Print("Partial symbol for %s at index %i\n", NameBuffer, Function->SymbolNumber)
 
 			Free(NameBuffer)
 		}
 
-		return Function->SymbolNumber
+		return Function->Symbol
 	}
 	
 	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
@@ -368,15 +368,15 @@ struct CompilerState {
 			
 			Function->StringifyInto(NameBuffer, '.')
 
-			if (Function->SymbolNumber = 0) {
+			if !(Function->Symbol) {
 				;Print("Created symbol %s\n", NameBuffer)
 
-				Function->SymbolNumber := this->ELF->AddFunctionSymbol(NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
+				Function->Symbol := this->ELF->AddFunctionSymbol(ELF_STB_LOCAL, NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
 			}
 			else {
 				;Print("Completed symbol index %i for %s\n", Function->SymbolNumber, NameBuffer)
 
-				ELFSymbol* Symbol := this->ELF->SymbolTable->At(Function->SymbolNumber)
+				ELFSymbol* Symbol := Function->Symbol
 
 				Symbol->Value := FunctionAddress
 				Symbol->Size := FunctionSize
@@ -877,7 +877,7 @@ define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister
 		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
 
-			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
 		}
 		else {
 			EmitLea_R64_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable))
@@ -906,18 +906,40 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
 	}
 	else if (TargetVariable->IsExternal) {
-		if (TargetVariable->SymbolNumber = -1) {
-			if (TypeIsCallable(TargetVariable->Type)) {
-				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicFunctionSymbol(TargetVariable->ExternalSymbolName->Buffer)
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			if !(TargetVariable->Symbol) {
+				i8 SymbolType := ELF_STT_NONE
+
+				if (TypeIsCallable(TargetVariable->Type)) {
+					SymbolType := ELF_STT_FUNC
+				}
+				else {
+					SymbolType := ELF_STT_OBJECT
+				}
+
+				TargetVariable->Symbol := Compiler->ELF->AddSymbol(TargetVariable->ExternalSymbolName->Buffer, ELF_SHN_UNDEF, ELF_STB_GLOBAL, SymbolType, 0, 0)
 			}
-			else {
-				TargetVariable->SymbolNumber := Compiler->ELF->AddDynamicGlobalSymbol(TargetVariable->ExternalSymbolName->Buffer)
-			}
+
+			;Print("external reference to %s is symbol %i\n", TargetVariable->ExternalSymbolName->Buffer, TargetVariable->SymbolNumber)
+
+			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
 		}
+		else {
+			if !(TargetVariable->Symbol) {
+				if (TypeIsCallable(TargetVariable->Type)) {
+					TargetVariable->Symbol := Compiler->ELF->AddDynamicFunctionSymbol(TargetVariable->ExternalSymbolName->Buffer)
+				}
+				else {
+					TargetVariable->Symbol := Compiler->ELF->AddDynamicGlobalSymbol(TargetVariable->ExternalSymbolName->Buffer)
+				}
+			}
 
-		EmitMove_R64_I64(Compiler, ResultRegister, 0)
+			EmitMove_R64_I64(Compiler, ResultRegister, 0)
 
-		Compiler->ELF->ReferenceDynamicSymbol(Compiler->Index - 8, TargetVariable->SymbolNumber)
+			Compiler->ELF->ReferenceDynamicSymbol(Compiler->Index - 8, TargetVariable->Symbol)
+		}
 
 		if !(TypeIsCallable(TargetVariable->Type)) {
 			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, 8)
@@ -949,7 +971,7 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 				EmitMove_RX_REL32(Compiler, ResultRegister, 0, TargetSize)
 
-				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
 			}
 			else {
 				EmitMove_RX_Offset(Compiler, ResultRegister, GetGlobalMemoryOffset(Compiler, TargetVariable), TargetSize)
@@ -970,7 +992,7 @@ define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* Targe
 		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			EmitMove_REL32_RX(Compiler, 0, SourceRegister, TargetSize)
 
-			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->SymbolNumber, -4)
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
 		}
 		else {
 			EmitMove_Offset_RX(Compiler, GetGlobalMemoryOffset(Compiler, TargetVariable), SourceRegister, TargetSize)
@@ -1953,11 +1975,11 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 			EmitCall_R64(Compiler, RAX)
 		}
 		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
-			i32 SymbolIndex := Compiler->FindOrAddFunctionSymbol(TargetFunction)
+			ELFSymbol* Symbol := Compiler->FindOrAddFunctionSymbol(TargetFunction)
 
 			EmitCall_REL32(Compiler, 0)
 
-			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolIndex, -4)
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, Symbol, -4)
 		}
 		else {
 			EmitCall_Label(Compiler, TargetFunction->LabelNumber)
@@ -2297,11 +2319,11 @@ define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type Result
 			FunctionDefine* OperandFunction := Operand->DefineNode
 			
 			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
-				i32 SymbolNumber := Compiler->FindOrAddFunctionSymbol(OperandFunction)
+				ELFSymbol* Symbol := Compiler->FindOrAddFunctionSymbol(OperandFunction)
 
 				EmitLea_R64_REL32(Compiler, ResultRegister, 0)
 
-				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolNumber, -4)
+				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, Symbol, -4)
 			}
 			else {
 				EmitLea_RAX_Label(Compiler, OperandFunction->LabelNumber)

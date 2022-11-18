@@ -118,6 +118,7 @@ i8 ELF_STV_PROTECTED := 4
 i16 ELF_SHN_UNDEF := 0
 i16 ELF_SHN_ABS := 0xFFF1 As i16
 i16 ELF_SHN_COMMON := 0xFFF2 As i16
+i16 ELF_SHN_UNKNOWN := 0x7FFF As i16
 
 struct ELFSymbol unaligned {
 	i32 NameOffset
@@ -214,6 +215,20 @@ struct ELFRelocation {
 		this->Offset := Offset
 		this->Type(RelocationType)
 		this->Symbol(SymbolIndex)
+
+		return this
+	}
+}
+
+struct ELFRelocationPair {
+	ELFRelocation* Relocation
+	ELFSymbol* Symbol
+
+	static self* New(ELFRelocation* Relocation, ELFSymbol* Symbol) {
+		self* this := Alloc(#self)
+
+		this->Relocation := Relocation
+		this->Symbol := Symbol
 
 		return this
 	}
@@ -538,12 +553,17 @@ struct ELFBuilder {
 		this->DynamicSymbolTable->Push(First)
 	}
 
-	define i32 AddSymbol(PointerArray* Symbols, i16 SectionIndex, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+	define ELFSymbol* AddSymbol(PointerArray* Symbols, i16 SectionIndex, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
 		i32 Index := Symbols->Count()
 		
 		ELFSymbol* Result := ELFSymbol:New()
 
-		Symbols->Push(Result)
+		if (Binding = ELF_STB_LOCAL) {
+			Symbols->Insert(1, Result)
+		}
+		else {
+			Symbols->Push(Result)
+		}
 
 		Result->NameOffset := NameOffset
 		Result->SectionIndex := SectionIndex
@@ -554,24 +574,31 @@ struct ELFBuilder {
 		Result->Value := Start
 		Result->Size := End - Start
 
-		return Index
+		return Result
 	}
-	define i32 AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+	define ELFSymbol* AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
 		return this->AddSymbol(Symbols, 0, NameOffset, Binding, SymbolType, Start, End)
 	}
 
-	define i32 AddFunctionSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
+	define ELFSymbol* AddSymbol(i32 NameOffset, i16 SectionIndex, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		return this->AddSymbol(this->SymbolTable, SectionIndex, NameOffset, Binding, SymbolType, Start, End)
+	}
+
+	define ELFSymbol* AddSymbol(i8* Name, i16 SectionIndex, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
-		return this->AddSymbol(this->SymbolTable, NameOffset, Binding, ELF_STT_FUNC, Start, End)
+		return this->AddSymbol(NameOffset, SectionIndex, Binding, SymbolType, Start, End)
 	}
-	define i32 AddFunctionSymbol(i8* Name, i64 Start, i64 End) {
-		return this->AddFunctionSymbol(ELF_STB_LOCAL, Name, Start, End)
-	}
-	define i32 AddGlobalSymbol(i8* Name, i64 Start, i64 End) {
+
+	define ELFSymbol* AddFunctionSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
 		i32 NameOffset := this->AppendString(Name)
 
-		return this->AddSymbol(this->SymbolTable, NameOffset, ELF_STB_LOCAL, ELF_STT_OBJECT, Start, End)
+		return this->AddSymbol(NameOffset, ELF_SHN_UNKNOWN, Binding, ELF_STT_FUNC, Start, End)
+	}
+	define ELFSymbol* AddGlobalSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(NameOffset, ELF_SHN_UNKNOWN, Binding, ELF_STT_OBJECT, Start, End)
 	}
 
 	define ELFSectionHeader* FinalizeSymbolTable(PointerArray* Symbols, i16 StringSection, i8* Name) {
@@ -604,11 +631,13 @@ struct ELFBuilder {
 		for (i32 Index := 0, Index < this->SymbolTable->Count(), Index++) {
 			ELFSymbol* Next := this->SymbolTable->At(Index)
 
-			if (Next->Type() = ELF_STT_FUNC) {
-				Next->SectionIndex := this->SectionIndex(this->CodeSectionHeader)
-			}
-			else if (Next->Type() = ELF_STT_OBJECT) {
-				Next->SectionIndex := this->SectionIndex(this->DataSectionHeader)
+			if (Next->SectionIndex = ELF_SHN_UNKNOWN) {
+				if (Next->Type() = ELF_STT_FUNC) {
+					Next->SectionIndex := this->SectionIndex(this->CodeSectionHeader)
+				}
+				else if (Next->Type() = ELF_STT_OBJECT) {
+					Next->SectionIndex := this->SectionIndex(this->DataSectionHeader)
+				}
 			}
 		}
 
@@ -650,7 +679,7 @@ struct ELFBuilder {
 	PointerArray* DynamicSectionEntries ; <ELFDynamicSectionEntry*>
 
 	ELFSectionHeader* DynamicRelocationSection
-	PointerArray* DynamicRelocations ; <ELFRelocation*>
+	PointerArray* DynamicRelocations ; <ELFRelocationPair*>
 
 	i8* DynamicStrings
 	i32 DynamicStringsLength
@@ -721,12 +750,12 @@ struct ELFBuilder {
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_NEEDED, NameOffset)
 	}
 
-	define i32 AddDynamicFunctionSymbol(i8* Name) {
+	define ELFSymbol* AddDynamicFunctionSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
 		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_FUNC, 0, 0)
 	}
-	define i32 AddDynamicGlobalSymbol(i8* Name) {
+	define ELFSymbol* AddDynamicGlobalSymbol(i8* Name) {
 		i32 NameOffset := this->AddDynamicString(Name)
 
 		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_OBJECT, 0, 0)
@@ -774,10 +803,13 @@ struct ELFBuilder {
 		this->AddDynamicEntry(ELF_DYNAMIC_TAG_HASH, HashSection)
 	}
 
-	define void ReferenceDynamicSymbol(i32 CodeOffset, i32 SymbolIndex) {
+	define void ReferenceDynamicSymbol(i32 CodeOffset, ELFSymbol* Symbol) {
 		i32 Index := this->DynamicRelocations->Count()
 
-		this->DynamicRelocations->Push(ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE, SymbolIndex))
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE, 0)
+		ELFRelocationPair* Pair := ELFRelocationPair:New(Relocation, Symbol)
+
+		this->DynamicRelocations->Push(Pair)
 
 		this->ReferenceSection(this->DynamicRelocationSection, Index * #ELFRelocation, this->CodeSectionHeader)
 	}
@@ -787,7 +819,12 @@ struct ELFBuilder {
 		ELFRelocation* Relocations := Alloc(Size)
 
 		for (i32 Index := 0, Index < this->DynamicRelocations->Count(), Index++) {
-			MoveMemory(Relocations[Index], this->DynamicRelocations->At(Index), #ELFRelocation)
+			ELFRelocationPair* Pair := this->DynamicRelocations->At(Index)
+
+			i32 SymbolIndex := this->DynamicSymbolTable->Find(Pair->Symbol)
+			Pair->Relocation->Symbol(SymbolIndex As i16)
+
+			MoveMemory(Relocations[Index], Pair->Relocation, #ELFRelocation)
 		}
 
 		ELFSectionHeader* Section := this->DynamicRelocationSection
@@ -858,7 +895,7 @@ struct ELFBuilder {
 	}
 
 	ELFSectionHeader* TextRelocationSection
-	PointerArray* TextRelocations ; <ELFRelocation*>
+	PointerArray* TextRelocations ; <ELFRelocationPair*>
 
 	define void SetupTextRelocations() {
 		ELFSectionHeader* Section := this->AddDataSection(".rela.text", null, 0)
@@ -870,18 +907,20 @@ struct ELFBuilder {
 		this->TextRelocations := PointerArray:New()
 	}
 
-	define ELFRelocation* ReferenceSymbol(i32 CodeOffset, i32 SymbolIndex) {
-		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32, SymbolIndex)
+	define ELFRelocationPair* ReferenceSymbol(i32 CodeOffset, ELFSymbol* Symbol) {
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32, 0)
+		
+		ELFRelocationPair* Pair := ELFRelocationPair:New(Relocation, Symbol)
 
-		this->TextRelocations->Push(Relocation)
+		this->TextRelocations->Push(Pair)
 
-		return Relocation
+		return Pair
 	}
 
-	define void ReferenceSymbol(i32 CodeOffset, i32 SymbolIndex, i64 Addend) {
-		ELFRelocation* Relocation := this->ReferenceSymbol(CodeOffset, SymbolIndex)
+	define void ReferenceSymbol(i32 CodeOffset, ELFSymbol* Symbol, i64 Addend) {
+		ELFRelocationPair* Pair := this->ReferenceSymbol(CodeOffset, Symbol)
 
-		Relocation->Addend := Addend
+		Pair->Relocation->Addend := Addend
 	}
 
 	define void FinalizeTextRelocations(i16 SymbolTableSectionIndex) {
@@ -889,7 +928,18 @@ struct ELFBuilder {
 		ELFRelocation* Relocations := Alloc(Size)
 
 		for (i32 Index := 0, Index < this->TextRelocations->Count(), Index++) {
-			MoveMemory(Relocations[Index], this->TextRelocations->At(Index), #ELFRelocation)
+			ELFRelocationPair* Pair := this->TextRelocations->At(Index)
+
+			i32 SymbolIndex := this->SymbolTable->Find(Pair->Symbol)
+
+			if (SymbolIndex = -1) {
+				Print("%x\n", Pair->Symbol)
+				*null := 0
+			}
+
+			Pair->Relocation->Symbol(SymbolIndex As i16)
+
+			MoveMemory(Relocations[Index], Pair->Relocation, #ELFRelocation)
 		}
 
 		ELFSectionHeader* Section := this->TextRelocationSection

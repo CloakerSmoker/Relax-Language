@@ -23,8 +23,9 @@ struct VariableInfo {
 
 	union {
 		i32 StackOffset
-		i32 SymbolNumber
 	}
+	
+	ELFSymbol* Symbol
 
 	i16 GetCount,
 	i16 SetCount,
@@ -1643,26 +1644,32 @@ struct ParserState {
 				}
 			}
 			else if (NextTokenValue = KEYWORD_EXTERNAL) {
-				if !(this->Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
-					NextToken->Warn("'--dynamic' not specified, implicitly emitting a dynamic executable but bothering you about it anyways")
-					this->Config->DebugMode |= DEBUG_EMIT_DYNAMIC
+				i8 AllowExternal := this->Config->DebugMode & (DEBUG_EMIT_DYNAMIC | DEBUG_EMIT_OBJECT)
+
+				if !(AllowExternal) {
+					NextToken->Error("'--dynamic' or '--object' must be specified to reference external symbols")
 				}
 
-				Token* ExternalSource := this->Consume(TOKEN_TYPE_STRING, "Expected 'external' declaration source name")
+				if (this->Config->DebugMode & DEBUG_EMIT_DYNAMIC) {
+					Token* ExternalSource := this->Consume(TOKEN_TYPE_STRING, "Expected 'external' declaration source name")
 
-				i8 Exists := false
+					i8 Exists := false
 
-				for (i32 Index := 0, Index < this->ExternalSources->Count(), Index++) {
-					Token* Last := this->ExternalSources->At(Index)
+					for (i32 Index := 0, Index < this->ExternalSources->Count(), Index++) {
+						Token* Last := this->ExternalSources->At(Index)
 
-					if (ExternalSource->StringValue->Equals(Last->StringValue)) {
-						Exists := true
-						break
+						if (ExternalSource->StringValue->Equals(Last->StringValue)) {
+							Exists := true
+							break
+						}
+					}
+
+					if !(Exists) {
+						this->ExternalSources->Push(ExternalSource)
 					}
 				}
-
-				if !(Exists) {
-					this->ExternalSources->Push(ExternalSource)
+				else {
+					this->NextTokenMatches(TOKEN_TYPE_STRING)
 				}
 
 				i8 Multiple := false

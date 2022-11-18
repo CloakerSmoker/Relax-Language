@@ -217,8 +217,6 @@ define void EliminateGlobals(ParserState* Parser) {
 				VariableInfo* NextGlobal := FoundElement->Value
 
 				if (NextGlobal->IsExternal) {
-					NextGlobal->SymbolNumber := -1
-
 					FoundElement := FoundElement->NextElement
 					continue
 				}
