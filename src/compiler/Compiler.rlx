@@ -1957,7 +1957,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 
 			EmitCall_REL32(Compiler, 0)
 
-			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolIndex)
+			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolIndex, -4)
 		}
 		else {
 			EmitCall_Label(Compiler, TargetFunction->LabelNumber)
@@ -2296,8 +2296,20 @@ define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type Result
 		else if (OperandType = NODE_TYPE_DEFINE) {
 			FunctionDefine* OperandFunction := Operand->DefineNode
 			
-			EmitLea_RAX_Label(Compiler, OperandFunction->LabelNumber)
-			EmitMove_R64_R64(Compiler, ResultRegister, RAX)
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+				i32 SymbolNumber := Compiler->FindOrAddFunctionSymbol(OperandFunction)
+
+				EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, SymbolNumber, -4)
+			}
+			else {
+				EmitLea_RAX_Label(Compiler, OperandFunction->LabelNumber)
+
+				if (ResultRegister != RAX) {
+					EmitMove_R64_R64(Compiler, ResultRegister, RAX)
+				}
+			}
 		}
 		
 		i8 OperandSize := GetTypeSize(Operand->ValueType) As i8
