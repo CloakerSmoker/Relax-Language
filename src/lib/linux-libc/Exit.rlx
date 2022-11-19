@@ -1,0 +1,8 @@
+
+external "libc.so.6" {
+    void(i32) exit
+}
+
+define void Exit(i32 ExitCode) {
+    exit(ExitCode)
+}

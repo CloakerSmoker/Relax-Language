@@ -1,0 +1,52 @@
+
+
+define i32 SetAllocatorPanicHandler(i32 Priority, void(i8*, void*) Handler) {
+	return 0
+}
+
+external "libc.so.6" {
+    "calloc" void*(i64, i64) libc_calloc
+    "realloc" void*(i64) libc_realloc
+    "free" void(void*) libc_free
+}
+
+struct libc_allocation {
+    i64 Size
+    void[0] Data
+}
+
+define void* LibcAlloc(void* State, i64 Size) {
+    libc_allocation* Result := libc_calloc(Size + #libc_allocation, 1)
+
+    Result->Size := Size
+
+    return Result
+}
+
+define void LibcFree(void* State, void* Memory) {
+	libc_free(Memory - #libc_allocation)
+}
+
+define void* LibcReAlloc(void* State, void* Memory, i64 NewSize) {
+	libc_allocation* Old := Memory - #libc_allocation
+	
+	if (Old->Size >= NewSize) {
+		return Memory
+	}
+	
+	void* New := LibcAlloc(null, NewSize)
+	
+	FastMoveMemory(New, Memory, Old->Size)
+    FastSetMemory8(New + Old->Size, 0, NewSize - Old->Size)
+	
+	LibcFree(null, Memory)
+	
+	return New
+}
+
+MemoryAllocator DefaultAllocator {
+    State: null,
+    DoAllocate: &LibcAlloc,
+    DoExtend: &LibcReAlloc,
+    DoFree: &LibcFree
+}

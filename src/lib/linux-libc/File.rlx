@@ -1,0 +1,27 @@
+#Require "$/Memory.rlx"
+#Require "$/String.rlx"
+
+external "libc.so.6" {
+    i8*(i8*, i32) getcwd
+    i8*(i8*, i8*) realpath
+}
+
+define i8* GetWorkingDirectory() {
+    i8* Buffer := Alloc(256)
+
+    getcwd(Buffer, 255)
+
+	return Buffer
+}
+
+declare void Print(i8*, ...)
+
+define i8* GetAbsolutePath(i8* ForPath) {
+    i8* Buffer := Alloc(256)
+
+    realpath(ForPath, Buffer)
+
+    return Buffer
+}
+
+

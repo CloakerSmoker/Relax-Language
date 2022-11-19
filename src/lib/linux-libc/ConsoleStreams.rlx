@@ -1,0 +1,10 @@
+
+external "libc.so.6" {
+    "stdin" i64 libc_stdin
+    "stdout" i64 libc_stdout
+    "stderr" i64 libc_stderr
+}
+
+i64 STDIN := libc_stdin
+i64 STDOUT := libc_stdout
+i64 STDERR := libc_stderr

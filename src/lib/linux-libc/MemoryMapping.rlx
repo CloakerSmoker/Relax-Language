@@ -1,0 +1,30 @@
+i32 MMAP_PROTECTION_READ := 0x1
+i32 MMAP_PROTECTION_WRITE := 0x2
+
+i32 MMAP_FLAG_SHARED := 0x1
+i32 MMAP_FLAG_FIXED := 0x10
+i32 MMAP_FLAG_ANONYMOUS := 0x20
+i32 MMAP_FLAG_NO_RESERVE := 0x4000
+
+i32 MMAP_ANONYMOUS_FD := 0
+
+external "libc.so.6" {
+    void*(void*, i64, i32, i32, i32, i64) mmap
+    i32(void*, i64) munmap
+}
+
+define void* MapMemory(void* Where, i64 Size, i32 Protection, i32 Flags, i32 File, i64 Offset) {
+    return mmap(Where, Size, Protection, Flags, File, Offset)
+}
+
+define void* MapMemory(void* Where, i64 Size, i32 Protection, i32 Flags) {
+    return MapMemory(Where, Size, Protection, Flags, MMAP_ANONYMOUS_FD, 0)
+}
+
+define void* MapMemory(i64 Size, i32 Protection, i32 Flags) {
+    return MapMemory(null, Size, Protection, Flags | MMAP_FLAG_ANONYMOUS, MMAP_ANONYMOUS_FD, 0)
+}
+
+define i64 UnMapMemory(void* Where, i64 Size) {
+    return munmap(Where, Size)
+}

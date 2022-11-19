@@ -1,0 +1,97 @@
+
+external "libc.so.6" {
+    i64(i8*, i8*) fopen
+    
+    i32(i64, i32, i32) fseek
+    i32(i64) ftell
+
+    i32(void*, i32, i32, i64) fread
+    i32(void*, i32, i32, i64) fwrite
+
+    i32(i64) fclose
+
+    i32(i8*) unlink
+
+    i64(i64) fileno
+    i32(i64, i64) ftruncate64
+
+    i32(i8*) chdir
+}
+
+i32 FILE_READ := 0
+i32 FILE_WRITE := 1
+i32 FILE_READ_WRITE := 2
+
+i32 FILE_CREATE_NEW := 0x40
+
+define i64 FileOpen(i8* FilePath, i32 Mode) {
+    i8* ModeString := null
+
+    if (Mode = FILE_READ) {
+        ModeString := "r"
+    }
+    else if (Mode = FILE_WRITE) {
+        ModeString := "w"
+    }
+    else if (Mode = FILE_READ_WRITE) {
+        ModeString := "r+"
+    }
+    else if (Mode = (FILE_WRITE | FILE_CREATE_NEW)) {
+        ModeString := "a+"
+    }
+    else {
+        *null := 0
+    }
+
+    return fopen(FilePath, ModeString)
+}
+
+i32 SEEK_SET := 0
+i32 SEEK_RELATIVE := 1
+i32 SEEK_END := 2
+
+define i32 FileSeek(i64 File, i32 Offset, i32 Mode) {
+    return fseek(File, Offset, Mode)
+}
+define i32 FileTell(i64 File) {
+    return ftell(File)
+}
+
+define i32 FileGetSize(i64 File) {
+    i32 OldOffset := FileTell(File)
+    i32 End := FileSeek(File, 0, SEEK_END)
+    FileSeek(File, OldOffset, SEEK_SET)
+
+    return End
+}
+
+define i32 FileRead(i64 File, void* Buffer, i32 BytesToRead) {
+    return fread(Buffer, BytesToRead, 1, File)
+}
+define i32 FileWrite(i64 File, void* Buffer, i32 BufferSize) {
+    return fwrite(Buffer, BufferSize, 1, File)
+}
+
+define void FileClose(i64 File) {
+    fclose(File)
+}
+
+define i64 FileGetError(i64 Result) {
+	if (Result > 0) {
+		return 0
+	}
+
+    return -Result + 1
+}
+
+define i32 FileDelete(i8* FilePath) {
+    return unlink(FilePath)
+}
+
+define void FileTruncate(i64 File, i64 Size) {
+    ftruncate64(fileno(File), Size)
+}
+
+define void SetWorkingDirectory(i8* Path) {
+    chdir(Path)
+}

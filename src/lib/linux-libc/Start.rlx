@@ -1,0 +1,8 @@
+
+external {
+    i32(i32, i8**) Main
+}
+
+define i32 main(i32 ArgC, i8** ArgV, i8** EnvP) export raw {
+    return Main(ArgC, ArgV)
+}
