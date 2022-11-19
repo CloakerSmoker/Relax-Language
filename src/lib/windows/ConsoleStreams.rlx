@@ -1,0 +1,5 @@
+DllImport i64 GetStdHandle(i32) {Kernel32.dll, GetStdHandle}
+
+i64 STDIN := GetStdHandle(-10)
+i64 STDOUT := GetStdHandle(-11)
+i64 STDERR := GetStdHandle(-12)

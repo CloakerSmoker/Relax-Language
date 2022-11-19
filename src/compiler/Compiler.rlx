@@ -389,8 +389,6 @@ struct CompilerState {
 					ExportName := Function->ExportName->Buffer
 				}
 
-				Print("Exporting %s as %s\n", NameBuffer, ExportName)
-
 				this->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, ExportName, FunctionAddress, FunctionAddress + FunctionSize - 1)
 			}
 
@@ -722,7 +720,15 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		if (Config->DebugMode & DEBUG_EMIT_SYMBOLS) {
 			; Global symbols need to come last
 
-			Compiler->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, "_start", Compiler->MainOffset, Compiler->MainEnd)
+			if (Config->DebugMode & DEBUG_EMIT_NO_START_CODE) {
+				; Only define our own `_start` if we want to emit startup code.
+				; Otherwise, give it a better name
+
+				Compiler->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, "main", Compiler->MainOffset, Compiler->MainEnd)
+			}
+			else {
+				Compiler->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, "_start", Compiler->MainOffset, Compiler->MainEnd)
+			}
 
 			i16 SymbolTableIndex := Compiler->ELF->FinalizeSymbolTable()
 
@@ -1161,13 +1167,15 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 				However, the CRT startup code assumes that RDI points to argc, so that's what we do too.
 		*/
 		
-		if (Compiler->Config->ELFABI = ELF_ABI_LINUX) {
-			EmitMove_RX_RIX_DISPX(Compiler, RDI, RBP, 0x8, true, 8)
-			EmitLea_R64_R64_DISP8(Compiler, RSI, RBP, 0x10)
-		}
-		else if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
-			EmitLea_R64_R64_DISP8(Compiler, RSI, RDI, 0x8)
-			EmitMove_RX_RIX(Compiler, RDI, RDI, 8)
+		if !(Compiler->Config->DebugMode & DEBUG_EMIT_NO_START_CODE) {
+			if (Compiler->Config->ELFABI = ELF_ABI_LINUX) {
+				EmitMove_RX_RIX_DISPX(Compiler, RDI, RBP, 0x8, true, 8)
+				EmitLea_R64_R64_DISP8(Compiler, RSI, RBP, 0x10)
+			}
+			else if (Compiler->Config->ELFABI = ELF_ABI_FREEBSD) {
+				EmitLea_R64_R64_DISP8(Compiler, RSI, RDI, 0x8)
+				EmitMove_RX_RIX(Compiler, RDI, RDI, 8)
+			}
 		}
 	}
 	
@@ -1324,8 +1332,12 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	;Compiler->BeforeEpilogueBegin()
 	
 	EmitLeave(Compiler)
+
+	i8 IsELF := Compiler->Config->OutputFormat = OUTPUT_ELF
+	i8 IsNotGeneric := Compiler->Config->ELFABI != ELF_ABI_SYSTEMV
+	i8 EmitStartCode := !(Compiler->Config->DebugMode & DEBUG_EMIT_NO_START_CODE)
 	
-	if (IsMain && Compiler->Config->OutputFormat = OUTPUT_ELF && Compiler->Config->ELFABI != ELF_ABI_SYSTEMV) {
+	if (IsMain && IsELF && IsNotGeneric && EmitStartCode) {
 		EmitMove_R64_R64(Compiler, RDI, RAX)
 
 		i32 LINUX_SYSCALL_EXIT := 60
@@ -1450,8 +1462,12 @@ define void CompileReturn(CompilerState* Compiler, ASTNode* ReturnExpression) {
 	;Compiler->MarkLineNumber(ReturnExpression~>Context)
 	
 	EmitLeave(Compiler)
+
+	i8 IsMain := Compiler->CompilingMain
+	i8 IsELF := Compiler->Config->OutputFormat = OUTPUT_ELF
+	i8 EmitStartCode := !(Compiler->Config->DebugMode & DEBUG_EMIT_NO_START_CODE)
 	
-	if (Compiler->CompilingMain && Compiler->Config->OutputFormat = OUTPUT_ELF) {
+	if (IsMain && IsELF && EmitStartCode) {
 		/* If returning from Main() on Linux/BSD, actually call sys_exit() to ensure that the program exits correctly. */
 		
 		EmitMove_R64_R64(Compiler, RDI, RAX)

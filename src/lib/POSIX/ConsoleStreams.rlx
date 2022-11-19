@@ -1,0 +1,3 @@
+i64 STDIN := 0
+i64 STDOUT := 1
+i64 STDERR := 2
