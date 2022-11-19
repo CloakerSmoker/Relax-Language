@@ -382,6 +382,18 @@ struct CompilerState {
 				Symbol->Size := FunctionSize
 			}
 
+			if (Function->Attributes & FUNCTION_ATTRIBUTE_EXPORT) {
+				i8* ExportName := NameBuffer
+
+				if (Function->ExportName) {
+					ExportName := Function->ExportName->Buffer
+				}
+
+				Print("Exporting %s as %s\n", NameBuffer, ExportName)
+
+				this->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, ExportName, FunctionAddress, FunctionAddress + FunctionSize - 1)
+			}
+
 			Free(NameBuffer)
 		}
 	}

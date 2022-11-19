@@ -1168,6 +1168,32 @@ struct ParserState {
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_X64)) {
 				NewDefine->Attributes |= FUNCTION_ATTRIBUTE_USE_X64
 			}
+
+			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_EXPORT)) {
+				i8 AllowExport := this->Config->DebugMode & DEBUG_EMIT_OBJECT
+
+				if !(AllowExport) {
+					this->GetCurrentTokenContext()->Error("Exported functions are only allowed when building an object file")
+				}
+
+				NewDefine->Attributes |= FUNCTION_ATTRIBUTE_EXPORT
+
+				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_AS)) {
+					if (this->PeekNextToken()->Is(TOKEN_TYPE_STRING)) {
+						NewDefine->ExportName := this->GetNextToken()->StringValue
+					}
+				}
+				else if (this->PeekNextToken()->Is(TOKEN_TYPE_IDENTIFIER)) {
+					SafeString* ExportKind := this->PeekNextToken()->StringValue
+
+					if (ExportKind->Equals("raw")) {
+						NewDefine->ExportName := NewDefine->Name
+						this->GetNextToken()
+					}
+				}
+
+				NewDefine->CallCount := 2 ; lol
+			}
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
 				NewDefine->Attributes |= FUNCTION_ATTRIBUTE_ASSEMBY

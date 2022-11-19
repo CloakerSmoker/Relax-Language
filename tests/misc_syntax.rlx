@@ -82,8 +82,8 @@ define i32 Main() {
 	
 	Print(",%i", #ExtraText)
 	
-	Test* BestFit := Test*{5754784}
-	i32 BestFitRating := 2000011101
+	Test* `BestFit` := Test*{5754784}
+	i32 `Best Fit Rating` := 2000011101
 	
 	;breakpoint:()
 	
@@ -92,7 +92,7 @@ define i32 Main() {
 	
 	*pResult := 0xAA
 	
-	if (BestFit || BestFitRating < 200000) {
+	if (BestFit || `Best Fit Rating` < 200000) {
 		;Print("1")
 		i32 d := 1
 		*pResult += 0x55

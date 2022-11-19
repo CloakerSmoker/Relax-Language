@@ -403,7 +403,8 @@ i8 FUNCTION_IS_STATIC_METHOD := 2
 
 i8 FUNCTION_ATTRIBUTE_USE_X64 := 1
 i8 FUNCTION_ATTRIBUTE_ASSEMBY := 2
-i8 FUNCTION_ATTRIBUTE_VARIADIC := 4 
+i8 FUNCTION_ATTRIBUTE_VARIADIC := 4
+i8 FUNCTION_ATTRIBUTE_EXPORT := 8
 
 declare i32 GetTypeStringLength(Type)
 declare void StringifyType(void*, Type)
@@ -445,6 +446,8 @@ struct FunctionDefine {
 		i32 StringBufferSize,
 		i32 ConstantBufferSize
 	}
+
+	SafeString* ExportName
 	
 	i32 CallCount,
 	i8 UsesGlobals,

@@ -151,6 +151,7 @@ i8 KEYWORD_USING := 22
 i8 KEYWORD_ENUM := 23
 
 i8 KEYWORD_EXTERNAL := 24
+i8 KEYWORD_EXPORT := 25
 
 ; Should be zero, but somehow I used 0 as a regular value
 i8 KEYWORD_NONE := 127
@@ -298,6 +299,7 @@ struct LexerState {
 		this->DefineKeyword("using",     KEYWORD_USING)
 		this->DefineKeyword("enum",      KEYWORD_ENUM)
 		this->DefineKeyword("external",  KEYWORD_EXTERNAL)
+		this->DefineKeyword("export",    KEYWORD_EXPORT)
 		
 		return this
 	}
