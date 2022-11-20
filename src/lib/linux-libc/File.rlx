@@ -3,7 +3,6 @@
 
 external "libc.so.6" {
     i8*(i8*, i32) getcwd
-    i8*(i8*, i8*) realpath
 }
 
 define i8* GetWorkingDirectory() {
@@ -14,14 +13,21 @@ define i8* GetWorkingDirectory() {
 	return Buffer
 }
 
-declare void Print(i8*, ...)
-
 define i8* GetAbsolutePath(i8* ForPath) {
-    i8* Buffer := Alloc(256)
+    i8* Buffer := Alloc(260)
 
-    realpath(ForPath, Buffer)
+    MoveMemory(Buffer, ForPath, StringLength(ForPath)) ; Technically a bug
 
-    return Buffer
+    i8* Absolute := MakeAbsolute(Buffer)
+
+    if (Absolute != Buffer) {
+        Free(Buffer)
+    }
+
+    i8* Expanded := ExpandPath(Absolute)
+
+    Free(Absolute)
+
+    return Expanded
 }
-
 

@@ -997,11 +997,11 @@ struct LexerState {
 				
 				i8* AbsoluteIncludePath := GetAbsolutePath(IncludePathBuffer)
 
+				;Print("Expanded '%s' to '%s'\n", IncludePath->Buffer, AbsoluteIncludePath)
+
 				if (IsLibraryInclude || IsPlatformInclude) {
 					Free(IncludePathBuffer)
 				}
-
-				;Print("Expanded '%s' to '%s'\n", IncludePathBuffer, AbsoluteIncludePath)
 				
 				if (IsRequire) {
 					if (this->Config->HasIncludedPath(AbsoluteIncludePath)) {

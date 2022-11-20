@@ -20,7 +20,7 @@ define void* LibcAlloc(void* State, i64 Size) {
 
     Result->Size := Size
 
-    return Result
+    return Result~>Data
 }
 
 define void LibcFree(void* State, void* Memory) {

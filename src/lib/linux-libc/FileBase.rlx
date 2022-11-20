@@ -59,7 +59,8 @@ define i32 FileTell(i64 File) {
 
 define i32 FileGetSize(i64 File) {
     i32 OldOffset := FileTell(File)
-    i32 End := FileSeek(File, 0, SEEK_END)
+    FileSeek(File, 0, SEEK_END)
+    i32 End := FileTell(File)
     FileSeek(File, OldOffset, SEEK_SET)
 
     return End
