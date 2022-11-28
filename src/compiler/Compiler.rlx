@@ -1400,6 +1400,8 @@ declare void CompileUnwindTry(CompilerState*, i8)
 
 define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	/* Compiles some kind of statement */
+
+	Compiler->MarkLineNumber(NodeToCompile~>Context)
 	
 	i8 NodeType := NodeToCompile->NodeType
 	
