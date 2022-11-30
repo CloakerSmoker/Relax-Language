@@ -643,7 +643,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
 				
 				/* If the type is a struct then compile any methods it might have */
-				if (NextType && (NextType->IsStructType || NextType->IsBits)) {
+				if (NextType && (NextType->Is(TYPE_KIND_STRUCTURE) || NextType->Is(TYPE_KIND_BIT_FIELDS))) {
 					CompileFunctionHashMap(Compiler, NextType~>Methods)
 					CompileFunctionHashMap(Compiler, NextType~>StaticMethods)
 				}
@@ -976,7 +976,7 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 			Cast(Compiler, ResultRegister, LastValueSize As i8)
 		}
 	}
-	else if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->IsStructType) {
+	else if (GetPointerDepth(TargetVariable->Type) = 0 && GetBaseType(TargetVariable->Type)->Is(TYPE_KIND_STRUCTURE)) {
 		/* If GetVariableValue is called on a struct, then we should actually result in a pointer to that struct
 			So Compile(Get|Set)StructField can depending on getting a pointer, and never the struct as a number
 			Any time this could be abused *should* be caught by type checking 
@@ -2252,7 +2252,7 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 	if (PointerDepth = 1) {
 		IndexScale := (PointerBase->Size) As i8
 		
-		if (PointerBase->IsStructType) {
+		if (PointerBase->Is(TYPE_KIND_STRUCTURE)) {
 			GetAddress := true
 		}
 	}

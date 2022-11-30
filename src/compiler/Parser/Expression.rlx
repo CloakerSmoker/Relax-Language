@@ -339,7 +339,7 @@
 			Type AccessLeftType := CallToFunctionPointer->AccessNode->Left->ValueType
 			Type FirstParameterType := FunctionPointer->ParameterTypes[0]
 			
-			if (GetPointerDepth(AccessLeftType) = 0 && GetBaseType(AccessLeftType)->IsStructType) {
+			if (GetPointerDepth(AccessLeftType) = 0 && GetBaseType(AccessLeftType)->Is(TYPE_KIND_STRUCTURE)) {
 				AccessLeftType := this->PointerToType(AccessLeftType)
 				ShouldUpdateLeftType := true
 			}
@@ -515,7 +515,7 @@
 							FileClose(File)
 						}
 						else {
-							if (GetBaseType(TargetType)->IsBuiltin = false || GetPointerDepth(TargetType) != 0) {
+							if (GetBaseType(TargetType)->Is(TYPE_KIND_BUILTIN) = false || GetPointerDepth(TargetType) != 0) {
 								; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
 								;  easily write into the constant buffer
 								
@@ -827,7 +827,7 @@
 			
 							ResultBaseType->Name := AToS("(function pointer)")
 							ResultBaseType->Size := 8
-							ResultBaseType->IsFunctionPointer := true
+							ResultBaseType->Kind := TYPE_KIND_FUNCTION_POINTER
 
 							ResultBaseType~>FunctionPointer->ReturnType := FoundDefine->ReturnType
 							ResultBaseType~>FunctionPointer->ParameterCount := FoundDefine->ParameterCount
@@ -958,7 +958,7 @@
 			else {
 				; Else, this fits the `{Type`
 				
-				if (GetBaseType(ElementType)->IsBuiltin = false || GetPointerDepth(ElementType) != 0) {
+				if (GetBaseType(ElementType)->Is(TYPE_KIND_BUILTIN) = false || GetPointerDepth(ElementType) != 0) {
 					; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
 					;  easily write into the constant buffer
 					
@@ -1163,8 +1163,8 @@
 				;if ((LeftDepth != 0 && Operator = OPERATOR_DOT) || (LeftDepth = 0 && Operator = OPERATOR_MINUS_GREATER)) {
 				;	OperatorToken->Error("Wrong operator for left side pointer depth")
 				;}
-				;else if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
-				if (LeftBase->IsStructType = 0 || LeftBase->IsIncomplete && !LeftBase->IsBits) {
+				;else if (LeftBase->Is(TYPE_KIND_STRUCTURE) = 0 || LeftBase->IsIncomplete && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
+				if (LeftBase->Is(TYPE_KIND_STRUCTURE) = 0 || LeftBase->IsIncomplete && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")
@@ -1179,7 +1179,7 @@
 					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a 
 					;  method call
 					
-					if (LeftDepth = 0 && !LeftBase->IsBits) {
+					if (LeftDepth = 0 && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
 						; If `this` is a local struct, we change it to a `ThisType*` so the parameter type 
 						;  matches and the compiler will make sure to pass the address of `this` instead of 
 						;   the value.
@@ -1239,7 +1239,7 @@
 					if (Left->NodeType = NODE_TYPE_VARIABLE && Left->VariableValue->IsThis) {
 						Left->Error("`this` can't be assigned to")
 					}
-					else if (LeftDepth = 0 && LeftBase->IsStructType) {
+					else if (LeftDepth = 0 && LeftBase->Is(TYPE_KIND_STRUCTURE)) {
 						Left->Error("Structures can't be directly assigned")
 					}
 					else if !(Left->IsStorageValue()) {
@@ -1248,7 +1248,7 @@
 					
 					i8 SkipTypeCheck := false
 					
-					if (Operator != OPERATOR_COLON_EQUAL && LeftDepth != 0 && RightDepth = 0 && RightBase->IsBuiltin && RightBase->Size >= 4) {
+					if (Operator != OPERATOR_COLON_EQUAL && LeftDepth != 0 && RightDepth = 0 && RightBase->Is(TYPE_KIND_BUILTIN) && RightBase->Size >= 4) {
 						SkipTypeCheck := true
 					}
 					else if (LeftDepth != 0 && RightDepth = 1 && RightBase = this->void) {
@@ -1287,13 +1287,13 @@
 					ResultType := RightType
 				}
 				else if (Operator = OPERATOR_OPEN_BRACKET) {
-					if !(RightBase->IsBuiltin) {
+					if !(RightBase->Is(TYPE_KIND_BUILTIN)) {
 						Right->Error("Invalid `[Index]` type.")
 					}
 					
 					ResultType := this->DereferencePointerType(LeftType, Left~>Context)
 					
-					if (GetPointerDepth(ResultType) = 0 && GetBaseType(ResultType)->IsStructType) {
+					if (GetPointerDepth(ResultType) = 0 && GetBaseType(ResultType)->Is(TYPE_KIND_STRUCTURE)) {
 						ResultType := LeftType
 					}
 				}
@@ -1322,7 +1322,7 @@
 					
 					i8 LeftIsCompatibleWithRight := !CheckTypes(this->void, LeftType, RightType, null)
 					i8 RightIsCompatibleWithLeft := !CheckTypes(this->void, RightType, LeftType, null)
-					i8 IsPointerArithmetic := LeftDepth != 0 && RightDepth = 0 && RightBase->IsBuiltin && RightBase->Size >= 4
+					i8 IsPointerArithmetic := LeftDepth != 0 && RightDepth = 0 && RightBase->Is(TYPE_KIND_BUILTIN) && RightBase->Size >= 4
 					
 					if (RightIsCompatibleWithLeft || IsPointerArithmetic) {
 						ResultType := LeftType

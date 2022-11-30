@@ -428,7 +428,7 @@ struct DWARFBuilder {
 	define i32 TranslateTypeInfo(TypeInfo* T, i8 MustBeIncomplete) {
 		i32 Offset := 0
 		
-		if (T->IsStructType) {
+		if (T->Is(TYPE_KIND_STRUCTURE)) {
 			i32 AliasOffset := 0
 			
 			Offset := this->AddIncompleteStruct(&AliasOffset, T->Name->Buffer)
@@ -478,7 +478,7 @@ struct DWARFBuilder {
 			
 			this->EndStruct()
 		}
-		else if (T->IsBits) {
+		else if (T->Is(TYPE_KIND_BIT_FIELDS)) {
 			Offset := this->StartBits(T->Name->Buffer, T->Size)
 			this~>Types->Set(T->Name, Offset)
 			
@@ -505,7 +505,7 @@ struct DWARFBuilder {
 			
 			this->EndBits()
 		}
-		else if (T->IsEnum) {
+		else if (T->Is(TYPE_KIND_ENUMERATION)) {
 			Offset := this->StartEnum(T->Name->Buffer, T->Size)
 			this~>Types->Set(T->Name, Offset)
 			
@@ -572,7 +572,7 @@ struct DWARFBuilder {
 			
 			NameStream->Free()
 		}
-		else if (T->IsFunctionPointer) {
+		else if (T->Is(TYPE_KIND_FUNCTION_POINTER)) {
 			FunctionPointerInfo* FunctionPointer := T~>FunctionPointer
 			
 			i32 ReturnTypeOffset := this->FindOrTranslateType(FunctionPointer->ReturnType)
@@ -618,7 +618,7 @@ struct DWARFBuilder {
 		else {
 			i32 PointerDepth := GetPointerDepth(T)
 			
-			if (BaseType->IsFunctionPointer) {
+			if (BaseType->Is(TYPE_KIND_FUNCTION_POINTER)) {
 				; Our function pointers aren't actually pointers to function types, since
 				;  that would ask the question of "what happens if I dereference a function
 				;   pointer?" which I don't want to answer. 

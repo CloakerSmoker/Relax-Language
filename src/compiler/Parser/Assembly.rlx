@@ -298,7 +298,7 @@
 			
 			TypeInfo* BaseType := TypeElement->Value
 			
-			if !(BaseType->IsStructType) {
+			if !(BaseType->Is(TYPE_KIND_STRUCTURE)) {
 				FirstToken->Error("Must be the name of a structure type")
 			}
 			

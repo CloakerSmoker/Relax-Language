@@ -107,13 +107,6 @@ struct VariableHashMap {
 #Require "./src/compiler/Parser/AST.rlx"
 #Require "./src/compiler/Parser/Types.rlx"
 
-i8 TYPE_REGULAR := 1
-i8 TYPE_STRUCT := 2
-i8 TYPE_INCOMPLETE := 4
-i8 TYPE_BITS := 8
-i8 TYPE_ARRAY := 16
-i8 TYPE_ENUM := 32
-
 #Require "$/PointerArray.rlx"
 
 ; Holds the entire state of the parser
@@ -155,8 +148,12 @@ struct ParserState {
 	
 	i32 LabelCount
 	
-	declare TypeInfo* AddType(i8*, i16, i8)
+	declare TypeInfo* AddType(SourceContext*, SafeString*, i16, TYPE_KIND)
 	declare void SetupAssembly()
+
+	define TypeInfo* DefineBuiltinType(i8* RawName, i16 Size) {
+		return this->AddType(null, AToS(RawName), Size, TYPE_KIND_BUILTIN)
+	}
 	
 	static ParserState* New(BuildConfig* Config, LexerState* Lexer) {
 		ParserState* this := Alloc(#ParserState)
@@ -175,50 +172,32 @@ struct ParserState {
 		this->GlobalDefaults := AllocArray(8, 0)
 		this->GlobalConstantsBuffer := Alloc(4)
 		
-		this->i8 := this->AddType("i8", 1, TYPE_REGULAR)
-		this->i16 := this->AddType("i16", 2, TYPE_REGULAR)
-		this->i32 := this->AddType("i32", 4, TYPE_REGULAR)
-		this->i64 := this->AddType("i64", 8, TYPE_REGULAR)
-		this->void := this->AddType("void", 8, TYPE_REGULAR)
+		this->i8   := this->DefineBuiltinType("i8"  , 1)
+		this->i16  := this->DefineBuiltinType("i16" , 2)
+		this->i32  := this->DefineBuiltinType("i32" , 4)
+		this->i64  := this->DefineBuiltinType("i64" , 8)
+		this->void := this->DefineBuiltinType("void", 8)
 		
 		this->SetupAssembly()
 		
 		return this
 	}
 	
-	define TypeInfo* AddType(SourceContext* BlameContext, SafeString* Name, i16 Size, i8 Flags) {
+	define TypeInfo* AddType(SourceContext* BlameContext, SafeString* Name, i16 Size, TYPE_KIND Kind, i8 IsIncomplete) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
 		NewType->DefinedAt := BlameContext
 		NewType->Name := Name
 		NewType->Size := Size
+		NewType->Kind := Kind
+		NewType->IsIncomplete := IsIncomplete
 	
-		if (Flags & TYPE_STRUCT) {
-			NewType->IsStructType := true
-		}
-		
-		if (Flags & TYPE_INCOMPLETE) {
-			NewType->IsIncomplete := true
-		}
-		
-		if (Flags & TYPE_BITS) {
-			NewType->IsBits := true
-		}
-		
-		if (Flags & TYPE_REGULAR) {
-			NewType->IsBuiltin := true
-		}
-		
-		if (Flags & TYPE_ENUM) {
-			NewType->IsEnum := true
-		}
-		
 		this~>Types->Set(Name, NewType)
 		
 		return NewType
 	}
-	define TypeInfo* AddType(i8* Name, i16 Size, i8 Flags) {
-		return this->AddType(null, AToS(Name), Size, Flags)
+	define TypeInfo* AddType(SourceContext* BlameContext, SafeString* Name, i16 Size, TYPE_KIND Kind) {
+		return this->AddType(BlameContext, Name, Size, Kind, false)
 	}
 	
 	declare Token* GetCurrentToken()
@@ -237,7 +216,7 @@ struct ParserState {
 				return TYPE_NONE
 			}
 			else {
-				FoundTypeInfo := this->AddType(null, TypeName, 0, TYPE_STRUCT | TYPE_INCOMPLETE)
+				FoundTypeInfo := this->AddType(null, TypeName, 0, TYPE_KIND_STRUCTURE, true)
 			}
 		}
 		
@@ -286,7 +265,7 @@ struct ParserState {
 		if (Target->NodeType != NODE_TYPE_INTEGER) {
 			return Target
 		}
-		else if (GetPointerDepth(Target->ValueType) = 0 && GetBaseType(Target->ValueType)->IsEnum) {
+		else if (GetPointerDepth(Target->ValueType) = 0 && GetBaseType(Target->ValueType)->Is(TYPE_KIND_ENUMERATION)) {
 			return Target
 		}
 		
@@ -544,7 +523,7 @@ struct ParserState {
 			
 			Result->Name := AToS("(function pointer)")
 			Result->Size := 8
-			Result->IsFunctionPointer := true
+			Result->Kind := TYPE_KIND_FUNCTION_POINTER
 
 			Result~>FunctionPointer->ReturnType := ReturnType
 			Result~>FunctionPointer->ParameterCount := ParameterCount
@@ -672,7 +651,7 @@ struct ParserState {
 		i16 ForTypeDepth := GetPointerDepth(ForType)
 		TypeInfo* ForBaseType := GetBaseType(ForType)
 		
-		if (ForTypeDepth = 0 && ForBaseType->IsStructType) {
+		if (ForTypeDepth = 0 && ForBaseType->Is(TYPE_KIND_STRUCTURE)) {
 			i16 InitializerCapacity := 20
 			ASTNode** Initializers := Alloc(InitializerCapacity * #ASTNode*) As ASTNode**
 			
@@ -691,7 +670,7 @@ struct ParserState {
 				}
 				
 				StructField* Field := FieldElement->Value
-				i8 FieldIsStruct := GetPointerDepth(Field->ValueType) = 0 && GetBaseType(Field->ValueType)->IsStructType
+				i8 FieldIsStruct := GetPointerDepth(Field->ValueType) = 0 && GetBaseType(Field->ValueType)->Is(TYPE_KIND_STRUCTURE)
 				i8 FieldIsArray := Field->ValueType.IsArray
 				
 				; Build a node for `ForNode.Field`
@@ -766,7 +745,7 @@ struct ParserState {
 				ArrayAccess->Operator->IntegerValue := OPERATOR_OPEN_BRACKET
 				ArrayAccess->Right := ASTNode:New(NODE_TYPE_INTEGER, Index, this->i32->AsNonPointer())
 				
-				i8 InitializerIsStruct := GetPointerDepth(ElementType) = 0 && GetBaseType(ElementType)->IsStructType
+				i8 InitializerIsStruct := GetPointerDepth(ElementType) = 0 && GetBaseType(ElementType)->Is(TYPE_KIND_STRUCTURE)
 				
 				if (InitializerIsStruct) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for field initializer")
@@ -972,7 +951,7 @@ struct ParserState {
 			VariableInfo* ThisParameter := Alloc(#VariableInfo)
 			ThisParameter->Name := AToS("this")
 			
-			if (ThisType->IsBits) {
+			if (ThisType->Is(TYPE_KIND_BIT_FIELDS)) {
 				ThisParameter->Type := ThisType->AsNonPointer()
 			}
 			else {
@@ -1238,7 +1217,7 @@ struct ParserState {
 		return this->ParseFunctionDefinition(Namespace, FirstToken, null, false)
 	}
 	
-	define TypeInfo* ParseCustomTypeName(Token* NameToken, i8 Flags) {
+	define TypeInfo* ParseCustomTypeName(Token* NameToken, TYPE_KIND Kind) {
 		SafeString* Name := NameToken->StringValue
 		
 		TypeInfo* NewType := null
@@ -1260,7 +1239,7 @@ struct ParserState {
 		else {
 			; We didn't find a type by this name, so we can add it like normal
 			
-			NewType := this->AddType(NameToken~>Context, Name, 0, Flags)
+			NewType := this->AddType(NameToken~>Context, Name, 0, Kind)
 		}
 		
 		return NewType
@@ -1269,7 +1248,7 @@ struct ParserState {
 	define void ParseStructDefinition() {
 		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
 		
-		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_STRUCT)
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_STRUCTURE)
 		
 		; All of the "namespaces" a TypeInfo structure contains need to be initialized
 		
@@ -1356,7 +1335,7 @@ struct ParserState {
 			
 			; Only align the field if it isn't a struct, array, union, and if this structure isn't unaligned 
 			
-			if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->IsStructType) {
+			if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->Is(TYPE_KIND_STRUCTURE)) {
 				; Dummy branch
 			}
 			else if (InUnion || IsUnaligned) {
@@ -1403,14 +1382,13 @@ struct ParserState {
 		this~>Types->Set("self", null)
 		
 		NewType->Size := TotalSize
-		NewType->IsStructType := true
 		NewType->IsIncomplete := false
 	}
 	
 	define void ParseBitsDefinition() {
 		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for bits name")
 		
-		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_BITS)
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_BIT_FIELDS)
 		
 		HashMap* Fields := NewType~>Fields
 		HashMap* Methods := NewType~>Methods
@@ -1428,7 +1406,7 @@ struct ParserState {
 		TypeInfo* BackingBase := GetBaseType(BackingType)
 		i32 BackingDepth := GetPointerDepth(BackingType)
 		
-		if (BackingBase->IsStructType || BackingDepth) {
+		if (BackingBase->Is(TYPE_KIND_STRUCTURE) || BackingDepth) {
 			; Invalid types for bits backing types
 			
 			BackingTypeNode->Error("Bits backing type must be a plain integer type.")
@@ -1484,7 +1462,7 @@ struct ParserState {
 				
 				FieldType := FieldTypeNode->TypeValue
 				
-				if (GetPointerDepth(FieldType) = 0 && GetBaseType(FieldType)->IsStructType) {
+				if (GetPointerDepth(FieldType) = 0 && GetBaseType(FieldType)->Is(TYPE_KIND_STRUCTURE)) {
 					FieldTypeNode->Error("Structures cannot be contained in `bits` types")
 				}
 			}
@@ -1548,7 +1526,7 @@ struct ParserState {
 	define void ParseEnumDefinition() {
 		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for enum name")
 		
-		TypeInfo* BaseEnumType := this->ParseCustomTypeName(NameToken, TYPE_ENUM)
+		TypeInfo* BaseEnumType := this->ParseCustomTypeName(NameToken, TYPE_KIND_ENUMERATION)
 		BaseEnumType->Size := 4
 		HashMap* Fields := BaseEnumType~>Fields
 		Fields->Initialize()
@@ -1560,7 +1538,7 @@ struct ParserState {
 			TypeInfo* BackingBase := GetBaseType(BackingType)
 			i32 BackingDepth := GetPointerDepth(BackingType)
 			
-			if (BackingBase->IsStructType || BackingDepth) {
+			if (BackingBase->Is(TYPE_KIND_STRUCTURE) || BackingDepth) {
 				; Invalid types for bits backing types
 				
 				BackingTypeNode->Error("Enum backing type must be a plain integer.")
