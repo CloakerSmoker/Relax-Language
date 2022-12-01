@@ -1244,33 +1244,20 @@ struct ParserState {
 		
 		return NewType
 	}
-	
-	define void ParseStructDefinition() {
-		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
-		
-		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_STRUCTURE)
-		
-		; All of the "namespaces" a TypeInfo structure contains need to be initialized
-		
-		HashMap* Fields := NewType~>Fields
-		HashMap* Methods := NewType~>Methods
-		HashMap* StaticMethods := NewType~>StaticMethods
-		
-		Fields->Initialize()
-		Methods->Initialize()
-		StaticMethods->Initialize()
-		
-		i8 IsUnaligned := this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
-		
-		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
-		
-		i16 NextFieldOffset := 0
-		i16 TotalSize := 0
+
+	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned) {
+		HashMap* Fields := ForType~>Fields
+		HashMap* Methods := ForType~>Methods
+		HashMap* StaticMethods := ForType~>StaticMethods
+
+		this~>Types->Set("self", ForType)
+
+		i16 NextFieldOffset := ForType->Size
 		i8 InUnion := false
 		i16 MaxUnionSize := 0
-		
-		this~>Types->Set("self", NewType)
-		
+
+		i16 TotalSize := 0
+
 		loop {
 			if !(InUnion) {
 				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
@@ -1292,7 +1279,7 @@ struct ParserState {
 					
 					if (IsMethod) {
 						HashMap* MethodNamespace := Methods
-						TypeInfo* ThisType := NewType
+						TypeInfo* ThisType := ForType
 						
 						if (IsStaticMethod) {
 							MethodNamespace := StaticMethods
@@ -1378,10 +1365,25 @@ struct ParserState {
 				break
 			}
 		}
-		
+
 		this~>Types->Set("self", null)
+
+		ForType->Size := TotalSize
+	}
+	
+	define void ParseStructDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct name")
 		
-		NewType->Size := TotalSize
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_STRUCTURE)
+		
+		NewType->InitializeAggregate()
+		
+		i8 IsUnaligned := this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNALIGNED)
+		
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
+
+		this->ParseStructFields(NewType, IsUnaligned)
+		
 		NewType->IsIncomplete := false
 	}
 	

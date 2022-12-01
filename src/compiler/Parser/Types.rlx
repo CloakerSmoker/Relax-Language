@@ -63,6 +63,12 @@ struct TypeInfo {
 	define i8 Is(TYPE_KIND Kind) {
 		return this->Kind = Kind
 	}
+
+	define void InitializeAggregate() {
+		this~>Fields->Initialize()
+		this~>Methods->Initialize()
+		this~>StaticMethods->Initialize()
+	}
 }
 struct ArrayTypeInfo {
 	TypeInfo* BaseType
