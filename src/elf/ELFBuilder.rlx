@@ -1,0 +1,1294 @@
+i32 ELF_MAGIC               := 0x464C457F ; 0x7f 'ELF' magic
+i8  ELF_BITNESS_64          := 2          ; 1 = 32 bit, 2 = 64 bit
+i8  ELF_ENDIAN_LITTLE       := 1          ; 1 = Little endian
+
+i8  ELF_ABI_SYSTEMV         := 0          ; 0 = SystemV
+i8  ELF_ABI_VERSION_SYSTEMV := 0
+
+i8 ELF_ABI_LINUX := 3
+i8 ELF_ABI_VERSION_LINUX := 0
+
+i8 ELF_ABI_FREEBSD := 9
+i8 ELF_ABI_VERSION_FREEBSD := 0
+
+i16 ELF_FILETYPE_RELOCATABLE := 0x01
+i16 ELF_FILETYPE_EXECUTABLE  := 0x02
+i16 ELF_FILETYPE_DYNAMIC     := 0x03
+
+i16 ELF_MACHINE_AMD64       := 0x3E
+i32 ELF_VERSION             := 1
+
+i64 ELF_ALIGN_NONE := 0 ; Used for both segments and sections
+
+i32 ELF_SEGMENT_FLAGS_EXECUTE := 1
+i32 ELF_SEGMENT_FLAGS_WRITE   := 2
+i32 ELF_SEGMENT_FLAGS_READ    := 4
+
+i32 ELF_SEGMENT_TYPE_LOAD := 0x01
+i32 ELF_SEGMENT_TYPE_DYNAMIC := 0x2
+i32 ELF_SEGMENT_TYPE_INTERP := 0x3
+i32 ELF_SEGMENT_TYPE_PHDR := 0x06
+
+#Require "$/PointerArray.rlx"
+
+struct ELFProgramHeader {
+	i32 SegmentType
+	i32 Flags
+	i64 FileOffset
+	i64 VirtualAddress
+
+	union {
+		i64 PhysicalAddress
+		ELFProgramHeader* Sibling
+	}
+
+	i64 FileSize
+	i64 MemorySize
+
+	union {
+		i64 Alignment
+		PointerArray* Children ; <ELFSectionheader>
+	}
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this->Children := PointerArray:New()
+
+		return this
+	}
+}
+
+i32 ELF_SECTION_TYPE_DATA         := 0x01
+i32 ELF_SECTION_TYPE_SYMBOL_TABLE := 0x02
+i32 ELF_SECTION_TYPE_STRING_TABLE := 0x03
+i32 ELF_SECTION_TYPE_RELOCATIONS_ADDEND  := 0x04
+i32 ELF_SECTION_TYPE_HASH_TABLE   := 0x05
+i32 ELF_SECTION_TYPE_DYNAMIC      := 0x06
+i32 ELF_SECTION_TYPE_NODATA       := 0x08
+i32 ELF_SECTION_TYPE_RELOCATIONS  := 0x09
+i32 ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE := 0x0B
+
+i64 ELF_SECTION_FLAGS_WRITE    := 0x01
+i64 ELF_SECTION_FLAGS_ALLOCATE := 0x02
+i64 ELF_SECTION_FLAGS_EXECUTE  := 0x04
+i64 ELF_SECTION_FLAGS_STRINGS  := 0x20
+
+
+; Custom flag, used to mark that a section only exists for the purpose of mapping a name to some
+;  data which isn't loaded (like debug info)
+i64 ELF_SECTION_FLAGS_HAS_DATA := 0x2000
+
+struct ELFSectionHeader {
+	i32 NameOffset
+	i32 Type
+	i64 Flags
+	i64 VirtualAddress
+	i64 FileOffset
+	i64 FileSize
+	i32 AssociatedSectionIndex
+	i32 ExtraInfo
+	
+	union {
+		ELFProgramHeader* Parent
+		void* InitializedData
+		i64 Alignment
+	}
+
+	i64 EntrySize
+}
+
+i8 ELF_STB_LOCAL   := 0x00
+i8 ELF_STB_GLOBAL  := 0x10
+i8 ELF_STB_WEAK    := 0x20
+
+i8 ELF_STT_NONE    := 0x00
+i8 ELF_STT_OBJECT  := 0x01
+i8 ELF_STT_FUNC    := 0x02
+i8 ELF_STT_SECTION := 0x03
+i8 ELF_STT_FILE    := 0x04
+i8 ELF_STT_COMMON  := 0x05
+i8 ELF_STT_TLS     := 0x06
+
+i8 ELF_STV_DEFAULT   := 0
+i8 ELF_STV_INTERNAL  := 1
+i8 ELF_STV_HIDDEN    := 3
+i8 ELF_STV_PROTECTED := 4
+
+i16 ELF_SHN_UNDEF := 0
+i16 ELF_SHN_ABS := 0xFFF1 As i16
+i16 ELF_SHN_COMMON := 0xFFF2 As i16
+i16 ELF_SHN_UNKNOWN := 0x7FFF As i16
+
+struct ELFSymbol unaligned {
+	i32 NameOffset
+	i8 Info
+	i8 Other
+	i16 SectionIndex
+	i64 Value
+	i64 Size
+
+	static self* New() {
+		return Alloc(#self)
+	}
+
+	define void Binding(i8 Binding) {
+		this->Info := (this->Info & 0xF) | Binding
+	}
+	define i8 Binding() {
+		return (this->Info & 0xF0) As i8
+	}
+	define void Type(i8 SymbolType) {
+		this->Info := ((this->Info & 0xF0) | SymbolType) As i8
+	}
+	define i8 Type() {
+		return this->Info & 0xF
+	}
+	define void Visibility(i8 Visibility) {
+		this->Other := Visibility
+	}
+}
+
+i32 ELF_NOTE_TYPE_FREEBSD_ABI_TAG := 1
+i32 ELF_NOTE_DATA_FREEBSD_ABI_TAG_13_1 :=  1301000
+
+struct ELFNoteSection {
+	i32 NameLength
+	i32 DescriptionLength
+	i32 Type
+	i8[0] Name
+	
+	define void* Body() {
+		return this~>Name +this->NameLength 
+	}
+}
+
+i64 ELF_DYNAMIC_TAG_NULL := 0
+i64 ELF_DYNAMIC_TAG_NEEDED := 1
+i64 ELF_DYNAMIC_TAG_HASH := 4
+i64 ELF_DYNAMIC_TAG_STRTAB := 5
+i64 ELF_DYNAMIC_TAG_SYMTAB := 6
+i64 ELF_DYNAMIC_TAG_RELA := 7
+i64 ELF_DYNAMIC_TAG_RELASZ := 8
+i64 ELF_DYNAMIC_TAG_RELAENT := 9
+i64 ELF_DYNAMIC_TAG_STRSZ := 10
+i64 ELF_DYNAMIC_TAG_SYMENT := 11
+i64 ELF_DYNAMIC_TAG_REL := 17
+i64 ELF_DYNAMIC_TAG_RELSZ := 18
+i64 ELF_DYNAMIC_TAG_RELENT := 19
+
+struct ELFDynamicSectionEntry {
+	i64 Tag
+	i64 Value
+
+	static self* New(i64 Tag, i64 Value) {
+		self* this := Alloc(#self)
+
+		this->Tag := Tag
+		this->Value := Value
+
+		return this
+	}
+}
+
+i64 ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32 := 2
+i64 ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE := 6
+i64 ELF_RELOCATION_TYPE_X64_BASE_RELATIVE := 8
+
+struct ELFRelocation {
+	i64 Offset
+	i64 Info
+	i64 Addend
+
+	define void Type(i64 RelocationType) {
+		this->Info &= 0x7FFF_FFFF_0000_0000
+		this->Info |= RelocationType
+	}
+	define void Symbol(i64 SymbolIndex) {
+		this->Info &= 0xFFFF_FFFF
+		this->Info |= SymbolIndex << 32
+	}
+
+	static self* New(i64 Offset, i64 RelocationType, i64 SymbolIndex) {
+		self* this := Alloc(#self)
+
+		this->Offset := Offset
+		this->Type(RelocationType)
+		this->Symbol(SymbolIndex)
+
+		return this
+	}
+}
+
+struct ELFRelocationPair {
+	ELFRelocation* Relocation
+	ELFSymbol* Symbol
+
+	static self* New(ELFRelocation* Relocation, ELFSymbol* Symbol) {
+		self* this := Alloc(#self)
+
+		this->Relocation := Relocation
+		this->Symbol := Symbol
+
+		return this
+	}
+}
+
+struct ELFHeader unaligned {
+	i32 Magic
+	i8 Bitness
+	i8 Endianness
+	i8 UseCurrentVersion
+	i8 ABI
+	
+	union {
+		; This byte is followed by 7 unused ones, so we pad out to the correct offset with this union
+
+		i8 ABIVersion
+		i64 Unused
+	}
+	
+	i16 FileType
+	i16 MachineType
+	
+	i32 ELFVersion
+	i64 EntryPoint
+
+	i64 ProgramHeadersOffset
+	i64 SectionHeadersOffset
+
+	i32 Flags
+	i16 HeaderSize
+
+	i16 ProgramHeaderSize
+	i16 ProgramHeaderEntryCount
+	
+	i16 SectionHeaderSize
+	i16 SectionHeaderEntryCount
+
+	i16 SectionNameSectionIndex
+
+	define void Populate(i8 ABI, i8 ABIVersion, i16 FileType) {
+		; Default values for a statically linked little endian 64 bit x86-64 executable using the specified ABI
+		
+		this->Magic             := ELF_MAGIC
+		this->Bitness           := ELF_BITNESS_64
+		this->Endianness        := ELF_ENDIAN_LITTLE
+		this->UseCurrentVersion := true
+		this->ABI               := ABI
+		this->ABIVersion        := ABIVersion
+		this->FileType          := FileType
+		this->MachineType       := ELF_MACHINE_AMD64
+		this->ELFVersion        := ELF_VERSION
+		
+		this->HeaderSize                    := #ELFHeader As i16
+		this->ProgramHeaderSize             := #ELFProgramHeader As i16
+		this->SectionHeaderSize             := #ELFSectionHeader As i16
+
+		this->SectionNameSectionIndex := 1
+	}
+}
+
+struct ELFSectionReference {
+	ELFSectionHeader* From
+	i32 Offset
+	ELFSectionHeader* To
+
+	static self* New(ELFSectionHeader* From, i32 Offset, ELFSectionHeader* To) {
+		self* this := Alloc(#self)
+
+		this->From := From
+		this->Offset := Offset
+		this->To := To
+
+		return this
+	}
+}
+
+define i32 ELFHash(i8* Name) {
+	i64 Result := 0
+	i64 Temporary := 0
+
+	for (i32 Index := 0, Index < StringLength(Name), Index++) {
+		Result := (Result << 4) + Name[Index]
+		Temporary := Result & 0xF000_0000
+
+		if (Temporary) {
+			Result ^= Temporary >> 24
+		}
+
+		Result &= ~Temporary
+	}
+
+	return (Result & 0xFFFF_FFFF) As i32
+}
+
+struct ELFSymbolHashTable {
+	i32 BucketCount
+	i32 ChainCount
+	i32* Buckets
+	i32* Chains
+
+	static self* New(i32 BucketCount, i32 ChainCount) {
+		self* this := Alloc(#self)
+
+		this->BucketCount := BucketCount
+		this->Buckets := Alloc(BucketCount * #i32)
+
+		this->ChainCount := ChainCount
+		this->Chains := Alloc(ChainCount * #i32)
+
+		return this
+	}
+
+	define void AddSymbol(i8* Name, i32 Index) {
+		i32 Hash := ELFHash(Name)
+		i32 Bucket := Hash % this->BucketCount
+
+		if (this->Buckets[Bucket]) {
+			this->Chains[Index] := this->Buckets[Bucket]
+		}
+
+		this->Buckets[Bucket] := Index
+	}
+
+	define i32 Size() {
+		return 4 + 4 + (this->BucketCount * 4) + (this->ChainCount * 4)
+	}
+	define void Serialize(void* Buffer) {
+		MoveMemory(Buffer, this, 8)
+		MoveMemory(Buffer + 8, this->Buckets, this->BucketCount * 4)
+		MoveMemory(Buffer + 8 + (this->BucketCount * 4), this->Chains, this->ChainCount * 4)
+	}
+}
+
+; For efficient mapping executable and shared object files must have segments whose file offsets and virtual addresses 
+;  are congruent modulo the page size.
+; From: https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
+
+struct ELFBuilder {
+	union {
+		void* Buffer
+		ELFHeader* Header
+	}
+	
+	i32 BufferSize
+
+	i8 IsObjectFile
+	
+	ELFProgramHeader* PHDR                ; Segment for segment headers
+	ELFProgramHeader* LoadPHDR            ; Segment which loads the segment containing the segment headers
+	ELFSectionHeader* StringSection       ; Section which holds section names (Fuck this format)
+	
+	ELFProgramHeader* CodeProgramHeader   ; Segment for code
+	ELFSectionHeader* CodeSectionHeader   ; Section for code
+	
+	ELFProgramHeader* DataProgramHeader   ; Segment for data
+	ELFSectionHeader* DataSectionHeader   ; Segment for code
+	
+	i8* StringBuffer
+	i8* CodeBuffer
+	
+	PointerArray* ProgramHeaders ; <ELFProgramHeader*>
+	PointerArray* SectionHeaders ; <ELFSectionHeader*>
+
+	i32 Alignment
+
+	define i32 AlignmentNeeded(i32 Value) {
+		if (Value % this->Alignment) {
+			return this->Alignment - (Value % this->Alignment)
+		}
+
+		return 0
+	}
+	define i32 Align(i32 Value) {
+		return Value + this->AlignmentNeeded(Value)
+	}
+
+	define i16 SectionIndex(ELFSectionHeader* Header) {
+		return this->SectionHeaders->Find(Header) As i16
+	}
+
+	PointerArray* SectionReferences ; <ELFSectionReference*>
+
+	define void ReferenceSection(ELFSectionHeader* From, i32 Offset, ELFSectionHeader* To) {
+		this->SectionReferences->Push(ELFSectionReference:New(From, Offset, To))
+	}
+
+	define void DoSectionReferenceRelocations() {
+		for (i32 Index := 0, Index < this->SectionReferences->Count(), Index++) {
+			ELFSectionReference* Next := this->SectionReferences->At(Index)
+
+			;Print("Section[%i].%i -> Section[%i]\n", this->SectionIndex(Next->From), Next->Offset, this->SectionIndex(Next->To))
+
+			i64* Where := Next->From->InitializedData + Next->Offset
+
+			*Where += Next->To->VirtualAddress
+		}
+		
+	}
+	
+	i32 DataSize
+
+	define i32 AppendString(i8* String) {
+		i32 StringOffset := this->StringSection->FileSize As i32
+		i32 StringLength := StringLength(String)
+		
+		i32 NewSize := StringOffset + StringLength + 1
+		
+		this->StringBuffer := ReAlloc(this->StringBuffer, NewSize)
+		this->StringSection->FileSize := NewSize
+		
+		for (i32 Index := 0, Index < StringLength, Index += 1) {
+			this->StringBuffer[StringOffset + Index] := String[Index]
+		}
+		
+		return StringOffset
+	}
+
+	define ELFProgramHeader* AppendProgramHeader() {
+		this->Header->ProgramHeaderEntryCount += 1
+		
+		ELFProgramHeader* Result := ELFProgramHeader:New()
+		
+		this->ProgramHeaders->Push(Result)
+		
+		return Result
+	}
+	define ELFSectionHeader* AppendSectionHeader() {
+		this->Header->SectionHeaderEntryCount += 1
+		
+		ELFSectionHeader* Result := Alloc(#ELFSectionHeader)
+		
+		this->SectionHeaders->Push(Result)
+		
+		return Result
+	}
+
+	define ELFSectionHeader* AppendNamedSection(i8* Name) {
+		ELFSectionHeader* NewSection := this->AppendSectionHeader()
+		
+		NewSection->NameOffset := this->AppendString(Name)
+		
+		return NewSection
+	}
+
+	define void SetupCode() {
+		ELFSectionHeader* TextSection := this->AppendNamedSection(".text")
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			ELFProgramHeader* LoadCode := this->AppendProgramHeader()
+			
+			LoadCode->SegmentType := ELF_SEGMENT_TYPE_LOAD
+			LoadCode->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_EXECUTE | ELF_SEGMENT_FLAGS_WRITE
+
+			LoadCode->Children->Push(TextSection)
+			TextSection->Parent := LoadCode
+
+			this->CodeProgramHeader := LoadCode
+		}
+		
+		TextSection->Type  := ELF_SECTION_TYPE_DATA
+		TextSection->Flags := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_EXECUTE
+		TextSection->Alignment    := ELF_ALIGN_NONE
+
+		this->CodeSectionHeader := TextSection
+	}
+
+	define void AddCodeSection(i8* CodeBytes, i32 CodeLength) {
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			this->CodeProgramHeader->FileSize := CodeLength
+			this->CodeProgramHeader->MemorySize := CodeLength
+		}
+		
+		this->CodeSectionHeader->FileSize := CodeLength
+		this->CodeBuffer := CodeBytes
+	}
+
+	define void AddEmptyDataSection(i32 ReserveBytes) {
+		ELFSectionHeader* DataSection := this->AppendNamedSection(".bss")
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			ELFProgramHeader* LoadData := this->AppendProgramHeader()
+			
+			LoadData->SegmentType := ELF_SEGMENT_TYPE_LOAD
+			LoadData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+			LoadData->FileSize    := 0
+			LoadData->MemorySize  := ReserveBytes
+
+			LoadData->Children->Push(DataSection)
+			DataSection->Parent := LoadData
+			
+			this->DataProgramHeader := LoadData
+		}
+
+		DataSection->Type         := ELF_SECTION_TYPE_NODATA
+		DataSection->Flags        := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
+		DataSection->Alignment    := ELF_ALIGN_NONE
+		DataSection->FileSize     := ReserveBytes
+		
+		this->DataSectionHeader := DataSection
+	}
+	define ELFSectionHeader* AddDataSection(i8* Name, void* Data, i32 Size) {
+		ELFSectionHeader* DataSection := this->AppendNamedSection(Name)
+		
+		DataSection->Type           := ELF_SECTION_TYPE_DATA
+		DataSection->Flags          := ELF_SECTION_FLAGS_HAS_DATA
+		DataSection->Alignment      := ELF_ALIGN_NONE
+		DataSection->VirtualAddress := Data As i64
+		DataSection->FileSize       := Size
+
+		return DataSection
+	}
+
+	PointerArray* SymbolTable ; <ELFSymbol*>
+	PointerArray* DynamicSymbolTable ; <ELFSymbol*>
+
+	define void SetupSymbolTable() {
+		this->SymbolTable := PointerArray:New()
+		this->DynamicSymbolTable := PointerArray:New()
+
+		ELFSymbol* First := ELFSymbol:New()
+
+		this->SymbolTable->Push(First)
+		this->DynamicSymbolTable->Push(First)
+	}
+
+	define ELFSymbol* AddSymbol(PointerArray* Symbols, i16 SectionIndex, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		i32 Index := Symbols->Count()
+		
+		ELFSymbol* Result := ELFSymbol:New()
+
+		if (Binding = ELF_STB_LOCAL) {
+			Symbols->Insert(1, Result)
+		}
+		else {
+			Symbols->Push(Result)
+		}
+
+		Result->NameOffset := NameOffset
+		Result->SectionIndex := SectionIndex
+		Result->Type(SymbolType)
+		Result->Binding(Binding)
+		Result->Visibility(ELF_STV_DEFAULT)
+
+		Result->Value := Start
+		Result->Size := End - Start
+
+		return Result
+	}
+	define ELFSymbol* AddSymbol(PointerArray* Symbols, i32 NameOffset, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		return this->AddSymbol(Symbols, 0, NameOffset, Binding, SymbolType, Start, End)
+	}
+
+	define ELFSymbol* AddSymbol(i32 NameOffset, i16 SectionIndex, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		return this->AddSymbol(this->SymbolTable, SectionIndex, NameOffset, Binding, SymbolType, Start, End)
+	}
+
+	define ELFSymbol* AddSymbol(i8* Name, i16 SectionIndex, i8 Binding, i8 SymbolType, i64 Start, i64 End) {
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(NameOffset, SectionIndex, Binding, SymbolType, Start, End)
+	}
+
+	define ELFSymbol* AddFunctionSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(NameOffset, ELF_SHN_UNKNOWN, Binding, ELF_STT_FUNC, Start, End)
+	}
+	define ELFSymbol* AddGlobalSymbol(i8 Binding, i8* Name, i64 Start, i64 End) {
+		i32 NameOffset := this->AppendString(Name)
+
+		return this->AddSymbol(NameOffset, ELF_SHN_UNKNOWN, Binding, ELF_STT_OBJECT, Start, End)
+	}
+
+	define ELFSectionHeader* FinalizeSymbolTable(PointerArray* Symbols, i16 StringSection, i8* Name) {
+		i32 Size := Symbols->Count() * #ELFSymbol
+		ELFSymbol* SymbolTable := Alloc(Size)
+
+		i32 FirstNonLocalIndex := -1
+
+		for (i32 Index := 0, Index < Symbols->Count(), Index++) {
+			ELFSymbol* Next := Symbols->At(Index)
+
+			if (FirstNonLocalIndex = -1 && Next->Binding() = ELF_STB_GLOBAL) {
+				FirstNonLocalIndex := Index
+			}
+
+			MoveMemory(SymbolTable[Index], Next, #ELFSymbol)
+		}
+
+		ELFSectionHeader* Section := this->AddDataSection(Name, SymbolTable, Size)
+
+		Section->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
+		Section->AssociatedSectionIndex := StringSection
+		Section->ExtraInfo := FirstNonLocalIndex
+		Section->EntrySize := #ELFSymbol
+
+		return Section
+	}
+
+	define i16 FinalizeSymbolTable() {
+		for (i32 Index := 0, Index < this->SymbolTable->Count(), Index++) {
+			ELFSymbol* Next := this->SymbolTable->At(Index)
+
+			if (Next->SectionIndex = ELF_SHN_UNKNOWN) {
+				if (Next->Type() = ELF_STT_FUNC) {
+					Next->SectionIndex := this->SectionIndex(this->CodeSectionHeader)
+				}
+				else if (Next->Type() = ELF_STT_OBJECT) {
+					Next->SectionIndex := this->SectionIndex(this->DataSectionHeader)
+				}
+			}
+		}
+
+		i16 StringsIndex := this->SectionIndex(this->StringSection)
+
+		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->SymbolTable, StringsIndex, ".symtab")
+
+		return this->SectionIndex(Section)
+	}
+
+	define void SetProgramInterpreter(i8* Interpreter) {
+		i32 Size := StringLength(Interpreter)
+
+		ELFProgramHeader* LoadInterp := this->AppendProgramHeader()
+		
+		LoadInterp->SegmentType := ELF_SEGMENT_TYPE_LOAD
+		LoadInterp->Flags       := ELF_SEGMENT_FLAGS_READ
+		LoadInterp->FileSize    := Size
+		LoadInterp->MemorySize  := Size
+
+		ELFProgramHeader* Interp := this->AppendProgramHeader()
+		
+		Interp->SegmentType := ELF_SEGMENT_TYPE_INTERP
+		Interp->Flags       := ELF_SEGMENT_FLAGS_READ
+		Interp->FileSize    := Size
+		Interp->MemorySize  := 0
+		Interp->Sibling     := LoadInterp
+		
+		ELFSectionHeader* DotInterp := this->AddDataSection(".interp", Interpreter, Size)
+
+		LoadInterp->Children->Push(DotInterp)
+		DotInterp->Parent := LoadInterp
+		
+		DotInterp->Type := ELF_SECTION_TYPE_DATA
+	}
+
+	ELFProgramHeader* DynamicData
+	ELFSectionHeader* DotDynamic
+	PointerArray* DynamicSectionEntries ; <ELFDynamicSectionEntry*>
+
+	ELFSectionHeader* DynamicRelocationSection
+	PointerArray* DynamicRelocations ; <ELFRelocationPair*>
+
+	i8* DynamicStrings
+	i32 DynamicStringsLength
+
+	define void SetupDynamicRelocations() {
+		ELFSectionHeader* Section := this->AddDataSection(".rela.dyn", null, 0)
+
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
+
+		this->DynamicRelocationSection := Section
+		this->DynamicRelocations := PointerArray:New()
+	}
+
+	define void SetupDynamicSection() {
+		this->DynamicData := this->AppendProgramHeader()
+		this->DotDynamic := this->AddDataSection(".dynamic", null, 0)
+
+		this->DynamicData->SegmentType := ELF_SEGMENT_TYPE_LOAD
+		this->DynamicData->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+
+		this->DynamicSectionEntries := PointerArray:New()
+
+		this->SetupDynamicRelocations()
+
+		this->DynamicStrings := Alloc(1)
+		this->DynamicStringsLength := 1
+	}
+
+	define i32 AddDynamicEntry(i64 Tag, i64 Value) {
+		i32 Index := this->DynamicSectionEntries->Count()
+		this->DynamicSectionEntries->Push(ELFDynamicSectionEntry:New(Tag, Value))
+		return (Index * #ELFDynamicSectionEntry) + 8
+	}
+	define void AddDynamicEntry(i64 Tag, ELFSectionHeader* Section) {
+		i32 Index := this->DynamicSectionEntries->Count()
+		this->DynamicSectionEntries->Push(ELFDynamicSectionEntry:New(Tag, 0))
+		i32 Offset := (Index * #ELFDynamicSectionEntry) + 8
+
+		this->ReferenceSection(this->DotDynamic, Offset, Section)
+	}
+
+	define void AddDynamicDataSection(ELFSectionHeader* Section) {
+		i32 Offset := this->DynamicData->FileSize As i32
+		
+		this->DynamicData->Children->Push(Section)
+		Section->Parent := this->DynamicData
+
+		Section->FileOffset := Offset
+
+		this->DynamicData->FileSize += this->Align(Section->FileSize As i32)
+	}
+
+	define i32 AddDynamicString(i8* String) {
+		i32 Length := StringLength(String)
+		i32 Offset := this->DynamicStringsLength
+
+		this->DynamicStringsLength += Length + 1
+		this->DynamicStrings := ReAlloc(this->DynamicStrings, this->DynamicStringsLength)
+
+		MoveMemory(&this->DynamicStrings[Offset], String, Length)
+
+		return Offset
+	}
+
+	define void RequireDynamicLibrary(i8* Name) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_NEEDED, NameOffset)
+	}
+
+	define ELFSymbol* AddDynamicFunctionSymbol(i8* Name) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_FUNC, 0, 0)
+	}
+	define ELFSymbol* AddDynamicGlobalSymbol(i8* Name) {
+		i32 NameOffset := this->AddDynamicString(Name)
+
+		return this->AddSymbol(this->DynamicSymbolTable, NameOffset, ELF_STB_GLOBAL, ELF_STT_OBJECT, 0, 0)
+	}
+
+	define i16 FinalizeDynamicStrings() {
+		ELFSectionHeader* Section := this->AddDataSection(".dynstr", this->DynamicStrings, this->DynamicStringsLength)
+
+		Section->Type := ELF_SECTION_TYPE_STRING_TABLE
+
+		this->AddDynamicDataSection(Section)
+
+		i16 Index := this->SectionIndex(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_STRTAB, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_STRSZ, Section->FileSize)
+
+		return Index
+	}
+
+	define void FinalizeDynamicSymbolHashTable(i16 SymbolTableSectionIndex) {
+		i32 SymbolCount := this->DynamicSymbolTable->Count()
+		ELFSymbolHashTable* Hash := ELFSymbolHashTable:New(SymbolCount, SymbolCount)
+
+		for (i32 Index := 0, Index < SymbolCount, Index++) {
+			ELFSymbol* Next := this->DynamicSymbolTable->At(Index)
+
+			i8* Name := &this->DynamicStrings[Next->NameOffset]
+
+			Hash->AddSymbol(Name, Index)
+		}
+
+		i32 Size := Hash->Size()
+		void* Buffer := Alloc(Size)
+
+		Hash->Serialize(Buffer)
+
+		ELFSectionHeader* HashSection := this->AddDataSection(".hash", Buffer, Size)
+
+		HashSection->Type := ELF_SECTION_TYPE_HASH_TABLE
+		HashSection->AssociatedSectionIndex := SymbolTableSectionIndex
+
+		this->AddDynamicDataSection(HashSection)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_HASH, HashSection)
+	}
+
+	define void ReferenceDynamicSymbol(i32 CodeOffset, ELFSymbol* Symbol) {
+		i32 Index := this->DynamicRelocations->Count()
+
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE, 0)
+		ELFRelocationPair* Pair := ELFRelocationPair:New(Relocation, Symbol)
+
+		this->DynamicRelocations->Push(Pair)
+
+		this->ReferenceSection(this->DynamicRelocationSection, Index * #ELFRelocation, this->CodeSectionHeader)
+	}
+
+	define void FinalizeDynamicRelocations(i16 SymbolTableSectionIndex) {
+		i32 Size := this->DynamicRelocations->Count() * #ELFRelocation
+		ELFRelocation* Relocations := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->DynamicRelocations->Count(), Index++) {
+			ELFRelocationPair* Pair := this->DynamicRelocations->At(Index)
+
+			i32 SymbolIndex := this->DynamicSymbolTable->Find(Pair->Symbol)
+			Pair->Relocation->Symbol(SymbolIndex As i16)
+
+			MoveMemory(Relocations[Index], Pair->Relocation, #ELFRelocation)
+		}
+
+		ELFSectionHeader* Section := this->DynamicRelocationSection
+
+		Section->VirtualAddress := Relocations As i64
+		Section->FileSize := Size
+		Section->EntrySize := #ELFRelocation
+		Section->AssociatedSectionIndex := SymbolTableSectionIndex
+
+		this->AddDynamicDataSection(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELA, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELAENT, #ELFRelocation)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_RELASZ, Size)
+	}
+
+	define void FinalizeDynamicSymbols(i16 DynamicStrings) {
+		ELFSectionHeader* Section := this->FinalizeSymbolTable(this->DynamicSymbolTable, DynamicStrings, ".dynsym")
+
+		Section->Type := ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE
+
+		this->AddDynamicDataSection(Section)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMTAB, Section)
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_SYMENT, Section->ExtraInfo)
+
+		i16 SectionIndex := this->SectionIndex(Section)
+
+		this->FinalizeDynamicSymbolHashTable(SectionIndex)
+		this->FinalizeDynamicRelocations(SectionIndex)
+	}
+
+	define void FinalizeDynamicSection() {
+		i16 DynamicStringTable := this->FinalizeDynamicStrings()
+
+		this->FinalizeDynamicSymbols(DynamicStringTable)
+
+		this->AddDynamicEntry(ELF_DYNAMIC_TAG_NULL, 0)
+
+		i32 Size := this->DynamicSectionEntries->Count() * #ELFDynamicSectionEntry
+
+		ELFProgramHeader* LoadDynamic := this->AppendProgramHeader()
+
+		LoadDynamic->SegmentType := ELF_SEGMENT_TYPE_LOAD
+		LoadDynamic->Flags       := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+
+		ELFProgramHeader* Dynamic := this->AppendProgramHeader()
+		
+		Dynamic->SegmentType := ELF_SEGMENT_TYPE_DYNAMIC
+		Dynamic->Flags       := ELF_SEGMENT_FLAGS_READ
+		Dynamic->Sibling     := LoadDynamic
+
+		ELFDynamicSectionEntry* Entries := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->DynamicSectionEntries->Count(), Index++) {
+			MoveMemory(Entries[Index], this->DynamicSectionEntries->At(Index), #ELFDynamicSectionEntry)
+		}
+		
+		ELFSectionHeader* DotDynamic := this->DotDynamic
+
+		LoadDynamic->Children->Push(DotDynamic)
+		DotDynamic->Parent := LoadDynamic
+		
+		DotDynamic->VirtualAddress := Entries As i64
+		DotDynamic->FileSize := Size
+		DotDynamic->Type := ELF_SECTION_TYPE_DYNAMIC
+		DotDynamic->AssociatedSectionIndex := DynamicStringTable
+	}
+
+	ELFSectionHeader* TextRelocationSection
+	PointerArray* TextRelocations ; <ELFRelocationPair*>
+
+	define void SetupTextRelocations() {
+		ELFSectionHeader* Section := this->AddDataSection(".rela.text", null, 0)
+
+		Section->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
+		Section->ExtraInfo := this->SectionIndex(this->CodeSectionHeader)
+
+		this->TextRelocationSection := Section
+		this->TextRelocations := PointerArray:New()
+	}
+
+	define ELFRelocationPair* ReferenceSymbol(i32 CodeOffset, ELFSymbol* Symbol) {
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32, 0)
+		
+		ELFRelocationPair* Pair := ELFRelocationPair:New(Relocation, Symbol)
+
+		this->TextRelocations->Push(Pair)
+
+		return Pair
+	}
+
+	define void ReferenceSymbol(i32 CodeOffset, ELFSymbol* Symbol, i64 Addend) {
+		ELFRelocationPair* Pair := this->ReferenceSymbol(CodeOffset, Symbol)
+
+		Pair->Relocation->Addend := Addend
+	}
+
+	define void FinalizeTextRelocations(i16 SymbolTableSectionIndex) {
+		i32 Size := this->TextRelocations->Count() * #ELFRelocation
+		ELFRelocation* Relocations := Alloc(Size)
+
+		for (i32 Index := 0, Index < this->TextRelocations->Count(), Index++) {
+			ELFRelocationPair* Pair := this->TextRelocations->At(Index)
+
+			i32 SymbolIndex := this->SymbolTable->Find(Pair->Symbol)
+
+			if (SymbolIndex = -1) {
+				Print("%x\n", Pair->Symbol)
+				*null := 0
+			}
+
+			Pair->Relocation->Symbol(SymbolIndex As i16)
+
+			MoveMemory(Relocations[Index], Pair->Relocation, #ELFRelocation)
+		}
+
+		ELFSectionHeader* Section := this->TextRelocationSection
+
+		Section->VirtualAddress := Relocations As i64
+		Section->FileSize := Size
+		Section->EntrySize := #ELFRelocation
+		Section->AssociatedSectionIndex := SymbolTableSectionIndex
+	}
+
+	static ELFBuilder* New(i8 ABI, i8 ABIVersion, i16 ProgramType) {
+		ELFBuilder* this := Alloc(#ELFBuilder)
+
+		this->BufferSize := #ELFHeader
+		this->Buffer := Alloc(this->BufferSize)
+
+		this->IsObjectFile := ProgramType = ELF_FILETYPE_RELOCATABLE
+
+		this->SectionReferences := PointerArray:New()
+		
+		this->ProgramHeaders := PointerArray:New()
+		this->SectionHeaders := PointerArray:New()
+		
+		this->Header->Populate(ABI, ABIVersion, ProgramType)
+
+		this->Alignment := 1
+		
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			this->Alignment := 0x1000
+
+			ELFProgramHeader* PHDR := this->AppendProgramHeader()
+			this->PHDR := PHDR
+			
+			PHDR->SegmentType    := ELF_SEGMENT_TYPE_PHDR
+			PHDR->Flags          := ELF_SEGMENT_FLAGS_READ
+			PHDR->Alignment      := ELF_ALIGN_NONE
+			PHDR->FileOffset     := #ELFHeader
+			PHDR->VirtualAddress := #ELFHeader
+			
+			ELFProgramHeader* LoadPHDR := this->AppendProgramHeader()
+			this->LoadPHDR := LoadPHDR
+			
+			LoadPHDR->SegmentType    := ELF_SEGMENT_TYPE_LOAD
+			LoadPHDR->Flags          := ELF_SEGMENT_FLAGS_READ | ELF_SEGMENT_FLAGS_WRITE
+			LoadPHDR->Alignment      := ELF_ALIGN_NONE
+			LoadPHDR->FileOffset     := 0x00
+			LoadPHDR->VirtualAddress := 0x00
+		}
+
+		ELFSectionHeader* NullSection := this->AppendSectionHeader()
+		
+		ELFSectionHeader* StringSection := this->AppendSectionHeader()
+		this->StringSection := StringSection
+		
+		StringSection->Type := ELF_SECTION_TYPE_STRING_TABLE
+		
+		this->StringBuffer := Alloc(8)
+		StringSection->FileSize := 1
+		
+		StringSection->NameOffset := this->AppendString(".strtab")
+
+		this->SetupSymbolTable()
+
+		this->SetupCode()
+
+		if (this->Header->FileType = ELF_FILETYPE_RELOCATABLE) {
+			this->SetupTextRelocations()
+		}
+		
+		return this
+	}
+
+	define void AddSectionSymbols() {
+		i32 SectionHeaderCount := this->Header->SectionHeaderEntryCount
+
+		for (i16 Index := 2, Index < SectionHeaderCount, Index += 1) {
+			ELFSectionHeader* NextSectionHeader := this->SectionHeaders->At(Index)
+			
+			; ELF_STB_LOCAL ELF_STT_SECTION ELF_STV_DEFAULT
+
+			this->AddSymbol(this->SymbolTable, Index, NextSectionHeader->NameOffset, ELF_STB_LOCAL, ELF_STT_SECTION, 0, 0)
+		}
+	}
+	
+	define void Finalize(i32 CodeOffset, i32 MainOffset, i64 ImageBase, i64 PhysicalImageBase) {
+		; Note: the data section is excluded from the size, since a program header with a FileSize of 0 and non-zero 
+		;  MemorySize will have MemorySize zero bytes loaded into memory
+		
+		i32 ProgramHeaderCount := this->Header->ProgramHeaderEntryCount
+		i32 SectionHeaderCount := this->Header->SectionHeaderEntryCount
+		
+		i32 ProgramHeadersSize := ProgramHeaderCount * #ELFProgramHeader
+		i32 SectionHeadersSize := SectionHeaderCount * #ELFSectionHeader
+		i32 PaddingAfterPHDR := this->AlignmentNeeded(ProgramHeadersSize + SectionHeadersSize)
+		
+		i32 CodeSize := this->CodeSectionHeader->FileSize As i32
+		i32 PaddingAfterCode := this->AlignmentNeeded(CodeSize)
+		
+		i32 StringSectionSize := this->StringSection->FileSize As i32
+		i32 PaddingAfterStrings := this->AlignmentNeeded(StringSectionSize)
+
+		i32 DataSize := 0
+		
+		for (i32 Index := 0, Index < SectionHeaderCount, Index += 1) {
+			ELFSectionHeader* NextSectionHeader := this->SectionHeaders->At(Index)
+			
+			if (NextSectionHeader->Flags = ELF_SECTION_FLAGS_HAS_DATA) {
+				DataSize += this->Align(NextSectionHeader->FileSize As i32)
+			}
+		}
+		
+		i32 PHDRSize := ProgramHeadersSize + SectionHeadersSize
+		i32 HeadersSize := #ELFHeader
+		i32 PaddingBeforeCode := CodeOffset - HeadersSize
+
+		i64 GlobalBytes := 0
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			GlobalBytes := this->DataProgramHeader->MemorySize
+		}
+		
+		i64 GlobalPages := GlobalBytes / 0x1000
+		
+		if (GlobalBytes % 0x1000) {
+			GlobalPages += 1
+		}
+
+		i32 GlobalsSize := (GlobalPages * 0x1000) As i32
+		
+		i32 FinalSize := HeadersSize
+		              + PaddingBeforeCode
+					  + CodeSize
+					  + PaddingAfterCode
+					  + PHDRSize
+					  + PaddingAfterPHDR
+					  + StringSectionSize
+					  + PaddingAfterStrings
+					  + DataSize
+		
+		if (this->Header->FileType = ELF_FILETYPE_DYNAMIC) {
+			; Linux sets AUXV's AT_PHDR field to the wrong value on older
+			;  kernel versions, which ends up giving garbage to the dynamic
+			;   linker.
+			; So, to workaround that, we need to pad out the file so 
+			;  `base + header->phdr_offset = phdr_table` when `base` is either
+			;   the base address the image was read into memory at, or when
+			;    `base` is the image base assigned to the dynamic image. 
+			; You could probably guess, but the bug is that the kernel ignores
+			;  the PT_INTERP program header's value and uses header->phdr_offset
+			;   even though it is only a valid *file* offset.
+
+			FinalSize += GlobalsSize
+		}
+		
+		this->BufferSize := FinalSize
+		this->Buffer := ReAlloc(this->Buffer, FinalSize)
+		
+		void* Buffer := this->Buffer
+		i8* ByteBuffer := Buffer As i8*
+		
+		; Calculate the offset of each segment inside the file
+		i32 ProgramHeadersOffset := CodeOffset + CodeSize + PaddingAfterCode
+
+		if (this->Header->FileType = ELF_FILETYPE_DYNAMIC) {
+			ProgramHeadersOffset += GlobalsSize
+		}
+
+		i32 SectionHeadersOffset := ProgramHeadersOffset + ProgramHeadersSize
+		i32 StringsOffset := SectionHeadersOffset + SectionHeadersSize + PaddingAfterPHDR
+		i32 ExtraOffset := StringsOffset + StringSectionSize + PaddingAfterStrings
+		
+		; Update the ELF header to contain the program/section header offsets, and entry-point
+		this->Header->ProgramHeadersOffset := ProgramHeadersOffset
+		this->Header->SectionHeadersOffset := SectionHeadersOffset
+		
+		; Copy the bytes of all the program/section headers into the ELF buffer after the ELF header
+		;  (Which will line up with the offsets written into the header above)
+		
+		if (this->DataProgramHeader) {
+			; Update the data segment/section. Todo: If 1kb of globals are used, push the code segment back
+			this->DataProgramHeader->VirtualAddress := ImageBase + 0x1000
+			this->DataProgramHeader->PhysicalAddress := PhysicalImageBase + 0x1000
+			this->DataSectionHeader->VirtualAddress := ImageBase + 0x1000
+		}
+
+		i64 CodeBase := 0
+		
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			; Update the code segment+section with the code file offset, and entry-point
+			; Note: the code segment is loaded with the `CodeOffset` offset since AMD64 ELF requires the file offset
+			;  and virtual address to be equal modulo 1024
+			i64 ImageBaseToCode := 0x1000 + (GlobalPages * 0x1000) + CodeOffset
+
+			CodeBase := ImageBase + ImageBaseToCode
+			i64 AfterCode := CodeBase + CodeSize + PaddingAfterCode
+			i64 AfterPHDR := AfterCode + PHDRSize + PaddingAfterPHDR
+
+			this->PHDR->FileSize := PHDRSize
+			this->PHDR->MemorySize := PHDRSize
+			this->PHDR->FileOffset := ProgramHeadersOffset
+			this->PHDR->VirtualAddress := AfterCode
+			this->PHDR->PhysicalAddress := 0
+			
+			this->LoadPHDR->FileSize := PHDRSize
+			this->LoadPHDR->MemorySize := PHDRSize
+			this->LoadPHDR->FileOffset := ProgramHeadersOffset
+			this->LoadPHDR->VirtualAddress := AfterCode
+			this->LoadPHDR->PhysicalAddress := 0
+		}
+
+		this->StringSection->FileOffset := StringsOffset
+
+		i64 EntryPoint := CodeBase + MainOffset
+		
+		this->Header->EntryPoint := EntryPoint
+
+		if (this->Header->FileType != ELF_FILETYPE_RELOCATABLE) {
+			i64 PhysicalCodeBase := PhysicalImageBase + ImageBaseToCode
+
+			this->CodeProgramHeader->FileOffset := CodeOffset
+			this->CodeProgramHeader->VirtualAddress := CodeBase
+			this->CodeProgramHeader->PhysicalAddress := PhysicalCodeBase
+			
+			this->CodeSectionHeader->VirtualAddress := CodeBase
+		}
+
+		this->CodeSectionHeader->FileOffset := CodeOffset
+		
+		ELFProgramHeader* ProgramHeadersBuffer := (ByteBuffer + ProgramHeadersOffset) As ELFProgramHeader*
+		ELFSectionHeader* SectionHeadersBuffer := (ByteBuffer + SectionHeadersOffset) As ELFSectionHeader*
+		
+		i32 NextDataSectionOffset := ExtraOffset
+		i64 NextDataSectionAddress := AfterPHDR
+
+		; We need to sort program headers in ascending order*, hence the
+		; ugly double loop.
+		; *Except PHDR, which always comes first
+
+		; Handle program headers as either "map some random data", or as
+		;  "map the very specific data of my children".
+		; When mapping random data, we just pick the next available address
+		; When mapping children, we do the same but also write out all of the
+		;  child data into the file as a contigious block which we load with
+		;   the program header we're writing.
+
+		i32 Index := 0
+
+		while (this->ProgramHeaders->Count() != 0) {
+			i64 Score := 0x7FFF_FFFF_FFFF_FFFF
+			ELFProgramHeader* Best := null
+
+			for (i32 Inner := 0, Inner < this->ProgramHeaders->Count(), Inner += 1) {
+				ELFProgramHeader* Next := this->ProgramHeaders->At(Inner)
+
+				if (Next->SegmentType = ELF_SEGMENT_TYPE_PHDR) {
+					Best := Next
+					break
+				}
+
+				i64 NextScore := Next->VirtualAddress
+
+				if (NextScore = 0) {
+					if (Next->Sibling && !Next->Sibling->VirtualAddress) {
+						NextScore := 0x6FFF_FFFF_FFFF_FFFF
+					}
+					else {
+						NextScore := 0x3FFF_FFFF_FFFF_FFFF
+					}
+				}
+
+				if (NextScore < Score) {
+					Score := NextScore
+					Best := Next
+				}
+			}
+
+			this->ProgramHeaders->RemoveValue(Best)
+
+			if !(Best->VirtualAddress) {
+				if (Best->Sibling) {
+					Best->FileOffset := Best->Sibling->FileOffset
+					Best->FileSize := Best->Sibling->FileSize
+					Best->VirtualAddress := Best->Sibling->VirtualAddress
+					Best->MemorySize := Best->Sibling->MemorySize
+
+					Best->PhysicalAddress := Best->Sibling->PhysicalAddress
+				}
+				else {
+					Best->FileOffset := NextDataSectionOffset
+					Best->VirtualAddress := NextDataSectionAddress
+					Best->PhysicalAddress := Best->VirtualAddress - ImageBase + PhysicalImageBase
+				}
+
+				i32 ChildCount := Best->Children->Count()
+
+				for (i32 ChildIndex := 0, ChildIndex < ChildCount, ChildIndex++) {
+					ELFSectionHeader* NextChild := Best->Children->At(ChildIndex)
+
+					NextChild->InitializedData := null + NextChild->VirtualAddress
+					NextChild->FileOffset := NextDataSectionOffset
+					NextChild->VirtualAddress := NextDataSectionAddress
+					NextChild->Flags ^= ELF_SECTION_FLAGS_HAS_DATA
+
+					i32 AlignedSize := this->Align(NextChild->FileSize As i32)
+
+					NextDataSectionOffset += AlignedSize
+					NextDataSectionAddress += AlignedSize					
+				}
+
+				Best->FileSize := NextDataSectionOffset - Best->FileOffset
+				Best->MemorySize := Best->FileSize
+			}
+
+			Best->Alignment := 0
+			
+			MoveMemory(ProgramHeadersBuffer[Index++], Best, #ELFProgramHeader)
+		}
+
+		this->DoSectionReferenceRelocations()
+		
+		for (Index := 0, Index < SectionHeaderCount, Index += 1) {
+			NextSectionHeader := this->SectionHeaders->At(Index)
+
+			if (NextSectionHeader->InitializedData != null) {
+				; Section with data that has already been assigned a location
+
+				MoveMemory(&ByteBuffer[NextSectionHeader->FileOffset], NextSectionHeader->InitializedData, NextSectionHeader->FileSize As i32)
+				NextSectionHeader->InitializedData := null
+			}
+			else if (NextSectionHeader->Flags & ELF_SECTION_FLAGS_HAS_DATA) {
+				; Section with data that needs to be assigned a location
+
+				NextSectionHeader->FileOffset := NextDataSectionOffset
+	
+				MoveMemory(&ByteBuffer[NextDataSectionOffset], NextSectionHeader->VirtualAddress As void*, NextSectionHeader->FileSize As i32)
+				
+				NextSectionHeader->VirtualAddress := 0
+				NextSectionHeader->Flags ^= ELF_SECTION_FLAGS_HAS_DATA
+
+				i32 AlignedSize := this->Align(NextSectionHeader->FileSize As i32)
+
+				NextDataSectionOffset += AlignedSize
+			}
+
+			MoveMemory(SectionHeadersBuffer[Index], NextSectionHeader, #ELFSectionHeader)
+		}
+		
+		MoveMemory(&ByteBuffer[StringsOffset], this->StringBuffer, StringSectionSize)
+		MoveMemory(&ByteBuffer[CodeOffset], this->CodeBuffer, CodeSize)
+	}
+}

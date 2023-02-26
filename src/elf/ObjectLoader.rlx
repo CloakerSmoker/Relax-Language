@@ -1,0 +1,158 @@
+
+#Require "$/Console.rlx"
+#Require "$/File.rlx"
+
+#Require "$/AVLTree.rlx"
+
+#Require "./src/elf/ELFBuilder.rlx"
+
+struct ELFObjectSection {
+    ELFSectionHeader* Header
+
+    i8* Name
+    void* Data
+
+    ; For a data section with relocations
+    ELFObjectSection* RelocationSection
+
+    ; For a relocation section
+    ELFObjectSection* SymbolSection
+    PointerArray* Relocations
+
+    ; For a symbol table section
+    ELFObjectSection* StringSection
+    PointerArray* Symbols ; <ELFObjectSymbol*>
+
+    static self* New(ELFSectionHeader* Header, i8* Name, void* Data) {
+        self* this := Alloc(#self)
+
+        this->Header := Header
+        this->Name := Name
+        this->Data := Data
+
+        if (Header->Type = ELF_SECTION_TYPE_RELOCATIONS || Header->Type = ELF_SECTION_TYPE_RELOCATIONS_ADDEND) {
+            this->Relocations := PointerArray:New()
+        }
+        else if (Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
+            this->Symbols := PointerArray:New()
+        }
+
+        return this
+    }
+}
+
+struct ELFObjectRelocation {
+    ELFRelocation* Relocation
+}
+
+struct ELFObjectFile {
+    union {
+        void* Buffer
+        ELFHeader* Header
+    }
+
+    i32 Size
+
+    ELFProgramHeader* ProgramHeaders
+    ELFSectionHeader* SectionHeaders
+
+    PointerArray* SectionsByIndex ; <ELFObjectSection>
+    AVLTree SectionsByName ; <i64, ELFObjectSection*>
+
+    ELFSectionHeader* StringTableSectionHeader
+    i8* StringTable
+
+    static self* New(void* Buffer, i32 Size) {
+        self* this := Alloc(#self)
+
+        this->Buffer := Buffer
+        this->Size := Size
+
+        this->SectionsByIndex := PointerArray:New()
+        this~>SectionsByName->ValueSize := #ELFObjectSection*
+
+        this->ProgramHeaders := Buffer + this->Header->ProgramHeadersOffset
+        this->SectionHeaders := Buffer + this->Header->SectionHeadersOffset
+
+        this->StringTableSectionHeader := this->SectionHeaders[this->Header->SectionNameSectionIndex]
+        this->StringTable := Buffer + this->StringTableSectionHeader->FileOffset
+
+        return this
+    }
+
+    define ELFObjectSection* LoadSection(i32 Index) {
+        ELFSectionHeader* Header := this->SectionHeaders[Index]
+        i8* Name := &this->StringTable[Header->NameOffset]
+        void* Data := this->Buffer + Header->FileOffset
+
+        ELFObjectSection* Section := ELFObjectSection:New(Header, Name, Data)
+
+        this->SectionsByIndex->Insert(Index - 1, Section)
+        this~>SectionsByName->Insert(FNV1A(Name), &Section)
+
+        return Section
+    }
+
+    define void LoadSections() {
+        for (i32 Index := 1, Index < this->Header->SectionHeaderEntryCount, Index++) {
+            this->LoadSection(Index)
+        }
+
+        i32 Count := this->SectionsByIndex->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ELFObjectSection* Section := this->SectionsByIndex->At(Index)
+
+            if (Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS || Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS_ADDEND) {
+                i32 SymbolTableIndex := Section->Header->AssociatedSectionIndex
+                i32 ApplicantIndex := Section->Header->ExtraInfo
+
+                ELFObjectSection* SymbolTable := this->SectionsByIndex->At(SymbolTableIndex - 1)
+                ELFObjectSection* Applicant := this->SectionsByIndex->At(ApplicantIndex - 1)
+
+                Applicant->RelocationSection := Section
+                Section->SymbolSection := SymbolTable
+            }
+            else if (Section->Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
+                i32 StringTableIndex := Section->Header->AssociatedSectionIndex
+
+                ELFObjectSection* StringTable := this->SectionsByIndex->At(StringTableIndex - 1)
+
+                Section->StringSection := StringTable
+            }
+        }
+    }
+}
+
+define void Main(i64 ArgC, i8** ArgV) {
+    Print("File: %s\n\n", ArgV[1])
+
+    i64 F := FileOpen(ArgV[1], FILE_READ)
+
+    Print("Handle: %x\n", F)
+
+    i32 Size := FileGetSize(F)
+    void* Data := FileReadAll(F)
+
+    FileClose(F)
+
+    ELFObjectFile* Object := ELFObjectFile:New(Data, Size)
+
+    Object->LoadSections()
+
+    i32 Count := Object->SectionsByIndex->Count()
+
+    for (i32 Index := 0, Index < Count, Index++) {
+        ELFObjectSection* Section := Object->SectionsByIndex->At(Index)
+
+        Print("%i: %s\n", Index, Section->Name)
+
+        if (Section->RelocationSection) {
+            Print("\tRelocations: %s\n", Section->RelocationSection->Name)
+            Print("\t\tSymbols: %s\n", Section->RelocationSection->SymbolSection->Name)
+            Print("\t\t\tStrings: %s\n", Section->RelocationSection->SymbolSection->StringSection->Name)
+        }
+    }
+
+
+}

@@ -13,6 +13,7 @@
 #Require "./src/compiler/Utility.rlx"
 #Require "./src/compiler/Lexer.rlx"
 #Require "./src/compiler/Parser.rlx"
+#Require "./src/compiler/ErrorReporting.rlx"
 
 #Require "./src/compiler/IR2/Structures.rlx"
 
