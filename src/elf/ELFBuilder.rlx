@@ -195,6 +195,11 @@ i64 ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32 := 2
 i64 ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE := 6
 i64 ELF_RELOCATION_TYPE_X64_BASE_RELATIVE := 8
 
+struct ELFDirectRelocation {
+	i64 Offset
+	i64 Info
+}
+
 struct ELFRelocation {
 	i64 Offset
 	i64 Info
@@ -218,6 +223,14 @@ struct ELFRelocation {
 
 		return this
 	}
+}
+
+define i32 ELFRelocationType(i64 Info) {
+	return (Info & 0x7FFF_FFFF) As i32
+}
+
+define i32 ELFRelocationSymbol(i64 Info) {
+	return ((Info >> 32) & 0x7FFF_FFFF) As i32
 }
 
 struct ELFRelocationPair {

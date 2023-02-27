@@ -16,8 +16,9 @@ struct ELFObjectSection {
     ELFObjectSection* RelocationSection
 
     ; For a relocation section
+    ELFObjectSection* TargetSection
     ELFObjectSection* SymbolSection
-    PointerArray* Relocations
+    PointerArray* Relocations ; <ELFObjectRelocation*>
 
     ; For a symbol table section
     ELFObjectSection* StringSection
@@ -41,8 +42,41 @@ struct ELFObjectSection {
     }
 }
 
+struct ELFObjectSymbol {
+    ELFSymbol* Header
+
+    ELFObjectSection* Section
+    i8* Name
+
+    static self* New(ELFSymbol* Header, ELFObjectSection* Section, i8* Name) {
+        self* this := Alloc(#self)
+
+        this->Header := Header
+        this->Section := Section
+        this->Name := Name
+        
+        return this
+    }
+}
+
 struct ELFObjectRelocation {
-    ELFRelocation* Relocation
+    i64 Offset
+    i64 Type
+	i64 Addend
+
+    ELFObjectSymbol* Target
+
+    static self* New(i64 Offset, i64 Type, i64 Addend, ELFObjectSymbol* Target) {
+        self* this := Alloc(#self)
+
+        this->Offset := Offset
+        this->Type := Type
+        this->Addend := Addend
+
+        this->Target := Target
+
+        return this
+    }
 }
 
 struct ELFObjectFile {
@@ -98,10 +132,10 @@ struct ELFObjectFile {
             this->LoadSection(Index)
         }
 
-        i32 Count := this->SectionsByIndex->Count()
+        i32 SectionCount := this->SectionsByIndex->Count()
 
-        for (i32 Index := 0, Index < Count, Index++) {
-            ELFObjectSection* Section := this->SectionsByIndex->At(Index)
+        for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+            ELFObjectSection* Section := this->SectionsByIndex->At(SectionIndex)
 
             if (Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS || Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS_ADDEND) {
                 i32 SymbolTableIndex := Section->Header->AssociatedSectionIndex
@@ -111,6 +145,8 @@ struct ELFObjectFile {
                 ELFObjectSection* Applicant := this->SectionsByIndex->At(ApplicantIndex - 1)
 
                 Applicant->RelocationSection := Section
+
+                Section->TargetSection := Applicant
                 Section->SymbolSection := SymbolTable
             }
             else if (Section->Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
@@ -122,14 +158,81 @@ struct ELFObjectFile {
             }
         }
     }
+
+    define void LoadSymbolTables() {
+        i32 SectionCount := this->SectionsByIndex->Count()
+
+        for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+            ELFObjectSection* Section := this->SectionsByIndex->At(SectionIndex)
+
+            if (Section->Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
+                i64 Count := Section->Header->FileSize / #ELFSymbol
+
+                ELFSymbol* Symbols := Section->Data
+                i8* StringTable := Section->StringSection->Data
+
+                for (i32 Index := 1, Index < Count, Index++) {
+                    ELFSymbol* Symbol := Symbols[Index]
+                    i8* Name := &StringTable[Symbol->NameOffset]
+
+                    ELFObjectSection* SymbolSection := null
+
+                    if (Symbol->SectionIndex > 0) {
+                        SymbolSection := this->SectionsByIndex->At(Symbol->SectionIndex - 1)
+                    }
+
+                    if (Symbol->Type() = ELF_STT_SECTION && SymbolSection) {
+                        Name := SymbolSection->Name
+                    }
+
+                    Section->Symbols->Push(ELFObjectSymbol:New(Symbol, SymbolSection, Name))
+                }
+            }
+        }
+    }
+
+    define void LoadRelocations() {
+        i32 SectionCount := this->SectionsByIndex->Count()
+
+        for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+            ELFObjectSection* Section := this->SectionsByIndex->At(SectionIndex)
+
+            if (Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS) {
+                i64 Count := Section->Header->FileSize / #ELFDirectRelocation
+                ELFDirectRelocation* DirectRelocations := Section->Data
+
+                for (i32 Index := 0, Index < Count, Index++) {
+                    ELFDirectRelocation* DirectRelocation := DirectRelocations[Index]
+
+                    i32 SymbolIndex := ELFRelocationSymbol(DirectRelocation->Info)
+                    i32 Type := ELFRelocationType(DirectRelocation->Info)
+
+                    ELFObjectSymbol* Symbol := Section->SymbolSection->Symbols->At(SymbolIndex - 1)
+
+                    Section->Relocations->Push(ELFObjectRelocation:New(DirectRelocation->Offset, Type, 0, Symbol))
+                }
+            }
+            else if (Section->Header->Type = ELF_SECTION_TYPE_RELOCATIONS_ADDEND) {
+                i64 Count := Section->Header->FileSize / #ELFRelocation
+                ELFRelocation* Relocations := Section->Data
+
+                for (i32 Index := 0, Index < Count, Index++) {
+                    ELFRelocation* Relocation := Relocations[Index]
+
+                    i32 SymbolIndex := ELFRelocationSymbol(Relocation->Info)
+                    i32 Type := ELFRelocationType(Relocation->Info)
+
+                    ELFObjectSymbol* Symbol := Section->SymbolSection->Symbols->At(SymbolIndex - 1)
+
+                    Section->Relocations->Push(ELFObjectRelocation:New(Relocation->Offset, Type, Relocation->Addend, Symbol))
+                }
+            }
+        }
+    }
 }
 
 define void Main(i64 ArgC, i8** ArgV) {
-    Print("File: %s\n\n", ArgV[1])
-
     i64 F := FileOpen(ArgV[1], FILE_READ)
-
-    Print("Handle: %x\n", F)
 
     i32 Size := FileGetSize(F)
     void* Data := FileReadAll(F)
@@ -139,6 +242,8 @@ define void Main(i64 ArgC, i8** ArgV) {
     ELFObjectFile* Object := ELFObjectFile:New(Data, Size)
 
     Object->LoadSections()
+    Object->LoadSymbolTables()
+    Object->LoadRelocations()
 
     i32 Count := Object->SectionsByIndex->Count()
 
@@ -151,6 +256,32 @@ define void Main(i64 ArgC, i8** ArgV) {
             Print("\tRelocations: %s\n", Section->RelocationSection->Name)
             Print("\t\tSymbols: %s\n", Section->RelocationSection->SymbolSection->Name)
             Print("\t\t\tStrings: %s\n", Section->RelocationSection->SymbolSection->StringSection->Name)
+        }
+        else if (Section->Symbols) {
+            i32 SymbolCount := Section->Symbols->Count()
+
+            for (i32 SymbolIndex := 0, SymbolIndex < SymbolCount, SymbolIndex++) {
+                ELFObjectSymbol* Symbol := Section->Symbols->At(SymbolIndex)
+
+                Print("Symbol[%i]: ", SymbolIndex)
+
+                if (Symbol->Section) {
+                    Print("%s::", Symbol->Section->Name)
+                }
+
+                Print("%s\n", Symbol->Name)
+            }
+        }
+        else if (Section->Relocations) {
+            Print("Relocations for %s:\n", Section->TargetSection->Name)
+            
+            i32 RelocationCount := Section->Relocations->Count()
+
+            for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
+                ELFObjectRelocation* Relocation := Section->Relocations->At(RelocationIndex)
+
+                Print("\t%x: -> %s + %i\n", Relocation->Offset, Relocation->Target->Name, Relocation->Addend)
+            }
         }
     }
 
