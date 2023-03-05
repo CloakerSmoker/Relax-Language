@@ -1,0 +1,393 @@
+#Require "$/MemoryBase.rlx"
+#Require "$/StringBase.rlx"
+
+define i32 IntegerToString(i64 Number, i64 Base, i8* Buffer) {
+	i8 Sign := 0
+	
+	if (Number < 0) {
+		Sign := true
+		
+		if (Base = 10) {
+			Number := -Number
+		}
+		else if (Base = 16 || Base = 2) {
+			/* Negative hex numbers are printed as unsigned, and get the sign bit individually set in the output string */
+			
+			Number := Number & 0x7FFFFFFFFFFFFFFF
+		}
+	}
+	
+	for (i32 Index := 0, Number != 0, Index += 1) {
+		Buffer[Index] := NumberToCharacter((Number % Base) As i8)
+		Number := Number / Base
+	}
+	
+	if (Index = 0) {
+		Buffer[0] := '0'
+		Index := 1
+	}
+	
+	if (Sign) {
+		if (Base = 10) {
+			Buffer[Index] := '-'
+			Index += 1
+		}
+		else if (Base = 16) {
+			i8 Last := GetCharacterValue(Buffer[Index - 1])
+			Last := Last | 0x8
+			Buffer[Index - 1] := NumberToCharacter(Last)
+		}
+	}
+	
+	MemoryReverse(Buffer, Index)
+	
+	Buffer[Index] := 0
+	
+	return Index
+}
+
+i8 ANSI_BLACK  := 0x00
+i8 ANSI_RED    := 0x01
+i8 ANSI_GREEN  := 0x02
+i8 ANSI_BLUE   := 0x04
+i8 ANSI_BRIGHT := 0x08
+i8 ANSI_WHITE  := 0x0F
+
+define i8 TranslateColorToANSI(i8 Color) {
+	if (Color & ANSI_BRIGHT) {
+		Color &= ~ANSI_BRIGHT
+		
+		return (Color + 90) As i8
+	}
+	else {
+		return (Color + 30) As i8
+	}
+}
+
+i8* ESC := i8[0x1B, '[', 0]
+
+struct PrintFormatPrototype {
+	i8* Name
+	void(PrintOutputAdapterPrototype*, i8*, i32*, void*, i32, i32*) Format
+	
+	PrintFormatPrototype* Next
+}
+
+PrintFormatPrototype* FirstPrintFormat := null
+
+define i32 AddPrintFormat(PrintFormatPrototype* Prototype) {
+	Prototype->Next := FirstPrintFormat
+	FirstPrintFormat := Prototype
+	
+	return 0
+}
+
+struct PrintOutputAdapterPrototype {
+	void(PrintOutputAdapterPrototype*, i8) PrintCharacter
+	void(PrintOutputAdapterPrototype*, i8*, i32) PrintCharacters
+	
+	i32 Index  ; Scratch space for PrintCharacter implementations
+	i32 Length ; TODO: Come up with something smarter than this
+	i8* Buffer
+	
+	define void DoPrintCharacters(i8* Characters, i32 Length) {
+		if (this->PrintCharacters) {
+			this->PrintCharacters(Characters, Length)
+		}
+		else {
+			for (i32 Index := 0, Index < Length, Index++) {
+				this->PrintCharacter(Characters[Index])
+			}
+		}
+	}
+	define void PrintString(i8* String) {
+		this->DoPrintCharacters(String, StringLength(String))
+	}
+	
+	define void PrintIntegerBase(i64 Number, i64 Base) {
+		i8[65] Buffer
+		
+		i32 Length := IntegerToString(Number, Base, Buffer)
+		
+		this->DoPrintCharacters(Buffer, Length)
+	}
+	define void PrintInteger(i64 Number) {
+		this->PrintIntegerBase(Number, 10)
+	}
+	
+	define void PrintHex(i64 Number) {
+		this->PrintIntegerBase(Number, 16)
+	}
+	define void PrintPrefixedHex(i64 Number) {
+		this->PrintString("0x")
+		this->PrintIntegerBase(Number, 16)
+	}
+	
+	define void PrintBinary(i64 Number) {
+		this->PrintIntegerBase(Number, 2)
+	}
+	define void PrintPrefixedBinary(i64 Number) {
+		this->PrintString("0b")
+		this->PrintIntegerBase(Number, 2)
+	}
+	
+	define void PrintByte(i64 Number) {
+		Number &= 0xFF
+
+		i8[2] Buffer
+
+		Buffer[0] := NumberToCharacter(((Number >> 4) & 0xF) As i8)
+		Buffer[1] := NumberToCharacter((Number & 0xF) As i8)
+		
+		this->DoPrintCharacters(Buffer, 2)
+	}
+	define void PrintLiteral(i64 PackedCharacters) {
+		i8* Characters := &PackedCharacters As i8*
+		
+		for (i32 Length := 0, (Length < 8) && (Characters[Length] != 0), Length += 1) {}
+		
+		this->DoPrintCharacters(Characters, Length)
+	}
+	
+	declare void Print(i8*, ...)
+	
+	define void RawPrint(i8* Format, void* Parameters, i32 ParameterCount) {
+		void* OutputAdapter := &PrintCharacter
+		
+		i32 Length := StringLength(Format)
+		i32 ParameterIndex := 0
+		
+		for (i32 Index := 0, Index < Length, Index += 1) {
+			i8 Next := Format[Index]
+			
+			if (Next = '%') {
+				i8* FormatName := &Format[++Index]
+				
+				PrintFormatPrototype* CurrentFormat := FirstPrintFormat
+				i8 Done := false
+				
+				loop {
+					if !(CurrentFormat) {
+						break
+					}
+					
+					i32 CurrentFormatNameLength := StringLength(CurrentFormat->Name)
+					
+					if (CompareMemory(FormatName, CurrentFormat->Name, CurrentFormatNameLength)) {
+						Index += CurrentFormatNameLength - 1
+						
+						CurrentFormat->Format(this, Format, &Index, Parameters, ParameterCount, &ParameterIndex)
+						
+						Done := true
+						
+						break
+					}				
+					else {
+						CurrentFormat := CurrentFormat->Next
+					}
+				}
+				
+				if (Done) {
+					continue
+				}
+				
+				Next := *FormatName
+				i64 NextParameter := Parameters[ParameterIndex++]
+				
+				if (Next = 'i') {
+					this->PrintInteger(NextParameter As i64)
+				}
+				else if (Next = 'x') {
+					this->PrintPrefixedHex(NextParameter As i64)
+				}
+				else if (Next = 'c') {
+					this->DoPrintCharacters(&NextParameter As i8*, 1)
+				}
+				else if (Next = 's') {
+					this->PrintString(NextParameter As i8*)
+				}
+				else if (Next = 'l') {
+					this->PrintLiteral(NextParameter As i64)
+				}
+				else if (Next = 'b') {
+					this->PrintBinary(NextParameter As i64)
+				}
+				else if (Next = 'B') {
+					this->PrintByte(NextParameter As i64)
+				}
+			}
+			else if (Next = '^') {
+				i8 First := Format[++Index]
+				
+				if (First = 'E') {
+					*(null As i32*) := 123
+				}
+				
+				if (First = 'R') {
+					this->Print("\e[0m")
+				}
+				else if (First = 'S') {
+					i8 Fore := GetCharacterValue(Format[++Index])
+					
+					this->Print("\e[%im", TranslateColorToANSI(Fore))
+				}
+				else if (First = 'H') {
+					i8 Back := GetCharacterValue(Format[++Index])
+					
+					this->Print("\e[%im", TranslateColorToANSI(Back) + 10)
+				}
+				else {
+					Fore := GetCharacterValue(First)
+					Back := GetCharacterValue(Format[++Index])
+					
+					this->Print("\e[%im", TranslateColorToANSI(Fore))
+					this->Print("\e[%im", TranslateColorToANSI(Back) + 10)
+				}
+			}
+			else {
+				i32 Start := Index
+				
+				loop {
+					Next := Format[++Index]
+					
+					if (Next = '%' || Next = '^') {
+						this->DoPrintCharacters(&Format[Start], Index-- - Start)
+						break
+					}
+					else if (Index >= Length) {
+						this->DoPrintCharacters(&Format[Start], Index - Start)
+						break
+					}
+				}
+			}
+		}
+	}
+	
+	define void RawPrint(i8* Format, void* Parameters) {
+		i32 ParameterCount := Parameters[0] As i32
+		void* Parameters := &Parameters[1]
+		
+		this->RawPrint(Format, Parameters, ParameterCount)
+	}
+	
+	define void Print(i8* Format, ... Parameters) {
+		i32 ParameterCount := Parameters[0] As i32
+		void* Parameters := &Parameters[1]
+		
+		this->RawPrint(Format, Parameters, ParameterCount)
+	}
+}
+
+define void DefaultPrintCharacter(PrintOutputAdapterPrototype* this, i8 Character) {
+	PrintCharacter(Character)
+}
+define void DefaultPrintCharacters(PrintOutputAdapterPrototype* this, i8* Characters, i32 Count) {
+	PrintCharacters(Characters, Count)
+}
+
+PrintOutputAdapterPrototype DefaultPrinter {
+	PrintCharacter: &DefaultPrintCharacter,
+	PrintCharacters: &DefaultPrintCharacters
+}
+
+PrintOutputAdapterPrototype* Printer := &DefaultPrinter
+
+define void Print(i8* Format, ... Parameters) {
+	Printer->RawPrint(Format, Parameters)
+}
+define void Print(i32 Number) {
+	Print("%i", Number)
+}
+define void Print(i64 Number) {
+	Print("%i", Number)
+}
+define void PrintHex(i64 Number) {
+	Print("%x", Number)
+}
+define void PrintLiteral(i64 Literal) {
+	Print("%l", Literal)
+}
+
+define void RawPrint(i8* Format, void* Parameters) {
+	Printer->RawPrint(Format, Parameters)
+}
+
+; FormatLength
+
+define void FormatLengthPrintCharacter(PrintOutputAdapterPrototype* this, i8 Character) {
+	this->Index++
+}
+
+PrintOutputAdapterPrototype FormatLengthPrinter {
+	PrintCharacter: &FormatLengthPrintCharacter
+}
+
+define i32 RawFormatLength(i8* Format, void* Parameters) {
+	FormatLengthPrinter.Index := 0
+	FormatLengthPrinter.RawPrint(Format, Parameters)
+	return FormatLengthPrinter.Index
+}
+define i32 FormatLength(i8* Format, ... Parameters) {
+	return RawFormatLength(Format, Parameters)
+}
+
+; Full `Print` output counting
+
+define void* StartCountingCharactersPrinted() {
+	void* State := Printer
+	
+	FormatLengthPrinter.Index := 0
+	Printer := &FormatLengthPrinter
+	
+	return State
+}
+define i32 StopCountingCharactersPrinted(void* State) {
+	Printer := State
+	
+	return FormatLengthPrinter.Index
+}
+
+; FormatString with maximum buffer size
+
+define void FormatStringPrintCharacter(PrintOutputAdapterPrototype* this, i8 Character) {
+	if (this->Index >= this->Length) {
+		return
+	}
+	
+	this->Buffer[this->Index++] := Character
+}
+
+PrintOutputAdapterPrototype RawFormatStringPrinter {
+	PrintCharacter: &FormatStringPrintCharacter
+}
+PrintOutputAdapterPrototype* FormatStringPrinter := &RawFormatStringPrinter
+
+define i32 RawFormatString(i8* String, i32 Length, i8* Format, void* Parameters) {
+	FormatStringPrinter->Index := 0
+	FormatStringPrinter->Buffer := String
+	FormatStringPrinter->Length := Length
+	FormatStringPrinter->RawPrint(Format, Parameters)
+	return FormatStringPrinter->Index
+}
+define i32 FormatString(i8* String, i32 Length, i8* Format, ... Parameters) {
+	return RawFormatString(String, Length, Format, Parameters)
+}
+
+; Full `Print` capturing with maximum size
+
+define void* StartCapturingCharactersPrinted(void* Buffer, i32 Length) {
+	void* State := Printer
+	
+	FormatStringPrinter->Index := 0
+	FormatStringPrinter->Buffer := Buffer
+	FormatStringPrinter->Length := Length
+	
+	Printer := FormatStringPrinter
+	
+	return State
+}
+define i32 StopCapturingCharactersPrinted(void* State) {
+	Printer := State
+	
+	return FormatStringPrinter->Index
+}

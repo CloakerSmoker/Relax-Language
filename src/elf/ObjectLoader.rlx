@@ -264,12 +264,22 @@ struct ELFObjectFile {
     }
 }
 
+/*
+
 define ELFObjectSection* MergeSections(ELFObjectSection* Left, ELFObjectSection* Right) {
     i64 TotalSize := Left->Header->FileSize + Right->Header->FileSize
     void* Data := Alloc(TotalSize)
 
     MoveMemory(Data, Left->Data, Left->Header->FileSize As i32)
     MoveMemory(Data + Left->Header->FileSize, Right->Data, Right->Header->FileSize As i32)
+
+    ELFSectionHeader* RelocationsHeader := Alloc(#ELFSectionHeader)
+
+    RelocationsHeader->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
+
+    i8* Name := FormatString(".rela%s", )
+
+    ELFObjectSection* Relocations := ELFObjectSection:New(RelocationsHeader, )    
 
     ELFSectionHeader* Header := Alloc(#ELFSectionHeader)
 
@@ -283,6 +293,8 @@ define ELFObjectSection* MergeSections(ELFObjectSection* Left, ELFObjectSection*
 
     return null
 }
+
+*/
 
 define ELFObjectFile* LinkObjects(ELFObjectFile* Left, ELFObjectFile* Right) {
 
@@ -335,6 +347,4 @@ define void Main(i64 ArgC, i8** ArgV) {
             }
         }
     }
-
-
 }
