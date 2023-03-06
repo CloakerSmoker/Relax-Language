@@ -27,3 +27,77 @@ define i8* RawFormatString(i8* Format, void* Parameters) {
 define i8* FormatString(i8* Format, ... Parameters) {
 	return RawFormatString(Format, Parameters)
 }
+
+define void DoHexDumpPrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	i8* Data := Parameters[*ParameterIndex] As i8*
+	i32 Size := Parameters[*ParameterIndex + 1] As i32
+	
+	i32 FullRows := Size / 16
+	i32 RemainderRow := Size % 16
+	
+	;this->Print("%x %x\n", FullRows, RemainderRow)
+	
+	if (RemainderRow) {
+		FullRows += 1
+	}
+	
+	this->Print("   |  ")
+	
+	for (i32 Column := 0, Column < 16, Column++) {
+		this->Print("%B ", Column)
+	}
+	
+	this->Print(" |\n")
+	
+	this->Print("   |--")
+	
+	for (i32 Column := 0, Column < 16, Column++) {
+		this->Print("---")
+	}
+	
+	this->Print("-|\n")
+
+	for (i32 Row := 0, Row < FullRows, Row++) {
+		this->Print("%B |  ", Row)
+		
+		i32 Columns := 16
+		
+		if (Row + 1 = FullRows && RemainderRow) {
+			Columns := RemainderRow
+		}
+		
+		for (i32 Column := 0, Column < Columns, Column++) {
+			i8 Byte := Data[(Row * 16) + Column]
+			
+			this->Print("%B ", Byte)
+		}
+		
+		for (i32 Padding := Column, Padding < 16, Padding++) {
+			this->Print("   ")
+		}
+		
+		this->Print(" | ")
+		
+		for (i32 Column := 0, Column < Columns, Column++) {
+			i8 Byte := Data[(Row * 16) + Column]
+			
+			if (Byte >= '!' && Byte <= '~') {
+				this->Print("%c", Byte)
+			}
+			else {
+				this->Print(".")
+			}
+		}
+		
+		this->Print("\n")
+	}
+	
+	*ParameterIndex += 2
+}
+
+PrintFormatPrototype HexDumpFormatPrototype {
+	Name: "hexdump",
+	Format: &DoHexDumpPrint
+}
+
+i32 HEX_DUMP_FORMAT_PROTOTYPE_ID := AddPrintFormat(&HexDumpFormatPrototype)
