@@ -1,0 +1,130 @@
+
+
+enum SECTION_TYPE {
+    InitializedData
+    UninitializedData
+    Code
+    Discard
+}
+
+define SECTION_TYPE TranslateELFSectionType(i32 Type) {
+    
+}
+
+struct ObjectSection {
+    SECTION_TYPE Type
+
+    i8* Name
+
+    void* Data
+    i32 Size
+
+    ; For any section which has symbols defined inside of it
+    PointerArray* Symbols ; <ObjectSymbol*>
+    PointerArray* Relocations ; <ObjectRelocation*>
+
+    static self* New(SECTION_TYPE Type, i8* Name, void* Data, i32 Size) {
+        self* this := Alloc(#self)
+
+        this->Type := Type
+
+        this->Name := Name
+
+        this->Data := Data
+        this->Size := Size
+
+        this->Symbols := PointerArray:New()
+        this->Relocations := PointerArray:New()
+
+        return this
+    }
+
+    define void Discard() {
+        this->Symbols->Clear()
+        this->Relocations->Clear()
+        this->Size := 0
+        this->Type := SECTION_TYPE_DISCARD
+    }
+}
+
+enum SYMBOL_BINDING {
+    Local
+    Global
+    Weak
+}
+
+enum SYMBOL_TYPE {
+    Object
+    Function
+    Section
+    File
+}
+
+enum SYMBOL_VISIBILITY {
+    Default
+    Internal
+    Hidden
+    Protected
+}
+
+struct ObjectSymbol {
+    i8* Name
+
+    ObjectSection* Section
+
+    PointerArray* Relocations ; <ObjectRelocation*>
+
+    static self* New(ELFSymbol* Header, ObjectSection* Section, i8* Name) {
+        self* this := Alloc(#self)
+
+        this->Header := Header
+        this->Section := Section
+        this->Name := Name
+
+        this->Relocations := PointerArray:New()
+        
+        return this
+    }
+}
+
+enum RELOCATION_TYPE {
+    Offset32
+    Offset64
+    Absolute32
+    Absolute64
+}
+
+struct ObjectRelocation {
+    ObjectSection* Container
+
+    RELOCATION_TYPE Type
+    i64 Offset
+
+    ObjectSymbol* Target
+    i64 Addend
+
+    static self* New(ObjectSection* Container, SYMBOL_TYPE Type, i64 Offset, ObjectSymbol* Target, i64 Addend) {
+        self* this := Alloc(#self)
+
+        this->Container := Container
+
+        this->Type := Type
+        this->Offset := Offset
+
+        this->Target := Target
+        this->Addend := Addend
+
+        return this
+    }
+}
+
+struct ObjectFile {
+    PointerArray* Sections ; <ObjectSection*>
+    AVLTree SectionsByName ; <i64, ObjectSection*>
+
+    AVLTree LocalSymbols
+    AVLTree GlobalSymbols
+
+    AVLTree WeakSymbols
+    AVLTree UndefinedSymbols
+}
