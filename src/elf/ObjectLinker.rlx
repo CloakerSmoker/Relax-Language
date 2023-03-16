@@ -67,6 +67,18 @@ enum SYMBOL_VISIBILITY {
     Protected
 }
 
+SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
+
+}
+
+SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
+
+}
+
+SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
+    
+}
+
 struct ObjectSymbol {
     i8* Name
 
@@ -74,10 +86,13 @@ struct ObjectSymbol {
 
     PointerArray* Relocations ; <ObjectRelocation*>
 
-    static self* New(ELFSymbol* Header, ObjectSection* Section, i8* Name) {
+    static self* New(SYMBOL_BINDING Binding, SYMBOL_TYPE Type, SYMBOL_VISIBILITY Visibility, ObjectSection* Section, i8* Name) {
         self* this := Alloc(#self)
 
-        this->Header := Header
+        this->Binding := Binding
+        this->Type := Type
+        this->Visibility := Visibility
+
         this->Section := Section
         this->Name := Name
 
@@ -127,4 +142,6 @@ struct ObjectFile {
 
     AVLTree WeakSymbols
     AVLTree UndefinedSymbols
+
+
 }

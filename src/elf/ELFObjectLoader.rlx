@@ -133,9 +133,8 @@ struct ELFObjectFile {
         i8* Name := &this->StringTable[Header->NameOffset]
         void* Data := this->Buffer + Header->FileOffset
 
-        
-
-        ELFObjectSection* Section := ObjectSection:New(, Name, Data)
+        auto Type := TranslateELFSectionType(Header->Type)
+        auto Section := ObjectSection:New(Type, Name, Data, Header->FileSize)
 
         this->SectionsByIndex->Insert(Index - 1, Section)
         this~>SectionsByName->Insert(FNV1A(Name), &Section)
@@ -153,7 +152,7 @@ struct ELFObjectFile {
         i32 SectionCount := this->SectionsByIndex->Count()
 
         for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
-            ELFObjectSection* Section := this->SectionsByIndex->At(SectionIndex)
+            ObjectSection* Section := this->SectionsByIndex->At(SectionIndex)
 
             if (Section->Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
                 i64 Count := Section->Header->FileSize / #ELFSymbol
@@ -168,7 +167,7 @@ struct ELFObjectFile {
                     ELFSymbol* Header := Symbols[Index]
                     i8* Name := &StringTable[Header->NameOffset]
 
-                    ELFObjectSection* SymbolSection := null
+                    ObjectSection* SymbolSection := null
 
                     if (Header->SectionIndex > 0) {
                         SymbolSection := this->SectionsByIndex->At(Header->SectionIndex - 1)
@@ -178,7 +177,11 @@ struct ELFObjectFile {
                         Name := SymbolSection->Name
                     }
 
-                    ELFObjectSymbol* Symbol := ELFObjectSymbol:New(Header, SymbolSection, Name)
+                    SYMBOL_BINDING Binding := TranslateELFSymbolBinding(Header->Binding)
+                    SYMBOL_TYPE Type := TranslateELFSymbolType(Header->Type)
+                    SYMBOL_VISIBILITY Visibility := TranslateELFSymbolVisibility(Header->Visibility)
+
+                    ObjectSymbol* Symbol := ObjectSymbol:New(Binding, Type, Visibility, SymbolSection, Name)
 
                     Section->Symbols->Push(Symbol)
 
