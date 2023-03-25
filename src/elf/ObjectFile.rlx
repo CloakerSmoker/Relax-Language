@@ -1,0 +1,302 @@
+
+#Require "$/AVLTree.rlx"
+
+#Require "./src/elf/ELFBuilder.rlx"
+
+/*
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT A HIGHLY ESTEEMED DEED,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO BEING A PLACE OF HONOR,
+ * FITNESS FOR COMMEMORATION, AND ANYTHING OF VALUE
+ */
+
+enum SECTION_TYPE {
+    Discard
+    Zero
+    Data
+}
+
+define SECTION_TYPE TranslateELFSectionType(i32 Type) {
+    if (Type = ELF_SECTION_TYPE_NODATA) {
+        return SECTION_TYPE_ZERO
+    }
+    else {
+        return SECTION_TYPE_DATA
+    }
+}
+
+define void Indent(i32 Level) {
+    for (i32 Index := 0, Index < Level, Index++) {
+        Print("\t")
+    }
+}
+
+declare void DumpSymbol(i32, ObjectSymbol*)
+declare void DumpSymbolInline(ObjectSymbol*)
+
+declare void DumpRelocation(ObjectRelocation*)
+
+struct ObjectSection {
+    SECTION_TYPE Type
+
+    i8* Name
+
+    void* Data
+    i64 Size
+
+    ; For any section which has symbols defined inside of it
+    PointerArray* Symbols ; <ObjectSymbol*>
+    PointerArray* Relocations ; <ObjectRelocation*>
+
+    static self* New(SECTION_TYPE Type, i8* Name, void* Data, i64 Size) {
+        self* this := Alloc(#self)
+
+        this->Type := Type
+
+        this->Name := Name
+
+        this->Data := Data
+        this->Size := Size
+
+        this->Symbols := PointerArray:New()
+        this->Relocations := PointerArray:New()
+
+        return this
+    }
+
+    define i8 Is(SECTION_TYPE Type) {
+        return this->Type = Type
+    }
+
+    define void Discard() {
+        this->Symbols->Clear()
+        this->Relocations->Clear()
+        this->Size := 0
+        this->Type := SECTION_TYPE_DISCARD
+    }
+    
+    define void Dump() {
+        Print("Section %s {\n", this->Name)
+
+        if (this->Type = SECTION_TYPE_DISCARD) {
+            Print("\tDiscard\n}\n")
+            return
+        }
+
+        i32 SymbolCount := this->Symbols->Count()
+
+        if (SymbolCount) {
+            Print("\tSymbols {\n")
+
+            for (i32 SymbolIndex := 0, SymbolIndex < SymbolCount, SymbolIndex++) {
+                ObjectSymbol* Symbol := this->Symbols->At(SymbolIndex)
+
+                Print("\t\tSymbol %i: ", SymbolIndex)
+                DumpSymbol(2, Symbol)
+            }
+            
+            Print("\t}\n")
+        }
+
+        i32 RelocationCount := this->Relocations->Count()
+
+        if (RelocationCount) {
+            Print("\tReloctions {\n")
+
+            for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
+                ObjectRelocation* Relocation := this->Relocations->At(RelocationIndex)
+
+                Print("\t\t")
+                DumpRelocation(Relocation)
+                Print("\n")
+            }
+
+            Print("\t}\n")
+        }
+
+        if (this->Type = SECTION_TYPE_DATA) {
+            Print("\tData {\n")
+            Print("%hexdump\n", this->Data, this->Size)
+            Print("\t}\n")
+        }
+        else if (this->Type = SECTION_TYPE_ZERO) {
+            Print("\tZero { %i }\n", this->Size)
+        }
+
+        Print("}\n")
+    }
+}
+
+enum SYMBOL_BINDING {
+    Local
+    Global
+    Weak
+}
+
+define SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
+    if (Binding = ELF_STB_LOCAL) {
+        return SYMBOL_BINDING_LOCAL
+    }
+    else if (Binding = ELF_STB_GLOBAL) {
+        return SYMBOL_BINDING_GLOBAL
+    }
+    else if (Binding = ELF_STB_WEAK) {
+        return SYMBOL_BINDING_WEAK
+    }
+
+    return SYMBOL_BINDING_LOCAL
+}
+
+enum SYMBOL_TYPE {
+    None
+    Object
+    Function
+    Section
+    File
+}
+
+define SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
+    return Type As SYMBOL_TYPE
+}
+
+enum SYMBOL_VISIBILITY {
+    Default
+    Internal
+    Hidden
+    Protected
+}
+
+define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
+    return Visibility As SYMBOL_VISIBILITY
+}
+
+struct ObjectSymbol {
+    i8* Name
+    i64 Size
+    i64 Value
+
+    SYMBOL_BINDING Binding
+    SYMBOL_TYPE Type
+    SYMBOL_VISIBILITY Visibility
+
+    ObjectSection* Section
+
+    PointerArray* Relocations ; <ObjectRelocation*>
+
+    static self* New(SYMBOL_BINDING Binding, SYMBOL_TYPE Type, SYMBOL_VISIBILITY Visibility, ObjectSection* Section, i8* Name, i64 Size, i64 Value) {
+        self* this := Alloc(#self)
+
+        this->Binding := Binding
+        this->Type := Type
+        this->Visibility := Visibility
+
+        this->Section := Section
+
+        this->Name := Name
+        this->Size := Size
+        this->Value := Value
+
+        this->Relocations := PointerArray:New()
+        
+        return this
+    }
+
+    define void DumpInline() {
+        Print("%s::%s", this->Section->Name, this->Name)
+    }
+
+    define void Dump(i32 Level) {
+        Print("%s::%s (%x) @ %x\n", this->Section->Name, this->Name, this->Size, this->Value)
+
+        i32 Count := this->Relocations->Count()
+
+        if (Count) {
+            Indent(Level + 1)
+            Print("References {\n")
+
+            for (i32 Index := 0, Index < Count, Index++) {
+                ObjectRelocation* Relocation := this->Relocations->At(Index)
+
+                Indent(Level + 2)
+                DumpRelocation(Relocation)
+                Print("\n")
+            }
+
+            Indent(Level + 1)
+            Print("}\n")
+        }
+    }
+}
+
+enum RELOCATION_TYPE {
+    None
+    Offset_32
+    Offset_64
+    Absolute_32
+    Absolute_64
+}
+
+define RELOCATION_TYPE TranslateELFRelocationType(i32 Type) {
+    if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
+        return RELOCATION_TYPE_OFFSET_32
+    }
+    
+    return RELOCATION_TYPE_NONE
+}
+
+struct ObjectRelocation {
+    ObjectSection* Container
+
+    RELOCATION_TYPE Type
+    i64 Offset
+
+    ObjectSymbol* Target
+    i64 Addend
+
+    static self* New(ObjectSection* Container, RELOCATION_TYPE Type, i64 Offset, ObjectSymbol* Target, i64 Addend) {
+        self* this := Alloc(#self)
+
+        this->Container := Container
+
+        this->Type := Type
+        this->Offset := Offset
+
+        this->Target := Target
+        this->Addend := Addend
+
+        return this
+    }
+
+    define void Dump() {
+        Print("%s + %x -> &", this->Container->Name, this->Offset)
+        DumpSymbolInline(this->Target)
+
+        if (this->Addend) {
+            Print(" + %i", this->Addend)
+        }
+    }
+}
+
+define void DumpSymbolInline(ObjectSymbol* Symbol) {
+    Symbol->DumpInline()
+}
+
+define void DumpSymbol(i32 Indent, ObjectSymbol* Symbol) {
+    Symbol->Dump(Indent)
+}
+
+define void DumpRelocation(ObjectRelocation* Relocation) {
+    Relocation->Dump()
+}
+
+struct ObjectFile {
+    PointerArray* Sections ; <ObjectSection*>
+    AVLTree SectionsByName ; <i64, ObjectSection*>
+
+    AVLTree LocalSymbols
+    AVLTree GlobalSymbols
+
+    AVLTree WeakSymbols
+    AVLTree UndefinedSymbols
+
+
+}

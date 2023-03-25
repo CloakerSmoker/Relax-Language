@@ -147,6 +147,9 @@ struct ELFSymbol unaligned {
 	define void Visibility(i8 Visibility) {
 		this->Other := Visibility
 	}
+	define i8 Visibility() {
+		return this->Other
+	}
 }
 
 i32 ELF_NOTE_TYPE_FREEBSD_ABI_TAG := 1
