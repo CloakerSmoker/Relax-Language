@@ -73,45 +73,42 @@ struct ObjectSection {
         this->Size := 0
         this->Type := SECTION_TYPE_DISCARD
     }
-    
-    define void Dump() {
-        Print("Section %s {\n", this->Name)
 
-        if (this->Type = SECTION_TYPE_DISCARD) {
-            Print("\tDiscard\n}\n")
+    define void DumpRelocations(i32 Level) {
+        i32 Count := this->Relocations->Count()
+
+        if (Count = 0) {
             return
         }
 
-        i32 SymbolCount := this->Symbols->Count()
+        if (Count) {
+            Print("Reloction list contains %i entries {\n", Count)
 
-        if (SymbolCount) {
-            Print("\tSymbols {\n")
+            for (i32 Index := 0, Index < Count, Index++) {
+                ObjectRelocation* Relocation := this->Relocations->At(Index)
 
-            for (i32 SymbolIndex := 0, SymbolIndex < SymbolCount, SymbolIndex++) {
-                ObjectSymbol* Symbol := this->Symbols->At(SymbolIndex)
-
-                Print("\t\tSymbol %i: ", SymbolIndex)
-                DumpSymbol(2, Symbol)
-            }
-            
-            Print("\t}\n")
-        }
-
-        i32 RelocationCount := this->Relocations->Count()
-
-        if (RelocationCount) {
-            Print("\tReloctions {\n")
-
-            for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
-                ObjectRelocation* Relocation := this->Relocations->At(RelocationIndex)
-
-                Print("\t\t")
+                Indent(Level + 1)
                 DumpRelocation(Relocation)
                 Print("\n")
             }
 
-            Print("\t}\n")
+            Indent(Level)
+            Print("}\n")
         }
+    }
+    
+    define void Dump() {
+        Print("Section %s {", this->Name)
+
+        if (this->Type = SECTION_TYPE_DISCARD) {
+            Print(" Discard }\n")
+            return
+        }
+
+        Print("\n")
+
+        Indent(1)
+        this->DumpRelocations(1)
 
         if (this->Type = SECTION_TYPE_DATA) {
             Print("\tData {\n")
@@ -146,6 +143,14 @@ define SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
     return SYMBOL_BINDING_LOCAL
 }
 
+define i8* SymbolBindingName(SYMBOL_BINDING Binding) {
+    i8*[3] Names {
+        "Local", "Global", "Weak"
+    }
+
+    return Names[Binding As i32]
+}
+
 enum SYMBOL_TYPE {
     None
     Object
@@ -158,6 +163,14 @@ define SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
     return Type As SYMBOL_TYPE
 }
 
+define i8* SymbolTypeName(SYMBOL_TYPE Type) {
+    i8*[5] Names {
+        "None", "Object", "Function", "Section", "File"
+    }
+
+    return Names[Type As i32]
+}
+
 enum SYMBOL_VISIBILITY {
     Default
     Internal
@@ -167,6 +180,14 @@ enum SYMBOL_VISIBILITY {
 
 define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
     return Visibility As SYMBOL_VISIBILITY
+}
+
+define i8* SymbolVisibilityName(SYMBOL_VISIBILITY Visibility) {
+    i8*[4] Names {
+        "Default", "Internal", "Hidden", "Protected"
+    }
+
+    return Names[Visibility As i32]
 }
 
 struct ObjectSymbol {
@@ -201,17 +222,35 @@ struct ObjectSymbol {
     }
 
     define void DumpInline() {
-        Print("%s::%s", this->Section->Name, this->Name)
+        Print(SymbolBindingName(this->Binding))
+        Print("[%s", SymbolTypeName(this->Type))
+
+        if (this->Visibility != SYMBOL_VISIBILITY_DEFAULT) {
+            Print(" %s", SymbolVisibilityName(this->Visibility))
+        }
+
+        Print("(")
+
+        Print("%s)] = %x @ ", this->Name, this->Size)
+
+        if (this->Section = null) {
+            Print("<undef>")
+        }
+        else {
+            Print("%s", this->Section->Name)
+        }
+
+        Print(" + %x", this->Value)
     }
 
     define void Dump(i32 Level) {
-        Print("%s::%s (%x) @ %x\n", this->Section->Name, this->Name, this->Size, this->Value)
+        this->DumpInline()
 
         i32 Count := this->Relocations->Count()
 
         if (Count) {
             Indent(Level + 1)
-            Print("References {\n")
+            Print("Referenced by {\n")
 
             for (i32 Index := 0, Index < Count, Index++) {
                 ObjectRelocation* Relocation := this->Relocations->At(Index)
@@ -267,8 +306,9 @@ struct ObjectRelocation {
     }
 
     define void Dump() {
-        Print("%s + %x -> &", this->Container->Name, this->Offset)
+        Print("%s + %x -> &(", this->Container->Name, this->Offset)
         DumpSymbolInline(this->Target)
+        Print(")")
 
         if (this->Addend) {
             Print(" + %i", this->Addend)
@@ -288,15 +328,156 @@ define void DumpRelocation(ObjectRelocation* Relocation) {
     Relocation->Dump()
 }
 
+struct ObjectSymbolTable {
+    PointerArray* Symbols ; <ObjectSymbol*>
+    AVLTree SymbolsByName ; <i64, ObjectSymbol*>
+
+    static self* New() {
+        self* this := Alloc(#self)
+
+        this->Symbols := PointerArray:New()
+        this~>SymbolsByName->ValueSize := 8
+
+        return this
+    }
+
+    define i32 Count() {
+        return this->Symbols->Count()
+    }
+
+    define ObjectSymbol* At(i32 Index) {
+        return this->Symbols->At(Index)
+    }
+
+    define void Add(ObjectSymbol* Symbol) {
+        if (this->Symbols->Has(Symbol)) {
+            return
+        }
+
+        this->Symbols->Push(Symbol)
+        this~>SymbolsByName->InsertPointer(FNV1A(Symbol->Name), Symbol)
+    }
+
+    define ObjectSymbol* Find(i8* Name) {
+        return this~>SymbolsByName->GetPointer(FNV1A(Name))
+    }
+
+    define void Dump(i32 Level) {
+        i32 Count := this->Count()
+
+        if (Count = 0) {
+            Print("0 symbols\n")
+            return
+        }
+
+        Print("%i symbols {\n", Count)
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            Indent(Level + 1)
+            Print("%i: ", Index)
+            this->At(Index)->DumpInline()
+            Print("\n")
+        }
+
+        Indent(Level)
+        Print("}\n")
+    }
+}
+
 struct ObjectFile {
     PointerArray* Sections ; <ObjectSection*>
     AVLTree SectionsByName ; <i64, ObjectSection*>
 
-    AVLTree LocalSymbols
-    AVLTree GlobalSymbols
+    ObjectSymbolTable* LocalSymbols
+    ObjectSymbolTable* GlobalSymbols
+    ObjectSymbolTable* WeakSymbols
+    ObjectSymbolTable* UndefinedSymbols
 
-    AVLTree WeakSymbols
-    AVLTree UndefinedSymbols
+    static self* New() {
+        self* this := Alloc(#self)
 
+        this->Sections := PointerArray:New()
+        this~>SectionsByName->ValueSize := 8
 
+        this->LocalSymbols := ObjectSymbolTable:New()
+        this->GlobalSymbols := ObjectSymbolTable:New()
+        this->WeakSymbols := ObjectSymbolTable:New()
+        this->UndefinedSymbols := ObjectSymbolTable:New()
+
+        return this
+    }
+
+    define void AddSymbol(ObjectSymbol* Symbol) {
+        if (Symbol->Section = null) {
+            this->UndefinedSymbols->Add(Symbol)
+        }
+        else if (Symbol->Binding = SYMBOL_BINDING_LOCAL) {
+            this->LocalSymbols->Add(Symbol)
+        }
+        else if (Symbol->Binding = SYMBOL_BINDING_GLOBAL) {
+            this->GlobalSymbols->Add(Symbol)
+        }
+        else if (Symbol->Binding = SYMBOL_BINDING_WEAK) {
+            this->WeakSymbols->Add(Symbol)
+        }
+    }
+
+    define void AddSection(ObjectSection* Section) {
+        if (Section->Type = SECTION_TYPE_DISCARD) {
+            return
+        }
+
+        this->Sections->Push(Section)
+        this~>SectionsByName->InsertPointer(FNV1A(Section->Name), Section)
+
+        i32 Count := Section->Symbols->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ObjectSymbol* Symbol := Section->Symbols->At(Index)
+
+            this->AddSymbol(Symbol)
+        }
+
+        i32 Count := Section->Relocations->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ObjectRelocation* Relocation := Section->Relocations->At(Index)
+
+            this->AddSymbol(Relocation->Target)
+        }
+    }
+
+    define void DumpSections() {
+        i32 SectionCount := this->Sections->Count()
+
+        for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+            ObjectSection* Section := this->Sections->At(SectionIndex)
+
+            Section->Dump()
+        }
+    }
+
+    define void DumpSymbolTables() {
+        Print("Local symbol table contains ")
+        this->LocalSymbols->Dump(0)
+
+        Print("Global symbol table contains ")
+        this->GlobalSymbols->Dump(0)
+
+        Print("Weak symbol table contains ")
+        this->WeakSymbols->Dump(0)
+
+        Print("Undefined symbol table contains ")
+        this->UndefinedSymbols->Dump(0)
+    }
+
+    define void DumpRelocations() {
+        i32 SectionCount := this->Sections->Count()
+
+        for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+            ObjectSection* Section := this->Sections->At(SectionIndex)
+
+            Section->DumpRelocations(0)
+        }
+    }
 }

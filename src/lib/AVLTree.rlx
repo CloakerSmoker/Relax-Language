@@ -448,6 +448,10 @@ struct AVLTree {
 		this->Insert(Key, null)
 	}
 
+	define void InsertPointer(i64 Key, void* Value) {
+		this->Insert(Key, &Value As void*)
+	}
+
 	define void Remove(i64 Key) {
 		this->Root := this->Root->Remove(Key)
 	}

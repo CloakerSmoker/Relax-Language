@@ -6,93 +6,6 @@
 
 #Require "./src/elf/ELFBuilder.rlx"
 
-
-i32 ELF_SECTION_TYPE_DISCARD := 0x8000_0000 As i32
-
-struct ELFObjectSection {
-    ELFSectionHeader* Header
-
-    i8* Name
-    void* Data
-
-    ; For any section which has symbols defined inside of it
-    PointerArray* Symbols ; <ELFObjectSymbol*>
-    PointerArray* Relocations ; <ELFObjectRelocation*>
-
-    static self* New(ELFSectionHeader* Header, i8* Name, void* Data) {
-        self* this := Alloc(#self)
-
-        this->Header := Header
-        this->Name := Name
-        this->Data := Data
-
-        this->Symbols := PointerArray:New()
-        this->Relocations := PointerArray:New()
-
-        return this
-    }
-
-    define i8 Is(i32 Type) {
-        return this->Header->Type = Type
-    }
-
-    define i8 IsReloctions() {
-        return this->Is(ELF_SECTION_TYPE_RELOCATIONS) || this->Is(ELF_SECTION_TYPE_RELOCATIONS_ADDEND)
-    }
-
-    define void Discard() {
-        this->Symbols->Clear()
-        this->Relocations->Clear()
-        this->Header->FileSize := 0
-        this->Header->Type := ELF_SECTION_TYPE_DISCARD
-    }
-}
-
-struct ELFObjectSymbol {
-    ELFSymbol* Header
-
-    ELFObjectSection* Section
-    i8* Name
-
-    PointerArray* Relocations ; <ELFObjectRelocation*>
-
-    static self* New(ELFSymbol* Header, ELFObjectSection* Section, i8* Name) {
-        self* this := Alloc(#self)
-
-        this->Header := Header
-        this->Section := Section
-        this->Name := Name
-
-        this->Relocations := PointerArray:New()
-        
-        return this
-    }
-}
-
-struct ELFObjectRelocation {
-    ELFObjectSection* Owner
-
-    i64 Offset
-    i64 Type
-	i64 Addend
-
-    ELFObjectSymbol* Target
-
-    static self* New(ELFObjectSection* Owner, i64 Offset, i64 Type, i64 Addend, ELFObjectSymbol* Target) {
-        self* this := Alloc(#self)
-
-        this->Owner := Owner
-
-        this->Offset := Offset
-        this->Type := Type
-        this->Addend := Addend
-
-        this->Target := Target
-
-        return this
-    }
-}
-
 struct ELFObjectFile {
     union {
         void* Buffer
@@ -105,7 +18,6 @@ struct ELFObjectFile {
     ELFSectionHeader* SectionHeaders
 
     PointerArray* Sections ; <ObjectSection>
-    AVLTree SectionsByName ; <i64, ObjectSection*>
 
     ELFSectionHeader* StringTableSectionHeader
     i8* StringTable
@@ -117,7 +29,6 @@ struct ELFObjectFile {
         this->Size := Size
 
         this->Sections := PointerArray:New()
-        this~>SectionsByName->ValueSize := #ELFObjectSection*
 
         this->ProgramHeaders := Buffer + this->Header->ProgramHeadersOffset
         this->SectionHeaders := Buffer + this->Header->SectionHeadersOffset
@@ -166,6 +77,14 @@ struct ELFObjectFile {
                 this->Sections->Push(this->TranslateSection(Header))
             }
         }
+
+        ObjectSection* NullSection := this->Sections->At(0)
+
+        NullSection->Discard()
+
+        ObjectSection* SharedStringsSection := this->Sections->At(this->Header->SectionNameSectionIndex)
+
+        SharedStringsSection->Discard()
     }
 
     define void LoadSymbolTables() {
@@ -186,6 +105,8 @@ struct ELFObjectFile {
             i32 StringTableIndex := Header->AssociatedSectionIndex
             ObjectSection* StringTableSection := this->Sections->At(StringTableIndex)
             i8* StringTable := StringTableSection->Data
+
+            StringTableSection->Discard()
 
             for (i32 Index := 0, Index < Count, Index++) {
                 ELFSymbol* SymbolHeader := Symbols[Index]
@@ -233,6 +154,8 @@ struct ELFObjectFile {
             ObjectSection* SymbolTable := this->Sections->At(SymbolTableIndex)
             ObjectSection* Applicant := this->Sections->At(ApplicantIndex)
 
+            SymbolTable->Discard()
+
             if (Header->Type = ELF_SECTION_TYPE_RELOCATIONS) {
                 i64 Count := Header->FileSize / #ELFDirectRelocation
                 ELFDirectRelocation* DirectRelocations := Section->Data
@@ -245,7 +168,7 @@ struct ELFObjectFile {
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 
-                    ObjectRelocation* Relocation := ObjectRelocation:New(Section, Type, DirectHeader->Offset, Symbol, 0)
+                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, Type, DirectHeader->Offset, Symbol, 0)
 
                     Section->Relocations->Push(Relocation)
 
@@ -265,7 +188,7 @@ struct ELFObjectFile {
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 
-                    ObjectRelocation* Relocation := ObjectRelocation:New(Section, Type, RelocationHeader->Offset, Symbol, RelocationHeader->Addend)
+                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, Type, RelocationHeader->Offset, Symbol, RelocationHeader->Addend)
 
                     Section->Relocations->Push(Relocation)
 
@@ -282,9 +205,19 @@ struct ELFObjectFile {
         this->LoadRelocations()
     }
 
-    ;define ObjectFile* AsObject() {
-     ;   ObjectFile* 
-    ;}
+    define ObjectFile* AsObject() {
+        ObjectFile* Result := ObjectFile:New()
+
+        i32 SectionCount := this->Sections->Count()
+
+        for (i32 Index := 0, Index < SectionCount, Index++) {
+            ObjectSection* Section := this->Sections->At(Index)
+
+            Result->AddSection(Section)
+        }
+
+        return Result
+    }
 }
 
 /*
