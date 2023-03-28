@@ -96,6 +96,10 @@ struct ELFSectionHeader {
 	}
 
 	i64 EntrySize
+
+	static self* New() {
+		return Alloc(#self)
+	}
 }
 
 i8 ELF_STB_LOCAL   := 0x00
@@ -194,9 +198,18 @@ struct ELFDynamicSectionEntry {
 	}
 }
 
+i64 ELF_RELOCATION_TYPE_X64_NONE := 0
+i64 ELF_RELOCATION_TYPE_X64_DIRECT_64 := 1
 i64 ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32 := 2
-i64 ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE := 6
+i64 ELF_RELOCATION_TYPE_X64_GOT_32 := 3
+i64 ELF_RELOCATION_TYPE_X64_PLT_32 := 4
+i64 ELF_RELOCATION_TYPE_X64_COPY := 5
+i64 ELF_RELOCATION_TYPE_X64_GOT_ADDRESS := 6
+i64 ELF_RELOCATION_TYPE_X64_PLT_ADDRESS := 7
 i64 ELF_RELOCATION_TYPE_X64_BASE_RELATIVE := 8
+i64 ELF_RELOCATION_TYPE_X64_GOT_RELATIVE := 9
+i64 ELF_RELOCATION_TYPE_X64_DIRECT_32_ZX := 10
+i64 ELF_RELOCATION_TYPE_X64_DIRECT_32_SX := 11
 
 struct ELFDirectRelocation {
 	i64 Offset
@@ -207,6 +220,10 @@ struct ELFRelocation {
 	i64 Offset
 	i64 Info
 	i64 Addend
+
+	static self* New() {
+		return Alloc(#self)
+	}
 
 	define void Type(i64 RelocationType) {
 		this->Info &= 0x7FFF_FFFF_0000_0000
@@ -823,7 +840,7 @@ struct ELFBuilder {
 	define void ReferenceDynamicSymbol(i32 CodeOffset, ELFSymbol* Symbol) {
 		i32 Index := this->DynamicRelocations->Count()
 
-		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GLOBAL_RELATIVE, 0)
+		ELFRelocation* Relocation := ELFRelocation:New(CodeOffset, ELF_RELOCATION_TYPE_X64_GOT_RELATIVE, 0)
 		ELFRelocationPair* Pair := ELFRelocationPair:New(Relocation, Symbol)
 
 		this->DynamicRelocations->Push(Pair)

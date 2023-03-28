@@ -15,15 +15,6 @@ enum SECTION_TYPE {
     Data
 }
 
-define SECTION_TYPE TranslateELFSectionType(i32 Type) {
-    if (Type = ELF_SECTION_TYPE_NODATA) {
-        return SECTION_TYPE_ZERO
-    }
-    else {
-        return SECTION_TYPE_DATA
-    }
-}
-
 define void Indent(i32 Level) {
     for (i32 Index := 0, Index < Level, Index++) {
         Print("\t")
@@ -61,6 +52,15 @@ struct ObjectSection {
         this->Relocations := PointerArray:New()
 
         return this
+    }
+
+    define self* Clone() {
+        self* Result := CloneMemory(this, #self)
+
+        Result->Symbols := this->Symbols->Clone()
+        Result->Relocations := this->Relocations->Clone()
+
+        return Result
     }
 
     define i8 Is(SECTION_TYPE Type) {
@@ -129,20 +129,6 @@ enum SYMBOL_BINDING {
     Weak
 }
 
-define SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
-    if (Binding = ELF_STB_LOCAL) {
-        return SYMBOL_BINDING_LOCAL
-    }
-    else if (Binding = ELF_STB_GLOBAL) {
-        return SYMBOL_BINDING_GLOBAL
-    }
-    else if (Binding = ELF_STB_WEAK) {
-        return SYMBOL_BINDING_WEAK
-    }
-
-    return SYMBOL_BINDING_LOCAL
-}
-
 define i8* SymbolBindingName(SYMBOL_BINDING Binding) {
     i8*[3] Names {
         "Local", "Global", "Weak"
@@ -159,10 +145,6 @@ enum SYMBOL_TYPE {
     File
 }
 
-define SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
-    return Type As SYMBOL_TYPE
-}
-
 define i8* SymbolTypeName(SYMBOL_TYPE Type) {
     i8*[5] Names {
         "None", "Object", "Function", "Section", "File"
@@ -176,15 +158,12 @@ enum SYMBOL_VISIBILITY {
     Internal
     Hidden
     Protected
-}
-
-define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
-    return Visibility As SYMBOL_VISIBILITY
+    Dynamic
 }
 
 define i8* SymbolVisibilityName(SYMBOL_VISIBILITY Visibility) {
-    i8*[4] Names {
-        "Default", "Internal", "Hidden", "Protected"
+    i8*[5] Names {
+        "Default", "Internal", "Hidden", "Protected", "Dynamic"
     }
 
     return Names[Visibility As i32]
@@ -274,12 +253,12 @@ enum RELOCATION_TYPE {
     Absolute_64
 }
 
-define RELOCATION_TYPE TranslateELFRelocationType(i32 Type) {
-    if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
-        return RELOCATION_TYPE_OFFSET_32
+define i8* RelocationTypeName(RELOCATION_TYPE Type) {
+    i8*[5] Names {
+        "Unimplemented", "Offset_32", "Offset_64", "Absolute_32", "Absolute_64"
     }
-    
-    return RELOCATION_TYPE_NONE
+
+    return Names[Type As i32]
 }
 
 struct ObjectRelocation {
@@ -306,7 +285,7 @@ struct ObjectRelocation {
     }
 
     define void Dump() {
-        Print("%s + %x -> &(", this->Container->Name, this->Offset)
+        Print("%s + %x (%s) -> &(", this->Container->Name, this->Offset, RelocationTypeName(this->Type))
         DumpSymbolInline(this->Target)
         Print(")")
 
@@ -391,7 +370,9 @@ struct ObjectFile {
     ObjectSymbolTable* LocalSymbols
     ObjectSymbolTable* GlobalSymbols
     ObjectSymbolTable* WeakSymbols
+
     ObjectSymbolTable* UndefinedSymbols
+    ObjectSymbolTable* DynamicSymbols
 
     static self* New() {
         self* this := Alloc(#self)
@@ -445,6 +426,8 @@ struct ObjectFile {
 
             this->AddSymbol(Relocation->Target)
         }
+
+        Section->Symbols->Clear()
     }
 
     define void DumpSections() {

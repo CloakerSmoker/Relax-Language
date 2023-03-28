@@ -5,8 +5,51 @@
 #Require "$/AVLTree.rlx"
 
 #Require "./src/elf/ELFBuilder.rlx"
+#Require "./src/elf/ObjectFile.rlx"
 
-struct ELFObjectFile {
+define SECTION_TYPE TranslateELFSectionType(i32 Type) {
+    if (Type = ELF_SECTION_TYPE_NODATA) {
+        return SECTION_TYPE_ZERO
+    }
+    else {
+        return SECTION_TYPE_DATA
+    }
+}
+
+define SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
+    if (Binding = ELF_STB_LOCAL) {
+        return SYMBOL_BINDING_LOCAL
+    }
+    else if (Binding = ELF_STB_GLOBAL) {
+        return SYMBOL_BINDING_GLOBAL
+    }
+    else if (Binding = ELF_STB_WEAK) {
+        return SYMBOL_BINDING_WEAK
+    }
+
+    return SYMBOL_BINDING_LOCAL
+}
+
+define SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
+    return Type As SYMBOL_TYPE
+}
+
+define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
+    return Visibility As SYMBOL_VISIBILITY
+}
+
+define RELOCATION_TYPE TranslateELFRelocationType(i32 Type) {
+    if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
+        return RELOCATION_TYPE_OFFSET_32
+    }
+    else if (Type = ELF_RELOCATION_TYPE_X64_PLT_32) {
+        return RELOCATION_TYPE_OFFSET_32
+    }
+    
+    return RELOCATION_TYPE_NONE
+}
+
+struct ELFObjectLoader {
     union {
         void* Buffer
         ELFHeader* Header
