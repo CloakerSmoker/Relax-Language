@@ -75,6 +75,9 @@ struct PointerArray {
 		return Old
 	}
 
+	define void* First() {
+		return this->Data[0]
+	}
 	define void* Last() {
 		return this->At(this->Length - 1)
 	}

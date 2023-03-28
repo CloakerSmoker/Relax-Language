@@ -67,6 +67,20 @@ struct ELFObjectWriter {
     PointerArray* Sections ; <ObjectSection*>
     PointerArray* ELFSections ; <ELFSectionHeader*>
 
+    ; Each symbol table also has a list of associated relocation sections
+    ;  which target the given symbol table. These tables can either be
+    ;  emitted into an object file, or merged into a single table and
+    ;  emitted into an executable image.
+
+    ; List of all smybol tables present
+    PointerArray* SymbolTables ; <ObjectSection*>
+
+    ; Maps a section with relocations to its individual relocation sections
+    ;  for each symbol table present (sparsely)
+    ; aka Map<DataSection, Map<SymbolTable, RelocationSection>
+    AVLTree* SectionRelocationSections ; <ObjectSection*, AVLTree*<ObjectSection*, ObjectSection*>>
+    AVLTree* RelocationSectionSections ; <ObjectSection*, ObjectSection*>
+
     ObjectSection* NullSection
     ObjectSection* SharedStringTable
 
@@ -78,19 +92,38 @@ struct ELFObjectWriter {
         return Result
     }
 
+    define i32 GetSectionIndex(ObjectSection* Section) {
+        return this->Sections->Find(Section)
+    }
+
     define ObjectSection* CreateSymbolTable(i8* Name, i8* StringsName) {
         ObjectSection* StringTable := this->CreateSection(SECTION_TYPE_DATA, StringsName, 1)
         ObjectSection* SymbolTable := this->CreateSection(SECTION_TYPE_DATA, Name, 0)
 
+        this->SymbolTables->Push(SymbolTable)
+
         return SymbolTable
     }
 
-    static self* New() {
+    define i32 GetSymbolTableIndex(ObjectSection* SymbolTable) {
+        return this->SymbolTables->Find(SymbolTable)
+    }
+
+    void* State
+    ObjectSection*(void*, ObjectSymbol*) _AssignSymbolTable
+
+    static self* New(void* State, ObjectSection*(void*, ObjectSymbol*) AssignSymbolTable) {
         self* this := Alloc(#self)
+
+        this->State := State
+        this->_AssignSymbolTable := AssignSymbolTable
 
         this->Sections := PointerArray:New()
         this->ELFSections := PointerArray:New()
-        this->ELFSymbolTable := PointerArray:New()
+
+        this->SymbolTables := PointerArray:New()
+        this->SectionRelocationSections := AVLTree:New(#AVLTree*)
+        this->RelocationSectionSections := AVLTree:New(#ObjectSection*)
 
         ; Null section (to pad section indexes)
         this->NullSection := this->CreateSection(SECTION_TYPE_DISCARD, "", 0)
@@ -103,35 +136,46 @@ struct ELFObjectWriter {
 
     ; Juggling
 
+    define ObjectSection* AssignSymbolTable(ObjectSymbol* Symbol) {
+        return this->_AssignSymbolTable(this->State, Symbol)
+    }
+
     define void AddSection(ObjectSection* Section) {
         ; Adopt a section, and create a dedicated relocation section for it
         ;  if it needs one.
 
-        ObjectSection* Clone := Section->Clone()
-        this->Sections->Push(Clone)
+        Section := Section->Clone()
+        this->Sections->Push(Section)
 
         i32 RelocationCount := Section->Relocations->Count()
 
         if (RelocationCount) {
-            i8* RelocationSectionName := FormatString(".rela%s", Section->Name)
+            AVLTree* RelocationSections := AVLTree:New(#ObjectSection*)
+            this->SectionRelocationSections->InsertPointer(Section As i64, RelocationSections)
 
-            ObjectSection* RelocationSection := this->CreateSection(SECTION_TYPE_DATA, RelocationSectionName, 0)
+            for (i32 Index := 0, Index < RelocationCount, Index++) {
+                ObjectRelocation* Relocation := Section->Relocations->At(Index)
 
-            RelocationSection->Relocations := Clone->Relocations
-            Clone->Relocations := PointerArray:New()
-        }
-    }
+                ObjectSection* SymbolTableSection := this->AssignSymbolTable(Relocation->Target)
+                ObjectSection* RelocationSection := null
 
-    define void MergeSymbolTable(ObjectSection* Target, ObjectSymbolTable* Source) {
-        ; Symbols are moved from the specific symbol table into the global
-        ;  symbol table.
+                if (RelocationSections->Has(SymbolTableSection As i64)) {
+                    RelocationSection := RelocationSections->GetPointer(SymbolTableSection As i64)
+                }
+                else {
+                    i8* RelocationSectionName := FormatString("%s.rela%s", SymbolTableSection->Name, Section->Name)
 
-        i32 Count := Source->Count()
+                    RelocationSection := this->CreateSection(SECTION_TYPE_DATA, RelocationSectionName, 0)
 
-        for (i32 Index := 0, Index < Count, Index++) {
-            ObjectSymbol* Symbol := Source->At(Index)
+                    RelocationSections->InsertPointer(SymbolTableSection As i64, RelocationSection)
 
-            Target->Symbols->Push(Symbol)
+                    this->RelocationSectionSections->InsertPointer(RelocationSection As i64, Section)
+                }
+
+                RelocationSection->Relocations->Push(Relocation)
+            }
+
+            Section->Relocations->Clear()
         }
     }
 
@@ -145,6 +189,21 @@ struct ELFObjectWriter {
         }
     }
 
+    define void PopulateFromSymbolTable(ObjectSymbolTable* Source) {
+        ; Symbols are moved from the specific symbol table into a less specific
+        ;  (and generic) ELF symbol table
+
+        i32 Count := Source->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ObjectSymbol* Symbol := Source->At(Index)
+
+            ObjectSection* SymbolTableSection := this->AssignSymbolTable(Symbol)
+
+            SymbolTableSection->Symbols->Push(Symbol)
+        }
+    }
+
     ; Lowering
 
     define i32 FindOrAddString(ObjectSection* StringTable, i8* String) {
@@ -154,7 +213,7 @@ struct ELFObjectWriter {
 
         StringTable->Data := ReAlloc(StringTable->Data, StringTable->Size)
 
-        MoveMemory(&StringTable->Data[Offset], String, Length)
+        MoveMemory(StringTable->Data + Offset, String, Length)
 
         return Offset
     }
@@ -167,10 +226,42 @@ struct ELFObjectWriter {
         return Header
     }
 
-    define void Lower() {
-        i32 SymbolStringTableIndex := this->GetSectionIndex(this->SymbolStringTable)
-        i32 SymbolTableIndex := this->GetSectionIndex(this->SymbolTable)
+    define ELFSymbol* TranslateSymbol(ObjectSymbol* Symbol) {
+        ELFSymbol* Result := ELFSymbol:New()
 
+        ObjectSection* SymbolTable := this->AssignSymbolTable(Symbol)
+        ObjectSection* StringTable := this->Sections->At(this->GetSectionIndex(SymbolTable) - 1)
+        Result->NameOffset := this->FindOrAddString(StringTable, Symbol->Name)
+
+        if (Symbol->Section) {
+            Result->SectionIndex := this->GetSectionIndex(Symbol->Section) As i16
+        }
+        else {
+            Result->SectionIndex := ELF_SHN_UNDEF
+        }
+
+        Result->Value := Symbol->Value
+        Result->Size := Symbol->Size
+
+        return Result
+    }
+
+    define i32 GetSymbolIndex(ObjectSymbol* Symbol) {
+        ObjectSection* SymbolTable := this->AssignSymbolTable(Symbol)
+        return SymbolTable->Symbols->Find(Symbol)
+    }
+
+    define ELFRelocation* TranslateRelocation(ObjectRelocation* Relocation) {
+        ELFRelocation* Result := ELFRelocation:New()
+
+        Result->Offset := Relocation->Offset
+        Result->Addend := Relocation->Addend
+        Result->Symbol(this->GetSymbolIndex(Relocation->Target))
+
+        return Result
+    }
+
+    define void Lower() {
         i32 SectionCount := this->Sections->Count()
 
         for (i32 Index := 0, Index < SectionCount, Index++) {
@@ -180,17 +271,21 @@ struct ELFObjectWriter {
             this->ELFSections->Push(Header)
 
             if (Section->Relocations->Count()) {
+                ObjectRelocation* FirstRelocation := Section->Relocations->First()
+                ObjectSection* SymbolTable := this->AssignSymbolTable(FirstRelocation->Target)
+                i32 SymbolTableIndex := this->GetSectionIndex(SymbolTable)
+
                 Header->AssociatedSectionIndex := SymbolTableIndex
 
-                ; Slight hack: Relocation sections always live right below the containing section
-                ;  so the index of the target section is always RelocationIndex - 1
-                Header->ExtraInfo := Index - 1
+                ObjectSection* ContainerSection := this->RelocationSectionSections->Get(Section As i64)
+                i32 ContainerSectionIndex := this->GetSectionIndex(ContainerSection)
+
+                Header->ExtraInfo := ContainerSectionIndex
             }
             else if (Section->Symbols->Count()) {
-                ; Slight hack 2.0: Same as above, symbol tables are directly
-                ;  proceded by their string tables
+                ; Slight hack: symbol tables are directly proceded by their string tables
 
-                Header->AssociatedSectionIndex := 
+                Header->AssociatedSectionIndex := Index - 1
             }
         }
 
@@ -207,83 +302,34 @@ struct ELFObjectWriter {
                 ELFSymbol* Symbols := Section->Data
 
                 for (i32 SymbolIndex := 0, SymbolIndex < SymbolCount, SymbolIndex++) {
-                    ObjectSymbol* OriginalSymbol := 
+                    ObjectSymbol* OriginalSymbol := Section->Symbols->At(SymbolIndex)
+                    ELFSymbol* Symbol := this->TranslateSymbol(OriginalSymbol)
+
+                    MoveMemory(Symbols[SymbolIndex], Symbol, #ELFSymbol)
+
+                    ; TODO: Figure out if this is the first non-local
                 }
             }
         }
-    }
-
-    define i32 GetSectionIndex(ObjectSection* Section) {
-        return this->Sections->Find(Section)
-    }
-
-    define ELFSymbol* TranslateSymbol(ObjectSymbol* Symbol) {
-        ELFSymbol* Result := ELFSymbol:New()
-
-        Result->NameOffset := this->FindOrAddString(this->SymbolStringTable, Symbol->Name)
-
-        if (Symbol->Section) {
-            Result->SectionIndex := this->GetSectionIndex(Symbol->Section)
-        }
-        else {
-            Result->SectionIndex := ELF_SHN_UNDEF
-        }
-
-        Result->Value := Symbol->Value
-        Result->Size := Symbol->Size
-
-        return Result
-    }
-
-    define i32 SymbolCount() {
-        return (this->SymbolTable->Size / #ELFSymbol) As i32
-    }
-
-    define i32 GetSymbolIndex(ObjectSymbol* Symbol) {
-        return this->SymbolIndexMap->GetPointer(Symbol) As i32
-    }
-
-    define ELFRelocation* TranslateRelocation(ObjectRelocation* Relocation) {
-        ELFRelocation* Result := ELFRelocation:New()
-
-        Result->Offset := Relocation->Offset
-        Result->Addend := Relocation->Addend
-        Result->Symbol(this->GetSymbolIndex(Relocation->Target))
-
-        return Result
-    }
-
-    static self* FromObject(ObjectFile* File) {
-        self* this := self:New()
-
-        i32 SectionCount := File->Sections->Count()
 
         for (i32 Index := 0, Index < SectionCount, Index++) {
-            ObjectSection* Section := File->Sections->At(Index)
-
-            this->AddSection(Section)
-        }
-
-        this->AssimilateSymbolTable(File->LocalSymbols)
-        i32 FirstNonLocalSymbolIndex := this->SymbolCount()
-
-        this->AssimilateSymbolTable(File->GlobalSymbols)
-        this->AssimilateSymbolTable(File->WeakSymbols)
-        this->AssimilateSymbolTable(File->UndefinedSymbols)
-
-        for (i32 Index := 0, Index < SectionCount, Index++) {
-            ObjectSection* Section := File->Sections->At(Index)
-
-            ObjectSection* RelocationSection := this->CreateSection(SECTION_TYPE_DATA, FormatString(".rela%s", Section->Name), 0)
+            ObjectSection* Section := this->Sections->At(Index)
+            ELFSectionHeader* Header := this->ELFSections->At(Index)
 
             i32 RelocationCount := Section->Relocations->Count()
 
-            for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
-                ObjectRelocation* OriginalRelocation := Section->Relocations->At(RelocationIndex)
+            if (RelocationCount) {
+                Section->Size := 0
+                Section->Data := Alloc((SymbolCount + 1) * #ELFRelocation)
 
-                ELFRelocation* Relocation := this->TranslateRelocation(OriginalRelocation)
+                ELFRelocation* Relocations := Section->Data
 
+                for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
+                    ObjectRelocation* OriginalRelocation := Section->Relocations->At(RelocationIndex)
+                    ELFRelocation* Relocation := this->TranslateRelocation(OriginalRelocation)
 
+                    MoveMemory(Relocations[RelocationIndex], Relocation, #ELFRelocation)
+                }
             }
         }
     }
@@ -295,31 +341,27 @@ struct ELFPassthroughObjectWriter {
     ObjectSection* SymbolTable
 
     define ObjectSection* AssignSymbolTable(ObjectSymbol* Symbol) {
-        if (this->SymbolTable->Has(Symbol)) {
-            return this->SymbolTable
-        }
-
-        return null
+        return this->SymbolTable
     }
 
     static self* New(ObjectFile* File) {
         self* this := Alloc(#self)
 
-        this->Writer := ELFObjectWriter:New(&self.AssignSymbolTable)
+        this->Writer := ELFObjectWriter:New(this, &self.AssignSymbolTable)
 
         this->SymbolTable := this->Writer->CreateSymbolTable(".symtab", ".strtab")
 
         this->Writer->AddSections(File)
 
-        this->Writer->MergeSymbolTable(this->SymbolTable, File->LocalSymbols)
-        this->Writer->MergeSymbolTable(this->SymbolTable, File->GlobalSymbols)
-        this->Writer->MergeSymbolTable(this->SymbolTable, File->WeakSymbols)
-        this->Writer->MergeSymbolTable(this->SymbolTable, File->UndefinedSymbols)
+        this->Writer->PopulateFromSymbolTable(File->LocalSymbols)
+        this->Writer->PopulateFromSymbolTable(File->GlobalSymbols)
+        this->Writer->PopulateFromSymbolTable(File->WeakSymbols)
+        this->Writer->PopulateFromSymbolTable(File->UndefinedSymbols)
 
         return this
     }
 
     define void Lower() {
-
+        this->Writer->Lower()
     }
 }
