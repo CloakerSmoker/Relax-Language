@@ -364,4 +364,30 @@ struct ELFPassthroughObjectWriter {
     define void Lower() {
         this->Writer->Lower()
     }
+
+    define ELFEmitter* Emit() {
+        ELFEmitter* Emitter := ELFEmitter:New(0x1000)
+
+        i32 Count := this->Writer->Sections->Count()
+
+        Emitter->StartSectionHeaders()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ELFSectionHeader* SectionHeader := this->Writer->ELFSections->At(Index)
+
+            Emitter->WriteSectionHeader(SectionHeader)
+        }
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            ObjectSection* Section := this->Writer->Sections->At(Index)
+
+            Emitter->WriteSectionData(Index, Section->Data, Section->Size)
+        }
+
+        ELFHeader* Header := Emitter->Header
+
+        Header->SectionNameSectionIndex := this->Writer->GetSectionIndex(this->Writer->SharedStringTable) As i16
+
+        return Emitter
+    }
 }
