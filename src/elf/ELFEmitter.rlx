@@ -1,0 +1,96 @@
+struct RelocationPair {
+    i32 Offset
+    RelocatableBuffer* Target
+    i32 Addend
+}
+
+struct RelocatableBuffer {
+    void* Data
+    i32 Size
+}
+
+struct ELFEmitter {
+    union {
+        void* Buffer
+        ELFHeader* Header
+    }
+
+    i32 Size
+    i32 Alignment
+
+    static self* New(i32 Alignment) {
+        self* this := Alloc(#self)
+
+        this->Size := #ELFHeader
+        this->Buffer := Alloc(this->Size)
+
+        this->Alignment := Alignment
+
+        this->Header->Populate(ELF_ABI_SYSTEMV, ELF_ABI_VERSION_SYSTEMV, ELF_FILETYPE_RELOCATABLE)
+
+        return this
+    }
+
+    define i32 Index() {
+        return this->Size
+    }
+
+    define void* Extend(i32 Size) {
+        i32 Offset := this->Size
+
+        this->Size += Size
+        this->Buffer := ReAlloc(this->Buffer, this->Size)
+
+        return this->Buffer + Offset
+    }
+
+    define void Write(void* Data, i64 Size) {
+        i32 Offset := this->Size
+
+        this->Size += Size As i32
+        this->Buffer := ReAlloc(this->Buffer, this->Size)
+
+        MoveMemory(this->Buffer + Offset, Data, Size As i32)
+    }
+
+    define void Align() {
+        i32 AlignmentNeeded := this->Size % this->Alignment
+
+        if (AlignmentNeeded) {
+            this->Extend(this->Alignment - AlignmentNeeded)
+        }
+    }
+
+    define void StartSectionHeaders() {
+        this->Header->SectionHeadersOffset := this->Index()
+    }
+
+    define i32 WriteSectionHeader(ELFSectionHeader* Header) {
+        i32 Index := this->Header->SectionHeaderEntryCount
+
+        this->Write(Header, #ELFSectionHeader)
+
+        this->Header->SectionHeaderEntryCount += 1
+
+        return Index
+    }
+
+    define void WriteSectionData(i32 Index, void* Data, i64 Size) {
+        ELFSectionHeader* Headers := this->Buffer + this->Header->SectionHeadersOffset
+        ELFSectionHeader* Header := Headers[Index]
+
+        this->Align()
+
+        Header->FileOffset := this->Index()
+        Header->FileSize := Size
+
+        this->Write(Data, Size)
+    }
+
+    define void Finalize() {
+
+    }
+    
+
+
+}
