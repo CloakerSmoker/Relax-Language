@@ -87,7 +87,11 @@ struct ELFSectionHeader {
 	i64 FileOffset
 	i64 FileSize
 	i32 AssociatedSectionIndex
-	i32 ExtraInfo
+
+	union {
+		i32 ExtraInfo
+		i32 FirstNonLocalSymbolIndex
+	}
 	
 	union {
 		ELFProgramHeader* Parent
@@ -103,6 +107,7 @@ struct ELFSectionHeader {
 }
 
 i8 ELF_STB_LOCAL   := 0x00
+i8 ELF_SYMBOL_BINDING_LOCAL := 0x00
 i8 ELF_STB_GLOBAL  := 0x10
 i8 ELF_STB_WEAK    := 0x20
 

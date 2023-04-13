@@ -277,15 +277,31 @@ struct ELFObjectWriter {
 
                 Header->AssociatedSectionIndex := SymbolTableIndex
 
-                ObjectSection* ContainerSection := this->RelocationSectionSections->Get(Section As i64)
+                ObjectSection* ContainerSection := this->RelocationSectionSections->GetPointer(Section As i64)
                 i32 ContainerSectionIndex := this->GetSectionIndex(ContainerSection)
 
                 Header->ExtraInfo := ContainerSectionIndex
+
+                Header->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
+                Header->EntrySize := #ELFRelocation
             }
             else if (Section->Symbols->Count()) {
                 ; Slight hack: symbol tables are directly proceded by their string tables
 
                 Header->AssociatedSectionIndex := Index - 1
+
+                Header->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
+                Header->EntrySize := #ELFSymbol
+
+                ELFSectionHeader* SymbolStringsHeader := this->ELFSections->At(Index - 1)
+
+                SymbolStringsHeader->Type := ELF_SECTION_TYPE_STRING_TABLE
+            }
+            else if (Section = this->SharedStringTable) {
+                Header->Type := ELF_SECTION_TYPE_STRING_TABLE
+            }
+            else if (Index != 0) {
+                Header->Type := ELF_SECTION_TYPE_DATA
             }
         }
 
@@ -296,8 +312,8 @@ struct ELFObjectWriter {
             i32 SymbolCount := Section->Symbols->Count()
 
             if (SymbolCount) {
-                Section->Size := 0
-                Section->Data := Alloc((SymbolCount + 1) * #ELFSymbol)
+                Section->Size := (SymbolCount + 1) * #ELFSymbol
+                Section->Data := Alloc(Section->Size)
 
                 ELFSymbol* Symbols := Section->Data
 
@@ -305,9 +321,17 @@ struct ELFObjectWriter {
                     ObjectSymbol* OriginalSymbol := Section->Symbols->At(SymbolIndex)
                     ELFSymbol* Symbol := this->TranslateSymbol(OriginalSymbol)
 
-                    MoveMemory(Symbols[SymbolIndex], Symbol, #ELFSymbol)
+                    MoveMemory(Symbols[SymbolIndex + 1], Symbol, #ELFSymbol)
 
-                    ; TODO: Figure out if this is the first non-local
+                    if (Header->FirstNonLocalSymbolIndex = 0) {
+                        if (Symbol->Binding() != ELF_SYMBOL_BINDING_LOCAL) {
+                            Header->FirstNonLocalSymbolIndex := SymbolIndex
+                        }
+                    }
+                }
+
+                if (Header->FirstNonLocalSymbolIndex = 0) {
+                    Header->FirstNonLocalSymbolIndex := SymbolCount + 1
                 }
             }
         }
@@ -319,8 +343,8 @@ struct ELFObjectWriter {
             i32 RelocationCount := Section->Relocations->Count()
 
             if (RelocationCount) {
-                Section->Size := 0
-                Section->Data := Alloc((SymbolCount + 1) * #ELFRelocation)
+                Section->Size := (SymbolCount + 1) * #ELFRelocation
+                Section->Data := Alloc(Section->Size)
 
                 ELFRelocation* Relocations := Section->Data
 
@@ -366,7 +390,7 @@ struct ELFPassthroughObjectWriter {
     }
 
     define ELFEmitter* Emit() {
-        ELFEmitter* Emitter := ELFEmitter:New(0x1000)
+        ELFEmitter* Emitter := ELFEmitter:New(0x400)
 
         i32 Count := this->Writer->Sections->Count()
 
