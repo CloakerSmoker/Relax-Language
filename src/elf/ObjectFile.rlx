@@ -337,6 +337,14 @@ struct ObjectSymbolTable {
         this~>SymbolsByName->InsertPointer(FNV1A(Symbol->Name), Symbol)
     }
 
+    define i8 Has(i8* Name) {
+        return this~>SymbolsByName->Has(FNV1A(Name))
+    }
+
+    define i8 Has(ObjectSymbol* Symbol) {
+        return this->Has(Symbol->Name) && this->Symbols->Has(Symbol)
+    }
+
     define ObjectSymbol* Find(i8* Name) {
         return this~>SymbolsByName->GetPointer(FNV1A(Name))
     }
