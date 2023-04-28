@@ -789,6 +789,8 @@ struct ParserState {
 				}
 				
 				if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					Index += 1 ; horrible hack I hate this game
+
 					break
 				}
 			}
@@ -796,7 +798,7 @@ struct ParserState {
 			CodeBlock* ArrayInitializersBlock := Alloc(#CodeBlock) As CodeBlock*
 			
 			ArrayInitializersBlock->Statements := ElementInitiailizers
-			ArrayInitializersBlock->StatementCount := (Index + 1) As i16
+			ArrayInitializersBlock->StatementCount := Index
 			
 			return ASTNode:New(NODE_TYPE_EXPRESSION_BLOCK, ArrayInitializersBlock)
 		}
