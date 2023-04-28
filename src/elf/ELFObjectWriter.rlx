@@ -214,7 +214,7 @@ struct ELFObjectWriter {
                     RelocationSection := RelocationSections->GetPointer(SymbolTableSection As i64)
                 }
                 else {
-                    i8* RelocationSectionName := FormatString("%s.rela%s", SymbolTableSection->Name, Section->Name)
+                    i8* RelocationSectionName := FormatString(".rela%s", Section->Name)
 
                     RelocationSection := this->CreateSection(SECTION_TYPE_DATA, RelocationSectionName, 0)
 
@@ -340,27 +340,13 @@ struct ELFObjectWriter {
                 i32 ContainerSectionIndex := this->GetSectionIndex(ContainerSection)
 
                 Header->ExtraInfo := ContainerSectionIndex
-
-                Header->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
                 Header->EntrySize := #ELFRelocation
             }
             else if (Section->Symbols->Count()) {
                 ; Slight hack: symbol tables are directly proceded by their string tables
 
                 Header->AssociatedSectionIndex := Index - 1
-
-                Header->Type := ELF_SECTION_TYPE_SYMBOL_TABLE
                 Header->EntrySize := #ELFSymbol
-
-                ELFSectionHeader* SymbolStringsHeader := this->ELFSections->At(Index - 1)
-
-                SymbolStringsHeader->Type := ELF_SECTION_TYPE_STRING_TABLE
-            }
-            else if (Section = this->SharedStringTable) {
-                Header->Type := ELF_SECTION_TYPE_STRING_TABLE
-            }
-            else if (Index != 0) {
-                Header->Type := ELF_SECTION_TYPE_DATA
             }
         }
 
@@ -418,6 +404,46 @@ struct ELFObjectWriter {
     }
 }
 
+struct ELFSpecialSectionEntry {
+    i8* Name,
+    i32 Type,
+    i64 Flags
+}
+
+i64 ELF_SECTION_FLAGS_WRITE_ALLOCATE := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
+i64 ELF_SECTION_FLAGS_EXECUTE_ALLOCATE := ELF_SECTION_FLAGS_EXECUTE | ELF_SECTION_FLAGS_WRITE
+
+i32 ELF_SPECIAL_SECTION_COUNT := 26
+ELFSpecialSectionEntry[27] ELF_SPECIAL_SECTIONS {
+    { ".bss"          , ELF_SECTION_TYPE_NODATA              , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".comment"      , ELF_SECTION_TYPE_DATA                , 0                                 },
+    { ".data"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".data1"        , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".debug"        , ELF_SECTION_TYPE_DATA                , 0                                 },
+    { ".dynamic"      , ELF_SECTION_TYPE_DYNAMIC             , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".dynstr"       , ELF_SECTION_TYPE_STRING_TABLE        , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".dynsym"       , ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE, ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".fini"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
+    { ".fini_array"   , ELF_SECTION_TYPE_FINI_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".got"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".hash"         , ELF_SECTION_TYPE_HASH_TABLE          , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".init"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
+    { ".init_array"   , ELF_SECTION_TYPE_INIT_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".interp"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".line"         , ELF_SECTION_TYPE_DATA                , 0                                 },
+    { ".note*"        , ELF_SECTION_TYPE_DATA                , 0                                 },
+    { ".plt"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
+    { ".preinit_array", ELF_SECTION_TYPE_PREINIT_ARRAY       , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
+    { ".rela*"        , ELF_SECTION_TYPE_RELOCATIONS_ADDEND  , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".rel*"         , ELF_SECTION_TYPE_RELOCATIONS         , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".rodata"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".rodata1"      , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
+    { ".shstrtab"     , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
+    { ".strtab"       , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
+    { ".symtab"       , ELF_SECTION_TYPE_SYMBOL_TABLE        , 0                                 },
+    { ".text"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE}
+}
+
 struct ELFPassthroughObjectWriter {
     ObjectFile* Object
     ELFObjectWriter* Writer
@@ -429,8 +455,26 @@ struct ELFPassthroughObjectWriter {
     }
 
     define void TranslateSectionFields(ObjectSection* Source, ELFSectionHeader* Target) {
-        if (StringEquals(Source->Name, ".bss")) {
-            
+        i32 SourceNameLength := StringLength(Source->Name)
+
+        for (i32 Index := 0, Index < ELF_SPECIAL_SECTION_COUNT, Index++) {
+            ELFSpecialSectionEntry* Entry := ELF_SPECIAL_SECTIONS[Index]
+
+            i32 EntryNameLength := StringLength(Entry->Name)
+            i8 Prefix := false
+
+            if (Entry->Name[EntryNameLength - 1] = '*') {
+                Prefix := true
+                EntryNameLength -= 1
+            }
+
+            if (CompareMemory(Entry->Name, Source->Name, EntryNameLength)) {
+                if (Prefix || EntryNameLength = SourceNameLength) {
+                    Target->Type := Entry->Type
+                    Target->Flags := Entry->Flags
+                    break
+                }
+            }
         }
     }
 
@@ -472,6 +516,7 @@ struct ELFPassthroughObjectWriter {
         ELFObjectWriterPrototype Prototype {
             State: this,
             DoAssignSymbolTable: &self.AssignSymbolTable,
+            DoTranslateSectionFields: &self.TranslateSectionFields,
             DoTranslateSymbolFields: &self.TranslateSymbolFields,
             DoTranslateRelocationFields: &self.TranslateRelocationFields
         }
