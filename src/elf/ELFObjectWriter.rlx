@@ -71,6 +71,12 @@ struct ELFObjectWriterPrototype {
         return this->DoAssignSymbolTable(this->State, Symbol)
     }
 
+    void(void*, ObjectSection*, ELFSectionHeader*) DoTranslateSectionFields
+
+    define void TranslateSectionFields(ObjectSection* Source, ELFSectionHeader* Target) {
+        this->DoTranslateSectionFields(Source, Target)
+    }
+
     void(void*, ObjectSymbol*, ELFSymbol*) DoTranslateSymbolFields
 
     define void TranslateSymbolFields(ObjectSymbol* Source, ELFSymbol* Target) {
@@ -144,6 +150,10 @@ struct ELFObjectWriter {
 
     define ObjectSection* AssignSymbolTable(ObjectSymbol* Symbol) {
         return this->Prototype->AssignSymbolTable(Symbol)
+    }
+
+    define void TranslateSectionFields(ObjectSection* Source, ELFSectionHeader* Target) {
+        this->Prototype->TranslateSectionFields(Source, Target)
     }
     
     define void TranslateSymbolFields(ObjectSymbol* Source, ELFSymbol* Target) {
@@ -264,6 +274,8 @@ struct ELFObjectWriter {
 
         Header->NameOffset := this->FindOrAddString(this->SharedStringTable, Section->Name)
 
+        this->TranslateSectionFields(Section, Header)
+
         return Header
     }
 
@@ -293,7 +305,7 @@ struct ELFObjectWriter {
 
     define i32 GetSymbolIndex(ObjectSymbol* Symbol) {
         ObjectSection* SymbolTable := this->AssignSymbolTable(Symbol)
-        return SymbolTable->Symbols->Find(Symbol)
+        return SymbolTable->Symbols->Find(Symbol) + 1
     }
 
     define ELFRelocation* TranslateRelocation(ObjectRelocation* Relocation) {
@@ -390,7 +402,7 @@ struct ELFObjectWriter {
             i32 RelocationCount := Section->Relocations->Count()
 
             if (RelocationCount) {
-                Section->Size := (SymbolCount + 1) * #ELFRelocation
+                Section->Size := RelocationCount * #ELFRelocation
                 Section->Data := Alloc(Section->Size)
 
                 ELFRelocation* Relocations := Section->Data
@@ -416,18 +428,24 @@ struct ELFPassthroughObjectWriter {
         return this->SymbolTable
     }
 
+    define void TranslateSectionFields(ObjectSection* Source, ELFSectionHeader* Target) {
+        if (StringEquals(Source->Name, ".bss")) {
+            
+        }
+    }
+
     define void TranslateSymbolFields(ObjectSymbol* Source, ELFSymbol* Target) {
         if (this->Object->LocalSymbols->Has(Source)) {
-            Target->Binding(ELF_STB_LOCAL)
+            Target->Binding(ELF_SYMBOL_BINDING_LOCAL)
         }
         else if (this->Object->GlobalSymbols->Has(Source)) {
-            Target->Binding(ELF_STB_GLOBAL)
+            Target->Binding(ELF_SYMBOL_BINDING_GLOBAL)
         }
         else if (this->Object->WeakSymbols->Has(Source)) {
-            Target->Binding(ELF_STB_WEAK)
+            Target->Binding(ELF_SYMBOL_BINDING_WEAK)
         }
         else if (this->Object->UndefinedSymbols->Has(Source)) {
-            Target->Binding(ELF_STB_GLOBAL)
+            Target->Binding(ELF_SYMBOL_BINDING_GLOBAL)
         }
 
         if (Source->Type = SYMBOL_TYPE_FUNCTION) {

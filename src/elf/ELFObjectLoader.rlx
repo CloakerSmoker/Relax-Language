@@ -60,7 +60,8 @@ struct ELFObjectLoader {
     ELFProgramHeader* ProgramHeaders
     ELFSectionHeader* SectionHeaders
 
-    PointerArray* Sections ; <ObjectSection>
+    PointerArray* Sections ; <ObjectSection*>
+    PointerArray* Symbols ; <ObjectSymbol*>
 
     ELFSectionHeader* StringTableSectionHeader
     i8* StringTable
@@ -72,6 +73,7 @@ struct ELFObjectLoader {
         this->Size := Size
 
         this->Sections := PointerArray:New()
+        this->Symbols := PointerArray:New()
 
         this->ProgramHeaders := Buffer + this->Header->ProgramHeadersOffset
         this->SectionHeaders := Buffer + this->Header->SectionHeadersOffset
@@ -175,6 +177,9 @@ struct ELFObjectLoader {
 
                 if (SymbolSection) {
                     SymbolSection->Symbols->Push(Symbol)
+                }
+                else {
+                    this->Symbols->Push(Symbol)
                 }
             }
         }

@@ -381,6 +381,7 @@ struct ObjectFile {
 
     ObjectSymbolTable* UndefinedSymbols
     ObjectSymbolTable* DynamicSymbols
+    ObjectSymbolTable* MetaSymbols
 
     static self* New() {
         self* this := Alloc(#self)
