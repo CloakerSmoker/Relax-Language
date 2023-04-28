@@ -81,7 +81,7 @@ for i in range(0, recursion_count):
         print(f'{Fore.LIGHTRED_EX}Compile error ({hex(compile_result.returncode)}):\n{stdout_text}\n\n{stderr_text}', file=sys.stderr)
         sys.exit(1)
 
-    test_script = path_join(tools_dir, 'test_compiler.py')
+    use_compiler(compiler_output)
     test_command = f'{python} -m turnt -j -e {running_on.lower()} tests/*.rlx'
 
     test_result = subprocess.run(test_command, cwd=cwd, shell=True, capture_output=True, env={**os.environ, 'RLX': compiler_output})

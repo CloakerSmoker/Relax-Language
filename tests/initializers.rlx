@@ -49,6 +49,12 @@ struct Test5 {
 	}
 }
 
+struct ListEntry {
+	i8* Name,
+	i32 Number,
+	i8 Final
+}
+
 define void SHOULD_NOT_BE_REMOVED() asm {
 	ret
 }
@@ -83,6 +89,21 @@ define i32 Main() {
 	}
 	
 	Print("%i", FunctionPointer.Bytes[0] = 0xC3)
+
+
+	ListEntry[3] List {
+		{ "dog", 1, false },
+		{ "cat", 2, false },
+		{ "rat", 300, true}
+	}
+
+	i32 Sum := 0
+
+	for (i32 Index := 0, Index < 3, Index++) {
+		Sum += List[Index]->Number
+	}
+
+	Print(" %i", Sum)
 	
 	return 0
 }

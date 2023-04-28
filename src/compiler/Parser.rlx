@@ -652,24 +652,39 @@ struct ParserState {
 		TypeInfo* ForBaseType := GetBaseType(ForType)
 		
 		if (ForTypeDepth = 0 && ForBaseType->Is(TYPE_KIND_STRUCTURE)) {
+			i8 IsArrayStyle := true
+			i32 BeforeKeyValueCheck := this->Freeze()
+
+			if (this->NextTokenMatches(TOKEN_TYPE_IDENTIFIER) && this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
+				IsArrayStyle := false
+			}
+			
+			this->Unfreeze(BeforeKeyValueCheck)
+			
 			i16 InitializerCapacity := 20
 			ASTNode** Initializers := Alloc(InitializerCapacity * #ASTNode*) As ASTNode**
 			
 			i16 InitializerIndex := 0
 			i8 IsFirstInitializer := true
-			
+
 			while (IsFirstInitializer || this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
-				Token* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected initializer field name")
-				
-				this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected ':' after initializer field name")
-				
-				HashMapElement* FieldElement := ForBaseType~>Fields->Get(FieldName->StringValue)
-				
-				if (FieldElement = null) {
-					FieldName->Error("Unknown struct field")
+				if (IsArrayStyle) {
+					StructField* Field := ForBaseType->FieldsInOrder->At(InitializerIndex)
 				}
-				
-				StructField* Field := FieldElement->Value
+				else {
+					Token* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected initializer field name")
+					
+					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_COLON, "Expected ':' after initializer field name")
+					
+					HashMapElement* FieldElement := ForBaseType~>Fields->Get(FieldName->StringValue)
+					
+					if (FieldElement = null) {
+						FieldName->Error("Unknown struct field")
+					}
+					
+					StructField* Field := FieldElement->Value
+				}
+
 				i8 FieldIsStruct := GetPointerDepth(Field->ValueType) = 0 && GetBaseType(Field->ValueType)->Is(TYPE_KIND_STRUCTURE)
 				i8 FieldIsArray := Field->ValueType.IsArray
 				
@@ -1250,6 +1265,10 @@ struct ParserState {
 		HashMap* Methods := ForType~>Methods
 		HashMap* StaticMethods := ForType~>StaticMethods
 
+		PointerArray* FieldsInOrder := PointerArray:New()
+
+		ForType->FieldsInOrder := FieldsInOrder
+
 		this~>Types->Set("self", ForType)
 
 		i16 NextFieldOffset := ForType->Size
@@ -1259,11 +1278,14 @@ struct ParserState {
 		i16 TotalSize := 0
 
 		loop {
+			i8 IsFirstUnionMember := false
+
 			if !(InUnion) {
 				if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_UNION)) {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
 					
 					InUnion := true
+					IsFirstUnionMember := true
 				}
 				else {
 					i8 IsMethod := false
@@ -1300,6 +1322,10 @@ struct ParserState {
 			}
 			
 			StructField* NextField := Alloc(#StructField) As StructField*
+
+			if (!InUnion || IsFirstUnionMember) {
+				FieldsInOrder->Push(NextField)
+			}
 			
 			NextField->ValueType := this->ParseType(true)
 			

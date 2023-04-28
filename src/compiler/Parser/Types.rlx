@@ -32,9 +32,11 @@ struct TypeInfo {
 	SafeString* Name
 	
 	union {
-		HashMap Fields
+		HashMap Fields ; <StructField*>
 		FunctionPointerInfo FunctionPointer
 	}
+
+	PointerArray* FieldsInOrder ; <StructField*>
 	
 	HashMap Methods
 	HashMap StaticMethods
