@@ -38,14 +38,26 @@ define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
     return Visibility As SYMBOL_VISIBILITY
 }
 
-define RELOCATION_TYPE TranslateELFRelocationType(i32 Type) {
+define RELOCATION_TYPE TranslateRelocationTypeFromELF(i64 Type) {
     if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
         return RELOCATION_TYPE_OFFSET_32
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_PLT_32) {
-        return RELOCATION_TYPE_OFFSET_32
+    else if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_64) {
+        return RELOCATION_TYPE_OFFSET_64
     }
-    
+    else if (Type = ELF_RELOCATION_TYPE_X64_DIRECT_32_SX) {
+        return RELOCATION_TYPE_ABSOLUTE_32
+    }
+    else if (Type = ELF_RELOCATION_TYPE_X64_DIRECT_64) {
+        return RELOCATION_TYPE_ABSOLUTE_64
+    }
+    else if (Type = ELF_RELOCATION_TYPE_X64_GOT_32) {
+        return RELOCATION_TYPE_GOT_32
+    }
+    else if (Type = ELF_RELOCATION_TYPE_X64_PLT_32) {
+        return RELOCATION_TYPE_PLT_32
+    }
+
     return RELOCATION_TYPE_NONE
 }
 
@@ -212,7 +224,7 @@ struct ELFObjectLoader {
                     ELFDirectRelocation* DirectHeader := DirectRelocations[Index]
 
                     i32 SymbolIndex := ELFRelocationSymbol(DirectHeader->Info)
-                    RELOCATION_TYPE Type := TranslateELFRelocationType(ELFRelocationType(DirectHeader->Info))
+                    RELOCATION_TYPE Type := TranslateRelocationTypeFromELF(ELFRelocationType(DirectHeader->Info))
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 
@@ -232,7 +244,7 @@ struct ELFObjectLoader {
                     ELFRelocation* RelocationHeader := Relocations[Index]
 
                     i32 SymbolIndex := ELFRelocationSymbol(RelocationHeader->Info)
-                    RELOCATION_TYPE Type := TranslateELFRelocationType(ELFRelocationType(RelocationHeader->Info))
+                    RELOCATION_TYPE Type := TranslateRelocationTypeFromELF(ELFRelocationType(RelocationHeader->Info))
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 

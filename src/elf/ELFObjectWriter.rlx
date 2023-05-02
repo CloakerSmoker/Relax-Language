@@ -94,6 +94,28 @@ struct ELFObjectWriterPrototype {
     }
 }
 
+define i64 TranslateRelocationTypeToELF(RELOCATION_TYPE Type) {
+    if (Type = RELOCATION_TYPE_OFFSET_32) {
+        return ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32
+    }
+    else if (Type = RELOCATION_TYPE_OFFSET_64) {
+        return ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_64
+    }
+    else if (Type = RELOCATION_TYPE_ABSOLUTE_32) {
+        return ELF_RELOCATION_TYPE_X64_DIRECT_32_SX
+    }
+    else if (Type = RELOCATION_TYPE_ABSOLUTE_64) {
+        return ELF_RELOCATION_TYPE_X64_DIRECT_64
+    }
+    else if (Type = RELOCATION_TYPE_GOT_32) {
+        return ELF_RELOCATION_TYPE_X64_GOT_32
+    }
+    else if (Type = RELOCATION_TYPE_PLT_32) {
+        return ELF_RELOCATION_TYPE_X64_PLT_32
+    }
+
+    return ELF_RELOCATION_TYPE_X64_NONE
+}
 
 struct ELFObjectWriter {
     PointerArray* Sections ; <ObjectSection*>
@@ -182,7 +204,7 @@ struct ELFObjectWriter {
         this->NullSection := this->CreateSection(SECTION_TYPE_DISCARD, "", 0)
 
         ; String tables, 1 byte allocated size, 0 bytes actual size (to not skew string table offsets)
-        this->SharedStringTable := this->CreateSection(SECTION_TYPE_DATA, ".shstrtab", 1)
+        this->SharedStringTable := this->CreateSection(SECTION_TYPE_DATA, ".shstrtab", 0)
 
         return this
     }
@@ -274,7 +296,11 @@ struct ELFObjectWriter {
 
         Header->NameOffset := this->FindOrAddString(this->SharedStringTable, Section->Name)
 
-        this->TranslateSectionFields(Section, Header)
+        if (Header->NameOffset != 0) {
+            ; skip first (null) section
+
+            this->TranslateSectionFields(Section, Header)
+        }
 
         return Header
     }
@@ -410,11 +436,11 @@ struct ELFSpecialSectionEntry {
     i64 Flags
 }
 
-i64 ELF_SECTION_FLAGS_WRITE_ALLOCATE := ELF_SECTION_FLAGS_ALLOCATE | ELF_SECTION_FLAGS_WRITE
-i64 ELF_SECTION_FLAGS_EXECUTE_ALLOCATE := ELF_SECTION_FLAGS_EXECUTE | ELF_SECTION_FLAGS_WRITE
+i64 ELF_SECTION_FLAGS_WRITE_ALLOCATE := ELF_SECTION_FLAGS_WRITE | ELF_SECTION_FLAGS_ALLOCATE
+i64 ELF_SECTION_FLAGS_EXECUTE_ALLOCATE := ELF_SECTION_FLAGS_EXECUTE | ELF_SECTION_FLAGS_ALLOCATE
 
-i32 ELF_SPECIAL_SECTION_COUNT := 26
-ELFSpecialSectionEntry[27] ELF_SPECIAL_SECTIONS {
+i32 ELF_SPECIAL_SECTION_COUNT := 28
+ELFSpecialSectionEntry[28] ELF_SPECIAL_SECTIONS {
     { ".bss"          , ELF_SECTION_TYPE_NODATA              , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
     { ".comment"      , ELF_SECTION_TYPE_DATA                , 0                                 },
     { ".data"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
@@ -441,7 +467,8 @@ ELFSpecialSectionEntry[27] ELF_SPECIAL_SECTIONS {
     { ".shstrtab"     , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
     { ".strtab"       , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
     { ".symtab"       , ELF_SECTION_TYPE_SYMBOL_TABLE        , 0                                 },
-    { ".text"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE}
+    { ".text"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
+    { ".eh_frame"     , ELF_SECTION_TYPE_X86_X64_UNWIND      , ELF_SECTION_FLAGS_ALLOCATE        }
 }
 
 struct ELFPassthroughObjectWriter {
@@ -472,10 +499,12 @@ struct ELFPassthroughObjectWriter {
                 if (Prefix || EntryNameLength = SourceNameLength) {
                     Target->Type := Entry->Type
                     Target->Flags := Entry->Flags
-                    break
+                    return
                 }
             }
         }
+
+        Print("WARNING: Could not translate section '%s'\n", Source->Name)
     }
 
     define void TranslateSymbolFields(ObjectSymbol* Source, ELFSymbol* Target) {
@@ -505,7 +534,7 @@ struct ELFPassthroughObjectWriter {
     }
 
     define void TranslateRelocationFields(ObjectRelocation* Source, ELFRelocation* Target) {
-
+        Target->Type(TranslateRelocationTypeToELF(Source->Type))
     }
 
     static self* New(ObjectFile* File) {

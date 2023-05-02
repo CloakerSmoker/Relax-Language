@@ -251,11 +251,16 @@ enum RELOCATION_TYPE {
     Offset_64
     Absolute_32
     Absolute_64
+    GOT_32 ; *target = got[symbol] + addend
+    PLT_32 ; *target = plt[symbol] + addend - &symbol
 }
 
 define i8* RelocationTypeName(RELOCATION_TYPE Type) {
-    i8*[5] Names {
-        "Unimplemented", "Offset_32", "Offset_64", "Absolute_32", "Absolute_64"
+    i8*[7] Names {
+        "Unimplemented",
+        "Offset_32", "Offset_64",
+        "Absolute_32", "Absolute_64",
+        "GOT_32", "PLT_32"
     }
 
     return Names[Type As i32]
