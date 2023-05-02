@@ -1,0 +1,47 @@
+#Require "$/Console.rlx"
+#Require "./src/elf/ObjectFile.rlx"
+#Require "./src/elf/ELFObjectLoader.rlx"
+#Require "./src/elf/ELFEmitter.rlx"
+#Require "./src/elf/ELFObjectWriter.rlx"
+
+define ELFObjectLoader* LoadELFObject(i8* FileName) {
+    i64 F := FileOpen(FileName, FILE_READ)
+
+    i32 Size := FileGetSize(F)
+    void* Data := FileReadAll(F)
+
+    FileClose(F)
+
+    ELFObjectLoader* Object := ELFObjectLoader:New(Data, Size)
+
+    Object->Load()
+
+    return Object
+}
+
+define i64 Main(i64 ArgC, i8** ArgV) {
+    PointerArray* Objects := PointerArray:New() ; <ELFObjectLoader*>
+
+    for (i32 Index := 1, Index < ArgC, Index++) {
+        i8* FileName := ArgV[Index]
+        ELFObjectLoader* ELFLoader := LoadELFObject(FileName)
+
+        ObjectFile* Object := ELFLoader->AsObject()
+
+        Object->DumpSymbolTables()
+        Object->DumpRelocations()
+        
+        ELFPassthroughObjectWriter* Passthrough := ELFPassthroughObjectWriter:New(Object)
+
+        Passthrough->Lower()
+
+        ELFEmitter* Emit := Passthrough->Emit()
+
+        i64 f := FileOpen(ArgV[++Index], FILE_CREATE_NEW | FILE_WRITE)
+
+        FileWrite(f, Emit->Buffer, Emit->Size)
+        FileClose(f)
+    }
+
+    return false
+}

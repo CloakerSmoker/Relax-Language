@@ -54,6 +54,10 @@ struct ObjectSection {
         return this
     }
 
+    static self* New(SECTION_TYPE Type, i8* Name) {
+        return self:New(Type, Name, Alloc(1), 0)
+    }
+
     define self* Clone() {
         self* Result := CloneMemory(this, #self)
 
@@ -198,6 +202,10 @@ struct ObjectSymbol {
         this->Relocations := PointerArray:New()
         
         return this
+    }
+
+    define i8 IsUndefined() {
+        return this->Section = null
     }
 
     define void DumpInline() {
@@ -378,7 +386,7 @@ struct ObjectSymbolTable {
 
 struct ObjectFile {
     PointerArray* Sections ; <ObjectSection*>
-    AVLTree SectionsByName ; <i64, ObjectSection*>
+    AVLTree* SectionsByName ; <i64, ObjectSection*>
 
     ObjectSymbolTable* LocalSymbols
     ObjectSymbolTable* GlobalSymbols
@@ -392,7 +400,7 @@ struct ObjectFile {
         self* this := Alloc(#self)
 
         this->Sections := PointerArray:New()
-        this~>SectionsByName->ValueSize := 8
+        this->SectionsByName := AVLTree:New(#ObjectSection*)
 
         this->LocalSymbols := ObjectSymbolTable:New()
         this->GlobalSymbols := ObjectSymbolTable:New()
@@ -423,7 +431,7 @@ struct ObjectFile {
         }
 
         this->Sections->Push(Section)
-        this~>SectionsByName->InsertPointer(FNV1A(Section->Name), Section)
+        this->SectionsByName->InsertPointer(FNV1A(Section->Name), Section)
 
         i32 Count := Section->Symbols->Count()
 
@@ -441,7 +449,28 @@ struct ObjectFile {
             this->AddSymbol(Relocation->Target)
         }
 
-        Section->Symbols->Clear()
+        ;Section->Symbols->Clear()
+    }
+
+    define ObjectSection* GetSection(i8* Name) {
+        return this->SectionsByName->GetPointer(FNV1A(Name))
+    }
+
+    define ObjectSymbol* LookupExternalSymbol(i8* Name) {
+        ObjectSymbol* Global := this->GlobalSymbols->Find(Name)
+
+        if (Global) {
+            return Global
+        }
+
+        ObjectSymbol* Weak := this->WeakSymbols->Find(Name)
+
+        if (Weak) {
+            return Weak
+        }
+
+
+
     }
 
     define void DumpSections() {

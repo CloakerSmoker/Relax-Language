@@ -1,0 +1,73 @@
+
+/*
+ * "Merge" linker takes many object files, and merges them into one.
+ * This means a lot of symbol resolution, and some partial linking, but not
+ *  full address assignment or program headers or anything.
+ *
+ * Takes sections one at a time, and gradually builds up a master "result"
+ *  object file which is the sum of the inputs.
+ *
+ * Step 1: Collect input (and fixup symbols)
+ *  Consists of taking the sum of all sections in all input files, and
+ *   merging them together by name.
+ *  Section data is merged here, and symbols are cloned and adjusted to
+ *   match the new data layout.
+ * Step 2: Resolve relocations
+ *  Is the actual symbol resolution, where each relocation is processed to
+ *   determine the actual symbol to be referenced.
+ *  Note: This is going to suck, since private/internal/local symbols exist.
+ * Step 3: Profit???
+ *  I think those are the only real steps
+ */
+
+
+struct MergeLinker {
+    ObjectFile* Result
+
+    static self* New() {
+        self* this := Alloc(#self)
+
+        this->Objects := PointerArray:New()
+
+        return this
+    }
+
+    define ObjectSection* FindOrAddResultSection(ObjectSection* Original) {
+        ObjectSection* Section := this->Result->GetSection(Original->Name)
+
+        if !(Section) {
+            Section := ObjectSection:New(Original->Type, Original->Name)
+
+            this->Result->AddSection(Section)
+        }
+
+        return Section
+    }
+
+    define void AddSymbol(ObjectSymbol* Symbol) {
+        ObjectSymbol* Existing := this->Result->LookupExternalSymbol(Symbol->Name)
+
+        if (Symbol->IsUndefined() && Existing) {
+
+        }
+
+    }
+
+    define ObjectSection* MergeSections(ObjectSection* Left, ObjectSection* Right) {
+
+    }
+
+    define void AddObject(ObjectFile* Object) {
+        this->Objects->Push(Object)
+
+        i32 SectionCount := Object->Sections->Count()
+
+        for (i32 Index := 0, Index < SectionCount, Index++) {
+            ObjectSection* Section := Object->Sections->At(Index)
+
+            ObjectSection* ResultSection := this->FindOrAddResultSection(Section)
+
+
+        }
+    }
+}
