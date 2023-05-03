@@ -44,16 +44,77 @@ struct MergeLinker {
         return Section
     }
 
-    define void AddSymbol(ObjectSymbol* Symbol) {
-        ObjectSymbol* Existing := this->Result->LookupExternalSymbol(Symbol->Name)
+    define void AddRelocation(ObjectRelocation* Relocation) {
+        ; Resolves the symbol that the relocation should target.
+        ; Considers binding/visibility rules
+        ; Considers type mismatches
 
-        if (Symbol->IsUndefined() && Existing) {
+        ObjectSection* Section := this->FindOrAddResultSection(Relocation->Container)
 
+        ObjectSymbol* Symbol := Relocation->Target
+
+        ObjectRelocation* Result := ObjectRelocation:New(Section, Relocation->Type, Relocation->Offset, null, Relocation->Addend)
+
+        if (Symbol->Binding = SYMBOL_BINDING_LOCAL) {
+            Result->Target := this->SymbolMap->GetPointer(Symbol)
         }
+        else if (Symbol->Binding = SYMBOL_BINDING_WEAK) {
+            ObjectSymbol* Global := this->Result->GlobalSymbols->Find(Symbol->Name)
+
+            if (Global && Symbol->Visibility != SYMBOL_VISIBILITY_PROTECTED) {
+                Result->Target := Global
+            }
+            else {
+                Result->Target := this->SymbolMap->GetPointer(Symbol)
+            }
+        }
+        else if (Symbol->Binding = SYMBOL_BINDING_GLOBAL) {
+            if (Symbol->IsUndefined()) {
+                ObjectSymbol* Global := this->Result->GlobalSymbols->Find(Symbol->Name)
+
+                if (Global) {
+                    Result->Target := Global
+                }
+                else {
+                    ObjectSymbol* Weak := this->Result->WeakSymbols->Find(Symbol->Name)
+
+                    if (Weak) {
+                        Result->Target := Weak
+                    }
+                    else {
+                        Print("uhhh wheres %s\n", Symbol->Name)
+                    }
+                }
+            }
+
+            Result->Target := this->SymbolMap->GetPointer(Symbol)
+        }
+
 
     }
 
-    define ObjectSection* MergeSections(ObjectSection* Left, ObjectSection* Right) {
+    define void AddSymbol(ObjectSymbol* Symbol) {
+        
+    }
+
+    define void AddSection(ObjectSection* Section) {
+        ObjectSection* Result := this->FindOrAddResultSection(Section)
+
+        i32 Offset := Result->Size
+        
+        Result->Size += Section->Size
+        Result->Data := ReAlloc(Result->Data, Result->Size)
+
+        MoveMemory(Result->Data + Offset, Section->Data, Section->Size)
+
+        i32 SymbolCount := Section->Symbols->Count()
+
+        for (i32 Index := 0, Index < SymbolCount, Index++) {
+            ObjectSymbol* Existing := Section->Symbols->At(Index)
+
+
+        }
+
 
     }
 
