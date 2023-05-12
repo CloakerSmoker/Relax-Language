@@ -349,12 +349,53 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 	return 0
 }
 
+define i8 AreTypesEqual(Type Left, Type Right) {
+	if (GetPointerDepth(Left) != GetPointerDepth(Right)) {
+		return false
+	}
+
+	TypeInfo* LeftBase := GetBaseType(Left)
+	TypeInfo* RightBase := GetBaseType(Right)
+
+	if (LeftBase->Is(TYPE_KIND_FUNCTION_POINTER) && RightBase->Is(TYPE_KIND_FUNCTION_POINTER)) {
+		;Print("fptr equal? %t == %t ?\n", Left, Right)
+	
+		FunctionPointerInfo* LeftPointer := LeftBase~>FunctionPointer
+		FunctionPointerInfo* RightPointer := RightBase~>FunctionPointer
+
+		if (LeftPointer->Attributes != RightPointer->Attributes) {
+			return false
+		}
+
+		if !(AreTypesEqual(LeftPointer->ReturnType, RightPointer->ReturnType)) {
+			return false
+		}
+
+		if (LeftPointer->ParameterCount != RightPointer->ParameterCount) {
+			return false
+		}
+
+		for (i32 ParameterIndex := 0, ParameterIndex < LeftPointer->ParameterCount, ParameterIndex++) {
+			Type LeftParameter := LeftPointer->ParameterTypes[ParameterIndex]
+			Type RightParameter := RightPointer->ParameterTypes[ParameterIndex]
+			
+			if !(AreTypesEqual(LeftParameter, RightParameter)) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	return Left = Right
+}
+
 define i8 CheckTypeSignature(FunctionDefine* ForFunction, VariableInfo** AgainstParameters) {
 	for (i32 ParameterIndex := 0, ParameterIndex < ForFunction->ParameterCount, ParameterIndex += 1) {
 		Type ExpectedNext := ForFunction->Parameters[ParameterIndex]->Type
 		Type ActualNext := AgainstParameters[ParameterIndex]->Type
 		
-		if (ActualNext != ExpectedNext) {
+		if !(AreTypesEqual(ActualNext, ExpectedNext)) {
 			return false
 		}
 	}
