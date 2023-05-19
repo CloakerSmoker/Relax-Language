@@ -2128,9 +2128,22 @@ define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, St
 	i32 FieldOffset := TargetField->Offset
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		CompileExpression(Compiler, ResultRegister, TargetAccess->Left)
+		if (FieldOffset) {
+			; byte offset + bit range
+
+			; get pointer to bits
+			CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
+
+			; dereference pointer to bits
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, TargetFieldSize)
+		}
+		else {
+			; bit range
+
+			CompileExpression(Compiler, ResultRegister, TargetAccess->Left)
+		}
 		
-		TargetFieldSize := FieldOffset As i8
+		TargetFieldSize := TargetField->BitBackingSize
 		
 		i32 FieldSize := (TargetFieldSize * 8) - 1
 		i8 ShiftLeftBy := (FieldSize - TargetField->BitEndIndex) As i8
@@ -2176,14 +2189,20 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType) As i8
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
+		if (FieldOffset) {
+			CompileGetStructAccessPointer(Compiler, ResultPointerRegister, TargetAccess)
+			EmitMove_RX_RIX(Compiler, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) 
+		}
+		else {
+			CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
+		}
 		
-		TargetFieldSize := TargetField->Offset As i8
+		i8 TargetBitSize := TargetField->BitBackingSize
 		
 		i8 StartIndex := TargetField->BitStartIndex
 		i8 EndIndex := TargetField->BitEndIndex
 		
-		i32 FieldSize := (TargetFieldSize * 8) - 1
+		i32 FieldSize := (TargetBitSize * 8) - 1
 		i8 ShiftLeftBy := (FieldSize - (EndIndex - StartIndex)) As i8
 		i8 ShiftRightBy := (FieldSize - EndIndex) As i8
 		
@@ -2196,20 +2215,25 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 		
 		i64 Mask := ~(PartialMask >> StartIndex << StartIndex)
 		
-		EmitMove_RX_IX(Compiler, RDI, Mask, TargetFieldSize)
-		EmitAnd_RX_RX(Compiler, ResultPointerRegister, RDI, TargetFieldSize)
+		EmitMove_RX_IX(Compiler, RDI, Mask, TargetBitSize)
+		EmitAnd_RX_RX(Compiler, ResultPointerRegister, RDI, TargetBitSize)
 		
 		if (ShiftLeftBy) { 
-			EmitSAL_RX_I8(Compiler, ValueRegister, ShiftLeftBy, TargetFieldSize)
+			EmitSAL_RX_I8(Compiler, ValueRegister, ShiftLeftBy, TargetBitSize)
 		}
 		
-		EmitSAR_RX_I8(Compiler, ValueRegister, ShiftRightBy, TargetFieldSize)
-		EmitOr_RX_RX(Compiler, ResultPointerRegister, ValueRegister, TargetFieldSize)
+		EmitSAR_RX_I8(Compiler, ValueRegister, ShiftRightBy, TargetBitSize)
+		EmitOr_RX_RX(Compiler, ResultPointerRegister, ValueRegister, TargetBitSize)
 		
 		ASTNode* Left := TargetAccess->Left
 		i8 LeftNodeType := Left->NodeType
-		
-		if (LeftNodeType = NODE_TYPE_VARIABLE) {
+
+		if (FieldOffset) {
+			; ValueRegister is actually unused, ResultPointerRegister holds the result
+			CompileGetStructAccessPointer(Compiler, ValueRegister, TargetAccess)
+			EmitMove_RIX_RX(Compiler, ValueRegister, ResultPointerRegister, TargetFieldSize)
+		}
+		else if (LeftNodeType = NODE_TYPE_VARIABLE) {
 			CompileSetVariableValue(Compiler, Left->VariableValue, ResultPointerRegister)
 		}
 		else if (LeftNodeType = NODE_TYPE_STRUCT_ACCESS) {

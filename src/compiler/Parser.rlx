@@ -1262,22 +1262,20 @@ struct ParserState {
 		return NewType
 	}
 
-	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned) {
+	declare Type ParseBitsAsType()
+	declare void ParseBitsFields(TypeInfo*, i16, i16)
+
+	define i16 ParseNestedStruct(TypeInfo* ForType, i8 IsUnaligned, i16 NextFieldOffset) {
 		HashMap* Fields := ForType~>Fields
 		HashMap* Methods := ForType~>Methods
 		HashMap* StaticMethods := ForType~>StaticMethods
 
-		PointerArray* FieldsInOrder := PointerArray:New()
+		PointerArray* FieldsInOrder := ForType->FieldsInOrder
 
-		ForType->FieldsInOrder := FieldsInOrder
-
-		this~>Types->Set("self", ForType)
-
-		i16 NextFieldOffset := ForType->Size
 		i8 InUnion := false
 		i16 MaxUnionSize := 0
 
-		i16 TotalSize := 0
+		i16 TotalSize := ForType->Size
 
 		loop {
 			i8 IsFirstUnionMember := false
@@ -1287,11 +1285,14 @@ struct ParserState {
 					this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for union body.")
 					
 					InUnion := true
+					MaxUnionSize := 0
 					IsFirstUnionMember := true
 				}
 				else {
 					i8 IsMethod := false
 					i8 IsStaticMethod := false
+
+					i32 BeforeMethod := this->Freeze()
 					Token* MethodKeyword := this->PeekNextToken()
 					
 					if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD)) {
@@ -1320,54 +1321,77 @@ struct ParserState {
 						
 						continue
 					}
+					else {
+						this->Unfreeze(BeforeMethod)
+					}
 				}
 			}
-			
-			StructField* NextField := Alloc(#StructField) As StructField*
 
-			if (!InUnion || IsFirstUnionMember) {
-				FieldsInOrder->Push(NextField)
+			if (InUnion && this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' to open nested struct")
+				this->ParseNestedStruct(ForType, IsUnaligned, NextFieldOffset)
+				;Print("out\n")
+				;this->PeekNextToken()->Warn("nuts")
+
+				i16 FieldSize := ForType->Size - TotalSize
 			}
-			
-			NextField->ValueType := this->ParseType(true)
-			
-			Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
-			SafeString* FieldName := FieldNameToken->StringValue
-			NextField->Name := FieldName
-			NextField->DefinedAt := FieldNameToken~>Context
-			
-			HashMapElement* LastDefinitionElement := Fields->Get(FieldName)
-			
-			if (LastDefinitionElement) {
-				StructField* LastDefinition := LastDefinitionElement->Value
+			else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
+				Type BackingType := this->ParseBitsAsType()
+				i16 FieldSize := GetTypeSize(BackingType)
+
+				this->ParseBitsFields(ForType, NextFieldOffset, FieldSize)
+
+				;Print("%i %i %i\n", MaxUnionSize, NextFieldOffset, FieldSize)
+			}
+			else {
+				StructField* NextField := Alloc(#StructField) As StructField*
+
+				if (!InUnion || IsFirstUnionMember) {
+					FieldsInOrder->Push(NextField)
+				}
 				
-				this->DuplicateDefinitionError(FieldNameToken~>Context, LastDefinition->DefinedAt)
-			}
-			
-			Fields->Set(FieldName, NextField)
-			
-			i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
-			
-			; Only align the field if it isn't a struct, array, union, and if this structure isn't unaligned 
-			
-			if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->Is(TYPE_KIND_STRUCTURE)) {
-				; Dummy branch
-			}
-			else if (InUnion || IsUnaligned) {
-				; Dummy branch
-			}
-			else if (NextField->ValueType.IsArray) {
-				; Dummy branch
-			}
-			else if (NextFieldOffset % FieldSize) {
-				; Pad the field's offset to a multiple of its size
+				NextField->ValueType := this->ParseType(true)
 				
-				NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
+				Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
+				SafeString* FieldName := FieldNameToken->StringValue
+				NextField->Name := FieldName
+				NextField->DefinedAt := FieldNameToken~>Context
+				
+				HashMapElement* LastDefinitionElement := Fields->Get(FieldName)
+				
+				if (LastDefinitionElement) {
+					StructField* LastDefinition := LastDefinitionElement->Value
+					
+					this->DuplicateDefinitionError(FieldNameToken~>Context, LastDefinition->DefinedAt)
+				}
+				
+				Fields->Set(FieldName, NextField)
+				
+				i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
+
+				;Print("Align To %i from %i\n", FieldSize, NextFieldOffset)
+				
+				; Only align the field if it isn't a struct, array, union, and if this structure isn't unaligned 
+				
+				if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->Is(TYPE_KIND_STRUCTURE)) {
+					; Dummy branch
+				}
+				else if (InUnion || IsUnaligned) {
+					; Dummy branch
+				}
+				else if (NextField->ValueType.IsArray) {
+					; Dummy branch
+				}
+				else if (NextFieldOffset % FieldSize) {
+					; Pad the field's offset to a multiple of its size
+					
+					NextFieldOffset += FieldSize - (NextFieldOffset % FieldSize)
+				}
+				
+				; If we're in a union, don't change the NextFielzOffset so all union fields get overlapping offsets
+				
+				NextField->Offset := NextFieldOffset
 			}
-			
-			; If we're in a union, don't change the NextFielzOffset so all union fields get overlapping offsets
-			
-			NextField->Offset := NextFieldOffset
 			
 			if (InUnion) {
 				if (FieldSize > MaxUnionSize) {
@@ -1381,11 +1405,13 @@ struct ParserState {
 			TotalSize := NextFieldOffset
 			
 			if (InUnion && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				;Print("End union, %i + %i\n", NextFieldOffset, MaxUnionSize)
+
 				InUnion := false
 				NextFieldOffset += MaxUnionSize
 				TotalSize := NextFieldOffset
 			}
-			
+
 			; Ignore commas after fields, since they aren't needed for parsing
 			this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
 			
@@ -1394,6 +1420,15 @@ struct ParserState {
 			}
 		}
 
+		return TotalSize
+	}
+
+	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned) {
+		PointerArray* FieldsInOrder := PointerArray:New()
+		ForType->FieldsInOrder := FieldsInOrder
+
+		this~>Types->Set("self", ForType)
+		i16 TotalSize := this->ParseNestedStruct(ForType, IsUnaligned, 0)
 		this~>Types->Set("self", null)
 
 		ForType->Size := TotalSize
@@ -1414,43 +1449,16 @@ struct ParserState {
 		
 		NewType->IsIncomplete := false
 	}
-	
-	define void ParseBitsDefinition() {
-		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for bits name")
+
+	define void ParseBitsFields(TypeInfo* NewType, i16 ByteOffset, i16 BackingTypeSize) {
+		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
 		
-		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_BIT_FIELDS)
-		
+		i8 BackingTypeSizeBits := (BackingTypeSize * 8) As i8
+
 		HashMap* Fields := NewType~>Fields
 		HashMap* Methods := NewType~>Methods
 		HashMap* StaticMethods := NewType~>StaticMethods
-		
-		Fields->Initialize()
-		Methods->Initialize()
-		StaticMethods->Initialize()
-		
-		this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
-		
-		ASTNode* BackingTypeNode := this->ParseTypeNode()
-		Type BackingType := BackingTypeNode->ValueType
-		
-		TypeInfo* BackingBase := GetBaseType(BackingType)
-		i32 BackingDepth := GetPointerDepth(BackingType)
-		
-		if (BackingBase->Is(TYPE_KIND_STRUCTURE) || BackingDepth) {
-			; Invalid types for bits backing types
-			
-			BackingTypeNode->Error("Bits backing type must be a plain integer type.")
-		}
-		
-		i8 BackingTypeSize := GetTypeSize(BackingType) As i8
-		i8 BackingTypeSizeBits := (BackingTypeSize * 8) As i8
-		
-		NewType->Size := BackingTypeSize
-		
-		this~>Types->Set("self", NewType)
-		
-		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for bits type body.")
-		
+
 		loop {
 			i8 IsMethod := false
 			i8 IsStaticMethod := false
@@ -1519,7 +1527,8 @@ struct ParserState {
 			SafeString* FieldName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected bit field name.")->StringValue
 			
 			NextField->Name := FieldName
-			NextField->Offset := BackingTypeSize
+			NextField->Offset := ByteOffset
+			NextField->BitBackingSize := BackingTypeSize As i8
 			NextField->BitStartIndex := StartIndex
 			NextField->BitEndIndex := EndIndex
 			
@@ -1549,6 +1558,47 @@ struct ParserState {
 				break
 			}
 		}
+	}
+
+	define Type ParseBitsAsType() {
+		this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_AS, "Expected 'as' before bits backing type name")
+		
+		ASTNode* BackingTypeNode := this->ParseTypeNode()
+		Type BackingType := BackingTypeNode->ValueType
+		
+		TypeInfo* BackingBase := GetBaseType(BackingType)
+		i32 BackingDepth := GetPointerDepth(BackingType)
+		
+		if (BackingBase->Is(TYPE_KIND_STRUCTURE) || BackingDepth) {
+			; Invalid types for bits backing types
+			
+			BackingTypeNode->Error("Bits backing type must be a plain integer type.")
+		}
+
+		return BackingType
+	}
+	
+	define void ParseBitsDefinition() {
+		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for bits name")
+		
+		TypeInfo* NewType := this->ParseCustomTypeName(NameToken, TYPE_KIND_BIT_FIELDS)
+		
+		HashMap* Fields := NewType~>Fields
+		HashMap* Methods := NewType~>Methods
+		HashMap* StaticMethods := NewType~>StaticMethods
+		
+		Fields->Initialize()
+		Methods->Initialize()
+		StaticMethods->Initialize()
+		
+		Type BackingType := this->ParseBitsAsType()
+		
+		i8 BackingTypeSize := GetTypeSize(BackingType) As i8
+		NewType->Size := BackingTypeSize
+		
+		this~>Types->Set("self", NewType)
+		
+		this->ParseBitsFields(NewType, 0, BackingTypeSize)
 		
 		this~>Types->Set("self", null)
 	}

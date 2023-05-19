@@ -167,9 +167,9 @@ struct BinaryExpression {
 ; Struct Access
 
 struct StructField {
-	SourceContext* DefinedAt,
-	SafeString* Name,
-	Type ValueType,
+	SourceContext* DefinedAt
+	SafeString* Name
+	Type ValueType
 	
 	union {
 		i32 Extra
@@ -177,11 +177,12 @@ struct StructField {
 	}
 	
 	union {
-		i16 Offset,
+		i16 Offset
 		i32 EnumValue
 	}
 	
-	i8 BitStartIndex,
+	i8 BitBackingSize
+	i8 BitStartIndex
 	i8 BitEndIndex
 }
 
