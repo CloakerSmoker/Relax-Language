@@ -159,6 +159,10 @@ i8 KEYWORD_EXTENDS := 27
 ; Should be zero, but somehow I used 0 as a regular value
 i8 KEYWORD_NONE := 127
 
+define i8 IsIdentifier(i8 Character) {
+	return IsAlphaNumeric(Character) || Character = '?'
+}
+
 struct KeywordMapping {
 	i8 Value
 }
@@ -303,7 +307,7 @@ struct LexerState {
 		this->DefineKeyword("enum",      KEYWORD_ENUM)
 		this->DefineKeyword("external",  KEYWORD_EXTERNAL)
 		this->DefineKeyword("export",    KEYWORD_EXPORT)
-		this->DefineKeyword("class",    KEYWORD_CLASS)
+		;this->DefineKeyword("class",    KEYWORD_CLASS)
 		this->DefineKeyword("extends",    KEYWORD_EXTENDS)
 		
 		return this
@@ -846,11 +850,11 @@ struct LexerState {
 				this->Backtrack()
 			}
 			
-			while (IsAlphaNumeric(NextCharacter) && !this->AtEnd()) {
+			while (IsIdentifier(NextCharacter) && !this->AtEnd()) {
 				NextCharacter := this->GetNextCharacter()
 			}
 			
-			if !(IsAlphaNumeric(NextCharacter)) {
+			if !(IsIdentifier(NextCharacter)) {
 				this->Backtrack()
 			}
 			
