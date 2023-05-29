@@ -149,6 +149,36 @@ i8 NODE_TYPE_CAST := 27
 
 ; AST node structs region
 
+#Require "$/PointerArray.rlx"
+
+struct QualifiedName {
+	SourceContext Context
+
+	i8 Anchored
+	PointerArray* Parts ; <Token*>
+	Token* LocalPart
+
+	static self* New(i8 Anchored) {
+		self* this := Alloc(#self)
+
+		this->Anchored := Anchored
+		this->Parts := PointerArray:New()
+
+		return this
+	}
+
+	define void Push(Token* Part) {
+		this->Parts->Push(Part)
+	}
+
+	define i32 Count() {
+		return this->Parts->Count()
+	}
+	define Token* At(i32 Index) {
+		return this->Parts->At(Index)
+	}
+}
+
 ; Unary
 
 struct UnaryExpression {

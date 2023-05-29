@@ -133,6 +133,64 @@ define i16 GetPointerDepth(Type T) {
 	return T.PointerDepth
 }
 
+struct TypeNamespace {
+	SourceContext* DefinedAt
+
+	AVLTree* Children ; <FNV1A(i8*), TypeNamespace*>
+	AVLTree* Entries ; <FNV1A(i8*), TypeInfo*>
+
+	static self* New(SourceContext* DefinedAt) {
+		self* this := Alloc(#self)
+
+		this->DefinedAt := DefinedAt
+
+		this->Children := AVLTree:New(#TypeNamespace*)
+		this->Entries := AVLTree:New(#TypeInfo*)
+
+		return this
+	}
+
+	define TypeInfo* LookupEntry(Token* Name) {
+		return this->Entries->GetPointer(Name->StringValue->Hash())
+	}
+
+	define TypeNamespace* FindChild(Token* Name) {
+		return this->Children->GetPointer(Name->StringValue->Hash())
+	}
+	
+	define void CheckDuplicates(Token* Name) {
+		TypeInfo* DuplicateType := this->LookupEntry(Name)
+
+		if (DuplicateType) {
+			Name~>Context->Notify(NOTIFY_ERROR, "Name already defined")
+			DuplicateType->DefinedAt->Notify(NOTIFY_FATAL, "Previously defined here")
+		}
+
+		TypeNamespace* DuplicateChild := this->FindChild(Name)
+
+		if (DuplicateChild) {
+			Name~>Context->Notify(NOTIFY_ERROR, "Name already defined")
+			DuplicateChild->DefinedAt->Notify(NOTIFY_FATAL, "Previously defined here")
+		}
+	}
+
+	define TypeNamespace* AddChild(Token* Name) {
+		this->CheckDuplicates(Name)
+
+		TypeNamespace* Child := self:New(Name~>Context)
+
+		this->Children->InsertPointer(Name->StringValue->Hash(), Child)
+
+		return Child
+	}
+
+	define void DefineEntry(Token* Name, TypeInfo* Value) {
+		this->CheckDuplicates(Name)
+
+		this->Entries->InsertPointer(Name->StringValue->Hash(), Value)
+	}
+}
+
 define i32 StringifyType(void* RawBuffer, Type T) {
 	i8* Buffer := RawBuffer
 	i32 Index := 0

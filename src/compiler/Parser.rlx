@@ -124,6 +124,67 @@ struct ParserState {
 	HashMap Instructions,
 	
 	HashMap Types,
+
+	TypeNamespace* RootNamespace
+	TypeNamespace* CurrentNamespace
+
+	define TypeNamespace* FindOrAddNamespace(QualifiedName* Name, i8 AllowAdding) {
+		TypeNamespace* Root := this->CurrentNamespace
+
+		if (Name->Anchored) {
+			Root := this->RootNamespace
+		}
+
+		for (i32 Index := 0, Index < Name->Count(), Index++) {
+			Token* ChildName := Name->At(Index)
+			TypeNamespace* Child := Root->FindChild(ChildName)
+
+			if (Child = null) {
+				if (AllowAdding) {
+					Child := Root->AddChild(ChildName)
+				}
+				else {
+					ChildName~>Context->Error("Child namespace does not exist")
+				}
+			}
+
+			Root := Child
+		}
+
+		return Root
+	}
+
+	define TypeNamespace* FindOrAddNamespace(QualifiedName* Name) {
+		return this->FindOrAddNamespace(Name, true)
+	}
+
+	define TypeNamespace* FindNamespace(QualifiedName* Name) {
+		return this->FindOrAddNamespace(Name, false)
+	}
+
+	define TypeNamespace* EnterNamespace(QualifiedName* Name) {
+		TypeNamespace* Old := this->CurrentNamespace
+
+		this->CurrentNamespace := this->FindOrAddNamespace(Name)
+
+		return Old
+	}
+
+	define void ExitNamespace(TypeNamespace* Old) {
+		this->CurrentNamespace := Old
+	}
+
+	define TypeInfo* LookupQualifiedName(QualifiedName* Name) {
+		TypeNamespace* Namespace := this->FindNamespace(Name)
+
+		return Namespace->LookupEntry(Name->LocalPart)
+	}
+
+	define void DefinedQualifiedName(QualifiedName* Name, TypeInfo* Value) {
+		TypeNamespace* Namespace := this->FindNamespace(Name)
+
+		Namespace->DefineEntry(Name->LocalPart, Value)
+	}
 	
 	HashMap NameReplacements,
 

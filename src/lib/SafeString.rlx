@@ -158,6 +158,10 @@ struct SafeString {
 	define i8* Raw() {
 		return this->Buffer
 	}
+
+	define i64 Hash() {
+		return FNV1A(this->Buffer, this->Length)
+	}
 }
 
 define SafeString* AllocateNewSafeString() {
