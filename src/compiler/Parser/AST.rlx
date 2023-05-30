@@ -182,16 +182,16 @@ define void DoQualifiedNamePrint(PrintOutputAdapterPrototype* this, i8* Format, 
 	QualifiedName* Name := Parameters[*ParameterIndex] As QualifiedName*
 	
 	if (Name->Anchored) {
-		Print("::")
+		this->Print("::")
 	}
 
 	for (i32 Index := 0, Index < Name->Count(), Index++) {
 		Token* Next := Name->At(Index)
 
-		Print("%s::", Next->StringValue->Buffer)
+		this->Print("%s::", Next->StringValue->Buffer)
 	}
 
-	Print("%s", Name->LocalPart->StringValue->Buffer)
+	this->Print("%s", Name->LocalPart->StringValue->Buffer)
 	
 	*ParameterIndex += 1
 }

@@ -197,6 +197,10 @@ struct TypeNamespace {
 	define void DefineEntry(i8* Name, TypeInfo* Value) {
 		this->Entries->InsertPointer(FNV1A(Name), Value)
 	}
+	
+	define void DeleteEntry(i8* Name) {
+		this->Entries->Remove(FNV1A(Name))
+	}
 }
 
 define i32 StringifyType(void* RawBuffer, Type T) {

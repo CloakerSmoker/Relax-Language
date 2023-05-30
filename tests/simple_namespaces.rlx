@@ -1,0 +1,46 @@
+#Require "$/Memory.rlx"
+#Require "$/Console.rlx"
+
+struct dog::cat::bird {
+    i32 first
+    i32 second
+}
+
+struct bird {
+    i32 first
+}
+
+bits dog::cat::rat as i32 {
+    [10:20] storage
+}
+
+struct cat::bird {
+    i32[4] A
+    i16 B
+    i8 C
+    i8 D
+
+    static i32 return_20() {
+        return 20
+    }
+}
+
+define i32 Main() {
+    dog::cat::bird* test := Alloc(#dog::cat::bird)
+
+    test->second := 20
+
+    Print("%i\n", test->second)
+
+    dog::cat::rat pal := 0 As dog::cat::rat
+
+    pal.storage := 20
+
+    Print("%i\n", pal.storage)
+
+    Print("%i\n", #cat::bird)
+
+    Print("%i\n", cat::bird:return_20())
+
+    return 0
+}

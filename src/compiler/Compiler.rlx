@@ -118,19 +118,19 @@ struct CompilerState {
 		return this->Config->LookupIncludedPath(Path)
 	}
 	
-	define void TranslateTypeNamespace(TypeNamespace* Namespace) {
-		i32 Count := Namespace->Entries->Count()
+	define void TranslateTypeNamespace(TypeNamespace* Container) {
+		i32 Count := Container->Entries->Count()
 
 		for (i32 Index := 0, Index < Count, Index++) {
-			TypeInfo* Info := Namespace->Entries->At(Index)
+			TypeInfo* Info := Container->Entries->PointerAt(Index)
 
 			this->DWARF->TranslateTypeInfo(Info, false)
 		}
 
-		i32 Count := Namespace->Children->Count()
+		i32 Count := Container->Children->Count()
 
 		for (i32 Index := 0, Index < Count, Index++) {
-			TypeNamespace* Child := Namespace->Children->At(Index)
+			TypeNamespace* Child := Container->Children->PointerAt(Index)
 
 			this->TranslateTypeNamespace(Child)
 		}
@@ -551,11 +551,11 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 	}
 }
 
-define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Namespace) {
-	i32 Count := Namespace->Entries->Count()
+define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Container) {
+	i32 Count := Container->Entries->Count()
 
 	for (i32 Index := 0, Index < Count, Index++) {
-		TypeInfo* Info := Namespace->Entries->At(Index)
+		TypeInfo* Info := Container->Entries->PointerAt(Index)
 
 		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS)) {
 			CompileFunctionHashMap(Compiler, Info~>Methods)
@@ -563,10 +563,10 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Namespa
 		}
 	}
 
-	i32 Count := Namespace->Children->Count()
+	i32 Count := Container->Children->Count()
 
 	for (i32 Index := 0, Index < Count, Index++) {
-		TypeNamespace* Child := Namespace->Children->At(Index)
+		TypeNamespace* Child := Container->Children->PointerAt(Index)
 
 		CompileTypeNamespace(Compiler, Child)
 	}

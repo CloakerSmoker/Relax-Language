@@ -477,6 +477,9 @@ struct AVLTree {
 	define void* PointerValueAt(i32 Index) {
 		return *(this->Root->At(Index)->Value As void**)
 	}
+	define void* PointerAt(i32 Index) {
+		return this->PointerValueAt(Index)
+	}
 	define i32 IndexOf(i64 Key) {
 		return this->Root->IndexOf(Key)
 	}
