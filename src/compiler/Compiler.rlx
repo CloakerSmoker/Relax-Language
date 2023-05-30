@@ -118,6 +118,24 @@ struct CompilerState {
 		return this->Config->LookupIncludedPath(Path)
 	}
 	
+	define void TranslateTypeNamespace(TypeNamespace* Namespace) {
+		i32 Count := Namespace->Entries->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TypeInfo* Info := Namespace->Entries->At(Index)
+
+			this->DWARF->TranslateTypeInfo(Info, false)
+		}
+
+		i32 Count := Namespace->Children->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TypeNamespace* Child := Namespace->Children->At(Index)
+
+			this->TranslateTypeNamespace(Child)
+		}
+	}
+
 	define void InitializeDebugInfo() {
 		BuildConfig* Config := this->Config
 		
@@ -135,25 +153,7 @@ struct CompilerState {
 			this->DWARF->AddBaseType("i64", 8)
 			this->DWARF->AddBaseType("void", 8)
 
-			HashMap* RawTypes := this->Parser~>Types
-			void* Elements := RawTypes->Elements
-			i32 MaxIndex := RawTypes->BufferMaxCount As i32
-			
-			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
-				if (Elements[ElementIndex]) {
-					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-					
-					while (FoundElement) {
-						TypeInfo* NextType := FoundElement->Value
-						
-						if (NextType) {
-							this->DWARF->TranslateTypeInfo(NextType, false)
-						}
-						
-						FoundElement := FoundElement->NextElement
-					}
-				}
-			}
+			this->TranslateTypeNamespace(this->Parser->RootNamespace)
 			
 			;this->DWARF->LineInfo->AddDirectory("/")
 			this->DWARF->LineInfo->AddFile(AbsoluteSourceFile)
@@ -551,6 +551,27 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 	}
 }
 
+define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Namespace) {
+	i32 Count := Namespace->Entries->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		TypeInfo* Info := Namespace->Entries->At(Index)
+
+		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS)) {
+			CompileFunctionHashMap(Compiler, Info~>Methods)
+			CompileFunctionHashMap(Compiler, Info~>StaticMethods)
+		}
+	}
+
+	i32 Count := Namespace->Children->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		TypeNamespace* Child := Namespace->Children->At(Index)
+
+		CompileTypeNamespace(Compiler, Child)
+	}
+}
+
 define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
 	CountReferences(Parser)
 	EliminateGlobals(Parser)
@@ -630,28 +651,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	CompileFunctionHashMap(Compiler, Parser~>Functions)
 	
 	; Loop through each custom type
-	HashMap* Types := Parser~>Types
-	
-	i32 ElementCount := Types->BufferMaxCount As i32
-	void* Elements := Types->Elements
-	
-	for (i32 ElementIndex := 0, ElementIndex < ElementCount, ElementIndex += 1) {
-		if (Elements[ElementIndex]) {
-			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-			
-			while (FoundElement) {
-				TypeInfo* NextType := (FoundElement->Value) As TypeInfo*
-				
-				/* If the type is a struct then compile any methods it might have */
-				if (NextType && (NextType->Is(TYPE_KIND_STRUCTURE) || NextType->Is(TYPE_KIND_BIT_FIELDS))) {
-					CompileFunctionHashMap(Compiler, NextType~>Methods)
-					CompileFunctionHashMap(Compiler, NextType~>StaticMethods)
-				}
-				
-				FoundElement := FoundElement->NextElement
-			}
-		}
-	}
+	CompileTypeNamespace(Compiler, Parser->RootNamespace)
 	
 	if (Parser->MainFunction = null) {
 		SwapOutputStream()

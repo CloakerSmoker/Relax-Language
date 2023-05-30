@@ -158,10 +158,9 @@ struct QualifiedName {
 	PointerArray* Parts ; <Token*>
 	Token* LocalPart
 
-	static self* New(i8 Anchored) {
+	static self* New() {
 		self* this := Alloc(#self)
 
-		this->Anchored := Anchored
 		this->Parts := PointerArray:New()
 
 		return this
@@ -178,6 +177,31 @@ struct QualifiedName {
 		return this->Parts->At(Index)
 	}
 }
+
+define void DoQualifiedNamePrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	QualifiedName* Name := Parameters[*ParameterIndex] As QualifiedName*
+	
+	if (Name->Anchored) {
+		Print("::")
+	}
+
+	for (i32 Index := 0, Index < Name->Count(), Index++) {
+		Token* Next := Name->At(Index)
+
+		Print("%s::", Next->StringValue->Buffer)
+	}
+
+	Print("%s", Name->LocalPart->StringValue->Buffer)
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype QualifiedNameFormatPrototype {
+	Name: "qn",
+	Format: &DoQualifiedNamePrint
+}
+
+i32 QUALIFIED_NAME_FORMAT_PROTOTYPE_ID := AddPrintFormat(&QualifiedNameFormatPrototype)
 
 ; Unary
 

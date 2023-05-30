@@ -401,11 +401,18 @@
 	define ASTNode* ParseExpressionOperand() {
 		; Parses and returns a single operand of an expression
 		
+		i32 Before := this->Freeze()
+
 		Token* NextToken := this->GetNextToken()
 		ASTNode* Result := null
 		i8* ErrorMessage := null
-		
+
+		i8 AnchorQualifiedName := false
 		FunctionDefine* CurrentFunction := this->CurrentFunction
+
+		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COLON_COLON)) {
+			AnchorQualifiedName := true
+		}
 		
 		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			; If the next token is an `(`, then parse a sub-expression and consume a closing `)`
@@ -420,17 +427,20 @@
 				Result := this->ParseFunctionPointerCall(Result)
 			}
 		}
-		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER) {
+		else if (NextToken->Type = TOKEN_TYPE_IDENTIFIER || AnchorQualifiedName) {
 			; Else if the next token is an identifier.
 			;  `TryParseFunctionCall` check for built-in function calls, static method calls, and regular
 			;   function calls, returning an ASTNode* for each, and null when it couldn't parse any flavor of
 			;    function call, aka this identifier is just a variable access.
+
+			i32 AfterNextToken := this->Freeze()
+			this->Unfreeze(Before)
+
+			TypeInfo* StaticBase := null
+			QualifiedName* Name := this->TryParseQualifiedName(&ErrorMessage)
+			StaticBase := this->TryLookupQualifiedName(Name)
 			
-			HashMapElement* TypeElement := this~>Types->Get(NextToken->StringValue)
-			
-			if (TypeElement && !(TypeElement->Value As TypeInfo*)->IsIncomplete) {
-				TypeInfo* StaticBase := TypeElement->Value
-				
+			if (StaticBase && !StaticBase->IsIncomplete) {
 				if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 					Token* StaticMethodNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static field name")
 					
@@ -467,6 +477,9 @@
 					}
 				}
 				else {
+					; Type***[#file what?????]
+
+
 					i16 PointerDepth := 0
 					
 					while (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_STAR)) {
@@ -605,6 +618,8 @@
 				}
 			}
 			else {
+				NextToken := Name->LocalPart
+
 				VariableInfo* MaybeFunctionPointer := this->TryFindVariable(NextToken)
 				
 				if (MaybeFunctionPointer && TypeIsCallable(MaybeFunctionPointer->Type)) {
@@ -718,8 +733,8 @@
 					;  and maybe even a function name
 					
 					i32 Frozen := this->Freeze()
-					Token* MaybeFunctionName := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Dummy", &ErrorMessage)
-					
+					QualifiedName* MaybeFunctionName := this->TryParseQualifiedName(&ErrorMessage)
+
 					if (MaybeFunctionName && ErrorMessage = null) {
 						; In this case, we've got `&Name`, so it can only be getting the address of a
 						;  variable, function, or static function (Depending on if `Name` is followed by a `:`, or
@@ -731,7 +746,7 @@
 						if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 							; We have `&Name:OtherName`, which means we need to lookup a static method for our result
 							
-							Token* StaticMethodTypeName := MaybeFunctionName
+							QualifiedName* StaticMethodTypeName := MaybeFunctionName
 							Token* StaticMethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected static method name")
 							
 							FoundDefine := this->LookupStaticMethod(StaticMethodTypeName, StaticMethodName)
@@ -740,14 +755,12 @@
 							; We've got `&Name.Whatever`, which is either getting the address of a method
 							;  (aka `Name` is a type), or getting the address of a field (aka `Name` is a variable name)
 							
-							Token* MethodTypeName := MaybeFunctionName
+							QualifiedName* MethodTypeName := MaybeFunctionName
 							Token* MethodName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected method name")
+
+							TypeInfo* MethodBase := this->LookupQualifiedName(MethodTypeName)
 							
-							HashMapElement* MethodBaseElement := this~>Types->Get(MethodTypeName->StringValue)
-							
-							if (MethodBaseElement) {
-								TypeInfo* MethodBase := MethodBaseElement->Value
-								
+							if (MethodBase) {
 								HashMapElement* MethodElement := MethodBase~>Methods->Get(MethodName->StringValue)
 								
 								if (MethodElement) {
@@ -759,7 +772,7 @@
 						else {
 							; Else, we've just got `&Name`, so we check for `Name` as a function
 							
-							HashMapElement* FoundFunction := this~>Functions->Get(MaybeFunctionName->StringValue)
+							HashMapElement* FoundFunction := this~>Functions->Get(MaybeFunctionName->LocalPart->StringValue)
 							
 							if (FoundFunction) {
 								FoundDefine := FoundFunction->Value As FunctionDefine*

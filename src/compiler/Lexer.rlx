@@ -112,6 +112,7 @@ i8 PUNCTUATION_CLOSE_BRACKET := 4
 i8 PUNCTUATION_COMMA := 5
 i8 PUNCTUATION_AT := 6
 
+i8 PUNCTUATION_COLON_COLON := 7
 
 i8 KEYWORD_DECLARE := 0
 i8 KEYWORD_DEFINE := 1
@@ -153,8 +154,7 @@ i8 KEYWORD_ENUM := 23
 i8 KEYWORD_EXTERNAL := 24
 i8 KEYWORD_EXPORT := 25
 
-i8 KEYWORD_CLASS := 26
-i8 KEYWORD_EXTENDS := 27
+i8 KEYWORD_NAMESPACE := 26
 
 ; Should be zero, but somehow I used 0 as a regular value
 i8 KEYWORD_NONE := 127
@@ -307,8 +307,7 @@ struct LexerState {
 		this->DefineKeyword("enum",      KEYWORD_ENUM)
 		this->DefineKeyword("external",  KEYWORD_EXTERNAL)
 		this->DefineKeyword("export",    KEYWORD_EXPORT)
-		;this->DefineKeyword("class",    KEYWORD_CLASS)
-		this->DefineKeyword("extends",    KEYWORD_EXTENDS)
+		this->DefineKeyword("namespace", KEYWORD_NAMESPACE)
 		
 		return this
 	}
@@ -686,6 +685,10 @@ struct LexerState {
 			return this->AppendOperator(OPERATOR_BANG)
 		}
 		else if (NextCharacter = ':') {
+			if (this->NextCharacterMatches(':')) {
+				return this->AppendPunctuation(PUNCTUATION_COLON_COLON)
+			}
+
 			return this->AppendOperator(OPERATOR_COLON)
 		}
 		else if (NextCharacter = '(') {

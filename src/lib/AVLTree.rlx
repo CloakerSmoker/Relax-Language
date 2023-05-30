@@ -517,7 +517,13 @@ struct AVLTree {
 		return Node->Value
 	}
 	define void* GetPointer(i64 Key) {
-		return *(this->Get(Key) As void**)
+		void** Result := this->Get(Key) As void**
+
+		if (Result = null) {
+			return null
+		}
+
+		return *Result
 	}
 
 	define void Free() {
