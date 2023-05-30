@@ -135,14 +135,32 @@ define i16 GetPointerDepth(Type T) {
 
 struct TypeNamespace {
 	SourceContext* DefinedAt
+	QualifiedName* Name
+
+	TypeNamespace* Parent
 
 	AVLTree* Children ; <FNV1A(i8*), TypeNamespace*>
 	AVLTree* Entries ; <FNV1A(i8*), TypeInfo*>
 
-	static self* New(SourceContext* DefinedAt) {
+	static self* NewRoot() {
 		self* this := Alloc(#self)
 
-		this->DefinedAt := DefinedAt
+		this->Name := QualifiedName:New()
+		this->Name->Anchored := true
+
+		this->Children := AVLTree:New(#TypeNamespace*)
+		this->Entries := AVLTree:New(#TypeInfo*)
+
+		return this
+	}
+
+	static self* New(TypeNamespace* Parent, Token* Name) {
+		self* this := Alloc(#self)
+
+		this->Name := Parent->Name->Clone()->Push(Name)
+		this->DefinedAt := Name~>Context
+
+		this->Parent := Parent
 
 		this->Children := AVLTree:New(#TypeNamespace*)
 		this->Entries := AVLTree:New(#TypeInfo*)
@@ -151,7 +169,17 @@ struct TypeNamespace {
 	}
 
 	define TypeInfo* LookupEntry(Token* Name) {
-		return this->Entries->GetPointer(Name->StringValue->Hash())
+		TypeInfo* Local := this->Entries->GetPointer(Name->StringValue->Hash())
+
+		if (Local) {
+			return Local
+		}
+		else if (this->Parent != null) {
+			return this->Parent->LookupEntry(Name)
+		}
+		else {
+			return null
+		}
 	}
 
 	define TypeNamespace* FindChild(Token* Name) {
@@ -163,21 +191,21 @@ struct TypeNamespace {
 
 		if (DuplicateType) {
 			Name~>Context->Notify(NOTIFY_ERROR, "Name already defined")
-			DuplicateType->DefinedAt->Notify(NOTIFY_FATAL, "Previously defined here")
+			DuplicateType->DefinedAt->Notify(NOTIFY_FATAL, "Previous definition")
 		}
 
 		TypeNamespace* DuplicateChild := this->FindChild(Name)
 
 		if (DuplicateChild) {
 			Name~>Context->Notify(NOTIFY_ERROR, "Name already defined")
-			DuplicateChild->DefinedAt->Notify(NOTIFY_FATAL, "Previously defined here")
+			DuplicateChild->DefinedAt->Notify(NOTIFY_FATAL, "Previous definition")
 		}
 	}
 
 	define TypeNamespace* AddChild(Token* Name) {
 		this->CheckDuplicates(Name)
 
-		TypeNamespace* Child := self:New(Name~>Context)
+		TypeNamespace* Child := self:New(this, Name)
 
 		this->Children->InsertPointer(Name->StringValue->Hash(), Child)
 
@@ -200,6 +228,55 @@ struct TypeNamespace {
 	
 	define void DeleteEntry(i8* Name) {
 		this->Entries->Remove(FNV1A(Name))
+	}
+
+	static void Indent(i32 Depth) {
+		for (i32 Index := 0, Index < Depth, Index++) {
+			Print("\t")
+		}
+	}
+
+	define void Dump(i32 Depth) {
+		self:Indent(Depth)
+
+		if (this->Parent) {
+			Token* Name := this->Name->Parts->Last()
+			Print("%s:\n", Name->StringValue->Buffer)
+		}
+		else {
+			Print("<root>:\n")
+		}
+
+		i32 Count := this->Entries->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			self:Indent(Depth + 1)
+
+			TypeInfo* Info := this->Entries->PointerAt(Index)
+
+			if (Info->Is(TYPE_KIND_BIT_FIELDS)) {
+				Print("bits")
+			}
+			else if (Info->Is(TYPE_KIND_BUILTIN)) {
+				Print("builtin")
+			}
+			else if (Info->Is(TYPE_KIND_ENUMERATION)) {
+				Print("enum")
+			}
+			else if (Info->Is(TYPE_KIND_STRUCTURE)) {
+				Print("struct")
+			}
+
+			Print(" %s\n", Info->Name->Buffer)
+		}
+
+		i32 Count := this->Children->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			TypeNamespace* Child := this->Children->PointerAt(Index)
+
+			Child->Dump(Depth + 1)
+		}
 	}
 }
 

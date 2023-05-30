@@ -897,7 +897,7 @@ struct LexerState {
 			
 			return this->AppendToken(TOKEN_TYPE_IDENTIFIER, TokenText)
 		}
-		else if (NextCharacter = '#') {
+		else if (NextCharacter = '#' && IsAlphaNumeric(this->PeekNextCharacter())) {
 			NextCharacter := this->PeekNextCharacter()
 			
 			while (IsAlphaNumeric(NextCharacter) && !this->AtEnd()) {
@@ -1071,6 +1071,9 @@ struct LexerState {
 				
 				return this->AppendOperator(OPERATOR_POUND)
 			}
+		}
+		else if (NextCharacter = '#') {
+			return this->AppendOperator(OPERATOR_POUND)
 		}
 		else if (NextCharacter = 0 || IsWhiteSpace(NextCharacter)) {
 			/* Ignore null characters and whitespace */

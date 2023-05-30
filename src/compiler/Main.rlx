@@ -37,7 +37,10 @@ define void CompilerUnhandledExceptionHandler(i64 Code) {
 		
 		Child := Child->Child
 	}
+
+	Print("Parser Namespaces:\n")
 	
+	CurrentConfig->Parser->RootNamespace->Dump(0)
 }
 
 i8* ProgramName := "[compiler]"
@@ -286,6 +289,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 	Config->Lexer := Lexer
 	
 	ParserState* Parser := ParserState:New(Config, Lexer)
+	Config->Parser := Parser
+
 	Parser->ParseProgram()
 
 	if (Config->DumpInfo & DUMP_MAKEDEP) {

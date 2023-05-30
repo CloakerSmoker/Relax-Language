@@ -14,7 +14,7 @@ bits dog::cat::rat as i32 {
     [10:20] storage
 }
 
-struct cat::bird {
+struct cat::mouse {
     i32[4] A
     i16 B
     i8 C
@@ -22,6 +22,14 @@ struct cat::bird {
 
     static i32 return_20() {
         return 20
+    }
+}
+
+namespace cat {
+    struct rat {
+        i32 first
+        bird second
+        ::cat::mouse third
     }
 }
 
@@ -38,9 +46,9 @@ define i32 Main() {
 
     Print("%i\n", pal.storage)
 
-    Print("%i\n", #cat::bird)
+    Print("%i\n", #::cat::mouse)
 
-    Print("%i\n", cat::bird:return_20())
+    Print("%i\n", ::cat::mouse:return_20())
 
     return 0
 }

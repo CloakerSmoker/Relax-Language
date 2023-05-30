@@ -124,6 +124,8 @@ struct IncludeEntry {
 
 struct BuildConfig {
 	LexerState* Lexer
+	ParserState* Parser
+
 	i8* SourceFile
 	i8* LibraryDirectory
 	i8* PlatformDirectory

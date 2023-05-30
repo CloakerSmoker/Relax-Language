@@ -166,8 +166,18 @@ struct QualifiedName {
 		return this
 	}
 
-	define void Push(Token* Part) {
+	define self* Clone() {
+		self* Result := CloneMemory(this, #self)
+
+		Result->Parts := this->Parts->Clone()
+
+		return Result
+	}
+
+	define self* Push(Token* Part) {
 		this->Parts->Push(Part)
+
+		return this
 	}
 
 	define i32 Count() {
@@ -191,7 +201,9 @@ define void DoQualifiedNamePrint(PrintOutputAdapterPrototype* this, i8* Format, 
 		this->Print("%s::", Next->StringValue->Buffer)
 	}
 
-	this->Print("%s", Name->LocalPart->StringValue->Buffer)
+	if (Name->LocalPart) {
+		this->Print("%s", Name->LocalPart->StringValue->Buffer)
+	}
 	
 	*ParameterIndex += 1
 }
