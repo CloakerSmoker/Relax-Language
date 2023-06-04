@@ -16,6 +16,10 @@ struct Test {
 	i64 C,
 	i32 D,
 	i32 E
+
+	i64 _
+	i8 _
+	i8[20] _
 }
 
 struct Test2 unaligned {

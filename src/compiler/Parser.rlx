@@ -1486,42 +1486,49 @@ struct ParserState {
 				this->ParseBitsFields(ForType, NextFieldOffset, FieldSize)
 			}
 			else {
-				StructField* NextField := Alloc(#StructField) As StructField*
-
-				if (!InUnion || IsFirstUnionMember) {
-					FieldsInOrder->Push(NextField)
-				}
-				
-				NextField->ValueType := this->ParseType(true)
+				Type FieldType := this->ParseType(true)
 				
 				Token* FieldNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for struct field name")
 				SafeString* FieldName := FieldNameToken->StringValue
-				NextField->Name := FieldName
-				NextField->DefinedAt := FieldNameToken~>Context
-				
-				HashMapElement* LastDefinitionElement := Fields->Get(FieldName)
-				
-				if (LastDefinitionElement) {
-					StructField* LastDefinition := LastDefinitionElement->Value
+
+				i8 Padding? := FieldName->Equals("_")
+
+				if !(Padding?) {
+					StructField* NextField := Alloc(#StructField) As StructField*
+
+					if (!InUnion || IsFirstUnionMember) {
+						FieldsInOrder->Push(NextField)
+					}
 					
-					this->DuplicateDefinitionError(FieldNameToken~>Context, LastDefinition->DefinedAt)
+					NextField->ValueType := FieldType
+
+					NextField->Name := FieldName
+					NextField->DefinedAt := FieldNameToken~>Context
+					
+					HashMapElement* LastDefinitionElement := Fields->Get(FieldName)
+					
+					if (LastDefinitionElement) {
+						StructField* LastDefinition := LastDefinitionElement->Value
+						
+						this->DuplicateDefinitionError(FieldNameToken~>Context, LastDefinition->DefinedAt)
+					}
+					
+					Fields->Set(FieldName, NextField)
 				}
 				
-				Fields->Set(FieldName, NextField)
-				
-				i16 FieldSize := GetTypeStorageSize(NextField->ValueType)
+				i16 FieldSize := GetTypeStorageSize(FieldType)
 
 				;Print("Align To %i from %i\n", FieldSize, NextFieldOffset)
 				
 				; Only align the field if it isn't a struct, array, union, and if this structure isn't unaligned 
 				
-				if (GetPointerDepth(NextField->ValueType) = 0 && GetBaseType(NextField->ValueType)->Is(TYPE_KIND_STRUCTURE)) {
+				if (GetPointerDepth(FieldType) = 0 && GetBaseType(FieldType)->Is(TYPE_KIND_STRUCTURE)) {
 					; Dummy branch
 				}
 				else if (InUnion || IsUnaligned) {
 					; Dummy branch
 				}
-				else if (NextField->ValueType.IsArray) {
+				else if (FieldType.IsArray) {
 					; Dummy branch
 				}
 				else if (NextFieldOffset % FieldSize) {
@@ -1532,7 +1539,9 @@ struct ParserState {
 				
 				; If we're in a union, don't change the NextFielzOffset so all union fields get overlapping offsets
 				
-				NextField->Offset := NextFieldOffset
+				if !(Padding?) {
+					NextField->Offset := NextFieldOffset
+				}
 			}
 			
 			if (InUnion) {
