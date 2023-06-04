@@ -1477,19 +1477,13 @@ struct ParserState {
 
 			if (InUnion && this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' to open nested struct")
-				this->ParseNestedStruct(ForType, IsUnaligned, NextFieldOffset)
-				;Print("out\n")
-				;this->PeekNextToken()->Warn("nuts")
-
-				i16 FieldSize := ForType->Size - TotalSize
+				i16 FieldSize := this->ParseNestedStruct(ForType, IsUnaligned, NextFieldOffset) - TotalSize
 			}
 			else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
 				Type BackingType := this->ParseBitsAsType()
 				i16 FieldSize := GetTypeSize(BackingType)
 
 				this->ParseBitsFields(ForType, NextFieldOffset, FieldSize)
-
-				;Print("%i %i %i\n", MaxUnionSize, NextFieldOffset, FieldSize)
 			}
 			else {
 				StructField* NextField := Alloc(#StructField) As StructField*
