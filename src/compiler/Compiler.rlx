@@ -2128,14 +2128,14 @@ define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, St
 	i32 FieldOffset := TargetField->Offset
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		if (FieldOffset) {
+		if (TargetField->IsStructBitField) {
 			; byte offset + bit range
 
 			; get pointer to bits
 			CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
 
 			; dereference pointer to bits
-			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, TargetFieldSize)
+			EmitMove_RX_RIX(Compiler, ResultRegister, ResultRegister, TargetField->BitBackingSize)
 		}
 		else {
 			; bit range
@@ -2191,7 +2191,7 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
 		if (TargetField->IsStructBitField) {
 			CompileGetStructAccessPointer(Compiler, ResultPointerRegister, TargetAccess)
-			EmitMove_RX_RIX(Compiler, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) 
+			EmitMove_RX_RIX(Compiler, ResultPointerRegister, ResultPointerRegister, TargetField->BitBackingSize) 
 		}
 		else {
 			CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
@@ -2231,7 +2231,7 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 		if (TargetField->IsStructBitField) {
 			; ValueRegister is actually unused, ResultPointerRegister holds the result
 			CompileGetStructAccessPointer(Compiler, ValueRegister, TargetAccess)
-			EmitMove_RIX_RX(Compiler, ValueRegister, ResultPointerRegister, TargetFieldSize)
+			EmitMove_RIX_RX(Compiler, ValueRegister, ResultPointerRegister, TargetField->BitBackingSize)
 		}
 		else if (LeftNodeType = NODE_TYPE_VARIABLE) {
 			CompileSetVariableValue(Compiler, Left->VariableValue, ResultPointerRegister)
