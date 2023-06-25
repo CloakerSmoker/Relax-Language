@@ -250,6 +250,7 @@ struct StructField {
 	i8 BitBackingSize
 	i8 BitStartIndex
 	i8 BitEndIndex
+	i8 IsStructBitField
 }
 
 struct StructAccessExpression {

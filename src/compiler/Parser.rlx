@@ -1641,6 +1641,10 @@ struct ParserState {
 			}
 		
 			StructField* NextField := Alloc(#StructField) As StructField*
+
+			if (NewType->Is(TYPE_KIND_STRUCTURE)) {
+				NextField->IsStructBitField := true
+			}
 			
 			Type FieldType := TYPE_NONE
 			

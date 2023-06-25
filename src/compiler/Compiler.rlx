@@ -2189,7 +2189,7 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType) As i8
 	
 	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
-		if (FieldOffset) {
+		if (TargetField->IsStructBitField) {
 			CompileGetStructAccessPointer(Compiler, ResultPointerRegister, TargetAccess)
 			EmitMove_RX_RIX(Compiler, ResultPointerRegister, ResultPointerRegister, TargetFieldSize) 
 		}
@@ -2228,7 +2228,7 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 		ASTNode* Left := TargetAccess->Left
 		i8 LeftNodeType := Left->NodeType
 
-		if (FieldOffset) {
+		if (TargetField->IsStructBitField) {
 			; ValueRegister is actually unused, ResultPointerRegister holds the result
 			CompileGetStructAccessPointer(Compiler, ValueRegister, TargetAccess)
 			EmitMove_RIX_RX(Compiler, ValueRegister, ResultPointerRegister, TargetFieldSize)
