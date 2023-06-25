@@ -1,0 +1,216 @@
+#Require "$/Console.rlx"
+
+struct POINT {
+    i32 X
+    i32 Y
+}
+
+struct DEVMODEA {
+    i8 Size
+
+    union {
+        struct {
+            i8 PaperLength ; 1
+            i8 PaperWidth  ; 2
+            i16 Dummy1 ; 3 4
+            i8[4] String ; 5 6 7 8
+            i8 Tail ; 9
+        }
+
+        POINT Position ; 1 2 3 4 5 6 7 8 9
+
+        struct {
+            i8 DisplayOrentation ; 1 (2 3 4)
+            i32 DisplayFixedOutput ; 5 6 7 8
+            i16 A ; 6 7
+            i8 B ; 9
+        }
+    }
+
+    union {
+        i8 Value
+
+        bits as i8 {
+            [0:3] Low
+            [4] Flag1
+            [5] Flag2
+            [7] Sign
+        }
+    }
+
+    bits as i16 {
+        [0:7] LowHalf
+        [8:15] HighHalf
+    }
+
+    i8 After
+}
+
+struct FISHostToDevice {
+    union {
+        struct {
+            i8 Type
+
+            bits as i8 {
+                [0:3] PortMultiplier
+                [7] CommandOrControl
+            }
+
+            i8 Command
+            i8 FeatureLow
+        }
+
+        i32 DWORD1
+    }
+
+    union {
+        bits as i32 {
+            [0:23] LBALow
+            [24:31] Device
+        }
+
+        i32 DWORD2
+    }
+
+    union {
+        bits as i32 {
+            [0:23] LBAHigh
+            [24:31] FeatureHigh
+        }
+
+        i32 DWORD3
+    }
+
+    union {
+        struct {
+            i16 Count
+            i8 IsochronousCommandCompletion
+            i8 Control
+
+            i32 Reserved
+        }
+
+        i32 DWORD4
+    }
+}
+
+struct CommandHeader {
+    union {
+        struct {
+            bits As i16 {
+                [0:4] DWORDCount
+                [5] UseATAPI
+                [6] Direction
+                [7] Prefetchable
+                [8] Reset
+                [9] SelfTest
+                [10] ClearBusy
+                [12:15] PortMultiplierPort
+            }
+
+            i16 PhysicalDescriptorTableLength
+
+            i32 PhysicalDescriptorBytesTransferred
+
+            i32 CommandTableDescriptorBaseAddressLow
+            i32 CommandTableDescriptorBaseAddressHigh
+        }
+    }
+}
+
+struct IPV4Header {
+    union {
+        bits As i8 {
+            [0:3] Version
+            [4:7] IHL
+        }
+
+        i8 Version_IHL
+    }
+
+    union {
+        bits As i8 {
+            [0:5] DSCP
+            [5:7] ECN
+        }
+
+        i8 DSCP_ECN
+    }
+
+    i16 TotalLength
+    i16 Identification
+
+    union {
+        bits As i16 {
+            [0:2] Flags
+            [3:15] FragmentOffset
+        }
+
+        i16 Flags_FragmentOffset
+    }
+
+    i8 TimeToLive
+    i8 Protocol
+    i16 HeaderChecksum
+    i32 SourceIP
+    i32 DestinationIP
+}
+
+define i64 Main(i64 ArgC, i8** ArgV) {
+	GetArgs(&ArgC, &ArgV)
+	
+    DEVMODEA* Test := null
+    POINT* Pos := Test~>Position
+
+    FISHostToDevice* FIS := null
+
+    Print("%i %i %i %i = %i\n", FIS~>DWORD1, FIS~>DWORD2, FIS~>DWORD3, FIS~>DWORD4, #FISHostToDevice)
+
+    ;Print("%i %i %i\n", Test~>PaperLength, Test~>PaperWidth, Test~>Dummy1)
+    ;Print("%i %i %i %i\n", Test~>Tail, Test~>B, Test~>String, Pos~>Y)
+
+    DEVMODEA* Real := Alloc(#DEVMODEA)
+
+    Real~>Position->Y := 'abc'
+    Real->String[3] := 0
+
+    ;breakpoint:()
+
+    Real->Low := 2
+    Real->Sign := 1
+
+    Real->LowHalf := 0x7f
+    Real->HighHalf := 20
+
+    Print("%x %i\n", Real->LowHalf, Real->HighHalf)
+
+    ;breakpoint:()
+
+    ;Real->Value := 0xFF As i8
+
+    ;i8 Result := Real->Low
+
+    Print("%x\n", Real->Low)
+
+    Print("%x\n", #CommandHeader)
+
+    ;Print("%x: %i %i %i\n", Real->Value, Real->Low, Real->Flag1, Real->Flag2)
+
+    Print("%hexdump\n", Real, #DEVMODEA)
+
+    IPV4Header* Header := Alloc(#IPV4Header)
+
+    Print("Header: %x\n", Header)
+
+    Header->Version := 4
+    Header->IHL := 5
+
+    ;Header->DSCP := 4
+    ;Header->ECN := 3
+
+    Print("Header: %x\n", Header)
+
+    Print("%hexdump\n", Header, #IPV4Header)
+
+    return 0
+}
