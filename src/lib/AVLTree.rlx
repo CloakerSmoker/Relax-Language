@@ -453,7 +453,9 @@ struct AVLTree {
 	}
 
 	define void Remove(i64 Key) {
-		this->Root := this->Root->Remove(Key)
+		if (this->Root) {
+			this->Root := this->Root->Remove(Key)
+		}
 	}
 
 	define i32 Count() {
