@@ -389,7 +389,7 @@ struct AVLTreeNode {
 			Print("nil\n")
 		}
 		else {
-			Print("%x %x (%i, %i) [%i]:\n", this->Key, *(this->Value As void**), this->GetBalance(), this->Height, this->Left->Size)
+			Print("%x %x (%i, %i):\n", this->Key, this~>Value, this->GetBalance(), this->Height)
 
 			this->Left->Print(Depth + 1)
 			this->Right->Print(Depth + 1)
