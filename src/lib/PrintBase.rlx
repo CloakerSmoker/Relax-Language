@@ -164,30 +164,28 @@ struct PrintOutputAdapterPrototype {
 				i8* FormatName := &Format[++Index]
 				
 				PrintFormatPrototype* CurrentFormat := FirstPrintFormat
-				i8 Done := false
+
+				PrintFormatPrototype* BestMatch := null
+				i32 BestMatchLength := 0
 				
-				loop {
-					if !(CurrentFormat) {
-						break
-					}
-					
+				while (CurrentFormat) {			
 					i32 CurrentFormatNameLength := StringLength(CurrentFormat->Name)
 					
 					if (CompareMemory(FormatName, CurrentFormat->Name, CurrentFormatNameLength)) {
-						Index += CurrentFormatNameLength - 1
-						
-						CurrentFormat->Format(this, Format, &Index, Parameters, ParameterCount, &ParameterIndex)
-						
-						Done := true
-						
-						break
-					}				
-					else {
-						CurrentFormat := CurrentFormat->Next
-					}
+						if (CurrentFormatNameLength > BestMatchLength) {
+							BestMatch := CurrentFormat
+							BestMatchLength := CurrentFormatNameLength
+						}
+					}			
+					
+					CurrentFormat := CurrentFormat->Next
 				}
 				
-				if (Done) {
+				if (BestMatch != null) {
+					Index += StringLength(BestMatch->Name) - 1
+						
+					BestMatch->Format(this, Format, &Index, Parameters, ParameterCount, &ParameterIndex)
+
 					continue
 				}
 				
