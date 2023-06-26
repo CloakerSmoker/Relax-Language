@@ -228,6 +228,10 @@ struct AVLTreeNode {
 	}
 
 	define AVLTreeNode* Remove(i64 Key) {
+		if (this = null) {
+			return null
+		}
+
 		if (this->Key = Key) {
 			if (this->Right) {
 				AVLTreeNode* RightMinimum := this->Right->RemoveMinimum(this~>Right)
