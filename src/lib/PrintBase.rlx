@@ -238,11 +238,16 @@ struct PrintOutputAdapterPrototype {
 					this->Print("\e[%im", TranslateColorToANSI(Back) + 10)
 				}
 				else {
-					Fore := GetCharacterValue(First)
-					Back := GetCharacterValue(Format[++Index])
+					i8 Fore := First
+					i8 Back := Format[++Index]
 					
-					this->Print("\e[%im", TranslateColorToANSI(Fore))
-					this->Print("\e[%im", TranslateColorToANSI(Back) + 10)
+					if (Fore != '_') {
+						this->Print("\e[%im", TranslateColorToANSI(GetCharacterValue(Fore)))
+					}
+
+					if (Back != '_') {
+						this->Print("\e[%im", TranslateColorToANSI(GetCharacterValue(Back)) + 10)
+					}
 				}
 			}
 			else {

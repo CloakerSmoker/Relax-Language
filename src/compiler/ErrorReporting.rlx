@@ -32,9 +32,9 @@ define void PrintLexerBlame(LexerState* Blame, i32 IncludedAtLine) {
         PrintLexerBlame(Blame->Parent, Blame->IncludedAtLine)
     }
 
-    Print(" [from ^90")
+    Print(" [from ^9_")
     PrintSafeString(Blame->SourceFilePath)
-    Print(":%i ^F0]\n", IncludedAtLine)
+    Print(":%i ^F_]\n", IncludedAtLine)
 }
 
 define void NotifyAtContext(i32 Level, SourceContext* At, i8* Message) {	
@@ -60,10 +60,10 @@ define void NotifyAtContext(i32 Level, SourceContext* At, i8* Message) {
 	ResetColors()
 	
 	PrintSpaces(LineNumberLength + 1) 
-	Print(" [^90 ")
+	Print(" [^9_ ")
 	PrintSafeString(At->Lexer->SourceFilePath)
 	
-	Print(":%i ^F0]\n %s | ", At->LineNumber, LineNumberString)
+	Print(":%i ^F_]\n %s | ", At->LineNumber, LineNumberString)
 	
 	i32 OffsetInSource := At->PositionInSource
 	

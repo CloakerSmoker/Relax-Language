@@ -64,8 +64,13 @@ define i8 TranslateWindowsColor(i8 Color) {
 define void PrintANSIEscape(i8 Foreground, i8 Background) {
 	/* Writes a pair of ANSI escape sequences to change the terminal colors to Foreground/Background */
 	
-	Print("\e[%im", TranslateWindowsColor(Foreground))
-	Print("\e[%im", TranslateWindowsColor(Background) + 10)
+	if (Foreground != -1) {
+		Print("\e[%im", TranslateWindowsColor(Foreground))
+	}
+
+	if (Background != -1) {
+		Print("\e[%im", TranslateWindowsColor(Background) + 10)
+	}
 }
 
 i8 NO_COLORS := false
@@ -83,10 +88,15 @@ define void SetColor(i8 Foreground, i8 Background) {
 	}
 }
 define void ResetColors() {
-	SetColor(White, Black)
+	linux {
+		Print("^R")
+	}
+	windows {
+		SetColor(White, Black)
+	}
 }
 define void TextColor(i8 Foreground) {
-	SetColor(Foreground, Black)
+	SetColor(Foreground, -1 As i8)
 }
 
 define i8 ReadCharacter() {
