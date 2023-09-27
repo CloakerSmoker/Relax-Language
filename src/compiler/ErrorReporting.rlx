@@ -27,14 +27,14 @@ define void PrintSpaces(i32 Count) {
 	}
 }
 
-define void PrintLexerBlame(LexerState* Blame) {
+define void PrintLexerBlame(LexerState* Blame, i32 IncludedAtLine) {
     if (Blame->Parent) {
-        PrintLexerBlame(Blame->Parent)
+        PrintLexerBlame(Blame->Parent, Blame->IncludedAtLine)
     }
 
-    Print(" [in ^90")
+    Print(" [from ^90")
     PrintSafeString(Blame->SourceFilePath)
-    Print(" ^F0]\n")
+    Print(":%i ^F0]\n", IncludedAtLine)
 }
 
 define void NotifyAtContext(i32 Level, SourceContext* At, i8* Message) {	
@@ -45,7 +45,7 @@ define void NotifyAtContext(i32 Level, SourceContext* At, i8* Message) {
 	}
 
     if (At->Lexer->Parent) {
-        PrintLexerBlame(At->Lexer->Parent)
+        PrintLexerBlame(At->Lexer->Parent, At->Lexer->IncludedAtLine)
     }
 
 	i8* LineNumberString := IToA(At->LineNumber)

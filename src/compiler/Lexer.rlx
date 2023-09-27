@@ -233,6 +233,8 @@ struct LexerState {
 	
 	LexerState* Parent
 	LexerState* Child
+
+	i32 IncludedAtLine
 	
 	union {
 		void* Buffer
@@ -1036,6 +1038,7 @@ struct LexerState {
 				i8* IncludeFileText := OpenAndRead(AbsoluteIncludePath, &IncludeFileSize, &IncludePathBlame)
 				
 				this->Child := LexerState:New(this, IncludeFileText, IncludeFileSize, IncludePath)
+				this->Child->IncludedAtLine := this->CurrentLineNumber
 				
 				return this->GetNextToken(false)
 			}
