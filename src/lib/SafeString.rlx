@@ -1,6 +1,6 @@
-#Require $/Memory.rlx
-#Require $/String.rlx
-#Require $/Console.rlx
+#Require "$/Memory.rlx"
+#Require "$/String.rlx"
+#Require "$/Console.rlx"
 
 #Require "$/Exception.rlx"
 

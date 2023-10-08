@@ -913,10 +913,11 @@ struct LexerState {
 			SafeString* DirectiveText := this->GetString(StartingIndex + 1)
 			
 			i8 IsRequire := DirectiveText->Equals("require")
+			i8 IsInclude := DirectiveText->Equals("include")
 
 			i8 IsImageBase := DirectiveText->Equals("ImageBase")
 			
-			if (IsRequire || DirectiveText->Equals("include")) {
+			if (IsRequire || IsInclude) {
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
 					this->AppendToken(TOKEN_TYPE_DIRECTIVE, null)
 				}
@@ -927,34 +928,32 @@ struct LexerState {
 				i32 PathStartingIndex := StartingIndex
 				
 				this->GetNextCharacter()
-				
-				NextCharacter := this->PeekNextCharacter()
-				
-				i8 ExpectCloseQuote := false
-				
-				if (NextCharacter = '"') {
-					this->GetNextCharacter()
-					NextCharacter := this->PeekNextCharacter()
-					
-					StartingIndex += ExpectCloseQuote := true
+
+				if !(this->NextCharacterMatches('"')) {
+					this->AppendToken(0, null, StartingIndex, 1)->Error("Expected open quote for path")
 				}
 				
-				if (NextCharacter = '$') {
+				StartingIndex += 1
+
+				i8 IsLibraryInclude := false
+				i8 IsPlatformInclude := false
+				
+				if (this->NextCharacterMatches('$')) {
 					; Allow a single $ before a file name as a way to include files
 					;  from the compiler's `src/lib/` directory instead of shipping
 					;   a copy of the standard library with every project.
 					
-					this->GetNextCharacter()
-					NextCharacter := this->PeekNextCharacter()
+					IsLibraryInclude := true
 				}
-				else if (NextCharacter = '@') {
+				else if (this->NextCharacterMatches('@')) {
 					; Same as above, but to do a platform-relative include
 
-					this->GetNextCharacter()
-					NextCharacter := this->PeekNextCharacter()
+					IsPlatformInclude := true
 				}
+
+				NextCharacter := this->PeekNextCharacter()
 				
-				while (IsPath(NextCharacter, ExpectCloseQuote) && !this->AtEnd()) {
+				while (IsPath(NextCharacter, true) && !this->AtEnd()) {
 					NextCharacter := this->GetNextCharacter()
 				}
 				
@@ -964,10 +963,8 @@ struct LexerState {
 				
 				SafeString* IncludePath := this->GetString(StartingIndex)
 				
-				if (ExpectCloseQuote) {
-					if !(this->NextCharacterMatches('"')) {
-						this->AppendToken(0, null, StartingIndex, 1)->Error("Expected closing quote for include/require path.")
-					}
+				if !(this->NextCharacterMatches('"')) {
+					this->AppendToken(0, null, StartingIndex, 1)->Error("Expected closing quote for include/require path.")
 				}
 
 				if (this->Config->DumpInfo & DUMP_SYNTHETIC_TOKENS) {
@@ -982,9 +979,6 @@ struct LexerState {
 				}
 				
 				i8* IncludePathBuffer := IncludePath->Buffer
-				
-				i8 IsLibraryInclude := IncludePath->ASCIICharacterAt(0) = '$'
-				i8 IsPlatformInclude := IncludePath->ASCIICharacterAt(0) = '@'
 				
 				if (IsLibraryInclude) {
 					; $Path => $COMPILER_DIR/src/lib/Path

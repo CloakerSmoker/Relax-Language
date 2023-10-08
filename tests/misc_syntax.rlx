@@ -1,6 +1,6 @@
 #Require "./src/lib/Console.rlx"
-#Require ./src/lib/Console.rlx
-#Require src/lib/Console.rlx
+#Require "./src/lib/Console.rlx"
+#Require "src/lib/Console.rlx"
 #Require "$/Console.rlx"
 
 define void VATest(i32 T, i8 Q) {
