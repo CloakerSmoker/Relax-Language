@@ -43,6 +43,9 @@ elif running_on != 'Windows':
 compiler_link = f'build/{running_on.lower()}_test_compiler.{platform_extension}'
 compile_command_format = compiler_link + ' -i "./src/compiler/Main.rlx" -o "{}" --debug --' + running_on.lower()
 
+if 'RLXFLAGS' in os.environ:
+    compile_command_format = f'{compile_command_format} {os.environ["RLXFLAGS"]}'
+
 def use_compiler(new):
     try:
         os.unlink(compiler_link)
