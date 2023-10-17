@@ -1847,9 +1847,10 @@ struct ParserState {
 		NewType~>Fields->Set(Field->Name, Field)
 		NewType->Size := 8
 
+		NewType->IsClass := true
+
 		ClassInfo* Info := ClassInfo:New()
 		NewType->ClassInfo := Info
-
 
 		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_IMPLEMENTS)) {
 			loop {
@@ -1862,9 +1863,9 @@ struct ParserState {
 
 				Info->InterfacesInOrder->Push(InterfaceType)
 				Info->InterfacesBlame->Push(InterfaceName~>Context)
-				Info->Interfaces->Set(InterfaceType As i64, null)
+				Info->Interfaces->Insert(InterfaceType As i64, null)
 
-				InterfaceType->InterfaceInfo->ImplementedBy->Set(NewType As i64, null)
+				InterfaceType->InterfaceInfo->ImplementedBy->Insert(NewType As i64, null)
 
 				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 					break

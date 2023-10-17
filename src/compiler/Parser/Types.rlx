@@ -503,7 +503,28 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 			
 			return 0
 		}
-		
+
+		TypeInfo* Left := TargetBase
+		TypeInfo* Right := SourceBase
+
+		if (TargetBase->Is(TYPE_KIND_INTERFACE)) {
+			Left := SourceBase
+			Right := TargetBase
+		}
+
+		;Print("%t == %t?\n", Left, Right)
+		;Print("%i, %i, %i\n", Left->Kind, Left->IsClass, Right->Kind)
+
+		if (Left->Is(TYPE_KIND_STRUCTURE) && Left->IsClass && Right->Is(TYPE_KIND_INTERFACE)) {
+			;Print("Class -> Interface\n")
+
+			;Left->ClassInfo->Interfaces->Print()
+
+			if (Left->ClassInfo->Interfaces->Has(Right As i64)) {
+				return 0
+			}
+		}
+
 		return TypeError(SourceNode, Target, "Incompatible types")
 	}
 	else if (SourceDepth && TargetIsVoid && TargetDepth = 1) {
