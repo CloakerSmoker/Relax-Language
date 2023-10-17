@@ -215,6 +215,32 @@ PrintFormatPrototype QualifiedNameFormatPrototype {
 
 i32 QUALIFIED_NAME_FORMAT_PROTOTYPE_ID := AddPrintFormat(&QualifiedNameFormatPrototype)
 
+; Where else to put this?
+
+struct MatchFunctionErrorMessages {
+	i8* BlameOnCaller
+	i8* MissingRequiredParameters
+	i8* HasTooManyParameters
+	i8* ParameterShouldBeXNotY
+	i8* ParameterShouldBeX
+}
+
+MatchFunctionErrorMessages DefaultMatchFunctionErrors {
+	"No matching definition found",
+	"Is missing required parameters",
+	"Has too many parameters for",
+	"Parameter %i should be an %t, not a %t",
+	"Parameter %i should be an %t"
+}
+
+MatchFunctionErrorMessages InterfaceMatchFunctionErrors {
+	"No implementation for interface method found",
+	"Implementation takes more parameters than expected",
+	"Implementation takes less parameters than expected",
+	"Parameter %i should be an %t, not a %t",
+	"Parameter %i should be an %t"
+}
+
 ; Unary
 
 struct UnaryExpression {
@@ -630,6 +656,29 @@ struct FunctionDefine {
 		this->StringifyInto(IntoRawBuffer, ':')
 	}
 }
+
+define void DoFunctionDefinePrint(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	FunctionDefine* Function := Parameters[*ParameterIndex] As FunctionDefine*
+	
+	i32 Length := Function->GetStringLength()
+	i8* Buffer := Alloc(Length + 1)
+
+	Function->StringifyInto(Buffer, '.')
+
+	this->DoPrintCharacters(Buffer, Length - 1)
+
+	Free(Buffer)
+	
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype FunctionDefineFormatPrototype {
+	Name: "func",
+	Format: &DoFunctionDefinePrint
+}
+
+i32 FUNCTION_DEFINE_FORMAT_PROTOTYPE_ID := AddPrintFormat(&FunctionDefineFormatPrototype)
+
 
 ; EndRegion
 

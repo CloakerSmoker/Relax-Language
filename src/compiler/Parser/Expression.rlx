@@ -90,7 +90,7 @@
 		return Result
 	}
 	
-	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, SourceContext* BlameContext) {
+	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, SourceContext* BlameContext, MatchFunctionErrorMessages* Errors) {
 		; We've found a function which has the correct name for this function call. However, since a
 		;  name can be defined multiple times as long as it takes a different number or set of parameter types
 		;   we need to go through and find which actual function to call.
@@ -193,7 +193,7 @@
 			; If we didn't find any functions which fit our parameters, then we need to print out a nice
 			;  error message showing each definition, and why it didn't make the cut.
 
-			BlameContext->Notify(NOTIFY_ERROR, "No matching overload found")
+			BlameContext->Notify(NOTIFY_ERROR, Errors->BlameOnCaller)
 			
 			Next := FoundDefine
 			
@@ -207,10 +207,10 @@
 				}
 				
 				if (ParameterCount < Next->ParameterCount) {
-					Next~>Context->Notify(Level, "Is missing required parameters for overload")
+					Next~>Context->Notify(Level, Errors->MissingRequiredParameters)
 				}
 				else if (ParameterCount > Next->ParameterCount) {
-					Next~>Context->Notify(Level, "Has too many paramters for overload")
+					Next~>Context->Notify(Level, Errors->HasTooManyParameters)
 				}
 				else {
 					; FunctionDefine.TempValue is set in the loop above to be the index of the parameter which 
@@ -222,10 +222,10 @@
 					if (LastNonMatchingParameter < ParameterCount) {
 						Type PassedType := Parameters[LastNonMatchingParameter]->ValueType
 
-						Next~>Context->Notify(Level, "Parameter %i should be an %t, not a %t", LastNonMatchingParameter + 1, BadMatchType, PassedType)
+						Next~>Context->Notify(Level, Errors->ParameterShouldBeXNotY, LastNonMatchingParameter + 1, BadMatchType, PassedType)
 					}
 					else {
-						Next~>Context->Notify(Level, "Parameter %i should be an %t", LastNonMatchingParameter + 1, BadMatchType)
+						Next~>Context->Notify(Level, Errors->ParameterShouldBeX, LastNonMatchingParameter + 1, BadMatchType)
 					}
 				}
 				
@@ -240,6 +240,10 @@
 		; This is only reached when we did match against a function, which will be stored inside of BestFit.
 		
 		return BestFit
+	}
+
+	define FunctionDefine* MatchFunctionCall(FunctionDefine* FoundDefine, ASTNode** Parameters, i32 ParameterCount, SourceContext* BlameContext) {
+		return this->MatchFunctionCall(FoundDefine, Parameters, ParameterCount, BlameContext, &DefaultMatchFunctionErrors)
 	}
 	
 	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, ASTNode* ThisParameter, i8** ErrorMessage) {

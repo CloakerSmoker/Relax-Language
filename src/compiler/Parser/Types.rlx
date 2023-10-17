@@ -25,6 +25,39 @@ enum TYPE_KIND {
 	BIT_FIELDS
 	ENUMERATION
 	FUNCTION_POINTER
+	`INTERFACE`
+}
+
+struct InterfaceInfo {
+	PointerArray* Methods ; <FunctionDefine*>
+
+	AVLTree* ImplementedBy ; <TypeInfo*>
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this->Methods := PointerArray:New()
+		this->ImplementedBy := AVLTree:New(0)
+
+		return this
+	}
+}
+
+struct ClassInfo {
+	PointerArray* InterfacesInOrder ; <TypeInfo*>
+	PointerArray* InterfacesBlame ; <ErrorContext*>
+	AVLTree* Interfaces ; <TypeInfo*>
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this->InterfacesInOrder := PointerArray:New()
+		this->InterfacesBlame := PointerArray:New()
+
+		this->Interfaces := AVLTree:New(0)
+
+		return this
+	}
 }
 
 struct TypeInfo {
@@ -40,10 +73,16 @@ struct TypeInfo {
 	
 	HashMap Methods
 	HashMap StaticMethods
+
+	union {
+		InterfaceInfo* InterfaceInfo
+		ClassInfo* ClassInfo
+	}
 	
 	i16 Size
 	TYPE_KIND Kind
 	i8 IsIncomplete
+	i8 IsClass
 
 /*
 	i8 IsStructType,
