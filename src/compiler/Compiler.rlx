@@ -1790,10 +1790,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	}
 }
 
-
-; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
-;  functions which return 'void'
-define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
+define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := null
 	
@@ -1815,7 +1812,7 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	else if (BuiltinID = BUILTIN_BREAKPOINT) {
 		EmitInt3(Compiler)
 		
-		return 0
+		return
 	}
 	else if !(IS_SYSCALL) {
 		TargetFunction := CallNode->TargetFunction
@@ -2072,32 +2069,26 @@ define i32 CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node
 	}
 	
 	Compiler->RegisterStackIndex := RegisterStackIndex
-	
-	return 0
 }
 
 declare void CompileGetStructAccessPointer(CompilerState*, i8, StructAccessExpression*)
 
-; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
-;  functions which return 'void'
-define i32 CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+define void CompileStructAccessLeft(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	ASTNode* Left := TargetAccess->Left
 	
 	;if (TargetAccess->Operator->Value = OPERATOR_DOT) {
 	if (GetPointerDepth(Left->ValueType) = 0) {
 		if (Left->NodeType = NODE_TYPE_STRUCT_ACCESS) {
 			CompileGetStructAccessPointer(Compiler, ResultRegister, Left->AccessNode)
-			return 0
+			return
 		}
 		else if (Left->NodeType = NODE_TYPE_VARIABLE) {
 			CompileGetVariableAddress(Compiler, ResultRegister, Left->VariableValue)
-			return 0
+			return
 		}
 	}
 	
 	CompileExpression(Compiler, ResultRegister, Left)
-	
-	return 0
 }
 
 define void CompileGetStructAccessPointer(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
@@ -2113,14 +2104,12 @@ define void CompileGetStructAccessPointer(CompilerState* Compiler, i8 ResultRegi
 	}
 }
 
-; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
-;  functions which return 'void'
-define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
+define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, StructAccessExpression* TargetAccess) {
 	StructField* TargetField := TargetAccess->TargetField
 	
 	if (TargetAccess->Operator->Value = OPERATOR_TILDE_GREATER || TargetField->ValueType.IsArray) {
 		CompileGetStructAccessPointer(Compiler, ResultRegister, TargetAccess)
-		return 0
+		return
 	}
 	
 	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType) As i8
@@ -2174,8 +2163,6 @@ define i32 CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, St
 			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, ResultRegister, FieldOffset, !(FieldOffset >= 112), TargetFieldSize) 
 		}
 	}
-	
-	return 0
 }
 
 declare void CompileSetArrayAccess(CompilerState*, i8, ASTNode*, ASTNode*, i8)
@@ -2526,9 +2513,7 @@ define i8 FindFirstBitSet(i64 Number) asm {
 	ret
 }
 
-; TODO: Change this back to a 'void' function once raw 'return' statements are allowed inside of
-;  functions which return 'void'
-define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
+define void CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type ResultType, BinaryExpression* ExpressionToCompile, i8 DiscardResult) {
 	/* Compiles a binary expression, and both operands of the expression */
 	
 	ASTNode* Left := ExpressionToCompile->Left
@@ -2737,7 +2722,7 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 				
 				PopRegisterStack(Compiler)
 				
-				return 0
+				return
 			}
 		}
 		else if (Operator = OPERATOR_LESS_LESS || Operator = OPERATOR_GREATER_GREATER) {
@@ -2811,7 +2796,7 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 					}
 				}
 				
-				return 0
+				return
 			}
 			
 			i8 IsPlusMinus := (Operator = OPERATOR_PLUS || Operator = OPERATOR_MINUS)
@@ -2840,7 +2825,7 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 					*/
 					
 					Compiler->NoClobberA := OldClobberA
-					return 0
+					return
 				}
 			}
 			
@@ -2875,8 +2860,6 @@ define i32 CompileBinary(CompilerState* Compiler, i8 ResultRegister, Type Result
 		
 		Compiler->NoClobberA := OldClobberA
 	}
-	
-	return 0
 }
 
 define void CompileUnwindTry(CompilerState* Compiler, i8 ForReturn) {
