@@ -534,6 +534,9 @@ struct AVLTree {
 
 		return *Result
 	}
+	define void* GetPointer(void* Key) {
+		return this->GetPointer(Key As i64)
+	}
 
 	define void Free() {
 		if (this->Root) {
