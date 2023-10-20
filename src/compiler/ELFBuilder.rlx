@@ -897,14 +897,19 @@ struct ELFBuilder {
 	ELFSectionHeader* TextRelocationSection
 	PointerArray* TextRelocations ; <ELFRelocationPair*>
 
+	define void InitializeTextRelocations() {
+		this->TextRelocations := PointerArray:New()
+	}
+
 	define void SetupTextRelocations() {
+		this->InitializeTextRelocations()
+
 		ELFSectionHeader* Section := this->AddDataSection(".rela.text", null, 0)
 
 		Section->Type := ELF_SECTION_TYPE_RELOCATIONS_ADDEND
 		Section->ExtraInfo := this->SectionIndex(this->CodeSectionHeader)
 
 		this->TextRelocationSection := Section
-		this->TextRelocations := PointerArray:New()
 	}
 
 	define ELFRelocationPair* ReferenceSymbol(i32 CodeOffset, ELFSymbol* Symbol) {

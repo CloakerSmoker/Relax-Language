@@ -470,7 +470,7 @@ struct ObjectFile {
         }
 
 
-
+        return null
     }
 
     define void DumpSections() {

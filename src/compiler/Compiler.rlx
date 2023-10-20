@@ -1790,6 +1790,30 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	}
 }
 
+define void CompileInterfaceStubs(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
+	i32 Offset := 1 + ForClass->InterfacesInOrder->IndexOf(ForInterface)
+
+	i32 Count := ForInterface->Methods->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		FunctionDefine* Method := ForInterface->Methods->At(Index)
+		FunctionDefine* Implementation := ForClass->InterfaceMethods->GetValue(Method)
+		i32 StubLabel := ForClass->InterfaceStubLabels->GetValue(Method)
+
+		SetLabel(Compiler, StubLabel)
+		EmitSub_R64_IX(Compiler, RDI, Index * 8)
+		EmitJump_Label(Compiler, Implementation->LabelNumber)
+	}
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		
+	}
+}
+
+define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
+	
+}
+
 define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := null

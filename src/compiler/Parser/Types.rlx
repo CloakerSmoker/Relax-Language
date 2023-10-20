@@ -48,6 +48,9 @@ struct ClassInfo {
 	PointerArray* InterfacesBlame ; <ErrorContext*>
 	AVLTree* Interfaces ; <TypeInfo*>
 
+	AVLTree* InterfaceMethods ; <FunctionDefine*, FunctionDefine*>
+	AVLTree* InterfaceStubs ; <FunctionDefine*, i32>
+
 	static self* New() {
 		self* this := Alloc(#self)
 

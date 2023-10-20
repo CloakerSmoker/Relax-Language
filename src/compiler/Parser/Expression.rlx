@@ -1181,7 +1181,10 @@
 				;	OperatorToken->Error("Wrong operator for left side pointer depth")
 				;}
 				;else if (LeftBase->Is(TYPE_KIND_STRUCTURE) = 0 || LeftBase->IsIncomplete && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
-				if (LeftBase->Is(TYPE_KIND_STRUCTURE) = 0 || LeftBase->IsIncomplete && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
+				i8 IsInterface := LeftBase->Is(TYPE_KIND_INTERFACE)
+				i8 IsStructOrBits := LeftBase->Is(TYPE_KIND_STRUCTURE) || LeftBase->Is(TYPE_KIND_BIT_FIELDS)
+
+				if ((!IsInterface && !IsStructOrBits) || LeftBase->IsIncomplete) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")
@@ -1190,7 +1193,7 @@
 				HashMapElement* MaybeFieldElement := LeftBase~>Fields->Get(RightToken->StringValue)
 				HashMapElement* MaybeMethodElement := LeftBase~>Methods->Get(RightToken->StringValue)
 				
-				i8 MustBeMethodCall := MaybeMethodElement && !MaybeFieldElement
+				i8 MustBeMethodCall := IsInterface || (MaybeMethodElement && !MaybeFieldElement)
 				
 				if (this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN) && MustBeMethodCall) {
 					; If there is a struct access (using `->` or `.`) followed by a `(`, then it is a 
