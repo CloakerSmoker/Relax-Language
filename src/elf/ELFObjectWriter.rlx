@@ -441,34 +441,34 @@ i64 ELF_SECTION_FLAGS_EXECUTE_ALLOCATE := ELF_SECTION_FLAGS_EXECUTE | ELF_SECTIO
 
 i32 ELF_SPECIAL_SECTION_COUNT := 28
 ELFSpecialSectionEntry[28] ELF_SPECIAL_SECTIONS {
-    { ".bss"          , ELF_SECTION_TYPE_NODATA              , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".comment"      , ELF_SECTION_TYPE_DATA                , 0                                 },
-    { ".data"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".data1"        , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".debug"        , ELF_SECTION_TYPE_DATA                , 0                                 },
-    { ".dynamic"      , ELF_SECTION_TYPE_DYNAMIC             , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".dynstr"       , ELF_SECTION_TYPE_STRING_TABLE        , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".dynsym"       , ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE, ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".fini"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
-    { ".fini_array"   , ELF_SECTION_TYPE_FINI_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".got"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".hash"         , ELF_SECTION_TYPE_HASH_TABLE          , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".init"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
-    { ".init_array"   , ELF_SECTION_TYPE_INIT_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".interp"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".line"         , ELF_SECTION_TYPE_DATA                , 0                                 },
-    { ".note*"        , ELF_SECTION_TYPE_DATA                , 0                                 },
-    { ".plt"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
-    { ".preinit_array", ELF_SECTION_TYPE_PREINIT_ARRAY       , ELF_SECTION_FLAGS_WRITE_ALLOCATE  },
-    { ".rela*"        , ELF_SECTION_TYPE_RELOCATIONS_ADDEND  , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".rel*"         , ELF_SECTION_TYPE_RELOCATIONS         , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".rodata"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".rodata1"      , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE        },
-    { ".shstrtab"     , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
-    { ".strtab"       , ELF_SECTION_TYPE_STRING_TABLE        , 0                                 },
-    { ".symtab"       , ELF_SECTION_TYPE_SYMBOL_TABLE        , 0                                 },
-    { ".text"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE},
-    { ".eh_frame"     , ELF_SECTION_TYPE_X86_X64_UNWIND      , ELF_SECTION_FLAGS_ALLOCATE        }
+    { ".bss"          , ELF_SECTION_TYPE_NODATA              , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".comment"      , ELF_SECTION_TYPE_DATA                , 0                                  },
+    { ".data"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".data1"        , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".debug"        , ELF_SECTION_TYPE_DATA                , 0                                  },
+    { ".dynamic"      , ELF_SECTION_TYPE_DYNAMIC             , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".dynstr"       , ELF_SECTION_TYPE_STRING_TABLE        , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".dynsym"       , ELF_SECTION_TYPE_DYNAMIC_SYMBOL_TABLE, ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".fini"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE },
+    { ".fini_array"   , ELF_SECTION_TYPE_FINI_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".got"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".hash"         , ELF_SECTION_TYPE_HASH_TABLE          , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".init"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE },
+    { ".init_array"   , ELF_SECTION_TYPE_INIT_ARRAY          , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".interp"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".line"         , ELF_SECTION_TYPE_DATA                , 0                                  },
+    { ".note*"        , ELF_SECTION_TYPE_DATA                , 0                                  },
+    { ".plt"          , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE },
+    { ".preinit_array", ELF_SECTION_TYPE_PREINIT_ARRAY       , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".rela*"        , ELF_SECTION_TYPE_RELOCATIONS_ADDEND  , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".rel*"         , ELF_SECTION_TYPE_RELOCATIONS         , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".rodata"       , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".rodata1"      , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_ALLOCATE         },
+    { ".shstrtab"     , ELF_SECTION_TYPE_STRING_TABLE        , 0                                  },
+    { ".strtab"       , ELF_SECTION_TYPE_STRING_TABLE        , 0                                  },
+    { ".symtab"       , ELF_SECTION_TYPE_SYMBOL_TABLE        , 0                                  },
+    { ".text"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_EXECUTE_ALLOCATE },
+    { ".eh_frame"     , ELF_SECTION_TYPE_X86_X64_UNWIND      , ELF_SECTION_FLAGS_ALLOCATE         }
 }
 
 struct ELFPassthroughObjectWriter {
@@ -526,7 +526,7 @@ struct ELFPassthroughObjectWriter {
         }
         else if (Source->Type = SYMBOL_TYPE_SECTION) {
             Target->Type(ELF_SYMBOL_TYPE_SECTION)
-            Target->NameOffset := 0
+            ;Target->NameOffset := 0
         }
         else if (Source->Type = SYMBOL_TYPE_FILE) {
             Target->Type(ELF_SYMBOL_TYPE_FILE)

@@ -111,8 +111,8 @@ struct ObjectSection {
 
         Print("\n")
 
-        Indent(1)
-        this->DumpRelocations(1)
+        ;Indent(1)
+        ;this->DumpRelocations(1)
 
         if (this->Type = SECTION_TYPE_DATA) {
             Print("\tData {\n")
@@ -204,27 +204,41 @@ struct ObjectSymbol {
         return this
     }
 
+    define self* Clone() {
+        self* Result := CloneMemory(this, #self)
+
+        Result->Relocations := this->Relocations->Clone()
+
+        return Result
+    }
+
     define i8 IsUndefined() {
         return this->Section = null
     }
 
     define void DumpInline() {
         Print(SymbolBindingName(this->Binding))
-        Print("[%s", SymbolTypeName(this->Type))
+        Print(" %s", SymbolTypeName(this->Type))
 
         if (this->Visibility != SYMBOL_VISIBILITY_DEFAULT) {
             Print(" %s", SymbolVisibilityName(this->Visibility))
         }
 
-        Print("(")
+        ;Print(" named ")
 
-        Print("%s)] = %x @ ", this->Name, this->Size)
+        Print(" '%s', ", this->Name)
+
+        if (this->Size != 0) {
+            Print("%x bytes, ", this->Size)
+        }
+
+        Print("at ")
 
         if (this->Section = null) {
-            Print("<undef>")
+            Print("<undefined location>")
         }
         else {
-            Print("%s", this->Section->Name)
+            Print("section %s", this->Section->Name)
         }
 
         Print(" + %x", this->Value)
@@ -352,6 +366,9 @@ struct ObjectSymbolTable {
 
     define i8 Has(i8* Name) {
         return this~>SymbolsByName->Has(FNV1A(Name))
+    }
+    define i8 HasName(ObjectSymbol* Symbol) {
+        return this~>SymbolsByName->Has(FNV1A(Symbol->Name))
     }
 
     define i8 Has(ObjectSymbol* Symbol) {

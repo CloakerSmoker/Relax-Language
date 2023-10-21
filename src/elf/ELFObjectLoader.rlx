@@ -176,7 +176,9 @@ struct ELFObjectLoader {
                 }
 
                 if (SymbolHeader->Type() = ELF_STT_SECTION && SymbolSection) {
-                    Name := SymbolSection->Name
+                    if (StringLength(Name) = 0) {
+                        Name := SymbolSection->Name
+                    }
                 }
 
                 SYMBOL_BINDING Binding := TranslateELFSymbolBinding(SymbolHeader->Binding())
