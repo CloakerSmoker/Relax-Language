@@ -1789,7 +1789,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 		}
 	}
 }
-
+/*
 define void CompileInterfaceStubs(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
 	i32 Offset := 1 + ForClass->InterfacesInOrder->IndexOf(ForInterface)
 
@@ -1812,7 +1812,7 @@ define void CompileInterfaceStubs(CompilerState* Compiler, TypeInfo* ForClass, T
 
 define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
 	
-}
+}*/
 
 define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode

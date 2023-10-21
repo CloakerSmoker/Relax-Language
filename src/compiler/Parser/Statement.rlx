@@ -268,9 +268,9 @@
 					Result := ASTNode:New(NODE_TYPE_INTEGER, 0, this->i8->AsNonPointer())
 					Result := ASTNode:New(NODE_TYPE_RETURN, Result)
 					
-					if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
-						this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
-					}
+					;if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					;	this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
+					;}
 				}
 				else {
 					ASTNode* ExpressionToReturn := this->DowncastIntegerNode(this->ParseExpression())
