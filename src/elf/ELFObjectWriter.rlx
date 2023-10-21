@@ -380,9 +380,9 @@ struct ELFObjectWriter {
             ObjectSection* Section := this->Sections->At(Index)
             ELFSectionHeader* Header := this->ELFSections->At(Index)
 
-            i32 SymbolCount := Section->Symbols->Count()
+            if (Header->Type = ELF_SECTION_TYPE_SYMBOL_TABLE) {
+                i32 SymbolCount := Section->Symbols->Count()
 
-            if (SymbolCount) {
                 Section->Size := (SymbolCount + 1) * #ELFSymbol
                 Section->Data := Alloc(Section->Size)
 
@@ -411,9 +411,9 @@ struct ELFObjectWriter {
             ObjectSection* Section := this->Sections->At(Index)
             ELFSectionHeader* Header := this->ELFSections->At(Index)
 
-            i32 RelocationCount := Section->Relocations->Count()
+            if (Header->Type = ELF_SECTION_TYPE_RELOCATIONS || Header->Type = ELF_SECTION_TYPE_RELOCATIONS_ADDEND) {
+                i32 RelocationCount := Section->Relocations->Count()
 
-            if (RelocationCount) {
                 Section->Size := RelocationCount * #ELFRelocation
                 Section->Data := Alloc(Section->Size)
 

@@ -84,7 +84,12 @@ struct ELFEmitter {
         Header->FileOffset := this->Index()
         Header->FileSize := Size
 
-        this->Write(Data, Size)
+        if (Size = 0) {
+            this->Extend(1)
+        }
+        else {
+            this->Write(Data, Size)
+        }
     }
 
     define void Finalize() {

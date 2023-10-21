@@ -186,10 +186,6 @@ struct MergeLinker {
         for (i32 Index := 0, Index < SectionCount, Index++) {
             ObjectSection* Section := Object->Sections->At(Index)
 
-            if (StringEquals(Section->Name, ".eh_frame")) {
-                continue
-            }
-
             this->AddSection(Section)
         }
 
