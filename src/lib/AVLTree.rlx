@@ -455,6 +455,9 @@ struct AVLTree {
 	define void InsertPointer(i64 Key, void* Value) {
 		this->Insert(Key, &Value As void*)
 	}
+	define void InsertPointer(void* Key, void* Value) {
+		this->Insert(Key As i64, &Value As void*)
+	}
 
 	define void Remove(i64 Key) {
 		if (this->Root) {
@@ -467,6 +470,9 @@ struct AVLTree {
 	}
 	define i8 Has(i64 Key) {
 		return this->Root->Has(Key)
+	}
+	define i8 Has(void* Key) {
+		return this->Root->Has(Key As i64)
 	}
 	define AVLTreeNode* NodeAt(i32 Index) {
 		return this->Root->At(Index)

@@ -16,6 +16,10 @@ define void MoveMemory(void* RawTo, void* RawFrom, i32 Size) {
 	}
 }
 
+define void MoveMemory(void* RawTo, void* RawFrom, i64 Size) {
+	MoveMemory(RawTo, RawFrom, Size As i32)
+}
+
 define i8 CompareMemory(void* RawLeft, void* RawRight, i32 Size) {
 	i8* Left := RawLeft
 	i8* Right := RawRight
