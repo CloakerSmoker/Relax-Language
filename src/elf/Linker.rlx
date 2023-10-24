@@ -4,6 +4,7 @@
 #Require "./src/elf/ELFEmitter.rlx"
 #Require "./src/elf/ELFObjectWriter.rlx"
 #Require "./src/elf/MergeLinker.rlx"
+#Require "./src/elf/RelocationResolver.rlx"
 
 define ELFObjectLoader* LoadELFObject(i8* FileName) {
     i64 F := FileOpen(FileName, FILE_READ)
@@ -74,6 +75,8 @@ define i64 Main(i64 ArgC, i8** ArgV) {
 
             Merger->AddObject(Object)
         }
+
+        ResolveRelocations(Merger->Result)
 
         Print("Result File:\n")
 

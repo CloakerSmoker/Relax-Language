@@ -207,9 +207,21 @@ struct ObjectSymbol {
     define self* Clone() {
         self* Result := CloneMemory(this, #self)
 
-        Result->Relocations := this->Relocations->Clone()
+        Result->Relocations := PointerArray:New()
 
         return Result
+    }
+
+    define void ReferenceBy(ObjectRelocation* Relocation) {
+        this->Relocations->Push(Relocation)
+    }
+
+    define void UnReferenceBy(ObjectRelocation* Relocation) {
+        this->Relocations->RemoveValue(Relocation)
+    }
+
+    define i32 ReferenceCount() {
+        return this->Relocations->Count()
     }
 
     define i8 IsUndefined() {
@@ -309,6 +321,13 @@ struct ObjectRelocation {
         this->Addend := Addend
 
         return this
+    }
+
+    define void UpdateTarget(ObjectSymbol* NewTarget) {
+        this->Target->UnReferenceBy(this)
+        NewTarget->ReferenceBy(this)
+
+        this->Target := NewTarget
     }
 
     define void Dump() {

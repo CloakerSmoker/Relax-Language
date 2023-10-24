@@ -12,11 +12,7 @@
  *   merging them together by name.
  *  Section data is merged here, and symbols are cloned and adjusted to
  *   match the new data layout.
- * Step 2: Resolve relocations
- *  Is the actual symbol resolution, where each relocation is processed to
- *   determine the actual symbol to be referenced.
- *  Note: This is going to suck, since private/internal/local symbols exist.
- * Step 3: Profit???
+ * Step 2: Profit???
  *  I think those are the only real steps
  */
 
@@ -107,45 +103,7 @@ struct MergeLinker {
         Result->Offset += Section->Size
 
         Section->Relocations->Push(Result)
-
-        return
-
-        if (Symbol->Binding = SYMBOL_BINDING_LOCAL) {
-            Result->Target := this->SymbolMap->GetPointer(Symbol)
-        }
-        else if (Symbol->Binding = SYMBOL_BINDING_WEAK) {
-            ObjectSymbol* Global := this->Result->GlobalSymbols->Find(Symbol->Name)
-
-            if (Global && Symbol->Visibility != SYMBOL_VISIBILITY_PROTECTED) {
-                Result->Target := Global
-            }
-            else {
-                Result->Target := this->SymbolMap->GetPointer(Symbol)
-            }
-        }
-        else if (Symbol->Binding = SYMBOL_BINDING_GLOBAL) {
-            if (Symbol->IsUndefined()) {
-                ObjectSymbol* Global := this->Result->GlobalSymbols->Find(Symbol->Name)
-
-                if (Global) {
-                    Result->Target := Global
-                }
-                else {
-                    ObjectSymbol* Weak := this->Result->WeakSymbols->Find(Symbol->Name)
-
-                    if (Weak) {
-                        Result->Target := Weak
-                    }
-                    else {
-                        Print("uhhh wheres %s\n", Symbol->Name)
-                    }
-                }
-            }
-
-            Result->Target := this->SymbolMap->GetPointer(Symbol)
-        }
-
-        Section->Relocations->Push(Result)
+        Symbol->ReferenceBy(Result)
     }
 
     define void AddSection(ObjectSection* Section) {

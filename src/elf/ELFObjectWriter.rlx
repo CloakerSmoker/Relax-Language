@@ -273,7 +273,9 @@ struct ELFObjectWriter {
 
             ObjectSection* SymbolTableSection := this->AssignSymbolTable(Symbol)
 
-            SymbolTableSection->Symbols->Push(Symbol)
+            if (SymbolTableSection) {
+                SymbolTableSection->Symbols->Push(Symbol)
+            }
         }
     }
 
@@ -478,6 +480,12 @@ struct ELFPassthroughObjectWriter {
     ObjectSection* SymbolTable
 
     define ObjectSection* AssignSymbolTable(ObjectSymbol* Symbol) {
+        if (Symbol->IsUndefined() && Symbol->ReferenceCount() = 0) {
+            ; Discard undefined unreferenced symbols
+
+            return null
+        }
+
         return this->SymbolTable
     }
 

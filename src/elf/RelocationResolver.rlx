@@ -1,0 +1,40 @@
+
+define void ResolveRelocations(ObjectFile* Object) {
+    i32 SectionCount := Object->Sections->Count()
+
+    for (i32 SectionIndex := 0, SectionIndex < SectionCount, SectionIndex++) {
+        ObjectSection* Section := Object->Sections->At(SectionIndex)
+
+        i32 RelocationCount := Section->Relocations->Count()
+
+        for (i32 RelocationIndex := 0, RelocationIndex < RelocationCount, RelocationIndex++) {
+            ObjectRelocation* Relocation := Section->Relocations->At(RelocationIndex)
+            ObjectSymbol* Target := Relocation->Target
+
+            if (Target->Binding = SYMBOL_BINDING_WEAK) {
+                ObjectSymbol* Global := Object->GlobalSymbols->Find(Target->Name)
+
+                if (Global != null && Global->Visibility != SYMBOL_VISIBILITY_PROTECTED) {
+                    ; idk
+                    Relocation->UpdateTarget(Global)
+                }
+            }
+            else if (Target->Binding = SYMBOL_BINDING_GLOBAL) {
+                if (Target->IsUndefined()) {
+                    ObjectSymbol* Global := Object->GlobalSymbols->Find(Target->Name)
+
+                    if (Global != null) {
+                        Relocation->UpdateTarget(Global)
+                    }
+                    else {
+                        ObjectSymbol* Weak := Object->WeakSymbols->Find(Target->Name)
+
+                        if (Weak != null) {
+                            Relocation->UpdateTarget(Weak)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
