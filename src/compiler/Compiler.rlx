@@ -5,6 +5,7 @@
 */
 
 #Require "./src/elf/Library.rlx"
+#Require "$/ByteArray.rlx"
 
 #Require "./src/compiler/DWARF/DWARFBuilder.rlx"
 
@@ -91,16 +92,15 @@ struct CompilerState {
 
 	ObjectFile* Object
 	ObjectSection* CodeSection
+	ObjectSection* ReadOnlyDataSection
 	ObjectSection* DataSection
 	ObjectSection* ZeroSection
 
+	ByteArray* ReadOnlyData
+
 	ObjectSymbol* CurrentFunctionSymbol
-
 	ObjectSymbol* GlobalStringsSymbol
-
 	ObjectSymbol* CurrentFunctionStringsSymbol
-	i8* DataSectionBuffer
-	i32 DataSectionBufferSize
 	
 	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
@@ -112,18 +112,22 @@ struct CompilerState {
 			this->CodeSection := ObjectSection:New(SECTION_TYPE_DATA, ".text")
 			this->Object->AddNewSection(this->CodeSection)
 
+			this->ReadOnlyDataSection := ObjectSection:New(SECTION_TYPE_DATA, ".rodata")
+			this->Object->AddNewSection(this->ReadOnlyDataSection)
+
 			this->DataSection := ObjectSection:New(SECTION_TYPE_DATA, ".data")
 			this->Object->AddNewSection(this->DataSection)
 
 			this->ZeroSection := ObjectSection:New(SECTION_TYPE_DATA, ".bss")
 			this->Object->AddNewSection(this->ZeroSection)
 
-			this->DataSectionBuffer := CloneMemory(Parser->GlobalConstantsBuffer, Parser->GlobalConstantBufferSize)
-			this->DataSectionBufferSize := Parser->GlobalConstantBufferSize
+			this->ReadOnlyData := ByteArray:New()
+			
+			this->ReadOnlyData->Push(Parser->GlobalConstantsBuffer, Parser->GlobalConstantBufferSize)
 
 			this->GlobalStringsSymbol := ObjectSymbol:New(
 				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
-				this->DataSection, "strings(global)",
+				this->ReadOnlyDataSection, "strings(global)",
 				Parser->GlobalConstantBufferSize, 0
 			)
 
@@ -850,8 +854,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		Compiler->CodeSection->Data := Compiler->CodeBuffer
 		Compiler->CodeSection->Size := Compiler->Index
 
-		Compiler->DataSection->Data := Compiler->DataSectionBuffer
-		Compiler->DataSection->Size := Compiler->DataSectionBufferSize
+		Compiler->ReadOnlyDataSection->Data := Compiler->ReadOnlyData->Start()
+		Compiler->ReadOnlyDataSection->Size := Compiler->ReadOnlyData->Size()
 
 		Compiler->ZeroSection->Size := Parser~>Globals->NextOffset
 
@@ -1284,26 +1288,14 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 			ObjectSymbol* StringsSymbol := ObjectSymbol:New(
 				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
 				Compiler->DataSection, SymbolName,
-				FunctionToCompile->StringBufferSize, Compiler->DataSectionBufferSize
+				FunctionToCompile->StringBufferSize, Compiler->ReadOnlyData->Size()
 			)
 
 			; TODO: This looks like a compiler bug. StringsSymbol->Value is set in :New
 			;  but has a bad value. Seems to be related to `SymbolName` being inlined, with
 			;   the variadic call to `FormatString`
 
-			;StringsSymbol->Value := Compiler->DataSectionBufferSize
-			;StringsSymbol->Size := FunctionToCompile->StringBufferSize
-
-			;Print("%func %i, %i\n", FunctionToCompile, FunctionToCompile->StringBufferSize, StringsSymbol->Value)
-
-			Compiler->DataSectionBufferSize += FunctionToCompile->StringBufferSize
-
-			;Print("%i %i, %i bytes\n", Compiler->DataSectionBufferSize, StringsSymbol->Value, StringsSymbol->Size)
-
-			Compiler->DataSectionBuffer := ReAlloc(Compiler->DataSectionBuffer, Compiler->DataSectionBufferSize)
-
-			MoveMemory(Compiler->DataSectionBuffer + StringsSymbol->Value, FunctionToCompile->StringBuffer, FunctionToCompile->StringBufferSize)
-
+			Compiler->ReadOnlyData->Push(FunctionToCompile->StringBuffer, FunctionToCompile->StringBufferSize)
 			Compiler->Object->AddSymbol(StringsSymbol)
 
 			Compiler->CurrentFunctionStringsSymbol := StringsSymbol
