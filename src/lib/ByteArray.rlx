@@ -1,0 +1,54 @@
+
+#Require "$/Memory.rlx"
+
+struct ByteArray {
+
+    void* Buffer
+    i32 Capacity
+    i32 Index
+
+    static self* New() {
+        self* this := Alloc(#self)
+
+        this->Capacity := 8
+        this->Buffer := Alloc(this->Capacity)
+
+        return this
+    }
+
+    define void* Extend(i32 Size) {
+        i32 Offset := this->Index
+        this->Index += Size
+
+        i8 ShouldGrow := false
+
+        while (this->Index >= this->Capacity) {
+            ShouldGrow := true
+            this->Capacity *= 2
+        }
+        
+        ;Print("Grow to %i size, %i capacity\n", this->Index, this->Capacity)
+        
+        if (ShouldGrow) {
+            this->Buffer := ReAlloc(this->Buffer, this->Capacity)
+        }
+        
+        return this->Buffer + Offset
+    }
+
+    define void* Start() {
+        return this->Buffer
+    }
+
+    define i32 Size() {
+        return this->Index
+    }
+
+    define void* End() {
+        return this->Buffer + this->Index
+    }
+
+    define void Push(void* Data, i32 Size) {
+        MoveMemory(this->Extend(Size), Data, Size)
+    }
+}
