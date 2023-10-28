@@ -188,7 +188,7 @@ i16 DLL_HIGH_ENTROPY_VA := 0x0020
 i32 DEFAULT_RESERVE := 0x00100000
 i32 DEFAULT_COMMIT := 0x8000
 
-define void WritePEHeader(void* IntoBuffer, i16 Subsystem, i8 DynamicBase) {
+define void WritePEHeader(void* IntoBuffer, i16 Subsystem, i32 DynamicBase) {
 	/* Writes all the standard MZ/COFF/PE header values into the given buffer */
 	
 	MZHeader* NewHeader := IntoBuffer As MZHeader*
@@ -441,7 +441,7 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 	BuilderToReAlloc->BufferSize := NewSize
 }
 
-define PEBuilder* BuildBuilder(i16 Subsystem, i8 DynamicBase) {
+define PEBuilder* BuildBuilder(i16 Subsystem, i32 DynamicBase) {
 	/* Allocates a PEBuilder and sets all of the headers, along with writing the section headers */
 	
 	PEBuilder* NewBuilder := Alloc(#PEBuilder) As PEBuilder*
@@ -959,7 +959,7 @@ define void FinalizeImports(PEBuilder* TargetBuilder) {
 ==========================================
 */
 
-define void FinalizeBuilder(PEBuilder* Builder, i8 DynamicBase) {
+define void FinalizeBuilder(PEBuilder* Builder, i32 DynamicBase) {
 	/* Updates any header fields which need to be done before the file is "done" */
 	
 	if (DynamicBase) {

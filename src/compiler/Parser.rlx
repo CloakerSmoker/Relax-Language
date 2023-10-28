@@ -25,7 +25,10 @@ struct VariableInfo {
 		i32 StackOffset
 	}
 	
-	ELFSymbol* Symbol
+	union {
+		ELFSymbol* Symbol
+		ObjectSymbol* ObjectSymbol
+	}
 
 	i16 GetCount,
 	i16 SetCount,
@@ -1315,7 +1318,7 @@ struct ParserState {
 			}
 
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_EXPORT)) {
-				i8 AllowExport := this->Config->DebugMode & DEBUG_EMIT_OBJECT
+				i32 AllowExport := this->Config->DebugMode & DEBUG_EMIT_OBJECT
 
 				if !(AllowExport) {
 					this->GetCurrentTokenContext()->Error("Exported functions are only allowed when building an object file")
@@ -2016,7 +2019,7 @@ struct ParserState {
 				}
 			}
 			else if (NextTokenValue = KEYWORD_EXTERNAL) {
-				i8 AllowExternal := this->Config->DebugMode & (DEBUG_EMIT_DYNAMIC | DEBUG_EMIT_OBJECT)
+				i32 AllowExternal := this->Config->DebugMode & (DEBUG_EMIT_DYNAMIC | DEBUG_EMIT_OBJECT | DEBUG_EMIT_NEW_OBJECT)
 
 				if !(AllowExternal) {
 					NextToken->Error("'--dynamic' or '--object' must be specified to reference external symbols")

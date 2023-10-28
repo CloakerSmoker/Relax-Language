@@ -534,7 +534,11 @@ struct FunctionDefine {
 	i8 Attributes,
 	i8 HasFullDefinition,
 	i32 LabelNumber,
-	ELFSymbol* Symbol
+
+	union {
+		ELFSymbol* Symbol
+		ObjectSymbol* ObjectSymbol
+	}
 	
 	union {
 		i32 StringBufferSize,

@@ -1,7 +1,7 @@
 
 #Require "$/AVLTree.rlx"
 
-#Require "./src/elf/ELFBuilder.rlx"
+;#Require "./src/elf/ELFBuilder.rlx"
 
 /*
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT A HIGHLY ESTEEMED DEED,
@@ -38,10 +38,10 @@ struct ObjectSection {
     PointerArray* Symbols ; <ObjectSymbol*>
     PointerArray* Relocations ; <ObjectRelocation*>
 
-    static self* New(SECTION_TYPE Type, i8* Name, void* Data, i64 Size) {
+    static self* New(SECTION_TYPE _Type, i8* Name, void* Data, i64 Size) {
         self* this := Alloc(#self)
 
-        this->Type := Type
+        this->Type := _Type
 
         this->Name := Name
 
@@ -54,8 +54,8 @@ struct ObjectSection {
         return this
     }
 
-    static self* New(SECTION_TYPE Type, i8* Name) {
-        return self:New(Type, Name, Alloc(1), 0)
+    static self* New(SECTION_TYPE _Type, i8* Name) {
+        return self:New(_Type, Name, Alloc(1), 0)
     }
 
     define self* Clone() {
@@ -67,8 +67,8 @@ struct ObjectSection {
         return Result
     }
 
-    define i8 Is(SECTION_TYPE Type) {
-        return this->Type = Type
+    define i8 Is(SECTION_TYPE _Type) {
+        return this->Type = _Type
     }
 
     define void Discard() {
@@ -76,6 +76,10 @@ struct ObjectSection {
         this->Relocations->Clear()
         this->Size := 0
         this->Type := SECTION_TYPE_DISCARD
+    }
+
+    define void AddRelocation(ObjectRelocation* Relocation) {
+        this->Relocations->Push(Relocation)
     }
 
     define void DumpRelocations(i32 Level) {
@@ -143,18 +147,18 @@ define i8* SymbolBindingName(SYMBOL_BINDING Binding) {
 
 enum SYMBOL_TYPE {
     None
-    Object
+    Data
     Function
     Section
     File
 }
 
-define i8* SymbolTypeName(SYMBOL_TYPE Type) {
+define i8* SymbolTypeName(SYMBOL_TYPE _Type) {
     i8*[5] Names {
-        "None", "Object", "Function", "Section", "File"
+        "None", "Data", "Function", "Section", "File"
     }
 
-    return Names[Type As i32]
+    return Names[_Type As i32]
 }
 
 enum SYMBOL_VISIBILITY {
@@ -186,11 +190,11 @@ struct ObjectSymbol {
 
     PointerArray* Relocations ; <ObjectRelocation*>
 
-    static self* New(SYMBOL_BINDING Binding, SYMBOL_TYPE Type, SYMBOL_VISIBILITY Visibility, ObjectSection* Section, i8* Name, i64 Size, i64 Value) {
+    static self* New(SYMBOL_BINDING Binding, SYMBOL_TYPE _Type, SYMBOL_VISIBILITY Visibility, ObjectSection* Section, i8* Name, i64 Size, i64 Value) {
         self* this := Alloc(#self)
 
         this->Binding := Binding
-        this->Type := Type
+        this->Type := _Type
         this->Visibility := Visibility
 
         this->Section := Section
@@ -289,7 +293,7 @@ enum RELOCATION_TYPE {
     PLT_32 ; *target = plt[symbol] + addend - &symbol
 }
 
-define i8* RelocationTypeName(RELOCATION_TYPE Type) {
+define i8* RelocationTypeName(RELOCATION_TYPE _Type) {
     i8*[7] Names {
         "Unimplemented",
         "Offset_32", "Offset_64",
@@ -297,7 +301,7 @@ define i8* RelocationTypeName(RELOCATION_TYPE Type) {
         "GOT_32", "PLT_32"
     }
 
-    return Names[Type As i32]
+    return Names[_Type As i32]
 }
 
 struct ObjectRelocation {
@@ -309,12 +313,12 @@ struct ObjectRelocation {
     ObjectSymbol* Target
     i64 Addend
 
-    static self* New(ObjectSection* Container, RELOCATION_TYPE Type, i64 Offset, ObjectSymbol* Target, i64 Addend) {
+    static self* New(ObjectSection* Container, RELOCATION_TYPE _Type, i64 Offset, ObjectSymbol* Target, i64 Addend) {
         self* this := Alloc(#self)
 
         this->Container := Container
 
-        this->Type := Type
+        this->Type := _Type
         this->Offset := Offset
 
         this->Target := Target
@@ -488,6 +492,11 @@ struct ObjectFile {
         ;Section->Symbols->Clear()
     }
 
+    define void AddNewSection(ObjectSection* Section) {
+        this->AddSection(Section)
+        this->AddSymbol(ObjectSymbol:New(SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_SECTION, SYMBOL_VISIBILITY_DEFAULT, Section, Section->Name, 0, 0))
+    }
+
     define ObjectSection* GetSection(i8* Name) {
         return this->SectionsByName->GetPointer(FNV1A(Name))
     }
@@ -541,5 +550,11 @@ struct ObjectFile {
 
             Section->DumpRelocations(0)
         }
+    }
+
+    define void Dump() {
+        this->DumpSections()
+        this->DumpSymbolTables()
+        this->DumpRelocations()
     }
 }

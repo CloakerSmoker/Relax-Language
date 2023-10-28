@@ -4,6 +4,8 @@
 ==========================================
 */
 
+#Require "./src/elf/Library.rlx"
+
 #Require "./src/compiler/DWARF/DWARFBuilder.rlx"
 
 struct LabelInfo {
@@ -84,10 +86,32 @@ struct CompilerState {
 	DWARFBuilder* DWARF
 	
 	i32 DWARFCompilationUnitOffset
+
+	; New Linker Fields
+
+	ObjectFile* Object
+	ObjectSection* CodeSection
+	ObjectSection* DataSection
+	ObjectSection* ZeroSection
+
+	ObjectSymbol* CurrentFunctionSymbol
 	
 	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
 		this->Parser := Parser
+
+		if (Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			this->Object := ObjectFile:New()
+
+			this->CodeSection := ObjectSection:New(SECTION_TYPE_DATA, ".text")
+			this->Object->AddNewSection(this->CodeSection)
+
+			this->DataSection := ObjectSection:New(SECTION_TYPE_DATA, ".data")
+			this->Object->AddNewSection(this->DataSection)
+
+			this->ZeroSection := ObjectSection:New(SECTION_TYPE_DATA, ".bss")
+			this->Object->AddNewSection(this->ZeroSection)
+		}
 		
 		this->CodeBufferSize := 0x10000
 		this->CodeBuffer := Alloc(0x10000)
@@ -114,6 +138,35 @@ struct CompilerState {
 		this->FunctionCount := 0
 	}
 	
+	define ObjectSymbol* FindOrAddGlobalObjectSymbol(VariableInfo* Variable) {
+		if !(Variable->ObjectSymbol) {
+			if (Variable->IsExternal) {
+				SYMBOL_TYPE TargetType := SYMBOL_TYPE_DATA
+
+				if (TypeIsCallable(Variable->Type)) {
+					TargetType := SYMBOL_TYPE_FUNCTION
+				}
+
+				Variable->ObjectSymbol := ObjectSymbol:New(
+					SYMBOL_BINDING_GLOBAL, TargetType, SYMBOL_VISIBILITY_DEFAULT,
+					null, Variable->ExternalSymbolName->Buffer,
+					0, 0
+				)
+			}
+			else {
+				Variable->ObjectSymbol := ObjectSymbol:New(
+					SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
+					this->ZeroSection, Variable->Name->Buffer,
+					0, 0
+				)
+			}
+
+			this->Object->AddSymbol(Variable->ObjectSymbol)
+		}
+
+		return Variable->ObjectSymbol
+	}
+
 	define i8* SourcePathToAbsolutePath(i8* Path) {
 		return this->Config->LookupIncludedPath(Path)
 	}
@@ -194,7 +247,17 @@ struct CompilerState {
 					}
 
 					if (Config->DebugMode & DEBUG_EMIT_GLOBAL_SYMBOLS) {
-						NextGlobal->Symbol := this->ELF->AddGlobalSymbol(ELF_STB_LOCAL, NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
+						i32 Size := GetTypeStorageSize(NextGlobal->Type)
+
+						if (Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+							NextGlobal->ObjectSymbol := this->FindOrAddGlobalObjectSymbol(NextGlobal)
+
+							NextGlobal->ObjectSymbol->Value := NextGlobal->StackOffset
+							NextGlobal->ObjectSymbol->Size := Size
+						}
+						else {
+							NextGlobal->Symbol := this->ELF->AddGlobalSymbol(ELF_STB_LOCAL, NextGlobal->Name->Buffer, NextGlobal->StackOffset, NextGlobal->StackOffset + GetTypeStorageSize(NextGlobal->Type))
+						}
 					}
 					
 					FoundElement := FoundElement->NextElement
@@ -328,6 +391,36 @@ struct CompilerState {
 		}
 	}
 
+	define ObjectSymbol* FindOrAddFunctionObjectSymbol(FunctionDefine* Function) {
+		if !(Function->ObjectSymbol) {
+			i32 NameLength := Function->GetStringLength()
+			i8* NameBuffer := Alloc(NameLength + 1)
+			
+			Function->StringifyInto(NameBuffer, '.')
+
+			ObjectSymbol* FunctionSymbol := ObjectSymbol:New(
+				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
+				this->CodeSection, NameBuffer,
+				0, 0
+			)
+
+			Function->ObjectSymbol := FunctionSymbol
+			this->Object->AddSymbol(FunctionSymbol)
+		}
+
+		return Function->ObjectSymbol
+	}
+
+	define void ReferenceSymbolFromCode(i32 Offset, ObjectSymbol* Target, i32 Addend) {
+		ObjectRelocation* Relocation := ObjectRelocation:New(
+			this->CodeSection, RELOCATION_TYPE_OFFSET_32,
+			Offset, Target, Addend
+		)
+
+		Target->ReferenceBy(Relocation)
+		this->CodeSection->AddRelocation(Relocation)
+	}
+
 	define ELFSymbol* FindOrAddFunctionSymbol(FunctionDefine* Function) {
 		if !(Function->Symbol) {
 			i32 NameLength := Function->GetStringLength()
@@ -346,9 +439,15 @@ struct CompilerState {
 	}
 	
 	define void AfterCompileFunction(FunctionDefine* Function, i32 Data, i32 FunctionOffset) {
-		i64 FunctionAddress := this->Config->ImageBase + FunctionOffset
+		i64 FunctionAddress := FunctionOffset
 
-		if !(this->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+		if (this->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+
+		}
+		else if (this->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			FunctionAddress += this->Config->ImageBase
+		}
+		else {
 			FunctionAddress += this->CodeBase
 		}
 
@@ -368,18 +467,32 @@ struct CompilerState {
 			
 			Function->StringifyInto(NameBuffer, '.')
 
-			if !(Function->Symbol) {
-				;Print("Created symbol %s\n", NameBuffer)
+			if (this->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* FunctionSymbol := this->FindOrAddFunctionObjectSymbol(Function)
 
-				Function->Symbol := this->ELF->AddFunctionSymbol(ELF_STB_LOCAL, NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
+				FunctionSymbol->Value := FunctionAddress
+				FunctionSymbol->Size := FunctionSize
+
+				if (this->Parser->MainFunction = Function) {
+					ObjectSymbol* MainSymbol := ObjectSymbol:New(
+						SYMBOL_BINDING_GLOBAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
+						this->CodeSection, "main",
+						FunctionAddress, FunctionSize
+					)
+
+					this->Object->AddSymbol(MainSymbol)
+				}
 			}
 			else {
-				;Print("Completed symbol index %i for %s\n", Function->SymbolNumber, NameBuffer)
+				if (Function->Symbol) {
+					ELFSymbol* Symbol := Function->Symbol
 
-				ELFSymbol* Symbol := Function->Symbol
-
-				Symbol->Value := FunctionAddress
-				Symbol->Size := FunctionSize
+					Symbol->Value := FunctionAddress
+					Symbol->Size := FunctionSize
+				}
+				else {
+					Function->Symbol := this->ELF->AddFunctionSymbol(ELF_STB_LOCAL, NameBuffer, FunctionAddress, FunctionAddress + FunctionSize - 1)
+				}
 			}
 
 			if (Function->Attributes & FUNCTION_ATTRIBUTE_EXPORT) {
@@ -392,7 +505,7 @@ struct CompilerState {
 				this->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, ExportName, FunctionAddress, FunctionAddress + FunctionSize - 1)
 			}
 
-			Free(NameBuffer)
+			;Free(NameBuffer)
 		}
 	}
 }
@@ -589,6 +702,11 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		Compiler->DistanceBetweenGlobalsAndCode := Parser~>Globals->NextOffset
 	}
+	else if (Config->OutputFormat = OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		; :shrug:
+
+		Config->ImageBase := 0
+	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		i16 ELFType := ELF_FILETYPE_EXECUTABLE
 
@@ -699,6 +817,20 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		Result := FileWrite(OutputFileHandle, Binary, FileSize)
 		BytesWritten := FileSize
+	}
+	else if (Config->OutputFormat = OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		Compiler->CodeSection->Data := Compiler->CodeBuffer
+		Compiler->CodeSection->Size := Compiler->Index
+
+		Compiler->ZeroSection->Size := Parser~>Globals->NextOffset
+
+		Compiler->Object->Dump()
+
+		ELFPassthroughObjectWriter* Passthrough := ELFPassthroughObjectWriter:New(Compiler->Object)
+		Passthrough->Lower()
+		ELFEmitter* Emit := Passthrough->Emit()
+
+		FileWrite(OutputFileHandle, Emit->Buffer, Emit->Size)
 	}
 	else if (Config->OutputFormat = OUTPUT_ELF) {
 		Compiler->ELF->AddEmptyDataSection(Parser~>Globals->NextOffset)
@@ -892,7 +1024,14 @@ define i32 GetGlobalMemoryOffset(CompilerState* Compiler, VariableInfo* TargetVa
 
 define void CompileGetVariableAddress(CompilerState* Compiler, i8 ResultRegister, VariableInfo* TargetVariable) {
 	if (TargetVariable->IsGlobal) {
-		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* TargetSymbol := Compiler->FindOrAddGlobalObjectSymbol(TargetVariable)
+
+			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, TargetSymbol, -4)
+		}
+		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
 
 			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
@@ -924,7 +1063,14 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 		CompileGetVariableAddress(Compiler, ResultRegister, TargetVariable)
 	}
 	else if (TargetVariable->IsExternal) {
-		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* Target := Compiler->FindOrAddGlobalObjectSymbol(TargetVariable)
+
+			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, Target, -4)
+		}
+		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			if !(TargetVariable->Symbol) {
 				i8 SymbolType := ELF_STT_NONE
 
@@ -986,7 +1132,14 @@ define void CompileGetVariableValue(CompilerState* Compiler, i8 ResultRegister, 
 	}
 	else {
 		if (TargetVariable->IsGlobal) {
-			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* TargetSymbol := Compiler->FindOrAddGlobalObjectSymbol(TargetVariable)
+
+				EmitMove_RX_REL32(Compiler, ResultRegister, 0, TargetSize)
+
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, TargetSymbol, -4)
+			}
+			else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 				EmitMove_RX_REL32(Compiler, ResultRegister, 0, TargetSize)
 
 				Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
@@ -2025,6 +2178,13 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 		if (IsFunctionPointerCall) {
 			EmitCall_R64(Compiler, RAX)
 		}
+		else if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* TargetSymbol := Compiler->FindOrAddFunctionObjectSymbol(TargetFunction)
+
+			EmitCall_REL32(Compiler, 0)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, TargetSymbol, -4)
+		}
 		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			ELFSymbol* Symbol := Compiler->FindOrAddFunctionSymbol(TargetFunction)
 
@@ -2383,7 +2543,14 @@ define void CompileUnary(CompilerState* Compiler, i8 ResultRegister, Type Result
 		else if (OperandType = NODE_TYPE_DEFINE) {
 			FunctionDefine* OperandFunction := Operand->DefineNode
 			
-			if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* TargetSymbol := Compiler->FindOrAddFunctionObjectSymbol(OperandFunction)
+
+				EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, TargetSymbol, -4)
+			}
+			else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 				ELFSymbol* Symbol := Compiler->FindOrAddFunctionSymbol(OperandFunction)
 
 				EmitLea_R64_REL32(Compiler, ResultRegister, 0)

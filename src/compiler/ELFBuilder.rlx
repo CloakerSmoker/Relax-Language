@@ -87,7 +87,11 @@ struct ELFSectionHeader {
 	i64 FileOffset
 	i64 FileSize
 	i32 AssociatedSectionIndex
-	i32 ExtraInfo
+	
+	union {
+		i32 ExtraInfo
+		i32 FirstNonLocalSymbolIndex
+	}
 	
 	union {
 		ELFProgramHeader* Parent
@@ -96,6 +100,10 @@ struct ELFSectionHeader {
 	}
 
 	i64 EntrySize
+
+	static self* New() {
+		return Alloc(#self)
+	}
 }
 
 i8 ELF_STB_LOCAL   := 0x00
@@ -146,6 +154,9 @@ struct ELFSymbol unaligned {
 	}
 	define void Visibility(i8 Visibility) {
 		this->Other := Visibility
+	}
+	define i8 Visibility() {
+		return this->Other
 	}
 }
 
@@ -217,6 +228,10 @@ struct ELFRelocation {
 		this->Symbol(SymbolIndex)
 
 		return this
+	}
+
+	static self* New() {
+		return Alloc(#self)
 	}
 }
 

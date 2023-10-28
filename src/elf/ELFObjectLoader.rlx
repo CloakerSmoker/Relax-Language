@@ -4,11 +4,11 @@
 
 #Require "$/AVLTree.rlx"
 
-#Require "./src/elf/ELFBuilder.rlx"
+;#Require "./src/elf/ELFBuilder.rlx"
 #Require "./src/elf/ObjectFile.rlx"
 
-define SECTION_TYPE TranslateELFSectionType(i32 Type) {
-    if (Type = ELF_SECTION_TYPE_NODATA) {
+define SECTION_TYPE TranslateELFSectionType(i32 _Type) {
+    if (_Type = ELF_SECTION_TYPE_NODATA) {
         return SECTION_TYPE_ZERO
     }
     else {
@@ -30,31 +30,31 @@ define SYMBOL_BINDING TranslateELFSymbolBinding(i32 Binding) {
     return SYMBOL_BINDING_LOCAL
 }
 
-define SYMBOL_TYPE TranslateELFSymbolType(i32 Type) {
-    return Type As SYMBOL_TYPE
+define SYMBOL_TYPE TranslateELFSymbolType(i32 _Type) {
+    return _Type As SYMBOL_TYPE
 }
 
 define SYMBOL_VISIBILITY TranslateELFSymbolVisibility(i32 Visibility) {
     return Visibility As SYMBOL_VISIBILITY
 }
 
-define RELOCATION_TYPE TranslateRelocationTypeFromELF(i64 Type) {
-    if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
+define RELOCATION_TYPE TranslateRelocationTypeFromELF(i64 _Type) {
+    if (_Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_32) {
         return RELOCATION_TYPE_OFFSET_32
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_64) {
+    else if (_Type = ELF_RELOCATION_TYPE_X64_RIP_RELATIVE_64) {
         return RELOCATION_TYPE_OFFSET_64
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_DIRECT_32_SX) {
+    else if (_Type = ELF_RELOCATION_TYPE_X64_DIRECT_32_SX) {
         return RELOCATION_TYPE_ABSOLUTE_32
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_DIRECT_64) {
+    else if (_Type = ELF_RELOCATION_TYPE_X64_DIRECT_64) {
         return RELOCATION_TYPE_ABSOLUTE_64
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_GOT_32) {
+    else if (_Type = ELF_RELOCATION_TYPE_X64_GOT_32) {
         return RELOCATION_TYPE_GOT_32
     }
-    else if (Type = ELF_RELOCATION_TYPE_X64_PLT_32) {
+    else if (_Type = ELF_RELOCATION_TYPE_X64_PLT_32) {
         return RELOCATION_TYPE_PLT_32
     }
 
@@ -100,13 +100,13 @@ struct ELFObjectLoader {
         i8* Name := &this->StringTable[Header->NameOffset]
         void* Data := this->Buffer + Header->FileOffset
 
-        auto Type := TranslateELFSectionType(Header->Type)
+        auto _Type := TranslateELFSectionType(Header->Type)
 
-        if (Type = SECTION_TYPE_DISCARD) {
+        if (_Type = SECTION_TYPE_DISCARD) {
             return null
         }
 
-        auto Section := ObjectSection:New(Type, Name, Data, Header->FileSize)
+        auto Section := ObjectSection:New(_Type, Name, Data, Header->FileSize)
 
         return Section
     }
@@ -182,10 +182,10 @@ struct ELFObjectLoader {
                 }
 
                 SYMBOL_BINDING Binding := TranslateELFSymbolBinding(SymbolHeader->Binding())
-                SYMBOL_TYPE Type := TranslateELFSymbolType(SymbolHeader->Type())
+                SYMBOL_TYPE _Type := TranslateELFSymbolType(SymbolHeader->Type())
                 SYMBOL_VISIBILITY Visibility := TranslateELFSymbolVisibility(SymbolHeader->Visibility())
 
-                ObjectSymbol* Symbol := ObjectSymbol:New(Binding, Type, Visibility, SymbolSection, Name, SymbolHeader->Size, SymbolHeader->Value)
+                ObjectSymbol* Symbol := ObjectSymbol:New(Binding, _Type, Visibility, SymbolSection, Name, SymbolHeader->Size, SymbolHeader->Value)
 
                 Section->Symbols->Push(Symbol)
 
@@ -226,11 +226,11 @@ struct ELFObjectLoader {
                     ELFDirectRelocation* DirectHeader := DirectRelocations[Index]
 
                     i32 SymbolIndex := ELFRelocationSymbol(DirectHeader->Info)
-                    RELOCATION_TYPE Type := TranslateRelocationTypeFromELF(ELFRelocationType(DirectHeader->Info))
+                    RELOCATION_TYPE _Type := TranslateRelocationTypeFromELF(ELFRelocationType(DirectHeader->Info))
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 
-                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, Type, DirectHeader->Offset, Symbol, 0)
+                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, _Type, DirectHeader->Offset, Symbol, 0)
 
                     Section->Relocations->Push(Relocation)
 
@@ -246,11 +246,11 @@ struct ELFObjectLoader {
                     ELFRelocation* RelocationHeader := Relocations[Index]
 
                     i32 SymbolIndex := ELFRelocationSymbol(RelocationHeader->Info)
-                    RELOCATION_TYPE Type := TranslateRelocationTypeFromELF(ELFRelocationType(RelocationHeader->Info))
+                    RELOCATION_TYPE _Type := TranslateRelocationTypeFromELF(ELFRelocationType(RelocationHeader->Info))
 
                     ObjectSymbol* Symbol := SymbolTable->Symbols->At(SymbolIndex)
 
-                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, Type, RelocationHeader->Offset, Symbol, RelocationHeader->Addend)
+                    ObjectRelocation* Relocation := ObjectRelocation:New(Applicant, _Type, RelocationHeader->Offset, Symbol, RelocationHeader->Addend)
 
                     Section->Relocations->Push(Relocation)
 
