@@ -95,6 +95,12 @@ struct CompilerState {
 	ObjectSection* ZeroSection
 
 	ObjectSymbol* CurrentFunctionSymbol
+
+	ObjectSymbol* GlobalStringsSymbol
+
+	ObjectSymbol* CurrentFunctionStringsSymbol
+	i8* DataSectionBuffer
+	i32 DataSectionBufferSize
 	
 	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
@@ -111,6 +117,17 @@ struct CompilerState {
 
 			this->ZeroSection := ObjectSection:New(SECTION_TYPE_DATA, ".bss")
 			this->Object->AddNewSection(this->ZeroSection)
+
+			this->DataSectionBuffer := CloneMemory(Parser->GlobalConstantsBuffer, Parser->GlobalConstantBufferSize)
+			this->DataSectionBufferSize := Parser->GlobalConstantBufferSize
+
+			this->GlobalStringsSymbol := ObjectSymbol:New(
+				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
+				this->DataSection, "strings(global)",
+				Parser->GlobalConstantBufferSize, 0
+			)
+
+			this->Object->AddSymbol(this->GlobalStringsSymbol)
 		}
 		
 		this->CodeBufferSize := 0x10000
@@ -473,14 +490,14 @@ struct CompilerState {
 				FunctionSymbol->Value := FunctionAddress
 				FunctionSymbol->Size := FunctionSize
 
-				if (this->Parser->MainFunction = Function) {
-					ObjectSymbol* MainSymbol := ObjectSymbol:New(
+				if (Function->Name->Equals("Main")) {
+					ObjectSymbol* FunctionSymbol := ObjectSymbol:New(
 						SYMBOL_BINDING_GLOBAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
 						this->CodeSection, "main",
-						FunctionAddress, FunctionSize
+						FunctionSize, FunctionAddress
 					)
 
-					this->Object->AddSymbol(MainSymbol)
+					this->Object->AddSymbol(FunctionSymbol)
 				}
 			}
 			else {
@@ -501,8 +518,19 @@ struct CompilerState {
 				if (Function->ExportName) {
 					ExportName := Function->ExportName->Buffer
 				}
+				
+				if (this->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+					ObjectSymbol* FunctionSymbol := ObjectSymbol:New(
+						SYMBOL_BINDING_GLOBAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
+						this->CodeSection, ExportName,
+						FunctionSize, FunctionAddress
+					)
 
-				this->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, ExportName, FunctionAddress, FunctionAddress + FunctionSize - 1)
+					this->Object->AddSymbol(FunctionSymbol)
+				}
+				else {
+					this->ELF->AddFunctionSymbol(ELF_STB_GLOBAL, ExportName, FunctionAddress, FunctionAddress + FunctionSize - 1)
+				}
 			}
 
 			;Free(NameBuffer)
@@ -538,7 +566,7 @@ define void DumpGlobals(CompilerState* Compiler) {
 	i64 Base := Compiler->GlobalBase
 	
 	i32 MaxIndex := RawGlobals->BufferMaxCount As i32
-	
+
 	for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
 		if (Elements[ElementIndex]) {
 			HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
@@ -821,6 +849,9 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	else if (Config->OutputFormat = OUTPUT_ELF && Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 		Compiler->CodeSection->Data := Compiler->CodeBuffer
 		Compiler->CodeSection->Size := Compiler->Index
+
+		Compiler->DataSection->Data := Compiler->DataSectionBuffer
+		Compiler->DataSection->Size := Compiler->DataSectionBufferSize
 
 		Compiler->ZeroSection->Size := Parser~>Globals->NextOffset
 
@@ -1160,7 +1191,14 @@ define void CompileSetVariableValue(CompilerState* Compiler, VariableInfo* Targe
 	i8 TargetSize := GetTypeSize(TargetVariable->Type) As i8
 	
 	if (TargetVariable->IsGlobal) {
-		if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* GlobalSymbol := Compiler->FindOrAddGlobalObjectSymbol(TargetVariable)
+
+			EmitMove_REL32_RX(Compiler, 0, SourceRegister, TargetSize)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, GlobalSymbol, -4)
+		}
+		else if (Compiler->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			EmitMove_REL32_RX(Compiler, 0, SourceRegister, TargetSize)
 
 			Compiler->ELF->ReferenceSymbol(Compiler->Index - 4, TargetVariable->Symbol, -4)
@@ -1219,9 +1257,19 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	if (IsMain) {
 		SetLabel(Compiler, Compiler->GlobalStringsLabel)
 		
-		for (i32 ConstantByteIndex := 0, ConstantByteIndex < Compiler->Parser->GlobalConstantBufferSize, ConstantByteIndex += 1) {
-			PushByte(Compiler, Compiler->Parser->GlobalConstantsBuffer[ConstantByteIndex])
+		if !(Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			for (i32 ConstantByteIndex := 0, ConstantByteIndex < Compiler->Parser->GlobalConstantBufferSize, ConstantByteIndex += 1) {
+				PushByte(Compiler, Compiler->Parser->GlobalConstantsBuffer[ConstantByteIndex])
+			}
 		}
+
+			/*ObjectSymbol* MainSymbol := ObjectSymbol:New(
+				SYMBOL_BINDING_GLOBAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
+				Compiler->CodeSection, "main",
+				Compiler->Index, 0
+			)
+
+			Compiler->Object->AddSymbol(MainSymbol)*/
 	}
 	
 	; First though, we'll prefix the function's code with any strings which it uses
@@ -1229,9 +1277,41 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	if (FunctionToCompile->StringBufferSize) {
 		SetLabel(Compiler, StringsLabel)
-		
-		for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
-			PushByte(Compiler, FunctionToCompile->StringBuffer[CharacterIndex])
+
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			i8* SymbolName := FormatString("strings(%func)", FunctionToCompile)
+
+			ObjectSymbol* StringsSymbol := ObjectSymbol:New(
+				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
+				Compiler->DataSection, SymbolName,
+				FunctionToCompile->StringBufferSize, Compiler->DataSectionBufferSize
+			)
+
+			; TODO: This looks like a compiler bug. StringsSymbol->Value is set in :New
+			;  but has a bad value. Seems to be related to `SymbolName` being inlined, with
+			;   the variadic call to `FormatString`
+
+			;StringsSymbol->Value := Compiler->DataSectionBufferSize
+			;StringsSymbol->Size := FunctionToCompile->StringBufferSize
+
+			;Print("%func %i, %i\n", FunctionToCompile, FunctionToCompile->StringBufferSize, StringsSymbol->Value)
+
+			Compiler->DataSectionBufferSize += FunctionToCompile->StringBufferSize
+
+			;Print("%i %i, %i bytes\n", Compiler->DataSectionBufferSize, StringsSymbol->Value, StringsSymbol->Size)
+
+			Compiler->DataSectionBuffer := ReAlloc(Compiler->DataSectionBuffer, Compiler->DataSectionBufferSize)
+
+			MoveMemory(Compiler->DataSectionBuffer + StringsSymbol->Value, FunctionToCompile->StringBuffer, FunctionToCompile->StringBufferSize)
+
+			Compiler->Object->AddSymbol(StringsSymbol)
+
+			Compiler->CurrentFunctionStringsSymbol := StringsSymbol
+		}
+		else {
+			for (i32 CharacterIndex := 0, CharacterIndex < FunctionToCompile->StringBufferSize, CharacterIndex += 1) {
+				PushByte(Compiler, FunctionToCompile->StringBuffer[CharacterIndex])
+			}
 		}
 	}
 	
@@ -1334,7 +1414,16 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	if (Compiler->Config->DebugMode & DEBUG_EMIT_FUNCTION_NAMES) {
 		EmitPush_I32(Compiler, 0x12345678)
-		EmitLea_R64_Label(Compiler, RAX, StringsLabel)
+
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			EmitLea_R64_REL32(Compiler, RAX, 0)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, Compiler->CurrentFunctionStringsSymbol, 0)
+		}
+		else {
+			EmitLea_R64_Label(Compiler, RAX, StringsLabel)
+		}
+
 		EmitPush_R64(Compiler, RAX)
 		
 		; Extend LocalSpace to account for extra offset from RBP to local variables
@@ -1409,6 +1498,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	if (IsMain) {
 		Compiler->CurrentFunctionStringsLabel := Compiler->GlobalStringsLabel
+		Compiler->CurrentFunctionStringsSymbol := Compiler->GlobalStringsSymbol
 		
 		ASTNode** GlobalDefaults := Compiler->Parser->GlobalDefaults
 		i32 Length := GetArrayLength(GlobalDefaults)
@@ -1441,6 +1531,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		}
 		
 		Compiler->CurrentFunctionStringsLabel := StringsLabel
+		Compiler->CurrentFunctionStringsSymbol := StringsSymbol
 	}
 	
 	Compiler->MarkLineNumber(FunctionToCompile~>Context)
@@ -1925,9 +2016,16 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	else if (ExpressionType = NODE_TYPE_CALL) {
 		CompileCall(Compiler, ResultRegister, ExpressionToCompile)
 	}
-	else if (ExpressionType = NODE_TYPE_STRING) {		
-		EmitLea_R64_Label(Compiler, ResultRegister, Compiler->CurrentFunctionStringsLabel)
-		OffsetLabel(Compiler, ExpressionToCompile->StringOffsetValue)
+	else if (ExpressionType = NODE_TYPE_STRING) {
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			EmitLea_R64_REL32(Compiler, ResultRegister, 0)
+
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, Compiler->CurrentFunctionStringsSymbol, ExpressionToCompile->StringOffsetValue - 4)
+		}
+		else {
+			EmitLea_R64_Label(Compiler, ResultRegister, Compiler->CurrentFunctionStringsLabel)
+			OffsetLabel(Compiler, ExpressionToCompile->StringOffsetValue)
+		}
 	}
 	else if (ExpressionType = NODE_TYPE_GET_TYPE_SIZE) {
 		i32 OperandTypeSize := GetTypeStorageSize(ExpressionToCompile->TypeValue)

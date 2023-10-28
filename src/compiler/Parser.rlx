@@ -1318,7 +1318,7 @@ struct ParserState {
 			}
 
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_EXPORT)) {
-				i32 AllowExport := this->Config->DebugMode & DEBUG_EMIT_OBJECT
+				i32 AllowExport := this->Config->DebugMode & (DEBUG_EMIT_OBJECT | DEBUG_EMIT_NEW_OBJECT)
 
 				if !(AllowExport) {
 					this->GetCurrentTokenContext()->Error("Exported functions are only allowed when building an object file")
