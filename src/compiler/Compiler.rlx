@@ -109,6 +109,9 @@ struct CompilerState {
 		if (Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 			this->Object := ObjectFile:New()
 
+			ObjectSection* NoteGNUStack := ObjectSection:New(SECTION_TYPE_DATA, ".note.GNU-stack")
+			this->Object->AddNewSection(NoteGNUStack)
+
 			this->CodeSection := ObjectSection:New(SECTION_TYPE_DATA, ".text")
 			this->Object->AddNewSection(this->CodeSection)
 
@@ -1287,7 +1290,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 
 			ObjectSymbol* StringsSymbol := ObjectSymbol:New(
 				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
-				Compiler->DataSection, SymbolName,
+				Compiler->ReadOnlyDataSection, SymbolName,
 				FunctionToCompile->StringBufferSize, Compiler->ReadOnlyData->Size()
 			)
 
@@ -1410,7 +1413,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 			EmitLea_R64_REL32(Compiler, RAX, 0)
 
-			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, Compiler->CurrentFunctionStringsSymbol, 0)
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, Compiler->CurrentFunctionStringsSymbol, -4)
 		}
 		else {
 			EmitLea_R64_Label(Compiler, RAX, StringsLabel)
