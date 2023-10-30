@@ -1780,6 +1780,10 @@ struct ParserState {
 		Type EnumType := MakeType(BaseEnumType, 0)
 		
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected opening brace for enum type body")
+
+		if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+			return
+		}
 		
 		i32 NextValue := 0
 		

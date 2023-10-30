@@ -862,7 +862,7 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 
 		Compiler->ZeroSection->Size := Parser~>Globals->NextOffset
 
-		Compiler->Object->Dump()
+		;Compiler->Object->Dump()
 
 		ELFPassthroughObjectWriter* Passthrough := ELFPassthroughObjectWriter:New(Compiler->Object)
 		Passthrough->Lower()
@@ -1430,7 +1430,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		i32 LocalSlots := LocalSpace / 8
 		
-		if (LocalSpace % 8) {
+		if (LocalSlots % 2) {
+			LocalSpace += 8
 			LocalSlots += 1
 		}
 		
@@ -2135,10 +2136,30 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	}
 	
 	i8 RegisterStackIndex := Compiler->RegisterStackIndex
-	i8 StackIsAligned := RegisterStackIndex >= 8 && (RegisterStackIndex % 2 != 0)
+	i8 StackIsAligned := true
+
+	if (RegisterStackIndex >= 8) {
+		StackIsAligned := RegisterStackIndex % 2 != 0
+	}
+
+	if (HasSavedRAX) {
+		StackIsAligned := !StackIsAligned
+	}
+
+	if (StackParameterCount % 2 != 0) {
+		StackIsAligned := !StackIsAligned
+	}
+
+	if (ParameterCount = 9) {
+		;Print("Remainder: %i\n", StackParameterCount % 2)
+
+		;Print("RSI: %i\n", RegisterStackIndex)
+		;Print("SPC: %i\nSIA: %i\nHSR: %i\n", StackParameterCount, StackIsAligned, HasSavedRAX)
+		;EmitPush_R64(Compiler, RBX)
+	}
 	
-	if (StackParameterCount % 2 || StackIsAligned && !HasSavedRAX) {
-		EmitPush_R64(Compiler, RBX)
+	if !(StackIsAligned) {
+		EmitPush_R64(Compiler, RAX)
 		ExtraPadding := true
 	}
 	
@@ -2150,6 +2171,10 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	i32 OldMaxSave := Compiler->ParameterRegistersMaxSave
 	i32 OldMinSave := Compiler->ParameterRegistersMinSave
 	i8 ShouldSaveRegisters := OldMaxSave != OldMinSave
+
+	if (ParameterCount = 9) {
+		;Print("OMXS: %i\nOMNS: %i\nSSR: %i\n", OldMaxSave, OldMinSave, ShouldSaveRegisters)
+	}
 	
 	if (ShouldSaveRegisters) {
 		for (i32 SaveIndex := OldMinSave, SaveIndex < OldMaxSave, SaveIndex += 1) {
@@ -2221,8 +2246,13 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 					}
 				}
 			}
-			else if (USE_SYSTEMV) {				
-				ThisParameterRegister := GetSystemVRegister(ParameterIndex As i8)
+			else if (USE_SYSTEMV) {
+				if (ParameterIndex < RegisterParameterCount) {
+					ThisParameterRegister := GetSystemVRegister(ParameterIndex As i8)
+				}
+				else {
+					ThisParameterRegister := RBX
+				}
 			}
 			else {
 				if (ParameterIndex = 3) {ThisParameterRegister := R9}
@@ -2306,9 +2336,9 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	
 	; NOTE: This causes crashes. No clue why. Removing it drops code size and the tests still
 	;  pass so I don't think I really care.
-	;if (IS_VARIADIC) {
-	;	StackAdd += VariadicCount
-	;}
+	if (IS_VARIADIC) {
+		StackAdd := VariadicCount
+	}
 	
 	if (StackAdd) {
 		EmitAdd_R64_IX(Compiler, RSP, StackAdd * 8)

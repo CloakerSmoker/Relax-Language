@@ -3,4 +3,4 @@
 command = "build\\windows_test_compiler.exe -i tests/{base}.rlx -o tests/{base}.exe --windows > NUL || tests\\{base}.exe {args}"
 
 [envs.linux]
-command = "./build/linux_test_compiler.elf -i tests/{base}.rlx -o tests/{base}.elf --linux > /dev/null && tests/{base}.elf {args}"
+command = "./build/linux_test_compiler.elf -i tests/{base}.rlx -o tests/{base}.elf --linux {args} > /dev/null && tests/{base}.elf {args}"

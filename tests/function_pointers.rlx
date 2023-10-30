@@ -1,3 +1,7 @@
+/*
+ARGS: --debug --dwarf
+*/
+
 #Require "$/Console.rlx"
 
 define i8 real_function(i8 value) {
