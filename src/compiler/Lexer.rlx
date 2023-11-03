@@ -314,9 +314,9 @@ struct LexerState {
 		this->DefineKeyword("external",  KEYWORD_EXTERNAL)
 		this->DefineKeyword("export",    KEYWORD_EXPORT)
 		this->DefineKeyword("namespace", KEYWORD_NAMESPACE)
-		this->DefineKeyword("class",     KEYWORD_CLASS)
-		this->DefineKeyword("implements",KEYWORD_IMPLEMENTS)
-		this->DefineKeyword("interface", KEYWORD_INTERFACE)
+		;this->DefineKeyword("class",     KEYWORD_CLASS)
+		;this->DefineKeyword("implements",KEYWORD_IMPLEMENTS)
+		;this->DefineKeyword("interface", KEYWORD_INTERFACE)
 		
 		return this
 	}
