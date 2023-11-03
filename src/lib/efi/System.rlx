@@ -699,8 +699,8 @@ struct EFI_BOOT_SERVICES {
 		return EFICall(ImageHandle, MapKey As void*, this->_ExitBootServices)
 	}
 	
-	define i64 HandleProtocol(EFI_HANDLE* Handle, EFI_GUID* Protocol, void** Interface) {
-		return EFICall(Handle, Protocol, Interface, this->_HandleProtocol)
+	define i64 HandleProtocol(EFI_HANDLE* Handle, EFI_GUID* Protocol, void** _Interface) {
+		return EFICall(Handle, Protocol, _Interface, this->_HandleProtocol)
 	}
 	
 	define i64 LocateHandle(i32 SearchType, EFI_GUID* Protocol, void* SearchKey, i32* BufferSize, void* Buffer) {
@@ -711,11 +711,11 @@ struct EFI_BOOT_SERVICES {
 		return EFICall(Protocol, DevicePath, Device, this->_LocateDevicePath)
 	}
 	
-	define i64 LocateProtocol(EFI_GUID* Protocol, void* Registration, void** Interface) {
-		return EFICall(Protocol, Registration, Interface, this->_LocateProtocol)
+	define i64 LocateProtocol(EFI_GUID* Protocol, void* Registration, void** _Interface) {
+		return EFICall(Protocol, Registration, _Interface, this->_LocateProtocol)
 	}
-	define i64 LocateProtocol(EFI_GUID* Protocol, void** Interface) {
-		return EFICall(Protocol, null, Interface, this->_LocateProtocol)
+	define i64 LocateProtocol(EFI_GUID* Protocol, void** _Interface) {
+		return EFICall(Protocol, null, _Interface, this->_LocateProtocol)
 	}
 }
 
