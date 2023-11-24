@@ -1328,7 +1328,9 @@
 					ResultType := RightType
 				}
 				else if (Operator = OPERATOR_OPEN_BRACKET) {
-					if !(RightBase->Is(TYPE_KIND_BUILTIN)) {
+					i8 AllowedAsIndex := RightBase->Is(TYPE_KIND_BUILTIN) || RightBase->Is(TYPE_KIND_ENUMERATION)
+
+					if !(AllowedAsIndex) {
 						Right->Error("Invalid `[Index]` type.")
 					}
 					
