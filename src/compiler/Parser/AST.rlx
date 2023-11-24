@@ -180,6 +180,18 @@ struct QualifiedName {
 		return this
 	}
 
+	define Token* Pop() {
+		if (this->Parts->Count() = 0) {
+			return null
+		}
+		
+		Token* Result := this->LocalPart
+
+		this->LocalPart := this->Parts->Pop()
+
+		return Result
+	}
+
 	define i32 Count() {
 		return this->Parts->Count()
 	}

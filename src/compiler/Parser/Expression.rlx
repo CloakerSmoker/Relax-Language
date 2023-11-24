@@ -622,6 +622,27 @@
 				}
 			}
 			else {
+				if (Name->Count() >= 1) {
+					QualifiedName* MaybeEnumName := Name->Clone()
+					Token* MaybeEnumField := MaybeEnumName->Pop()
+
+					TypeInfo* MaybeEnumType := this->TryLookupQualifiedName(MaybeEnumName)
+
+					if (MaybeEnumType && MaybeEnumType->Kind = TYPE_KIND_ENUMERATION) {
+						HashMapElement* EnumFieldElement := MaybeEnumType~>Fields->Get(MaybeEnumField->StringValue)
+						
+						if (EnumFieldElement) {
+							StructField* EnumField := EnumFieldElement->Value
+						
+							Result := ASTNode:New(NODE_TYPE_INTEGER, EnumField->EnumValue, EnumField->ValueType)
+
+							Result~>Context->Clone(MaybeEnumName~>Context)
+
+							return Result
+						}
+					}
+				}
+
 				NextToken := Name->LocalPart
 
 				VariableInfo* MaybeFunctionPointer := this->TryFindVariable(NextToken)

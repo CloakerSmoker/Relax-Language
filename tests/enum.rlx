@@ -22,9 +22,9 @@ define void PrintAnimalType(animal_kind kind) {
 
 define i32 Main() {
 	PrintAnimalType(animal_kind:dog)
-	PrintAnimalType(animal_kind:cat)
+	PrintAnimalType(animal_kind::cat)
 	
-	Print("%i", starts_from_10:second)
+	Print("%i", starts_from_10::second)
 
 	PrintAnimalType(ANIMAL_KIND_DOG)
 	
