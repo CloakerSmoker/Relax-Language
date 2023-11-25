@@ -122,8 +122,10 @@
 				
 				NextParameterCount -= 1
 			}
+
+			i8 HasExcessParameters := IsVariadic && ParameterCount >= NextParameterCount
 			
-			if (NextParameterCount = ParameterCount || IsVariadic) {
+			if (NextParameterCount = ParameterCount || HasExcessParameters) {
 				; Only when the function we're checking against takes the correct number of parameters (or is
 				;  variadic) we actually calculate how compatible all of the parameters are.
 				
