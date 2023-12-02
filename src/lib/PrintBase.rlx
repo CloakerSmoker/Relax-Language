@@ -198,6 +198,9 @@ struct PrintOutputAdapterPrototype {
 				else if (Next = 'x') {
 					this->PrintPrefixedHex(NextParameter As i64)
 				}
+				else if (Next = 'X') {
+					this->PrintHex(NextParameter As i64)
+				}
 				else if (Next = 'c') {
 					this->DoPrintCharacters(&NextParameter As i8*, 1)
 				}

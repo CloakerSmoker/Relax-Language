@@ -66,6 +66,7 @@ struct ClassInfo {
 struct TypeInfo {
 	SourceContext* DefinedAt
 	SafeString* Name
+	QualifiedName* FullName
 	
 	union {
 		HashMap Fields ; <StructField*>
