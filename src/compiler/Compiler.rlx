@@ -2064,8 +2064,15 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	TypeInfo* Enumeration := GetBaseType(Node->ValueType)
 	i32 FieldCount := Enumeration->FieldsInOrder->Count()
+	i8 TypeSize := GetTypeSize(Node->ValueType) As i8
 
 	CompileExpression(Compiler, ResultRegister, Node)
+
+	if (TypeSize < 4) {
+		Cast(Compiler, ResultRegister, TypeSize)
+	}
+
+	i8 Temp := PushRegisterStack(Compiler)
 
 	if (Enumeration->IsLinearEnumeration) {
 		i32 BadRangeLabel := NextLabel(Compiler)
@@ -2081,13 +2088,13 @@ define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister,
 		EmitCmp_R32_IX(Compiler, ResultRegister, FieldCount)
 		EmitJGE_Label(Compiler, BadRangeLabel)
 
-		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		EmitLea_R64_Label(Compiler, Temp, Compiler->GlobalStringsLabel)
 		OffsetLabel(Compiler, Enumeration->EnumerationNamesOffset)
 
-		EmitMove_RX_SIB(Compiler, ResultRegister, 4, ResultRegister, RAX)
+		EmitMove_RX_SIB(Compiler, ResultRegister, 4, ResultRegister, Temp)
 
-		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
-		EmitAdd_RX_RX(Compiler, ResultRegister, RAX, 8)
+		EmitLea_R64_Label(Compiler, Temp, Compiler->GlobalStringsLabel)
+		EmitAdd_RX_RX(Compiler, ResultRegister, Temp, 8)
 
 		EmitJump_Label(Compiler, DoneLabel)
 
@@ -2100,7 +2107,7 @@ define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister,
 		i32 FoundLabel := NextLabel(Compiler)
 		i32 DoneLabel := NextLabel(Compiler)
 
-		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		EmitLea_R64_Label(Compiler, Temp, Compiler->GlobalStringsLabel)
 		OffsetLabel(Compiler, Enumeration->EnumerationNamesOffset)
 
 		for (i32 Index := 0, Index < FieldCount, Index++) {
@@ -2109,20 +2116,22 @@ define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister,
 			EmitCmp_R32_I32(Compiler, ResultRegister, Field->EnumValue)
 			EmitJEZ_Label(Compiler, FoundLabel)
 
-			EmitAdd_R64_I8(Compiler, RAX, 4)
+			EmitAdd_R64_I8(Compiler, Temp, 4)
 		}
 
 		EmitZeroRegister(Compiler, ResultRegister)
 		EmitJump_Label(Compiler, DoneLabel)
 
 		SetLabel(Compiler, FoundLabel)
-		EmitMove_RX_RIX(Compiler, ResultRegister, RAX, 4)
+		EmitMove_RX_RIX(Compiler, ResultRegister, Temp, 4)
 
-		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
-		EmitAdd_RX_RX(Compiler, ResultRegister, RAX, 8)
+		EmitLea_R64_Label(Compiler, Temp, Compiler->GlobalStringsLabel)
+		EmitAdd_RX_RX(Compiler, ResultRegister, Temp, 8)
 
 		SetLabel(Compiler, DoneLabel)
 	}
+
+	PopRegisterStack(Compiler)
 }
 
 define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {

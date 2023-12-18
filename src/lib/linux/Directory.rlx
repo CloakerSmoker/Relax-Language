@@ -1,22 +1,20 @@
 
 enum DirectoryEntryType As i8 {
     Directory := 4,
-    BlockDevice := 6,
-    File := 10
+    File := 8
 }
 
 struct DirectoryEntry {
     i64 INodeNumber
     i64 NextOffset
     i16 Length
+    DirectoryEntryType Type
+
+    define i8* TypeName() {
+        return nameof:(this->Type)
+    }
 
     i8[256] Name
-
-    define DirectoryEntryType GetType() {
-        DirectoryEntryType* pType := ((this As void*) + (this->Length As i64) - 1) As void*
-
-        return *pType
-    }
 }
 
 i64 LINUX_SYSCALL_GETDENTS64 := 217
