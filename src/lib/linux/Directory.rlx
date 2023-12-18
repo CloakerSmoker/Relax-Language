@@ -1,0 +1,88 @@
+
+enum DirectoryEntryType As i8 {
+    Directory := 4,
+    BlockDevice := 6,
+    File := 10
+}
+
+struct DirectoryEntry {
+    i64 INodeNumber
+    i64 NextOffset
+    i16 Length
+
+    i8[256] Name
+
+    define DirectoryEntryType GetType() {
+        DirectoryEntryType* pType := ((this As void*) + (this->Length As i64) - 1) As void*
+
+        return *pType
+    }
+}
+
+i64 LINUX_SYSCALL_GETDENTS64 := 217
+
+struct LinuxDirectoryWalker {
+    i64 Handle
+    i32 Index
+    i32 Count
+    DirectoryEntry*[8] Entries
+    i8[128] Buffer
+
+    static self* New(i64 Handle) {
+        self* this := Alloc(#self)
+
+        this->Handle := Handle
+
+        return this
+    }
+
+    define void Populate() {
+        this->Count := 0
+        this->Index := 0
+
+        i64 BytesRead := syscall:(LINUX_SYSCALL_GETDENTS64, this->Handle, this->Buffer, 128)
+
+        i32 Offset := 0
+
+        while (Offset != BytesRead) {
+            DirectoryEntry* Entry := (this->Buffer + Offset) As void*
+
+            this->Entries[this->Count] := Entry
+            this->Count += 1
+
+            Offset += Entry->Length
+        }
+    }
+
+    define i8 Next(DirectoryEntry* Result) {
+        if (this->Index >= this->Count) {
+            this->Populate()
+        }
+
+        if (this->Count = 0) {
+            return false
+        }
+
+        DirectoryEntry* Entry := this->Entries[this->Index++]
+        MoveMemory(Result, Entry, Entry->Length)
+
+        return true
+    }
+}
+
+define void* StartWalkDirectory(i64 Handle) {
+    return LinuxDirectoryWalker:New(Handle) As void*
+}
+
+define i8 WalkDirectoryNext(void** pState, DirectoryEntry* Out) {
+    LinuxDirectoryWalker* State := *pState
+
+    i8 Result := State->Next(Out)
+
+    if !(Result) {
+        Free(State)
+        *pState := null
+    }
+
+    return Result
+}
