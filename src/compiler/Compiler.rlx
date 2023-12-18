@@ -2061,6 +2061,70 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 	
 }*/
 
+define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
+	TypeInfo* Enumeration := GetBaseType(Node->ValueType)
+	i32 FieldCount := Enumeration->FieldsInOrder->Count()
+
+	CompileExpression(Compiler, ResultRegister, Node)
+
+	if (Enumeration->IsLinearEnumeration) {
+		i32 BadRangeLabel := NextLabel(Compiler)
+		i32 DoneLabel := NextLabel(Compiler)
+
+		if (Enumeration->EnumerationBase != 0) {
+			EmitSub_R64_IX(Compiler, ResultRegister, Enumeration->EnumerationBase)
+		}
+
+		EmitCmp_R32_IX(Compiler, ResultRegister, 0)
+		EmitJLT_Label(Compiler, BadRangeLabel)
+
+		EmitCmp_R32_IX(Compiler, ResultRegister, FieldCount)
+		EmitJGE_Label(Compiler, BadRangeLabel)
+
+		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		OffsetLabel(Compiler, Enumeration->EnumerationNamesOffset)
+
+		EmitMove_RX_SIB(Compiler, ResultRegister, 4, ResultRegister, RAX)
+
+		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		EmitAdd_RX_RX(Compiler, ResultRegister, RAX, 8)
+
+		EmitJump_Label(Compiler, DoneLabel)
+
+		SetLabel(Compiler, BadRangeLabel)
+		EmitZeroRegister(Compiler, ResultRegister)
+
+		SetLabel(Compiler, DoneLabel)
+	}
+	else {
+		i32 FoundLabel := NextLabel(Compiler)
+		i32 DoneLabel := NextLabel(Compiler)
+
+		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		OffsetLabel(Compiler, Enumeration->EnumerationNamesOffset)
+
+		for (i32 Index := 0, Index < FieldCount, Index++) {
+			StructField* Field := Enumeration->FieldsInOrder->At(Index)
+
+			EmitCmp_R32_I32(Compiler, ResultRegister, Field->EnumValue)
+			EmitJEZ_Label(Compiler, FoundLabel)
+
+			EmitAdd_R64_I8(Compiler, RAX, 4)
+		}
+
+		EmitZeroRegister(Compiler, ResultRegister)
+		EmitJump_Label(Compiler, DoneLabel)
+
+		SetLabel(Compiler, FoundLabel)
+		EmitMove_RX_RIX(Compiler, ResultRegister, RAX, 4)
+
+		EmitLea_R64_Label(Compiler, RAX, Compiler->GlobalStringsLabel)
+		EmitAdd_RX_RX(Compiler, ResultRegister, RAX, 8)
+
+		SetLabel(Compiler, DoneLabel)
+	}
+}
+
 define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	CallExpression* CallNode := Node->CallNode
 	FunctionDefine* TargetFunction := null
@@ -2068,6 +2132,14 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	i8 BuiltinID := CallNode->BuiltinID
 	i8 IS_SYSCALL := BuiltinID = BUILTIN_SYSCALL /* Used later to decide which set of registers are for parameters */
 	i8 IsFunctionPointerCall := BuiltinID = BUILTIN_FUNCTION_POINTER
+
+	if (BuiltinID = BUILTIN_NAME_OF) {
+		ASTNode* Parameter := CallNode->Parameters[0]
+
+		CompileGetEnumeratorName(Compiler, ResultRegister, Parameter)
+
+		return
+	}
 	
 	FunctionPointerInfo* FunctionPointer := null
 	

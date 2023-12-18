@@ -4,7 +4,7 @@
 ;#Require "./src/elf/ELFBuilder.rlx"
 
 #Require "$/PointerArray.rlx"
-#Require "./src/elf/ELFBuilder.rlx"
+;#Require "./src/elf/ELFBuilder.rlx"
 
 /*
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT A HIGHLY ESTEEMED DEED,

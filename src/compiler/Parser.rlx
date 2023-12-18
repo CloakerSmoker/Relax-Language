@@ -447,6 +447,16 @@ struct ParserState {
 			this->AddLocal(NewVariable, BlameToken)
 		}
 	}
+
+	define i32 AddGlobalConstantData(void* Data, i32 Size) {
+		i32 Offset := this->GlobalConstantBufferSize
+		this->GlobalConstantBufferSize += Size
+		this->GlobalConstantsBuffer := ReAlloc(this->GlobalConstantsBuffer, this->GlobalConstantBufferSize)
+
+		MoveMemory(this->GlobalConstantsBuffer + Offset, Data, Size)
+
+		return Offset
+	}
 	
 	define i32 Freeze() {
 		return this->Lexer->TokenIndex
@@ -1761,6 +1771,9 @@ struct ParserState {
 		HashMap* Fields := BaseEnumType~>Fields
 		Fields->Initialize()
 
+		BaseEnumType->FieldsInOrder := PointerArray:New()
+		PointerArray* FieldsInOrder := BaseEnumType->FieldsInOrder
+
 		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_AS)) {
 			ASTNode* BackingTypeNode := this->ParseTypeNode()
 			Type BackingType := BackingTypeNode->ValueType
@@ -1785,13 +1798,23 @@ struct ParserState {
 			return
 		}
 		
+		BaseEnumType->IsLinearEnumeration := true
 		i32 NextValue := 0
 		
 		loop {
 			Token* EnumVariableName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for enum field name")
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
-				NextValue := this->Consume(TOKEN_TYPE_INTEGER, "Expected enum field value")->IntegerValue As i32
+				i32 NewNextValue := this->Consume(TOKEN_TYPE_INTEGER, "Expected enum field value")->IntegerValue As i32
+
+				if (FieldsInOrder->Count() = 0) {
+					BaseEnumType->EnumerationBase := NewNextValue
+				}
+				else if (NewNextValue != NextValue) {
+					BaseEnumType->IsLinearEnumeration := false
+				}
+
+				NextValue := NewNextValue
 			}
 			
 			if (Fields->Get(EnumVariableName->StringValue)) {
@@ -1808,6 +1831,7 @@ struct ParserState {
 			MemberField->EnumValue := Value
 
 			Fields->Set(EnumVariableName->StringValue, MemberField)
+			FieldsInOrder->Push(MemberField)
 			
 			i8* RawEnumGlobalName := Alloc(50)
 			i32 Length := FormatString(RawEnumGlobalName, 50, "%s_%s", BaseEnumType->Name->Buffer, EnumVariableName->StringValue->Buffer)
@@ -1837,6 +1861,21 @@ struct ParserState {
 				break
 			}
 		}
+
+		i32 FieldCount := FieldsInOrder->Count()
+
+		; Generate array of offsets
+		i32 NamesSize := FieldCount * #i32
+		i32* NameOffsets := Alloc(NamesSize)
+
+		for (i32 Index := 0, Index < FieldCount, Index++) {
+			StructField* Field := FieldsInOrder->At(Index)
+			NameOffsets[Index] := this->AddGlobalConstantData(Field->Name->Buffer, Field->Name->Length + 1)
+
+			;Print("Field %i '%s' = %x\n", Index, Field->Name->Buffer, NameOffsets[Index])
+		}
+
+		BaseEnumType->EnumerationNamesOffset := this->AddGlobalConstantData(NameOffsets, NamesSize)
 	}
 
 	define void ParseClass() {

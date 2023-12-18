@@ -12,12 +12,26 @@ enum starts_from_10 {
 	third
 }
 
+enum sparse {
+	thirty := 30
+	fourty := 40
+	fifty := 50
+}
+
 #Require "$/Console.rlx"
 
 define void PrintAnimalType(animal_kind kind) {
 	i8*[4] Names {"cat", "dog", "frog", "fish"}
 	
 	Print("%s", Names[kind As i32])
+}
+
+define void PrintAnimalType2(animal_kind kind) {
+	Print("%s", nameof:(kind))
+}
+
+define void PrintSparseName(sparse s) {
+	Print("%s", nameof:(s))
 }
 
 define i32 Main() {
@@ -27,6 +41,16 @@ define i32 Main() {
 	Print("%i", starts_from_10::second)
 
 	PrintAnimalType(ANIMAL_KIND_DOG)
+
+	PrintAnimalType2(ANIMAL_KIND_CAT)
+	PrintAnimalType2(ANIMAL_KIND_FISH)
+	PrintAnimalType2(20 As animal_kind)
+
+	PrintSparseName(0 As sparse)
+	PrintSparseName(sparse::thirty)
+	PrintSparseName(sparse::fourty)
+	PrintSparseName(sparse::fifty)
+	PrintSparseName(60 As sparse)
 	
 	return 0
 }

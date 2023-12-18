@@ -81,12 +81,18 @@ struct TypeInfo {
 	union {
 		InterfaceInfo* InterfaceInfo
 		ClassInfo* ClassInfo
+		
+		struct {
+			i32 EnumerationBase
+			i32 EnumerationNamesOffset
+		}
 	}
 	
 	i16 Size
 	TYPE_KIND Kind
 	i8 IsIncomplete
 	i8 IsClass
+	i8 IsLinearEnumeration
 
 /*
 	i8 IsStructType,

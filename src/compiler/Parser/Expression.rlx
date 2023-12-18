@@ -298,8 +298,26 @@
 				Result->BuiltinID := BUILTIN_BREAKPOINT
 				ResultNode->ValueType := this->i8->AsNonPointer()
 			}
+			else if (Name->Equals("nameof") && ParameterCount = 1) {
+				Type ValueType := Parameters[0]->ValueType
+
+				if (GetPointerDepth(ValueType) != 0) {
+					Parameters[0]->Error("Must not point to the enumerator value")
+				}
+
+				TypeInfo* BaseType := GetBaseType(ValueType)
+
+				if !(BaseType->Is(TYPE_KIND_ENUMERATION)) {
+					Parameters[0]->Error("Must be of an enumeration type")
+				}
+
+				Result->BuiltinID := BUILTIN_NAME_OF
+				ResultNode->ValueType := this->i8->AsPointer(1)
+
+				i32 FieldCount := BaseType->FieldsInOrder->Count()
+			}
 			else {
-				NameToken->Error("No built-in function by this name found.")
+				NameToken->Error("No matching built-in function found.")
 			}
 			
 			return ResultNode

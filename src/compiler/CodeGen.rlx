@@ -316,19 +316,23 @@ define void EmitInstruction(CompilerState* Compiler, InstructionInfo* Info, i8 D
 	}
 }
 
-define void EmitBasicInstruction(CompilerState* Compiler, i16 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
+define void EmitBasicInstruction(CompilerState* Compiler, i16 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister, i8 REX) {
 	/* Helper so each caller doesn't have to build an InstructionInfo and call EmitInstruction */
 	
 	InstructionInfo Info
 	
 	Info.HasTwoByteOpcode := false
-	Info.REX := 0
+	Info.REX := REX
 	Info.OpcodeOne := Opcode As i8
 	Info.ByteOpcodeOne := (Opcode - 1) As i8
 	Info.Mode := Mode
 	Info.Size := Size
 	
 	EmitInstruction(Compiler, &Info, DestinationRegister, SourceRegister)
+}
+
+define void EmitBasicInstruction(CompilerState* Compiler, i16 Opcode, i8 Mode, i8 Size, i8 DestinationRegister, i8 SourceRegister) {
+	EmitBasicInstruction(Compiler, Opcode, Mode, Size, DestinationRegister, SourceRegister, 0)
 }
 
 define i8 GetDisplacementSize(i32 Displacement) {
@@ -760,6 +764,44 @@ define void EmitTest_RX_RX(CompilerState* Compiler, i8 DestinationRegister, i8 S
 define void EmitCmp_RX_RX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
 	EmitBasicInstruction(Compiler, 0x39, MODE_RTOR, Size, SourceRegister, DestinationRegister)
 }
+
+define void EmitCmp_RX_I8(CompilerState* Compiler, i8 DestinationRegister, i8 Value, i8 Size) {
+	if (Size = 1) {
+		; REX + 80 /7 ib 	CMP r/m8*, imm8
+
+		EmitBasicInstruction(Compiler, 0x81, MODE_RTOR, 1, 7, DestinationRegister, REX_BASE)
+	}
+	else {
+		; 83 /7 ib 	CMP r/m32, imm8
+
+		EmitBasicInstruction(Compiler, 0x83, MODE_RTOR, Size, 7, DestinationRegister)
+		PushByte(Compiler, Value)
+	}
+}
+
+define void EmitCmp_R32_I8(CompilerState* Compiler, i8 DestinationRegister, i8 Value) {
+	; 83 /7 ib 	CMP r/m32, imm8
+
+	EmitBasicInstruction(Compiler, 0x83, MODE_RTOR, 4, 7, DestinationRegister)
+	PushByte(Compiler, Value)
+}
+
+define void EmitCmp_R32_I32(CompilerState* Compiler, i8 DestinationRegister, i32 Value) {
+	; 81 /7 id 	CMP r/m32, imm32
+
+	EmitBasicInstruction(Compiler, 0x81, MODE_RTOR, 4, 7, DestinationRegister)
+	PushI32(Compiler, Value)
+}
+
+define void EmitCmp_R32_IX(CompilerState* Compiler, i8 DestinationRegister, i32 Value) {
+	if (GetNumberSize(Value) = 1) {
+		EmitCmp_R32_I8(Compiler, DestinationRegister, Value As i8)
+	}
+	else {
+		EmitCmp_R32_I32(Compiler, DestinationRegister, Value)
+	}
+}
+
 
 /*
 ==========================================
