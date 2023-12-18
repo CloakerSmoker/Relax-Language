@@ -3,6 +3,9 @@
 
 ;#Require "./src/elf/ELFBuilder.rlx"
 
+#Require "$/PointerArray.rlx"
+#Require "./src/elf/ELFBuilder.rlx"
+
 /*
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT A HIGHLY ESTEEMED DEED,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO BEING A PLACE OF HONOR,
