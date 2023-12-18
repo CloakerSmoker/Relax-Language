@@ -101,7 +101,12 @@ struct PrintOutputAdapterPrototype {
 		}
 	}
 	define void PrintString(i8* String) {
-		this->DoPrintCharacters(String, StringLength(String))
+		if (String = null) {
+			this->PrintString("<%s null>")
+		}
+		else {
+			this->DoPrintCharacters(String, StringLength(String))
+		}
 	}
 	
 	define void PrintIntegerBase(i64 Number, i64 Base) {
