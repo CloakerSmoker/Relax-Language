@@ -1,7 +1,56 @@
 i32 SYSCALL_READ := 0
 i32 SYSCALL_WRITE := 1
+
 i32 SYSCALL_OPEN := 2
+i32 SYSCALL_OPENAT := 257
 i32 SYSCALL_CLOSE := 3
+
+enum FileStatusType {
+    FIFO := 1,
+    CharacterDevice := 2,
+    Directory := 4,
+    BlockDevice := 6,
+    File := 8,
+    SymbolicLink := 10,
+    Socket := 12
+}
+
+struct FileStatus {
+	i64 Device
+	i64 INodeNumber
+	i64 LinkCount
+	
+    union {
+	    i32 Mode
+
+        bits As i32 {
+            FileStatusType [12:16] Type
+        }
+    }
+	
+	i32 UserID
+	i32 GroupID
+	
+	i32 Padding1
+	i64 RepresentedDevice
+	
+	i64 Size
+	i64 BlockSize
+	i64 BlockCount
+	
+	i64 AccessedTime
+	i64 AccessedTimeNanoseconds
+	
+	i64 ModifiedTime
+	i64 ModifiedTimeNanoseconds
+	
+	i64 CreatedTime
+	i64 CreatedTimeNanoseconds
+	
+	i64[3] Unused
+}
+
+i32 SYSCALL_FSTAT := 5
 
 i32 SYSCALL_SEEK := 8
 i32 SYSCALL_FTRUNCATE := 77

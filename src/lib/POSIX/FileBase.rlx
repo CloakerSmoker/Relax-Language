@@ -2,9 +2,23 @@ define i64 FileOpen(i8* FilePath, i32 Mode) {
     return syscall:(SYSCALL_OPEN, FilePath, Mode, 0x1C0)
 }
 
+define i64 FileOpenAt(i64 Directory, i8* FilePath, i32 Mode) {
+    return syscall:(SYSCALL_OPENAT, Directory, FilePath, Mode, 0x1C0)
+}
+
+define i64 FileGetStatus(i64 File, FileStatus* Status) {
+    return syscall:(SYSCALL_FSTAT, File, Status)
+}
+
 i32 SEEK_SET := 0
 i32 SEEK_RELATIVE := 1
 i32 SEEK_END := 2
+
+enum SeekMode {
+	Set,
+	Offset,
+	End
+}
 
 define i32 FileSeek(i64 File, i32 Offset, i32 Mode) {
     return syscall:(SYSCALL_SEEK, File, Offset, Mode) As i32
