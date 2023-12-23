@@ -6,6 +6,10 @@ define i64 FileOpenAt(i64 Directory, i8* FilePath, i32 Mode) {
     return syscall:(SYSCALL_OPENAT, Directory, FilePath, Mode, 0x1C0)
 }
 
+define i64 MakeDirectoryAt(i64 Directory, i8* Path) {
+    return syscall:(SYSCALL_MKDIRAT, Directory, Path, 0x1C0)
+}
+
 define i64 FileGetStatus(i64 File, FileStatus* Status) {
     return syscall:(SYSCALL_FSTAT, File, Status)
 }
