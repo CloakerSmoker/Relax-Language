@@ -1334,8 +1334,9 @@
 					this->DowncastIntegerNode(Right)
 					
 					; Ensure that our shift count is an i8, as anything bigger is definitely invalid
+					;  - UPDATE: nevermind fuck this it is so ungodly annoying
 					
-					CheckTypes(this->void, Right->ValueType, this->i8->AsNonPointer(), Right)
+					;CheckTypes(this->void, Right->ValueType, this->i8->AsNonPointer(), Right)
 					
 					if (GetTypeSize(LeftType) < 4) {
 						ResultType := this->i32->AsNonPointer()
