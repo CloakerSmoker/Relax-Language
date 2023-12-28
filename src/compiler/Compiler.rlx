@@ -2671,13 +2671,13 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 	
 	Type PointerType := Pointer->ValueType
 	
-	i8 IndexScale := 8
+	i32 IndexScale := 8
 	
 	TypeInfo* PointerBase := GetBaseType(PointerType)
 	i16 PointerDepth := GetPointerDepth(PointerType)
 	
 	if (PointerDepth = 1) {
-		IndexScale := (PointerBase->Size) As i8
+		IndexScale := PointerBase->Size
 		
 		if (PointerBase->Is(TYPE_KIND_STRUCTURE)) {
 			GetAddress := true
@@ -2698,11 +2698,11 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 			EmitLea_R64_R64_DISPX(Compiler, ResultRegister, PointerRegister, IndexAsDisplacement)
 			
 			if (IsSet) {
-				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale)
+				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale As i8)
 			}
 		}
 		else {
-			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, PointerRegister, IndexAsDisplacement, DisplacementSize, IndexScale)
+			EmitMove_RX_RIX_DISPX(Compiler, ResultRegister, PointerRegister, IndexAsDisplacement, DisplacementSize, IndexScale As i8)
 		}
 	}
 	else {
@@ -2717,19 +2717,25 @@ define void CompileArrayAccess(CompilerState* Compiler, i8 ResultRegister, ASTNo
 		
 		if (IsSet || GetAddress) {
 			if (IndexScale > 8) {
-				EmitIMul_R64_I8(Compiler, IndexRegister, IndexScale)
+				if (IndexScale < 0x80) {
+					EmitIMul_R64_I8(Compiler, IndexRegister, IndexScale As i8)
+				}
+				else {
+					EmitIMul_R64_I32(Compiler, IndexRegister, IndexScale)
+				}
+
 				EmitAdd_RX_RX(Compiler, PointerRegister, IndexRegister, 8)
 			}
 			else {
-				EmitLea_R64_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+				EmitLea_R64_SIB(Compiler, ResultRegister, IndexScale As i8, IndexRegister, PointerRegister)
 			}
 			
 			if (IsSet) {
-				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale)
+				EmitMove_RIX_RX(Compiler, ResultRegister, ValueRegister, IndexScale As i8)
 			}
 		}
 		else {
-			EmitMove_RX_SIB(Compiler, ResultRegister, IndexScale, IndexRegister, PointerRegister)
+			EmitMove_RX_SIB(Compiler, ResultRegister, IndexScale As i8, IndexRegister, PointerRegister)
 		}
 		
 		PopRegisterStack(Compiler)
