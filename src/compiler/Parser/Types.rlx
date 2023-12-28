@@ -232,7 +232,18 @@ struct TypeNamespace {
 	}
 
 	define TypeNamespace* FindChild(Token* Name) {
-		return this->Children->GetPointer(Name->StringValue->Hash())
+		i64 NameHash := Name->StringValue->Hash()
+		TypeNamespace* Child := this->Children->GetPointer(NameHash)
+
+		if (Child) {
+			return Child
+		}
+		else if (this->Parent != null) {
+			return this->Parent->FindChild(Name)
+		}
+		else {
+			return null
+		}
 	}
 	
 	define void CheckDuplicates(Token* Name) {
