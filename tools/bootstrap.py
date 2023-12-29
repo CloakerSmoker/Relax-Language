@@ -18,6 +18,9 @@ import argparse
 
 # ONLY COMMIT AFTER A NEW VERSION PASSES THIS SCRIPT
 
+if not os.path.exists('tests/build'):
+    os.mkdir('tests/build')
+
 init(autoreset=True)
 cwd = os.getcwd()
 path_join = os.path.join
