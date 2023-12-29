@@ -65,12 +65,11 @@ struct PointerArray {
 		this->Length += 1
 	}
 	define void* Remove(i32 Index) {
+		this->Length -= 1
 		i32 Space := this->Length - Index
 
 		void* Old := this->Data[Index]
 		MoveMemory(&this->Data[Index], &this->Data[Index + 1], Space * #void*)
-
-		this->Length -= 1
 
 		return Old
 	}
