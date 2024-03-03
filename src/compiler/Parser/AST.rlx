@@ -478,6 +478,7 @@ i32 SHIM_SIZEOF_ASSEMBLYBLOCK := 8 + 8 + #HashMap + 16 * 8
 i8 INSTRUCTION_REGULAR := 0
 i8 INSTRUCTION_LABEL := 1
 i8 INSTRUCTION_LABEL_INCOMPLETE := 2
+i8 INSTRUCTION_EMIT_BYTES := 3
 
 struct InstructionNode {
 	SourceContext Context,
@@ -485,7 +486,8 @@ struct InstructionNode {
 	
 	union {
 		Instruction* Base,
-		SafeString* LabelName
+		SafeString* LabelName,
+		PointerArray* Bytes ; <Token*>
 	},
 	
 	union {

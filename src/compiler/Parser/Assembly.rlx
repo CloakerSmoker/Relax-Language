@@ -519,8 +519,40 @@
 		
 		return Next
 	}
+
+	define InstructionNode* ParseEmit() {
+		InstructionNode* Result := Alloc(#InstructionNode)
+
+		Result->Type := INSTRUCTION_EMIT_BYTES
+		Result~>Context->Clone(this->GetCurrentTokenContext())
+
+		Result->Bytes := PointerArray:New()
+
+		loop {
+			Token* Next := this->GetNextToken()
+
+			if (Next->Is(TOKEN_TYPE_INTEGER)) {
+				Result->Bytes->Push(Next)
+
+				this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
+			}
+			else if (Next->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+				Result~>Context->Merge(Next)
+				break
+			}
+			else {
+				Next->Error("Unexpected token in byte literal")
+			}
+		}
+
+		return Result
+	}
 	
 	define InstructionNode* ParseInstruction(AssemblyBlock* ThisBlock) {
+		if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+			return this->ParseEmit()
+		}
+
 		Token* InstructionToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected instruction name")
 		SafeString* InstructionName := InstructionToken->StringValue
 		

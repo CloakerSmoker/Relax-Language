@@ -26,7 +26,8 @@ define i32 IncRAX() asm {
 	inc, rbx
 	lock xchg, rbx, {rsp} as i64*
 	pop, rax
-	ret
+	;ret
+	{ 0xC3 }
 }
 
 struct example {
@@ -47,7 +48,8 @@ define i32 Main() {
 	i64 B := 0
 	
 	asm (rdi := 696968, rax := &B) {
-		xchg, rax, rdi
+		;xchg, rax, rdi
+		{ 0x48, 0x97 }
 		call, @IncRAX
 		mov, {rdi} As i64*, rax
 	}

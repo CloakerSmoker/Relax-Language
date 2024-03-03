@@ -165,6 +165,16 @@ define void CompileInstruction(CompilerState* Compiler, InstructionNode* ToCompi
 	if (ToCompile->Type = INSTRUCTION_LABEL) {
 		SetLabel(Compiler, ToCompile->LabelNumber)
 	}
+	else if (ToCompile->Type = INSTRUCTION_EMIT_BYTES) {
+		PointerArray* Bytes := ToCompile->Bytes
+		i32 Count := Bytes->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			Token* Byte := Bytes->At(Index)
+
+			PushByte(Compiler, Byte->IntegerValue As i8)
+		}
+	}
 	else {		
 		InstructionOperand* OperandOne := ToCompile->Operands[0]
 		InstructionOperand* OperandTwo := ToCompile->Operands[1]
