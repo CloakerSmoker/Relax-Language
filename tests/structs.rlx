@@ -64,6 +64,8 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 
 		Print(" ")
 	}
+
+	Print("%i", &Test3.B)
 	
 	return 0
 }

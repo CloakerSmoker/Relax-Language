@@ -812,6 +812,20 @@
 									ThisType := MethodBase->AsPointer(1)
 									FoundDefine := MethodElement->Value
 								}
+
+								; &Struct.Field as offsetof
+
+								HashMapElement* FieldElement := MethodBase~>Fields->Get(MethodName->StringValue)
+
+								if (FieldElement) {
+									StructField* Field := FieldElement->Value
+
+									Result := ASTNode:New(NODE_TYPE_INTEGER, Field->Offset, this->i32->AsNonPointer())
+
+									Result~>Context->Clone(NextToken~>Context)->Merge(this->GetCurrentTokenContext())
+
+									return Result
+								}
 							}
 						}
 						else {
