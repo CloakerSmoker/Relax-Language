@@ -25,7 +25,9 @@ define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Ta
 			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
 		}
 		else if !(Target->HasFullDefinition) {
-			Target~>Context->Error("Function is declared but never defined")
+			if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD) {
+				Target~>Context->Error("Function is declared but never defined")
+			}
 		}
 		else {
 			Visitor->VisitBlocks(Target->Body)
@@ -363,6 +365,9 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 			}
 			else if (TargetFunction->IsImported) {
 				; Dummy branch
+			}
+			else if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+				; Dummy, again
 			}
 			else if (TargetFunction->Body->StatementCount = 0) {
 				; A call to an empty function

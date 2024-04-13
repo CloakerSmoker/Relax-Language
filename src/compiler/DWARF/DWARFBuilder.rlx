@@ -590,6 +590,48 @@ struct DWARFBuilder {
 			
 			this->EndFunctionPointer()
 		}
+		else if (T->Is(TYPE_KIND_INTERFACE)) {
+			i32 AliasOffset := 0
+			
+			Offset := this->AddIncompleteStruct(&AliasOffset, T->Name->Buffer)
+			this~>Types->Set(T->Name, Offset)
+
+			if (MustBeIncomplete) {
+				return Offset
+			}
+
+			PointerArray* Methods := T->InterfaceInfo->Methods
+			i32 MethodCount := Methods->Count()
+
+			i32* MethodOffsets := Alloc(MethodCount * #i32)
+
+			for (i32 Index := 0, Index < MethodCount, Index++) {
+				FunctionDefine* Method := Methods->At(Index)
+
+				i32 ReturnTypeOffset := this->FindOrTranslateType(Method->ReturnType)
+				i32 MethodOffset := this->StartFunctionPointer(FormatString("%s.%s", T->Name->Buffer, Method->Name->Buffer), ReturnTypeOffset)
+
+				for (i32 ParameterIndex := 0, ParameterIndex < Method->ParameterCount, ParameterIndex++) {
+					i32 ParameterTypeOffset := this->FindOrTranslateType(Method->Parameters[ParameterIndex]->Type)
+
+					this->AddFunctionPointerParameter(ParameterTypeOffset)
+				}
+
+				this->EndFunctionPointer()
+
+				MethodOffsets[Index] := MethodOffset
+			}
+
+			Offset := this->StartStructCompletion(AliasOffset, T->Size)
+
+			for (i32 Index := 0, Index < MethodCount, Index++) {
+				FunctionDefine* Method := Methods->At(Index)
+
+				this->AddStructField(Method->Name->Buffer, MethodOffsets[Index], Index * 8)
+			}
+
+			this->EndStruct()
+		}
 		
 		return Offset
 	}

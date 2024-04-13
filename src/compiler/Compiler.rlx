@@ -88,6 +88,10 @@ struct CompilerState {
 	
 	i32 DWARFCompilationUnitOffset
 
+	; Init labels (called from Main() before user code)
+
+	PointerArray* InitializerLabels ; <i64>
+
 	; New Linker Fields
 
 	ObjectFile* Object
@@ -160,6 +164,8 @@ struct CompilerState {
 		this->TotalTryDepth := 0
 		
 		this->FunctionCount := 0
+
+		this->InitializerLabels := PointerArray:New()
 	}
 	
 	define ObjectSymbol* FindOrAddGlobalObjectSymbol(VariableInfo* Variable) {
@@ -699,6 +705,8 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 	}
 }
 
+declare void CompileClassInterfaces(CompilerState*, ClassInfo*)
+
 define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Container) {
 	i32 Count := Container->Entries->Count()
 
@@ -708,6 +716,10 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS)) {
 			CompileFunctionHashMap(Compiler, Info~>Methods)
 			CompileFunctionHashMap(Compiler, Info~>StaticMethods)
+
+			if (Info->IsClass) {
+				CompileClassInterfaces(Compiler, Info->ClassInfo)
+			}
 		}
 	}
 
@@ -799,12 +811,12 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	if (Config->DumpInfo & DUMP_GLOBALS) {
 		DumpGlobals(Compiler)
 	}
+
+	; Loop through each custom type
+	CompileTypeNamespace(Compiler, Parser->RootNamespace)
 	
 	; Compile all global functions
 	CompileFunctionHashMap(Compiler, Parser~>Functions)
-	
-	; Loop through each custom type
-	CompileTypeNamespace(Compiler, Parser->RootNamespace)
 	
 	if (Parser->MainFunction = null) {
 		SwapOutputStream()
@@ -1528,6 +1540,14 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		
 		Compiler->CurrentFunctionStringsLabel := StringsLabel
 		Compiler->CurrentFunctionStringsSymbol := StringsSymbol
+
+		i32 InitializerCount := Compiler->InitializerLabels->Count()
+
+		for (i32 Index := 0, Index < InitializerCount, Index++) {
+			i32 InitializerLabel := Compiler->InitializerLabels->At(Index) As i32
+
+			EmitCall_Label(Compiler, InitializerLabel)
+		}
 	}
 	
 	Compiler->MarkLineNumber(FunctionToCompile~>Context)
@@ -2036,30 +2056,58 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 		}
 	}
 }
-/*
-define void CompileInterfaceStubs(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
-	i32 Offset := 1 + ForClass->InterfacesInOrder->IndexOf(ForInterface)
+;/*
+define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* ForClass, InterfaceImplementationInfo* Info) {
+	InterfaceInfo* ForInterface := Info->ForInterfaceInfo
+	i32 Offset := ForClass->InterfacesInOrder->Find(Info)
 
 	i32 Count := ForInterface->Methods->Count()
 
 	for (i32 Index := 0, Index < Count, Index++) {
-		FunctionDefine* Method := ForInterface->Methods->At(Index)
-		FunctionDefine* Implementation := ForClass->InterfaceMethods->GetValue(Method)
-		i32 StubLabel := ForClass->InterfaceStubLabels->GetValue(Method)
+		FunctionDefine* Implementation := Info->Methods->At(Index)
+		i32 StubLabel := Info->StubLabels[Index]
 
 		SetLabel(Compiler, StubLabel)
 		EmitSub_R64_IX(Compiler, RDI, Index * 8)
 		EmitJump_Label(Compiler, Implementation->LabelNumber)
 	}
 
+	if (Compiler->Index % 2) { PushI8(Compiler, 0) }
+	if (Compiler->Index % 4) { PushI16(Compiler, 0) }
+	if (Compiler->Index % 8) { PushI32(Compiler, 0) }
+
+	SetLabel(Compiler, Info->VirtualFunctionTableLabel)
+
 	for (i32 Index := 0, Index < Count, Index++) {
-		
+		PushI64(Compiler, 0)
+	}
+
+	SetLabel(Compiler, Info->SetupVirtualFunctionTableLabel)
+	EmitLea_R64_Label(Compiler, RAX, Info->VirtualFunctionTableLabel)
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		i32 StubLabel := Info->StubLabels[Index]
+
+		EmitLea_R64_Label(Compiler, RBX, StubLabel)
+		EmitMove_RIX_RX(Compiler, RBX, RAX, 8)
+	}
+
+	EmitReturn(Compiler)
+}
+
+define void CompileClassInterfaces(CompilerState* Compiler, ClassInfo* Info) {
+	i32 Count := Info->InterfacesInOrder->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
+
+		CompileInterfaceImplementation(Compiler, Info, ImplementationInfo)
+
+		Compiler->InitializerLabels->Push(ImplementationInfo->SetupVirtualFunctionTableLabel As void*)
 	}
 }
 
-define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* ForClass, TypeInfo* ForInterface) {
-	
-}*/
+;*/
 
 define void CompileGetEnumeratorName(CompilerState* Compiler, i8 ResultRegister, ASTNode* Node) {
 	TypeInfo* Enumeration := GetBaseType(Node->ValueType)
@@ -2200,7 +2248,7 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 		if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
 			Node->Error("Calls to DllImported functions are not allowed when the target output format is not PE.")
 		}
-		else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition) {
+		else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition || TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
 			Node->Error("Called function is only declared, and never defined")
 		}
 		

@@ -1883,16 +1883,6 @@ struct ParserState {
 		
 		NewType->InitializeAggregate()
 
-		StructField* Field := Alloc(#StructField)
-		
-		Field->DefinedAt := null
-		Field->Name := AToS("VirtualFunctionTable")
-		Field->ValueType := this->void->AsPointer(1)
-		Field->Offset := 0
-
-		NewType~>Fields->Set(Field->Name, Field)
-		NewType->Size := 8
-
 		NewType->IsClass := true
 
 		ClassInfo* Info := ClassInfo:New()
@@ -1907,14 +1897,39 @@ struct ParserState {
 					InterfaceName~>Context->Error("Classes can only implement interface types")
 				}
 
-				Info->InterfacesInOrder->Push(InterfaceType)
-				Info->InterfacesBlame->Push(InterfaceName~>Context)
-				Info->Interfaces->Insert(InterfaceType As i64, null)
+				InterfaceImplementationInfo* ImplementationInfo := InterfaceImplementationInfo:New(InterfaceName~>Context, InterfaceType)
+
+				ImplementationInfo->VirtualFunctionTableLabel := this->LabelCount++
+				ImplementationInfo->SetupVirtualFunctionTableLabel := this->LabelCount++
+
+				i32 MethodCount := InterfaceType->InterfaceInfo->Methods->Count()
+
+				for (i32 Index := 0, Index < MethodCount, Index++) {
+					ImplementationInfo->StubLabels[Index] := this->LabelCount++
+				}
+
+				Info->InterfacesInOrder->Push(ImplementationInfo)
+				Info->Interfaces->Insert(InterfaceType As i64, ImplementationInfo)
 
 				InterfaceType->InterfaceInfo->ImplementedBy->Insert(NewType As i64, null)
 
+				StructField* Field := Alloc(#StructField)
+				
+				Field->DefinedAt := null
+				Field->Name := AToS(FormatString("__VirtualFunctionTable_%s", InterfaceType->Name->Buffer))
+				Field->ValueType := this->void->AsPointer(1)
+				Field->Offset := NewType->Size
+				NewType->Size += 8
+
+				Print("vtbl field: %s\n", Field->Name->Buffer)
+
+				NewType~>Fields->Set(Field->Name, Field)
+
 				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 					break
+				}
+				else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					continue
 				}
 				else {
 					this->PeekNextToken()->Error("Unexpected token in 'implements' list")
@@ -1931,10 +1946,12 @@ struct ParserState {
 		i32 Count := Info->InterfacesInOrder->Count()
 
 		for (i32 Index := 0, Index < Count, Index++) {
-			TypeInfo* InterfaceType := Info->InterfacesInOrder->At(Index)
-			SourceContext* InterfaceBlame := Info->InterfacesBlame->At(Index)
+			InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
 
-			PointerArray* InterfaceMethods := InterfaceType->InterfaceInfo->Methods
+			TypeInfo* InterfaceType := ImplementationInfo->ForInterface
+			SourceContext* InterfaceBlame := ImplementationInfo->Blame
+
+			PointerArray* InterfaceMethods := ImplementationInfo->ForInterfaceInfo->Methods
 			i32 MethodCount := InterfaceMethods->Count()
 
 			for (i32 MethodIndex := 0, MethodIndex < MethodCount, MethodIndex++) {
@@ -1950,6 +1967,9 @@ struct ParserState {
 				FunctionDefine* TargetMethod := TargetElement->Value As FunctionDefine*
 				i32 ParameterCount := InterfaceMethod->ParameterCount
 
+				; Build a fake parameter list with the interface method's parameter types
+				;  so that we can match against a function which satisfies those types
+
 				ASTNode** Parameters := Alloc(ParameterCount * #ASTNode*)
 
 				for (i32 ParameterIndex := 0, ParameterIndex < ParameterCount, ParameterIndex++) {
@@ -1959,8 +1979,9 @@ struct ParserState {
 					Parameters[ParameterIndex] := ASTNode:New(NODE_TYPE_NONE, 0, ParameterType)
 				}
 
-				this->MatchFunctionCall(TargetMethod, Parameters, ParameterCount, InterfaceMethod~>Context, &InterfaceMatchFunctionErrors)
+				FunctionDefine* ImplementationMethod := this->MatchFunctionCall(TargetMethod, Parameters, ParameterCount, InterfaceMethod~>Context, &InterfaceMatchFunctionErrors)
 
+				ImplementationInfo->Methods->Push(ImplementationMethod)
 			}
 		}
 		
@@ -1980,6 +2001,8 @@ struct ParserState {
 		loop {
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
 				FunctionDefine* Method := this->ParseFunctionDefinition(NewType~>Methods, this->GetCurrentToken(), NewType, true)
+
+				Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
 
 				Info->Methods->Push(Method)
 			}

@@ -28,41 +28,6 @@ enum TYPE_KIND {
 	`INTERFACE`
 }
 
-struct InterfaceInfo {
-	PointerArray* Methods ; <FunctionDefine*>
-
-	AVLTree* ImplementedBy ; <TypeInfo*>
-
-	static self* New() {
-		self* this := Alloc(#self)
-
-		this->Methods := PointerArray:New()
-		this->ImplementedBy := AVLTree:New(0)
-
-		return this
-	}
-}
-
-struct ClassInfo {
-	PointerArray* InterfacesInOrder ; <TypeInfo*>
-	PointerArray* InterfacesBlame ; <ErrorContext*>
-	AVLTree* Interfaces ; <TypeInfo*>
-
-	AVLTree* InterfaceMethods ; <FunctionDefine*, FunctionDefine*>
-	AVLTree* InterfaceStubs ; <FunctionDefine*, i32>
-
-	static self* New() {
-		self* this := Alloc(#self)
-
-		this->InterfacesInOrder := PointerArray:New()
-		this->InterfacesBlame := PointerArray:New()
-
-		this->Interfaces := AVLTree:New(0)
-
-		return this
-	}
-}
-
 struct TypeInfo {
 	SourceContext* DefinedAt
 	SafeString* Name
@@ -180,6 +145,61 @@ define i16 GetTypeStorageSize(Type T) {
 }
 define i16 GetPointerDepth(Type T) {
 	return T.PointerDepth
+}
+
+struct InterfaceInfo {
+	PointerArray* Methods ; <FunctionDefine*>
+
+	AVLTree* ImplementedBy ; <TypeInfo*>
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this->Methods := PointerArray:New()
+		this->ImplementedBy := AVLTree:New(0)
+
+		return this
+	}
+}
+
+struct InterfaceImplementationInfo {
+	SourceContext* Blame
+
+	TypeInfo* ForInterface
+	InterfaceInfo* ForInterfaceInfo
+
+	PointerArray* Methods ; <FunctionDefine*>
+	i32* StubLabels
+
+	i32 VirtualFunctionTableLabel
+	i32 SetupVirtualFunctionTableLabel
+
+	static self* New(SourceContext* Blame, TypeInfo* ForInterface) {
+		self* this := Alloc(#self)
+
+		this->Blame := Blame
+		this->ForInterface := ForInterface
+		this->ForInterfaceInfo := ForInterface->InterfaceInfo
+
+		this->Methods := PointerArray:New()
+		this->StubLabels := Alloc(this->ForInterfaceInfo->Methods->Count() * #i32)
+
+		return this
+	}
+}
+
+struct ClassInfo {
+	PointerArray* InterfacesInOrder ; <InterfaceImplementationInfo*>
+	AVLTree* Interfaces ; <TypeInfo*, InterfaceImplementationInfo*>
+
+	static self* New() {
+		self* this := Alloc(#self)
+
+		this->InterfacesInOrder := PointerArray:New()
+		this->Interfaces := AVLTree:New(#InterfaceImplementationInfo*)
+
+		return this
+	}
 }
 
 struct TypeNamespace {
