@@ -25,7 +25,7 @@ define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Ta
 			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
 		}
 		else if !(Target->HasFullDefinition) {
-			if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD) {
+			if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD && Target->IsMethod != FUNCTION_IS_DERIVED_METHOD) {
 				Target~>Context->Error("Function is declared but never defined")
 			}
 		}

@@ -228,7 +228,9 @@ struct ParserState {
 	i32 LabelCount
 	
 	declare TypeInfo* AddType(SourceContext*, QualifiedName*, i16, TYPE_KIND)
+	
 	declare void SetupAssembly()
+	declare void SetupDerivedInterfaces()
 
 	define TypeInfo* DefineBuiltinType(i8* RawName, i16 Size) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
@@ -268,6 +270,7 @@ struct ParserState {
 		this->void := this->DefineBuiltinType("void", 8)
 		
 		this->SetupAssembly()
+		this->SetupDerivedInterfaces()
 		
 		return this
 	}
@@ -1176,9 +1179,9 @@ struct ParserState {
 					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
 					this->Consume(TOKEN_TYPE_OPERATOR, OPERATOR_DOT, "Expected '.' for variadic marker")
 					
-					if (ParameterCount > 4) {
+					if (ParameterCount >= 6) {
 						Start->Merge(this->GetCurrentTokenContext())
-						Start->Error("Only >4 regular paremeters can be passed with a variable argument.")
+						Start->Error("Only <4 regular paremeters can be passed with a variable argument.")
 					}
 					
 					Attributes |= FUNCTION_ATTRIBUTE_VARIADIC
@@ -1878,6 +1881,177 @@ struct ParserState {
 		BaseEnumType->EnumerationNamesOffset := this->AddGlobalConstantData(NameOffsets, NamesSize)
 	}
 
+	define FunctionDefine* DeriveMethod(SourceContext* Blame, i8* Name, Type ReturnType, i32 ParameterTypeCount, Type* ParameterTypes) {
+		FunctionDefine* Definition := Alloc(#FunctionDefine)
+
+		Definition~>Context->Clone(Blame)
+
+		Definition->Name := AToS(Name)
+		Definition->IsMethod := FUNCTION_IS_DERIVED_METHOD
+
+		Definition->LabelNumber := this->LabelCount++
+
+		Definition->ParameterCount := ParameterTypeCount As i16
+		Definition->Parameters := Alloc(ParameterTypeCount * #VariableInfo*)
+
+		Definition->ReturnType := ReturnType
+
+		for (i32 Index := 0, Index < ParameterTypeCount, Index++) {
+			VariableInfo* Parameter := Alloc(#VariableInfo)
+			Type ParameterType := ParameterTypes[Index]
+
+			Parameter->Name := AToS(FormatString("%s_%i", Name, Index))
+			Parameter->Type := ParameterType
+			Parameter->IsParameter := true
+
+			Definition->Parameters[Index] := Parameter
+		}
+
+		return Definition
+	}
+
+	define FunctionDefine* DeriveMethod(SourceContext* Blame, i8* Name, Type ReturnType, ... RawParameterTypes) {
+		i32 ParameterTypeCount := RawParameterTypes[0] As i32
+		Type* ParameterTypes := &RawParameterTypes[1] As Type*
+
+		return this->DeriveMethod(Blame, Name, ReturnType, ParameterTypeCount, ParameterTypes)
+	}
+
+	define SourceContext* MakeFakeContext(i8* FileName, i8* Text) {
+		LexerState* FakeLexer := LexerState:Fake(Text, AToS(FileName))
+
+		SourceContext* FakeContext := Alloc(#SourceContext)
+		FakeContext->Lexer := FakeLexer
+		FakeContext->LineNumber := 0
+		FakeContext->PositionInSource := 0
+		FakeContext->LengthInSource := StringLength(Text) As i16
+
+		return FakeContext
+	}
+
+	define TypeInfo* MakeDerivedType(i8* Name, i32 MethodCount) {
+		TypeInfo* NewType := Alloc(#TypeInfo)
+		
+		NewType->DefinedAt := this->MakeFakeContext(Name, Name)
+		NewType->Name := AToS(Name)
+		NewType->Size := (MethodCount * #void*) As i16
+		NewType->Kind := TYPE_KIND_INTERFACE
+		NewType->InterfaceInfo := InterfaceInfo:New()
+
+		this->RootNamespace->DefineEntry(Name, NewType)
+
+		return NewType
+	}
+
+	define void AppendDerivedMethod(TypeInfo* Info, i8* Name, i8* FakeSource, Type ReturnType, ... RawParameterTypes) {
+		i32 ParameterTypeCount := RawParameterTypes[0] As i32
+		Type* ParameterTypes := &RawParameterTypes[1] As Type*
+
+		SourceContext* Context := this->MakeFakeContext(Info->Name->Buffer, FakeSource)
+
+		Info->InterfaceInfo->Methods->Push(this->DeriveMethod(Context, Name, ReturnType, ParameterTypeCount, ParameterTypes))
+	}
+
+	TypeInfo* IAnyType
+	TypeInfo* INewType
+	TypeInfo* IDebugType
+
+	define void SetupDerivedInterfaces() {
+		Type VoidType := this->void->AsNonPointer()
+		Type ThisType := this->void->AsPointer(1)
+		Type AnyType := ThisType
+
+		;this->MakeFakeContext("IAny", "IAny")
+		;this->MakeFakeContext("IAny", "define void Initialize(self* this) { derived }")
+
+		this->IAnyType := this->MakeDerivedType("IAny", 1)
+		this->AppendDerivedMethod(this->IAnyType, "Initialize", "declare void Initialize(self*)", VoidType, ThisType)
+
+		this->INewType := this->MakeDerivedType("INew", 1)
+		this->AppendDerivedMethod(this->INewType, "New", "declare self* New(self*)", ThisType, ThisType)
+		
+	}
+
+	define InterfaceImplementationInfo* DeriveInterface(TypeInfo* Target, SourceContext* Blame, TypeInfo* InterfaceType) {
+		InterfaceImplementationInfo* Implementation := InterfaceImplementationInfo:New(Blame, InterfaceType)
+
+		Implementation->IsDerived := true
+
+		Type VoidType := this->void->AsNonPointer()
+		Type ThisType := Target->AsPointer(1)
+
+		if (Implementation->ForInterface = this->IAnyType) {
+			Implementation->Methods->Push(this->DeriveMethod(Blame, "Initialize", VoidType, ThisType))
+		}
+		else if (Implementation->ForInterface = this->INewType) {
+			; todo: new type() as (null As Type*)->New()
+
+			Implementation->Methods->Push(this->DeriveMethod(Blame, "New", ThisType, ThisType))
+		}
+		else if (Implementation->ForInterface = this->IDebugType) {
+
+		}
+		else {
+			Blame->Error("Cannot derive implementation for this interface")
+		}
+
+		i32 Count := Implementation->Methods->Count()
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			FunctionDefine* Method := Implementation->Methods->At(Index)
+
+			Target~>Methods->Set(Method->Name, Method)
+		}
+
+		return Implementation
+	}
+
+	define void ParseClassInterface(TypeInfo* ContainerType, i8 IsDerived) {
+		ClassInfo* Info := ContainerType->ClassInfo
+
+		QualifiedName* InterfaceName := this->ParseQualifiedName()
+		TypeInfo* InterfaceType := this->TryLookupQualifiedName(InterfaceName)
+
+		if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
+			InterfaceName~>Context->Error("Classes can only implement interface types")
+		}
+
+		InterfaceImplementationInfo* ImplementationInfo := null
+
+		if (IsDerived) {
+			ImplementationInfo := this->DeriveInterface(ContainerType, InterfaceName~>Context, InterfaceType)
+		}
+		else {
+			ImplementationInfo := InterfaceImplementationInfo:New(InterfaceName~>Context, InterfaceType)
+		}
+
+		ImplementationInfo->VirtualFunctionTableLabel := this->LabelCount++
+		ImplementationInfo->SetupVirtualFunctionTableLabel := this->LabelCount++
+
+		i32 MethodCount := InterfaceType->InterfaceInfo->Methods->Count()
+
+		for (i32 Index := 0, Index < MethodCount, Index++) {
+			ImplementationInfo->StubLabels[Index] := this->LabelCount++
+		}
+
+		Info->InterfacesInOrder->Push(ImplementationInfo)
+		Info->Interfaces->Insert(InterfaceType As i64, ImplementationInfo)
+
+		InterfaceType->InterfaceInfo->ImplementedBy->Insert(ContainerType As i64, null)
+
+		StructField* Field := Alloc(#StructField)
+		
+		Field->DefinedAt := null
+		Field->Name := AToS(FormatString("__VirtualFunctionTable_%s", InterfaceType->Name->Buffer))
+		Field->ValueType := this->void->AsPointer(1)
+		Field->Offset := ContainerType->Size
+		ContainerType->Size += 8
+
+		Print("vtbl field: %s\n", Field->Name->Buffer)
+
+		ContainerType~>Fields->Set(Field->Name, Field)
+	}
+
 	define void ParseClass() {
 		TypeInfo* NewType := this->ParseCustomTypeName(TYPE_KIND_STRUCTURE)
 		
@@ -1888,47 +2062,23 @@ struct ParserState {
 		ClassInfo* Info := ClassInfo:New()
 		NewType->ClassInfo := Info
 
+		i8 CanDerive := true
+
 		if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_IMPLEMENTS)) {
+			CanDerive := false
+
 			loop {
-				QualifiedName* InterfaceName := this->ParseQualifiedName()
-				TypeInfo* InterfaceType := this->TryLookupQualifiedName(InterfaceName)
-
-				if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
-					InterfaceName~>Context->Error("Classes can only implement interface types")
-				}
-
-				InterfaceImplementationInfo* ImplementationInfo := InterfaceImplementationInfo:New(InterfaceName~>Context, InterfaceType)
-
-				ImplementationInfo->VirtualFunctionTableLabel := this->LabelCount++
-				ImplementationInfo->SetupVirtualFunctionTableLabel := this->LabelCount++
-
-				i32 MethodCount := InterfaceType->InterfaceInfo->Methods->Count()
-
-				for (i32 Index := 0, Index < MethodCount, Index++) {
-					ImplementationInfo->StubLabels[Index] := this->LabelCount++
-				}
-
-				Info->InterfacesInOrder->Push(ImplementationInfo)
-				Info->Interfaces->Insert(InterfaceType As i64, ImplementationInfo)
-
-				InterfaceType->InterfaceInfo->ImplementedBy->Insert(NewType As i64, null)
-
-				StructField* Field := Alloc(#StructField)
-				
-				Field->DefinedAt := null
-				Field->Name := AToS(FormatString("__VirtualFunctionTable_%s", InterfaceType->Name->Buffer))
-				Field->ValueType := this->void->AsPointer(1)
-				Field->Offset := NewType->Size
-				NewType->Size += 8
-
-				Print("vtbl field: %s\n", Field->Name->Buffer)
-
-				NewType~>Fields->Set(Field->Name, Field)
+				this->ParseClassInterface(NewType, false)
 
 				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
 					break
 				}
 				else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
+					if (this->PeekNextToken()->Is(TOKEN_TYPE_KEYWORD, KEYWORD_DERIVES)) {
+						CanDerive := true
+						break
+					}
+
 					continue
 				}
 				else {
@@ -1936,8 +2086,24 @@ struct ParserState {
 				}
 			}
 		}
+		else if (this->PeekNextToken()->Is(TOKEN_TYPE_KEYWORD, KEYWORD_DERIVES)) {
+			; dummy branch
+		}
 		else {
 			this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected open brace for struct body")
+		}
+
+		if (CanDerive && this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_DERIVES)) {
+			loop {
+				this->ParseClassInterface(NewType, true)
+
+				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+					break
+				}
+				else {
+					this->PeekNextToken()->Error("Unexpected token in 'derives' list")
+				}
+			}
 		}
 
 		this->ParseStructFields(NewType, false)

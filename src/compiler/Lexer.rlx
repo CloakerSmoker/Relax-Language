@@ -159,6 +159,7 @@ i8 KEYWORD_NAMESPACE := 26
 i8 KEYWORD_CLASS := 27
 i8 KEYWORD_IMPLEMENTS := 29
 i8 KEYWORD_INTERFACE := 30
+i8 KEYWORD_DERIVES := 31
 
 ; Should be zero, but somehow I used 0 as a regular value
 i8 KEYWORD_NONE := 127
@@ -267,6 +268,16 @@ struct LexerState {
 			return KEYWORD_NONE
 		}
 	}
+
+	static LexerState* Fake(i8* Source, SafeString* SourceFilePath) {
+		LexerState* this := Alloc(#LexerState)
+
+		this->Source := Source
+		this->SourceLength := StringLength(Source)
+		this->SourceFilePath := SourceFilePath
+
+		return this
+	}
 	
 	static LexerState* New(BuildConfig* Config, LexerState* Parent, i8* Source, i32 SourceLength, SafeString* SourceFilePath) {
 		LexerState* this := Alloc(#LexerState)
@@ -317,6 +328,7 @@ struct LexerState {
 		this->DefineKeyword("class",     KEYWORD_CLASS)
 		this->DefineKeyword("implements",KEYWORD_IMPLEMENTS)
 		this->DefineKeyword("interface", KEYWORD_INTERFACE)
+		this->DefineKeyword("derives", KEYWORD_DERIVES)
 		
 		return this
 	}

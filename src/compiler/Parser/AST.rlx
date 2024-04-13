@@ -505,11 +505,18 @@ struct InstructionNode {
 
 ; EndRegion
 
+enum DeriveInterface {
+	IAny,
+	INew,
+	IDebug
+}
+
 ; Function Definition Region
 
 i8 FUNCTION_IS_METHOD := 1
 i8 FUNCTION_IS_STATIC_METHOD := 2
 i8 FUNCTION_IS_INTERFACE_METHOD := 3
+i8 FUNCTION_IS_DERIVED_METHOD := 4
 
 i8 FUNCTION_ATTRIBUTE_USE_X64 := 1
 i8 FUNCTION_ATTRIBUTE_ASSEMBY := 2

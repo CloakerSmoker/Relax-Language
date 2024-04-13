@@ -637,6 +637,10 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 	Free(NameBuffer)
 }
 
+define void CompileDerivedMethod(CompilerState* State, FunctionDefine* DerivedMethod) {
+	
+}
+
 define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunction, i8 IsOverload) {
 	/* Compiles either:
 		A single function (BaseFunction)
