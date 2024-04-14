@@ -160,6 +160,7 @@ i8 KEYWORD_CLASS := 27
 i8 KEYWORD_IMPLEMENTS := 29
 i8 KEYWORD_INTERFACE := 30
 i8 KEYWORD_DERIVES := 31
+i8 KEYWORD_VIRTUAL := 32
 
 ; Should be zero, but somehow I used 0 as a regular value
 i8 KEYWORD_NONE := 127
@@ -328,7 +329,8 @@ struct LexerState {
 		this->DefineKeyword("class",     KEYWORD_CLASS)
 		this->DefineKeyword("implements",KEYWORD_IMPLEMENTS)
 		this->DefineKeyword("interface", KEYWORD_INTERFACE)
-		this->DefineKeyword("derives", KEYWORD_DERIVES)
+		this->DefineKeyword("derives",   KEYWORD_DERIVES)
+		this->DefineKeyword("virtual",   KEYWORD_VIRTUAL)
 		
 		return this
 	}

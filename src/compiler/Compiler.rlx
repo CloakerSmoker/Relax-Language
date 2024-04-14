@@ -694,7 +694,7 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			EmitMove_R64_I64(Compiler, RAX, FNV1A(Buffer, Length))
 		}
 	}
-	else if (InterfaceType = Compiler->Parser->INewType) {
+	else if (InterfaceType = Compiler->Parser->IAllocateType) {
 
 	}
 
