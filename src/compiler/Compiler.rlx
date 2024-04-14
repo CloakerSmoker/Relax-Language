@@ -687,6 +687,12 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 				EmitMove_RIX_DISP8_RX(Compiler, P1, RBX, (Index * 8) As i8, 8)
 			}
 		}
+		else if (MethodIndex = 1) {
+			i8[100] Buffer
+			i32 Length := FormatString(Buffer, 100, "%t", ClassType)
+
+			EmitMove_R64_I64(Compiler, RAX, FNV1A(Buffer, Length))
+		}
 	}
 	else if (InterfaceType = Compiler->Parser->INewType) {
 
@@ -1387,7 +1393,6 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
-	Print("SetLabel %i\n", FunctionToCompile->LabelNumber)
 	
 	i32 DebugData := Compiler->BeforeCompileFunction(FunctionToCompile)
 	
@@ -2161,10 +2166,10 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* F
 		FunctionDefine* Implementation := Info->Methods->At(Index)
 		i32 StubLabel := Info->StubLabels[Index]
 
-		Print("Generated stub call to label %i\n", Implementation->LabelNumber)
+		;Print("Generated stub call to label %i\n", Implementation->LabelNumber)
 
 		SetLabel(Compiler, StubLabel)
-		EmitSub_R64_IX(Compiler, RDI, Index * 8)
+		EmitSub_R64_IX(Compiler, RDI, Offset * 8)
 		EmitJump_Label(Compiler, Implementation->LabelNumber)
 	}
 

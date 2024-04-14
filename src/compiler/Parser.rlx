@@ -1964,8 +1964,9 @@ struct ParserState {
 		;this->MakeFakeContext("IAny", "IAny")
 		;this->MakeFakeContext("IAny", "define void Initialize(self* this) { derived }")
 
-		this->IAnyType := this->MakeDerivableInterface("IAny", 1)
+		this->IAnyType := this->MakeDerivableInterface("IAny", 2)
 		this->AddDeriveableMethod(this->IAnyType, "Initialize", "declare void Initialize(self*)", VoidType, ThisType)
+		this->AddDeriveableMethod(this->IAnyType, "TypeID", "declare i64 TypeID(self*)", this->i64->AsNonPointer(), ThisType)
 
 		this->INewType := this->MakeDerivableInterface("INew", 1)
 		this->AddDeriveableMethod(this->INewType, "New", "declare self* New(self*)", ThisType, ThisType)
@@ -1994,6 +1995,7 @@ struct ParserState {
 
 		if (Implementation->ForInterface = this->IAnyType) {
 			this->AddDerivedMethod(Implementation, 0, "Initialize", VoidType, ThisType)
+			this->AddDerivedMethod(Implementation, 1, "TypeID", this->i64->AsNonPointer(), ThisType)
 		}
 		else if (Implementation->ForInterface = this->INewType) {
 			; todo: new type() as (null As Type*)->New()
@@ -2020,23 +2022,16 @@ struct ParserState {
 		return Implementation
 	}
 
-	define void ParseClassInterface(TypeInfo* ContainerType, i8 IsDerived) {
+	define void AddClassInterface(TypeInfo* ContainerType, SourceContext* Blame, TypeInfo* InterfaceType, i8 IsDerived) {
 		ClassInfo* Info := ContainerType->ClassInfo
-
-		QualifiedName* InterfaceName := this->ParseQualifiedName()
-		TypeInfo* InterfaceType := this->TryLookupQualifiedName(InterfaceName)
-
-		if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
-			InterfaceName~>Context->Error("Classes can only implement interface types")
-		}
 
 		InterfaceImplementationInfo* ImplementationInfo := null
 
 		if (IsDerived) {
-			ImplementationInfo := this->DeriveInterfaceImplementation(InterfaceName~>Context, ContainerType, InterfaceType)
+			ImplementationInfo := this->DeriveInterfaceImplementation(Blame, ContainerType, InterfaceType)
 		}
 		else {
-			ImplementationInfo := InterfaceImplementationInfo:New(InterfaceName~>Context, ContainerType, InterfaceType)
+			ImplementationInfo := InterfaceImplementationInfo:New(Blame, ContainerType, InterfaceType)
 		}
 
 		ImplementationInfo->VirtualFunctionTableLabel := this->LabelCount++
@@ -2061,9 +2056,25 @@ struct ParserState {
 		Field->Offset := ContainerType->Size
 		ContainerType->Size += 8
 
-		Print("vtbl field: %s\n", Field->Name->Buffer)
+		;Print("vtbl field: %s\n", Field->Name->Buffer)
 
 		ContainerType~>Fields->Set(Field->Name, Field)
+	}
+
+	define void ParseClassInterface(TypeInfo* ContainerType, i8 IsDerived) {
+		ClassInfo* Info := ContainerType->ClassInfo
+
+		QualifiedName* InterfaceName := this->ParseQualifiedName()
+		TypeInfo* InterfaceType := this->TryLookupQualifiedName(InterfaceName)
+
+		if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
+			InterfaceName~>Context->Error("Classes can only implement interface types")
+		}
+		else if (Info->Interfaces->Has(InterfaceType)) {
+			InterfaceName~>Context->Error("Interface is already implemented/derived")
+		}
+
+		this->AddClassInterface(ContainerType, InterfaceName~>Context, InterfaceType, IsDerived)
 	}
 
 	define void ParseClass() {
@@ -2075,6 +2086,8 @@ struct ParserState {
 
 		ClassInfo* Info := ClassInfo:New()
 		NewType->ClassInfo := Info
+
+		this->AddClassInterface(NewType, this->MakeFakeContext("Implicit Derive", "IAny"), this->IAnyType, true)
 
 		i8 CanDerive := true
 
