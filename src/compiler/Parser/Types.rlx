@@ -85,6 +85,21 @@ struct TypeInfo {
 		this~>Methods->Initialize()
 		this~>StaticMethods->Initialize()
 	}
+
+	i64 CachedTypeID
+
+	define i64 GetTypeID() {
+		if (this->CachedTypeID != 0) {
+			return this->CachedTypeID
+		}
+
+		i8[100] Buffer
+		i32 Length := FormatString(Buffer, 100, "%t", this)
+
+		this->CachedTypeID := FNV1A(Buffer, Length)
+
+		return this->CachedTypeID
+	}
 }
 struct ArrayTypeInfo {
 	TypeInfo* BaseType
@@ -196,6 +211,8 @@ struct InterfaceImplementationInfo {
 struct ClassInfo {
 	PointerArray* InterfacesInOrder ; <InterfaceImplementationInfo*>
 	AVLTree* Interfaces ; <TypeInfo*, InterfaceImplementationInfo*>
+
+	InterfaceImplementationInfo* IAnyImplementation
 
 	static self* New() {
 		self* this := Alloc(#self)

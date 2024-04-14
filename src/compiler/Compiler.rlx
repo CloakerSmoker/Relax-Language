@@ -661,6 +661,11 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 
 define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* DerivedMethod) {
 	; Derives the method :)
+
+	if (DerivedMethod->CodeOffset != 0) {
+		return
+	}
+
 	InterfaceImplementationInfo* Implementation := DerivedMethod->DerivedImplementationInfo
 	
 	TypeInfo* InterfaceType := Implementation->ForInterface
@@ -670,6 +675,7 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	ClassInfo* Info := ClassType->ClassInfo
 
 	SetLabel(Compiler, DerivedMethod->LabelNumber)
+	DerivedMethod->CodeOffset := Compiler->Index
 
 	if (InterfaceType = Compiler->Parser->IAnyType) {
 		if (MethodIndex = 0) {
@@ -688,14 +694,32 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			}
 		}
 		else if (MethodIndex = 1) {
-			i8[100] Buffer
-			i32 Length := FormatString(Buffer, 100, "%t", ClassType)
-
-			EmitMove_R64_I64(Compiler, RAX, FNV1A(Buffer, Length))
+			EmitMove_R64_I64(Compiler, RAX, ClassType->GetTypeID())
 		}
 	}
 	else if (InterfaceType = Compiler->Parser->IAllocateType) {
+		i8 P1 := Compiler->GetParameterRegister(0)
+		i8 P2 := Compiler->GetParameterRegister(1)
 
+		EmitMove_R64_I64(Compiler, P2, ClassType->GetTypeID())
+
+		if (MethodIndex = 0) {
+			; auto Result := Alloc(sizeof(Self))
+			; Result->Initialize()
+
+			EmitMove_R32_I32(Compiler, P1, ClassType->Size)
+			EmitCall_Label(Compiler, Compiler->Parser->Allocator->LabelNumber)
+			EmitPush_R64(Compiler, RAX)
+			
+			EmitMove_R64_R64(Compiler, P1, RAX)
+			FunctionDefine* IAnyInitialize := Info->IAnyImplementation->Methods->At(0)
+			EmitCall_Label(Compiler, IAnyInitialize->LabelNumber)
+
+			EmitPop_R64(Compiler, RAX)
+		}
+		else if (MethodIndex = 1) {
+			EmitCall_Label(Compiler, Compiler->Parser->Deleter->LabelNumber)
+		}
 	}
 
 	EmitReturn(Compiler)

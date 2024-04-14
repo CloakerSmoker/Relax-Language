@@ -53,6 +53,14 @@ define void* CloneMemory(void* Memory, i32 Size) {
 	return NewBuffer
 }
 
+define void* AllocateInstance(i64 Size, i64 TypeID) {
+	return Alloc(Size)
+}
+
+define void DeleteInstance(void* Instance, i64 Size) {
+	Free(Instance)
+}
+
 struct ExpandArray {
 	i32 ElementSize,
 	i32 Capacity	

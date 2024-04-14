@@ -256,6 +256,14 @@ MatchFunctionErrorMessages InterfaceMatchFunctionErrors {
 	"Parameter %i should be an %t"
 }
 
+MatchFunctionErrorMessages InternalMatchFunctionErrors {
+	"No definition for internal function found",
+	"Takes more parameters than expected",
+	"Takes less parameters than expected",
+	"Parameter %i should be an %t, not a %t",
+	"Parameter %i should be an %t"
+}
+
 ; Unary
 
 struct UnaryExpression {
