@@ -143,7 +143,10 @@ i8 NODE_TYPE_GET_TYPE_SIZE := 24
 i8 NODE_TYPE_EXPRESSION_BLOCK := 25
 i8 NODE_TYPE_BLOCK := 26
 
+; note: I forgot why this exists
 i8 NODE_TYPE_CAST := 27
+
+i8 NODE_TYPE_DYNAMIC_CAST := 28
 
 ; EndRegion
 
@@ -310,6 +313,7 @@ struct CallExpression {
 		FunctionDefine* TargetFunction,
 		ASTNode* CallToFunctionPointer
 	}
+
 	ASTNode** Parameters,
 	i32 ParameterCount,
 	i8 BuiltinID
@@ -505,12 +509,6 @@ struct InstructionNode {
 
 ; EndRegion
 
-enum DeriveInterface {
-	IAny,
-	INew,
-	IDebug
-}
-
 ; Function Definition Region
 
 i8 FUNCTION_IS_METHOD := 1
@@ -544,12 +542,15 @@ struct FunctionDefine {
 	union {
 		CodeBlock* Body,
 		AssemblyBlock* AssemblyBody,
-		SafeString* ImportFileName
+		SafeString* ImportFileName,
+		InterfaceImplementationInfo* DerivedImplementationInfo,
+		i32 VirtualFunctionTableSlot
 	},
 	union {
 		i8* StringBuffer,
 		void* ConstantsBuffer,
-		SafeString* ImportFunctionName
+		SafeString* ImportFunctionName,
+		i32 DerivedMethodIndex
 	},
 	
 	SafeString* MethodOfTypeName,

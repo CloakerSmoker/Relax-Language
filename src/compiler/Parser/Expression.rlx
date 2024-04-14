@@ -339,6 +339,18 @@
 		
 		Result->TargetFunction := BestFit
 		ResultNode->ValueType := BestFit->ReturnType
+
+		if (ThisParameter) {
+			Type ThisType := ThisParameter->ValueType
+
+			if (GetPointerDepth(ThisType) = 1) {
+				TypeInfo* ThisTypeInfo := GetBaseType(ThisType)
+
+				if (ThisTypeInfo->Is(TYPE_KIND_INTERFACE)) {
+					
+				}
+			}
+		}
 		
 		return ResultNode
 	}

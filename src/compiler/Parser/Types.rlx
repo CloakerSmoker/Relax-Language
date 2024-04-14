@@ -165,6 +165,8 @@ struct InterfaceInfo {
 struct InterfaceImplementationInfo {
 	SourceContext* Blame
 
+	TypeInfo* ForType
+
 	TypeInfo* ForInterface
 	InterfaceInfo* ForInterfaceInfo
 
@@ -176,10 +178,11 @@ struct InterfaceImplementationInfo {
 
 	i8 IsDerived
 
-	static self* New(SourceContext* Blame, TypeInfo* ForInterface) {
+	static self* New(SourceContext* Blame, TypeInfo* ForType, TypeInfo* ForInterface) {
 		self* this := Alloc(#self)
 
 		this->Blame := Blame
+		this->ForType := ForType
 		this->ForInterface := ForInterface
 		this->ForInterfaceInfo := ForInterface->InterfaceInfo
 

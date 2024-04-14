@@ -366,7 +366,7 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 			else if (TargetFunction->IsImported) {
 				; Dummy branch
 			}
-			else if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			else if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD || TargetFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
 				; Dummy, again
 			}
 			else if (TargetFunction->Body->StatementCount = 0) {
@@ -504,6 +504,137 @@ define void FoldConstants(ParserState* Parser) {
 	Visitor->AllowType(NODE_TYPE_GET_TYPE_SIZE)
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_IF)
+	
+	if !(Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
+		Visitor->VisitBlocks(Parser->MainFunction->Body)
+	}
+	
+	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
+	
+	Free(Visitor)
+}
+
+define i8 TypesNeedDynamicCast(Type LeftType, Type RightType) {
+	TypeInfo* LeftTypeInfo := GetBaseType(LeftType)
+	TypeInfo* RightTypeInfo := GetBaseType(RightType)
+
+	if (GetPointerDepth(LeftType) != 1 || GetPointerDepth(RightType) != 1) {
+		return false
+	}
+
+	i8 LeftIsClass := LeftTypeInfo->IsClass
+	i8 LeftIsInterface := LeftTypeInfo->Is(TYPE_KIND_INTERFACE)
+
+	i8 RightIsClass := RightTypeInfo->IsClass
+	i8 RightIsInterface := RightTypeInfo->Is(TYPE_KIND_INTERFACE)
+
+	if (LeftIsClass && RightIsInterface) || (LeftIsInterface && RightIsClass) {
+		return true
+	}
+	else {
+		return false
+	}
+}
+
+define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Root) {
+	Visitor->VisitChildren(Root)
+
+	; Dynamic casts only need to be inserted at:
+	;  Call points: 
+	;   define void TakesInterface(IWhatever*)
+	;   TakesInterface(ClassImplementingIWhatever)
+	;  Assignments:
+	;   IWhatever* whatever
+	;   whatever := ClassImplementingIWhatever
+	;  Excplict casts:
+	;   (ClassImplementingIWhatever As IWhatever*)
+	;
+	; All examples are bidirectional (up/down casts)
+	; All instances have already been type checked
+
+	;Root->Warn("Visited")
+
+	if (Root->NodeType = NODE_TYPE_CALL) {
+		CallExpression* Call := Root->CallNode
+
+		if (Call->BuiltinID = BUILTIN_FUNCTION_POINTER) {
+			Type FunctionPointerType := Call->CallToFunctionPointer->ValueType
+			FunctionPointerInfo* Info := GetBaseType(FunctionPointerType)~>FunctionPointer
+
+			for (i32 Index := 0, Index < Info->ParameterCount, Index++) {
+				ASTNode* ProvidedParameter := Call->Parameters[Index]
+				Type ProvidedType := ProvidedParameter->ValueType
+				Type ExpectedType := Info->ParameterTypes[Index]
+
+				if (TypesNeedDynamicCast(ProvidedType, ExpectedType)) {
+					ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, ProvidedParameter, ExpectedType)
+					Cast~>Context->Clone(ProvidedParameter~>Context)
+					Call->Parameters[Index] := Cast
+				}
+			}
+		}
+		else if (Call->BuiltinID = BUILTIN_NONE) {
+			FunctionDefine* Definition := Call->TargetFunction
+			i32 ParameterCount := Definition->ParameterCount
+
+			if (Definition->Attributes & FUNCTION_ATTRIBUTE_VARIADIC) {
+				ParameterCount -= 1
+			}
+
+			for (i32 Index := 0, Index < ParameterCount, Index++) {
+				ASTNode* ProvidedParameter := Call->Parameters[Index]
+				Type ProvidedType := ProvidedParameter->ValueType
+				Type ExpectedType := Definition->Parameters[Index]->Type
+
+				if (TypesNeedDynamicCast(ProvidedType, ExpectedType)) {
+					ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, ProvidedParameter, ExpectedType)
+					Cast~>Context->Clone(ProvidedParameter~>Context)
+					Call->Parameters[Index] := Cast
+				}
+			}
+		}
+	}
+	else if (Root->NodeType = NODE_TYPE_BINARY) {
+		BinaryExpression* Binary := Root->BinaryNode
+
+		Type LeftType := Binary->Left->ValueType
+		Type RightType := Binary->Right->ValueType
+
+		i8 Operator := Binary->Operator->Value As i8
+
+		if (Operator != OPERATOR_COLON_EQUAL && Operator != OPERATOR_AS) {
+			return null
+		}
+
+		if (TypesNeedDynamicCast(LeftType, RightType)) {
+			Type TargetType := TYPE_NONE
+			ASTNode** pValueNode := null
+
+			if (Operator = OPERATOR_COLON_EQUAL) {
+				TargetType := LeftType
+				pValueNode := Binary~>Right
+			}
+			else if (Operator = OPERATOR_AS) {
+				TargetType := RightType
+				pValueNode := Binary~>Left
+			}
+
+			ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, *pValueNode, TargetType)
+
+			Cast~>Context->Clone((*pValueNode)~>Context)
+
+			*pValueNode := Cast
+		}
+	}
+
+	return null
+}
+
+define void InsertClassInterfaceCasts(ParserState* Parser) {
+	ASTVisitor* Visitor := ASTVisitor:New(&InsertClassInterfaceCastsVisitNode)
+	
+	Visitor->AllowType(NODE_TYPE_BINARY)
+	Visitor->AllowType(NODE_TYPE_CALL)
 	
 	if !(Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 		Visitor->VisitBlocks(Parser->MainFunction->Body)

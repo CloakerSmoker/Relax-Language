@@ -472,6 +472,9 @@ define void EmitMove_R64_RX(CompilerState* Compiler, i8 DestinationRegister, i8 
 define void EmitMove_RX_RIX_DISPX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 DisplacementSize, i8 Size) {
 	EmitBasicInstructionDisplacement(Compiler, 0x8B, Size, DestinationRegister, SourceRegister, Displacement, DisplacementSize)
 }
+define void EmitMove_RX_RIX_DISPX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i32 Displacement, i8 Size) {
+	EmitBasicInstructionDisplacement(Compiler, 0x8B, Size, DestinationRegister, SourceRegister, Displacement, GetNumberSize(Displacement))
+}
 
 /* Move [register + displacement], register */
 

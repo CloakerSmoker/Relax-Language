@@ -15,6 +15,7 @@ struct LabelInfo {
 	i8 IsPlaceholder
 }
 
+declare i8 GetSystemVRegister(i32)
 declare i32 GetVariableOffset(CompilerState*, VariableInfo*, i8*)
 
 struct CompilerState {
@@ -549,6 +550,27 @@ struct CompilerState {
 			;Free(NameBuffer)
 		}
 	}
+
+	define i8 GetParameterRegister(i8 Index, i8 ForceX64) {
+		i8 Result := 0
+		
+		if (ForceX64) {
+			Result := (Index + 1) As i8
+			
+			if (Result > 2) {
+				Result += 5
+			}
+		}
+		else {
+			Result := GetSystemVRegister(Index)
+		}
+
+		return Result
+	}
+
+	define i8 GetParameterRegister(i8 Index) {
+		return this->GetParameterRegister(Index, false)
+	}
 }
 
 /*
@@ -637,8 +659,40 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 	Free(NameBuffer)
 }
 
-define void CompileDerivedMethod(CompilerState* State, FunctionDefine* DerivedMethod) {
+define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* DerivedMethod) {
+	; Derives the method :)
+	InterfaceImplementationInfo* Implementation := DerivedMethod->DerivedImplementationInfo
 	
+	TypeInfo* InterfaceType := Implementation->ForInterface
+	i32 MethodIndex := DerivedMethod->DerivedMethodIndex
+
+	TypeInfo* ClassType := Implementation->ForType
+	ClassInfo* Info := ClassType->ClassInfo
+
+	SetLabel(Compiler, DerivedMethod->LabelNumber)
+
+	if (InterfaceType = Compiler->Parser->IAnyType) {
+		if (MethodIndex = 0) {
+			i8 P1 := Compiler->GetParameterRegister(0)
+
+			i32 InterfaceCount := Info->InterfacesInOrder->Count()
+
+			for (i32 Index := 0, Index < InterfaceCount, Index++) {
+				InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
+
+				; lea rbx, vtfb[Index]
+				; mov [p1 + Index * 8], rbx
+
+				EmitLea_R64_Label(Compiler, RBX, ImplementationInfo->VirtualFunctionTableLabel)
+				EmitMove_RIX_DISP8_RX(Compiler, P1, RBX, (Index * 8) As i8, 8)
+			}
+		}
+	}
+	else if (InterfaceType = Compiler->Parser->INewType) {
+
+	}
+
+	EmitReturn(Compiler)
 }
 
 define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunction, i8 IsOverload) {
@@ -648,8 +702,11 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 	*/
 	
 	;BaseFunction->CodeOffset := Compiler->Index
-	
-	if (BaseFunction->IsImported) {
+
+	if (BaseFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+		CompileDerivedMethod(Compiler, BaseFunction)
+	}
+	else if (BaseFunction->IsImported) {
 		if (Compiler->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
 			CompileImportStub(Compiler, BaseFunction)
 		}
@@ -737,6 +794,8 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 }
 
 define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
+	InsertClassInterfaceCasts(Parser)
+
 	CountReferences(Parser)
 	EliminateGlobals(Parser)
 	FoldConstants(Parser)
@@ -1328,6 +1387,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
+	Print("SetLabel %i\n", FunctionToCompile->LabelNumber)
 	
 	i32 DebugData := Compiler->BeforeCompileFunction(FunctionToCompile)
 	
@@ -1468,18 +1528,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		VariableInfo* NextParameter := (FunctionToCompile->Parameters)[RegisterParameterIndex]
 		
 		/* And which register it is in (according to the target ABI) */
-		i8 NextParameterRegister := 0
-		
-		if (USE_SYSTEMV) {
-			NextParameterRegister := GetSystemVRegister(RegisterParameterIndex)
-		}
-		else {
-			NextParameterRegister := (RegisterParameterIndex + 1) As i8
-			
-			if (NextParameterRegister > 2) {
-				NextParameterRegister += 5
-			}
-		}
+		i8 NextParameterRegister := Compiler->GetParameterRegister(RegisterParameterIndex, !USE_SYSTEMV)
 		
 		/* And write the parameter register's value into the parameter's stack space */
 		CompileSetVariableValue(Compiler, NextParameter, NextParameterRegister)
@@ -2059,6 +2108,47 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 			CompileExpression(Compiler, RAX, ExpressionBlock->Statements[Index])
 		}
 	}
+	else if (ExpressionType = NODE_TYPE_DYNAMIC_CAST) {
+		ExpressionToCompile->Warn("Dynamic Cast")
+
+		ASTNode* Value := ExpressionToCompile->CastFromValue
+
+		CompileExpression(Compiler, ResultRegister, Value)
+
+		TypeInfo* From := GetBaseType(Value->ValueType)
+		TypeInfo* To := GetBaseType(ExpressionToCompile->ValueType)
+
+		i32 Sign := 0
+		ClassInfo* Info := null
+		TypeInfo* InterfaceType := null
+
+		if (From->IsClass) {
+			; Downcast, class -> interface
+
+			Sign := 1
+			Info := From->ClassInfo
+			InterfaceType := To
+		}
+		else if (To->IsClass) {
+			; Upcast, interface -> class
+
+			Sign := -1
+			Info := To->ClassInfo
+			InterfaceType := From
+		}
+
+		InterfaceImplementationInfo* Implementation := Info->Interfaces->GetPointer(InterfaceType)
+		i32 Index := Info->InterfacesInOrder->Find(Implementation)
+
+		if (Index != 0) {
+			if (Sign = 1) {
+				EmitAdd_R64_IX(Compiler, ResultRegister, Index * 8)
+			}
+			else if (Sign = -1) {
+				EmitSub_R64_IX(Compiler, ResultRegister, Index * 8)
+			}
+		}
+	}
 }
 ;/*
 define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* ForClass, InterfaceImplementationInfo* Info) {
@@ -2070,6 +2160,8 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* F
 	for (i32 Index := 0, Index < Count, Index++) {
 		FunctionDefine* Implementation := Info->Methods->At(Index)
 		i32 StubLabel := Info->StubLabels[Index]
+
+		Print("Generated stub call to label %i\n", Implementation->LabelNumber)
 
 		SetLabel(Compiler, StubLabel)
 		EmitSub_R64_IX(Compiler, RDI, Index * 8)
@@ -2093,7 +2185,7 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* F
 		i32 StubLabel := Info->StubLabels[Index]
 
 		EmitLea_R64_Label(Compiler, RBX, StubLabel)
-		EmitMove_RIX_RX(Compiler, RBX, RAX, 8)
+		EmitMove_RIX_DISP8_RX(Compiler, RAX, RBX, (Index * 8) As i8, 8)
 	}
 
 	EmitReturn(Compiler)
@@ -2234,6 +2326,8 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	
 	i32 TargetParameterCount := CallNode->ParameterCount
 	i8 TargetAttributes := 0
+
+	i8 IsVirtualMethodCall := false
 	
 	if (IsFunctionPointerCall) {
 		FunctionPointer := GetBaseType(CallNode->CallToFunctionPointer->ValueType)~>FunctionPointer
@@ -2248,11 +2342,15 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	}
 	else if !(IS_SYSCALL) {
 		TargetFunction := CallNode->TargetFunction
+
+		if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			IsVirtualMethodCall := true
+		}
 		
 		if (Compiler->Config->OutputFormat != OUTPUT_PE && TargetFunction->IsImported) {
 			Node->Error("Calls to DllImported functions are not allowed when the target output format is not PE.")
 		}
-		else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition || TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+		else if !(TargetFunction->IsImported || TargetFunction->HasFullDefinition || TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD || TargetFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
 			Node->Error("Called function is only declared, and never defined")
 		}
 		
@@ -2460,6 +2558,13 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	}
 	else if (USE_SYSTEMV) {
 		if (IsFunctionPointerCall) {
+			EmitCall_R64(Compiler, RAX)
+		}
+		else if (IsVirtualMethodCall) {
+			i32 Offset := TargetFunction->VirtualFunctionTableSlot
+
+			EmitMove_RX_RIX(Compiler, RAX, GetSystemVRegister(0), 8)
+			EmitMove_RX_RIX_DISPX(Compiler, RAX, RAX, Offset * 8, 8)
 			EmitCall_R64(Compiler, RAX)
 		}
 		else if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
