@@ -721,6 +721,42 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			EmitCall_Label(Compiler, Compiler->Parser->Deleter->LabelNumber)
 		}
 	}
+	else if (InterfaceType = Compiler->Parser->INewType) {
+		i8 P1 := Compiler->GetParameterRegister(0)
+		i8 P2 := Compiler->GetParameterRegister(1)
+
+		FunctionDefine* Target := DerivedMethod->WrappedNewMethod
+
+		InterfaceImplementationInfo* IAllocateImplementation := Info->Interfaces->GetPointer(Compiler->Parser->IAllocateType)
+		FunctionDefine* IAllocateAllocate := IAllocateImplementation->Methods->At(0)
+
+		i32 RegisterParameterCount := 6
+
+		if (DerivedMethod->ParameterCount < 6) {
+			RegisterParameterCount := DerivedMethod->ParameterCount
+		}
+		
+		for (i32 Index := RegisterParameterCount - 1, Index >= 0, Index--) {
+			EmitPush_R64(Compiler, Compiler->GetParameterRegister(Index As i8))
+		}
+
+		EmitCall_Label(Compiler, IAllocateAllocate->LabelNumber)
+		EmitPush_R64(Compiler, RAX)
+
+		i32 ParameterCount := DerivedMethod->ParameterCount + 1
+
+		RegisterParameterCount := 6
+
+		if (ParameterCount < 6) {
+			RegisterParameterCount := ParameterCount
+		}
+
+		for (i32 Index := 0, Index < RegisterParameterCount, Index++) {
+			EmitPop_R64(Compiler, Compiler->GetParameterRegister(Index As i8))
+		}
+
+		EmitCall_Label(Compiler, Target->LabelNumber)
+	}
 
 	EmitReturn(Compiler)
 }

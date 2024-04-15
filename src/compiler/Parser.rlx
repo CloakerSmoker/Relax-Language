@@ -1888,7 +1888,6 @@ struct ParserState {
 		Definition~>Context->Clone(Blame)
 
 		Definition->Name := AToS(Name)
-		Definition->IsMethod := FUNCTION_IS_DERIVED_METHOD
 
 		Definition->LabelNumber := this->LabelCount++
 
@@ -1933,7 +1932,8 @@ struct ParserState {
 	define TypeInfo* MakeDerivableInterface(i8* Name, i32 MethodCount) {
 		TypeInfo* NewType := Alloc(#TypeInfo)
 		
-		NewType->DefinedAt := this->MakeFakeContext(Name, Name)
+		NewType->InitializeAggregate()
+		NewType->DefinedAt := this->MakeFakeContext(FormatString("Internal Interface %s", Name), FormatString("interface %s {", Name))
 		NewType->Name := AToS(Name)
 		NewType->Size := (MethodCount * #void*) As i16
 		NewType->Kind := TYPE_KIND_INTERFACE
@@ -1944,17 +1944,26 @@ struct ParserState {
 		return NewType
 	}
 
-	define void AddDeriveableMethod(TypeInfo* Info, i8* Name, i8* FakeSource, Type ReturnType, ... RawParameterTypes) {
+	define FunctionDefine* AddDeriveableMethod(TypeInfo* Info, i8* Name, i8* FakeSource, Type ReturnType, ... RawParameterTypes) {
 		i32 ParameterTypeCount := RawParameterTypes[0] As i32
 		Type* ParameterTypes := &RawParameterTypes[1] As Type*
 
 		SourceContext* Context := this->MakeFakeContext(Info->Name->Buffer, FakeSource)
 
-		Info->InterfaceInfo->Methods->Push(this->MakeDerivedMethod(Context, Name, ReturnType, ParameterTypeCount, ParameterTypes))
+		FunctionDefine* Method := this->MakeDerivedMethod(Context, Name, ReturnType, ParameterTypeCount, ParameterTypes)
+		
+		Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
+		Method->VirtualFunctionTableSlot := Info->InterfaceInfo->Methods->Count()
+
+		Info->InterfaceInfo->Methods->Push(Method)
+		Info~>Methods->Set(Name, Method)
+
+		return Method
 	}
 
 	TypeInfo* IAnyType
 	TypeInfo* IAllocateType
+	TypeInfo* INewType
 	TypeInfo* IDebugType
 
 	define void SetupDerivableInterfaces() {
@@ -1973,6 +1982,10 @@ struct ParserState {
 		this->AddDeriveableMethod(this->IAllocateType, "Allocate", "virtual self* Allocate()", ThisType)
 		this->AddDeriveableMethod(this->IAllocateType, "Delete", "virtual void Delete(self*)", VoidType, ThisType)
 		
+		; INew has 0 methods, and instead generates one `:New` static method for each
+		;  defined `->New` method, with the static version implicitly calling
+		;   `:Allocate` and returning `this`
+		this->INewType := this->MakeDerivableInterface("INew", 0)
 	}
 
 	define FunctionDefine* FindFirstFunctionByName(i8* Name) {
@@ -2037,6 +2050,8 @@ struct ParserState {
 
 		FunctionDefine* Definition := this->MakeDerivedMethod(Info->Blame, Name, ReturnType, ParameterTypeCount, ParameterTypes)
 
+		Definition->IsMethod := FUNCTION_IS_DERIVED_METHOD
+
 		Definition->MethodOfTypeName := Info->ForType->Name
 
 		Definition->DerivedImplementationInfo := Info
@@ -2072,6 +2087,9 @@ struct ParserState {
 			Target~>StaticMethods->Set(Allocate->Name, Allocate)
 		}
 		else if (Implementation->ForInterface = this->IDebugType) {
+
+		}
+		else if (Implementation->ForInterface = this->INewType) {
 
 		}
 		else {
@@ -2143,6 +2161,18 @@ struct ParserState {
 		}
 		else if (Info->Interfaces->Has(InterfaceType)) {
 			InterfaceName~>Context->Error("Interface is already implemented/derived")
+		}
+
+		if (InterfaceType = this->INewType) {
+			if !(IsDerived) {
+				InterfaceName~>Context->Error("Cannot manually implement INew, derive this interface instead")
+			}
+
+			; Automatically derive IAllocate when implementing INew
+
+			if !(Info->Interfaces->Has(this->IAllocateType)) {
+				this->AddClassInterface(ContainerType, InterfaceName~>Context, this->IAllocateType, true)
+			}
 		}
 
 		this->AddClassInterface(ContainerType, InterfaceName~>Context, InterfaceType, IsDerived)
@@ -2248,6 +2278,49 @@ struct ParserState {
 				ImplementationInfo->Methods->Push(ImplementationMethod)
 
 				ImplementationMethod->CallCount := 2
+			}
+		}
+
+		InterfaceImplementationInfo* INewImplementation := Info->Interfaces->GetPointer(this->INewType)
+
+		if (INewImplementation) {
+			HashMapElement* Element := NewType~>Methods->Get("New")
+
+			if (Element) {
+				FunctionDefine* Current := Element->Value
+
+				while (Current) {
+					if (Current->IsMethod = FUNCTION_IS_METHOD) {
+						Current->CallCount := 2
+
+						i32 ParameterCount := Current->ParameterCount - 1
+						Type* ParameterTypes := Alloc(ParameterCount * #Type)
+
+						for (i32 Index := 0, Index < ParameterCount, Index++) {
+							VariableInfo* OriginalParameter := Current->Parameters[Index + 1]
+
+							ParameterTypes[Index] := OriginalParameter->Type
+						}
+
+						FunctionDefine* DerivedWrapper := this->MakeDerivedMethod(Current~>Context, "New", NewType->AsPointer(1), ParameterCount, ParameterTypes)
+
+						DerivedWrapper->IsMethod := FUNCTION_IS_DERIVED_METHOD
+						DerivedWrapper->MethodOfTypeName := NewType->Name
+
+						DerivedWrapper->DerivedImplementationInfo := INewImplementation
+						DerivedWrapper->WrappedNewMethod := Current
+
+						HashMapElement* Last := NewType~>StaticMethods->Get("New")
+
+						if (Last) {
+							DerivedWrapper->Next := Last->Value
+						}
+
+						NewType~>StaticMethods->Set("New", DerivedWrapper)
+					}
+
+					Current := Current->Next
+				}
 			}
 		}
 		

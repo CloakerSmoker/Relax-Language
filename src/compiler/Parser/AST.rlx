@@ -577,7 +577,10 @@ struct FunctionDefine {
 		i32 ConstantBufferSize
 	}
 
-	SafeString* ExportName
+	union {
+		SafeString* ExportName
+		FunctionDefine* WrappedNewMethod
+	}
 	
 	i32 CallCount,
 	i8 UsesGlobals,
