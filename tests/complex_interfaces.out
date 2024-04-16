@@ -1,0 +1,7 @@
+IAllocate:
+Value: 20
+
+INew:
+Zero   Parameter New: Complicated.New()      : 10 20
+Single Parameter New: Complicated.New(30)    : 30 40
+Double Parameter New: Complicated.New(50, 60): 50 60

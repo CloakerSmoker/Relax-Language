@@ -1,0 +1,28 @@
+SuperSimple:
+Distance from SuperSimple to IAny: 0x0
+Direct TypeID  : 0x8BD064DDB69A756
+Indirect TypeID: 0x8BD064DDB69A756
+
+Simple:
+Direct Call  : Hello
+Indirect Call: Hello
+
+State:
+Direct SetValue+GetValue         : Set 20, Get = 20
+Indirect SetValue+GetValue       : Set 30, Get = 30
+Direct SetValue+Indirect GetValue: Set 40, Get = 40
+Indirect SetValue+Direct GetValue: Set 50, Get = 50
+
+Down Casts:
+To IAny Through Assignment: 0xAE239213B7C70376
+To IAny Through Cast      : 0xAE239213B7C70376
+To IAny Through Call      : 0xAE239213B7C70376
+To IHaveState Through Assignment: 60
+To IHaveState Through Cast      : 60
+To IHaveState Through Call      : 60
+
+Up Casts:
+From IAny       To State: I was called directly!
+From IAny       To State: 60
+From IHaveState To State: I was called directly!
+From IHaveState To State: 60

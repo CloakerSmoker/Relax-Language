@@ -1,0 +1,56 @@
+#Require "$/Console.rlx"
+
+class AllocateMePlease derives IAllocate {
+    i8 Value
+}
+
+class Complicated derives INew {
+    i32 First
+    i64 Second
+
+    define void New() {
+        Print("Complicated.New()")
+
+        this->First := 10
+        this->Second := 20
+    }
+
+    define void New(i32 First) {
+        Print("Complicated.New(%i)", First)
+
+        this->First := First
+        this->Second := 40
+    }
+
+    define void New(i32 First, i64 Second) {
+        Print("Complicated.New(%i, %i)", First, Second)
+
+        this->First := First
+        this->Second := Second
+    }
+}
+
+define i32 Main() {
+    Print("IAllocate:\n")
+
+    AllocateMePlease* Please := AllocateMePlease:Allocate()
+
+    Please->Value := 20
+    Print("Value: %i\n", Please->Value)
+
+    Print("\nINew:\n")
+
+    Print("Zero   Parameter New: ")
+    Complicated* C1 := Complicated:New()
+    Print("      : %i %i\n", C1->First, C1->Second)
+
+    Print("Single Parameter New: ")
+    Complicated* C2 := Complicated:New(30)
+    Print("    : %i %i\n", C2->First, C2->Second)
+
+    Print("Double Parameter New: ")
+    Complicated* C3 := Complicated:New(50, 60)
+    Print(": %i %i\n", C3->First, C3->Second)
+
+    return 0
+}

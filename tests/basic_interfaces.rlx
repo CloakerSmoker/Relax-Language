@@ -1,0 +1,146 @@
+#Require "$/Console.rlx"
+
+interface IAmSimple {
+    virtual void Hi()
+}
+
+interface IHaveState {
+    virtual void SetValue(i32)
+    virtual i32 GetValue()
+}
+
+class SuperSimple {
+    ; Only implements 1 interface (IAny, derived, implict)
+
+    define void Hi() {
+        Print("Hello")
+    }
+}
+
+class Simple implements IAmSimple {
+    define void Hi() {
+        Print("Hello")
+    }
+}
+
+class State implements IHaveState {
+    i32 Value
+
+    define void SetValue(i32 Value) {
+        this->Value := Value
+    }
+    define i32 GetValue() {
+        return this->Value
+    }
+
+    ; Dummy overloads to mess with interfaces
+
+    define void SetValue(void* Dummy) {}
+    define void GetValue(void* Dummy) {}
+
+    ; Upcast verifictation
+
+    define i8* OnlyCalledDirectly() {
+        return "I was called directly!"
+    }
+}
+
+define IAny* CastThroughCall(IAny* Value) {
+    return Value
+}
+
+define IHaveState* CastStateThroughCall(IHaveState* Value) {
+    return Value
+}
+
+/*
+
+Verifies:
+Direct calls to plain methods
+Direct calls to derived methods
+Casts (via assignment) to interface types
+Direct calls to interface methods
+Indirect calls to derived methods
+Indirect calls to interface methods
+`this` pointer adjustment in indirect calls
+Casts (via `As`) to interface types
+Casts (via function calls) to interface types
+
+*/
+
+define i32 Main() {
+    ; SuperSimple Tests
+    Print("SuperSimple:\n")
+
+    SuperSimple* SS := Alloc(#SuperSimple)
+    SS->Initialize() ; Direct call to derived method
+
+    IAny* AnySS := SS
+
+    Print("Distance from SuperSimple to IAny: %x\n", (AnySS As i64) - (SS As i64))
+
+    Print("Direct TypeID  : %x\n", SS->TypeID())
+    Print("Indirect TypeID: %x\n", AnySS->TypeID())
+
+    ; Simple Tests
+    Print("\nSimple:\n")
+
+    Simple* S := Alloc(#Simple)
+    S->Initialize()
+
+    Print("Direct Call  : ")
+    S->Hi()
+    Print("\n")
+
+    IAmSimple* IS := S
+
+    Print("Indirect Call: ")
+    IS->Hi()
+    Print("\n")
+
+    ; State Tests
+    Print("\nState:\n")
+
+    State* ST := Alloc(#State)
+    ST->Initialize()
+
+    IHaveState* IST := ST
+
+    Print("Direct SetValue+GetValue         : ")
+    ST->SetValue(20)
+    Print("Set 20, Get = %i\n", ST->GetValue())
+
+    Print("Indirect SetValue+GetValue       : ")
+    IST->SetValue(30)
+    Print("Set 30, Get = %i\n", IST->GetValue())
+
+    Print("Direct SetValue+Indirect GetValue: ")
+    ST->SetValue(40)
+    Print("Set 40, Get = %i\n", IST->GetValue())
+
+    Print("Indirect SetValue+Direct GetValue: ")
+    IST->SetValue(50)
+    Print("Set 50, Get = %i\n", ST->GetValue())
+
+    Print("\nDown Casts:\n")
+
+    IAny* AnyST := ST
+    Print("To IAny Through Assignment: %x\n", AnyST->TypeID())
+    Print("To IAny Through Cast      : %x\n", (ST As IAny*)->TypeID())
+    Print("To IAny Through Call      : %x\n", CastThroughCall(ST)->TypeID())
+
+    ST->SetValue(60)
+
+    IHaveState* IHS := ST
+    Print("To IHaveState Through Assignment: %i\n", IHS->GetValue())
+    Print("To IHaveState Through Cast      : %i\n", (ST As IHaveState*)->GetValue())
+    Print("To IHaveState Through Call      : %i\n", CastStateThroughCall(ST)->GetValue())
+
+    Print("\nUp Casts:\n")
+    Print("From IAny       To State: %s\n", (AnyST As State*)->OnlyCalledDirectly())
+    Print("From IAny       To State: %i\n", (AnyST As State*)->Value)
+    Print("From IHaveState To State: %s\n", (IHS As State*)->OnlyCalledDirectly())
+    Print("From IHaveState To State: %i\n", (IHS As State*)->Value)
+
+    return 0
+}
