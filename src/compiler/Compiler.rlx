@@ -722,6 +722,18 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 		}
 	}
 	else if (InterfaceType = Compiler->Parser->INewType) {
+		; The flow here is super annoying.
+		; We need to call IAllocate->Allocate, but also preserve *all* of our parameters
+		;  for the INew->New() implementation. As if that didn't suck enough, we also need
+		;   to insert the `this` parameter which is the result of IAllocate->Allocate.
+
+		; First we push everything onto the stack to survive IAllocate->Allocate
+		; Then we pop our register parameters
+		; Then we push the result value
+		; Then we duplicate the stack parameter list
+		; Then we call INew->New() and cleanup the parameters after
+		; Finally, we pop the result in RAX and can return
+
 		i8 P1 := Compiler->GetParameterRegister(0)
 		i8 P2 := Compiler->GetParameterRegister(1)
 
@@ -730,11 +742,17 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 		InterfaceImplementationInfo* IAllocateImplementation := Info->Interfaces->GetPointer(Compiler->Parser->IAllocateType)
 		FunctionDefine* IAllocateAllocate := IAllocateImplementation->Methods->At(0)
 
+		i32 StackParameterCount := 0
 		i32 RegisterParameterCount := 6
 
 		if (DerivedMethod->ParameterCount < 6) {
 			RegisterParameterCount := DerivedMethod->ParameterCount
 		}
+		else {
+			StackParameterCount := DerivedMethod->ParameterCount - RegisterParameterCount
+		}
+
+		; Save all of the parameter registers
 		
 		for (i32 Index := RegisterParameterCount - 1, Index >= 0, Index--) {
 			EmitPush_R64(Compiler, Compiler->GetParameterRegister(Index As i8))
@@ -743,19 +761,54 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 		EmitCall_Label(Compiler, IAllocateAllocate->LabelNumber)
 		EmitPush_R64(Compiler, RAX)
 
-		i32 ParameterCount := DerivedMethod->ParameterCount + 1
+		i32 NewParameterCount := DerivedMethod->ParameterCount + 1
+		
+		i32 NewStackParameterCount := 0
+		i32 NewRegisterParameterCount := 6
 
-		RegisterParameterCount := 6
-
-		if (ParameterCount < 6) {
-			RegisterParameterCount := ParameterCount
+		if (NewParameterCount < 6) {
+			NewRegisterParameterCount := NewParameterCount
+		}
+		else {
+			NewStackParameterCount := NewParameterCount - NewRegisterParameterCount
 		}
 
-		for (i32 Index := 0, Index < RegisterParameterCount, Index++) {
+		; Pop all of our parameter registers (with `this` magically inserted)
+
+		for (i32 Index := 0, Index < NewRegisterParameterCount, Index++) {
 			EmitPop_R64(Compiler, Compiler->GetParameterRegister(Index As i8))
 		}
 
+		; Save our return value
+
+		EmitPush_R64(Compiler, RDI)
+
+		; Duplicate stack parameters
+
+		EmitMove_R64_R64(Compiler, RAX, RSP)
+
+		for (i32 Index := 0, Index < NewStackParameterCount, Index++) {
+			EmitPush_R64_DISP8(Compiler, RAX, (Index * 8) As i8)
+		}
+
 		EmitCall_Label(Compiler, Target->LabelNumber)
+
+		; Cleanup stack
+
+		if (NewStackParameterCount != 0) {
+			EmitAdd_R64_I8(Compiler, RSP, (NewStackParameterCount * 8) As i8)
+		}
+
+		; Get return value
+
+		EmitPop_R64(Compiler, RAX)
+
+		; If we bumped a register parameter onto the stack, clean it up
+		;  (the caller doesn't know to clean it up)
+
+		if (StackParameterCount != NewStackParameterCount) {
+			EmitPop_R64(Compiler, RBX)
+		}
 	}
 
 	EmitReturn(Compiler)

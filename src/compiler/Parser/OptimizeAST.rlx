@@ -25,7 +25,27 @@ define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Ta
 			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
 		}
 		else if !(Target->HasFullDefinition) {
-			if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD && Target->IsMethod != FUNCTION_IS_DERIVED_METHOD) {
+			if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+				; When we derive IAllocate, we are indirectly calling
+				;  `AllocateInstance` and `DeleteInstance` without reflecting
+				;   this relationship in the call graph.
+				; To ensure that `(Allocate|Delete)Instance` aren't eliminated
+				;  and that the functions they depend on aren't eliminated, we
+				;   need to manually "fix" the call graph here by visiting the
+				;    "true" targets of `IAllocate` instead of the derived targets.
+
+				ParserState* Parser := Visitor->GetState() As void*
+
+				if (Target->DerivedImplementationInfo->ForInterface = Parser->IAllocateType) {
+					if (Target->DerivedMethodIndex = 0) {
+						CountReferencesVisitFunction(Visitor, Parser->Allocator)
+					}
+					else if (Target->DerivedMethodIndex = 1) {
+						CountReferencesVisitFunction(Visitor, Parser->Deleter)
+					}
+				}
+			}
+			else if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD) {
 				Target~>Context->Error("Function is declared but never defined")
 			}
 		}
@@ -109,6 +129,8 @@ define void* CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 
 define void CountReferences(ParserState* Parser) {
 	ASTVisitor* Visitor := ASTVisitor:New(&CountReferencesVisit)
+
+	Visitor->SetState(Parser As i64)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
