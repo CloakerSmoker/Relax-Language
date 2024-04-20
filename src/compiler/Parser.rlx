@@ -1094,9 +1094,7 @@ struct ParserState {
 	#Require "./src/compiler/Parser/Assembly.rlx"
 	#Require "./src/compiler/Parser/Statement.rlx"
 	
-	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken, TypeInfo* ThisType, i8 ForMethod) {
-		i8 Mode := FirstToken->Value As i8
-		
+	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken, TypeInfo* ThisType, i8 Mode, i8 ForMethod) {
 		i8 ForStatic := Mode = KEYWORD_STATIC
 		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
 		i8 ForImport := Mode = KEYWORD_DLLIMPORT
@@ -1395,6 +1393,9 @@ struct ParserState {
 		}
 		
 		return NewDefine
+	}
+	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken, TypeInfo* ThisType, i8 ForMethod) {
+		return this->ParseFunctionDefinition(Container, FirstToken, ThisType, FirstToken->Value As i8, ForMethod)
 	}
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken) {
 		return this->ParseFunctionDefinition(Container, FirstToken, null, false)
@@ -2338,8 +2339,13 @@ struct ParserState {
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for interface body")
 
 		loop {
-			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_VIRTUAL)) {
-				FunctionDefine* Method := this->ParseFunctionDefinition(NewType~>Methods, this->GetCurrentToken(), NewType, true)
+			Token* Peek := this->PeekNextToken()
+
+			;if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_VIRTUAL)) {
+			if (Peek->Is(TOKEN_TYPE_IDENTIFIER) && Peek->StringValue->Equals("virtual")) {
+				this->GetNextToken()
+
+				FunctionDefine* Method := this->ParseFunctionDefinition(NewType~>Methods, this->GetCurrentToken(), NewType, KEYWORD_VIRTUAL, true)
 
 				Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
 				Method->VirtualFunctionTableSlot := Info->Methods->Count()
@@ -2511,25 +2517,37 @@ struct ParserState {
 			}
 		}
 		else if (NextToken->Is(TOKEN_TYPE_IDENTIFIER)) {
-			; Handles global variable declarations
-			
-			Token* BlameToken := NextToken
-			
-			i8* ErrorMessage := null
-			ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
-			
-			if (ErrorMessage) {
-				BlameToken~>Context->Merge(this->GetCurrentTokenContext())
-				BlameToken->Error(ErrorMessage)
+			if (NextToken->StringValue->Equals("class")) {
+				this->GetNextToken()
+
+				this->ParseClass()
 			}
-			
-			if (DefaultValueExpression != null) {
-				; Handles global variable default value expressions
+			else if (NextToken->StringValue->Equals("interface")) {
+				this->GetNextToken()
+
+				this->ParseInterface()
+			}
+			else {
+				; Handles global variable declarations
 				
-				i32 Index := GetArrayLength(this->GlobalDefaults)
-				this->GlobalDefaults := ReAllocArray(this->GlobalDefaults, 1)
+				Token* BlameToken := NextToken
 				
-				this->GlobalDefaults[Index] := DefaultValueExpression
+				i8* ErrorMessage := null
+				ASTNode* DefaultValueExpression := this->TryParseVariableDeclaration(true, false, &ErrorMessage)
+				
+				if (ErrorMessage) {
+					BlameToken~>Context->Merge(this->GetCurrentTokenContext())
+					BlameToken->Error(ErrorMessage)
+				}
+				
+				if (DefaultValueExpression != null) {
+					; Handles global variable default value expressions
+					
+					i32 Index := GetArrayLength(this->GlobalDefaults)
+					this->GlobalDefaults := ReAllocArray(this->GlobalDefaults, 1)
+					
+					this->GlobalDefaults[Index] := DefaultValueExpression
+				}
 			}
 		}
 		else if (NextToken->Is(TOKEN_TYPE_EOF)) {
