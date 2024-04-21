@@ -1096,6 +1096,7 @@ struct ParserState {
 	
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken, TypeInfo* ThisType, i8 Mode, i8 ForMethod) {
 		i8 ForStatic := Mode = KEYWORD_STATIC
+		i8 ForDeclare := Mode = KEYWORD_DECLARE
 		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
 		i8 ForImport := Mode = KEYWORD_DLLIMPORT
 		i8 ForVirtual := Mode = KEYWORD_VIRTUAL
@@ -1237,7 +1238,7 @@ struct ParserState {
 					if (CheckTypeSignature(NextFunction, ParameterList)) {
 						; Allow redefining a declared overload
 						
-						if (NextFunction->HasFullDefinition || ForVirtual) {
+						if ((!ForDeclare && NextFunction->HasFullDefinition) || ForVirtual) {
 							this->DuplicateDefinitionError(NameToken~>Context, NextFunction~>Context)
 						}
 						
@@ -1255,6 +1256,12 @@ struct ParserState {
 			}
 			
 			TailFunction := NextFunction
+		}
+
+		if (ForDeclare && NewDefine != null) {
+			; Ignore duplicate/redundant `declare`s
+
+			return NewDefine
 		}
 		
 		if (NewDefine = null) {

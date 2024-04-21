@@ -3,9 +3,13 @@
 #Require "src/lib/Console.rlx"
 #Require "$/Console.rlx"
 
+declare void VATest(i32, i8)
+
 define void VATest(i32 T, i8 Q) {
 	Print("Ocall ")
 }
+
+declare void VATest(i32, i8)
 
 define void VATest(i64 T, ... Args) {
 	Print("%x, %x ", T, Args[0])
