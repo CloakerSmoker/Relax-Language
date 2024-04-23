@@ -475,6 +475,9 @@ struct CompilerState {
 		if (this->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 
 		}
+		else if (this->Config->DebugMode & DEBUG_EMIT_FUNCTION_SYMBOLS) {
+
+		}
 		else if (this->Config->DebugMode & DEBUG_EMIT_OBJECT) {
 			FunctionAddress += this->Config->ImageBase
 		}
