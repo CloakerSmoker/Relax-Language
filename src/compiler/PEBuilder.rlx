@@ -165,8 +165,12 @@ struct PEHeader {
 
 i32 MACHINE_AMD64 := 0x8664
 
+i16 COFF_RELOCATIONS_STRIPPED := 0x1
 i16 COFF_EXECUTABLE_IMAGE := 0x0002
+i16 COFF_LINE_NUMBERS_STRIPPED := 0x4
+i16 COFF_LOCAL_SYMBOLS_STRIPPED := 0x8
 i16 COFF_LARGE_ADDRESS_AWARE := 0x0020
+i16 COFF_DEBUG_STRIPPED := 0x200
 i16 COFF_IMAGE_FILE_DLL := 0x2000
 
 i16 PE32_PLUS_MAGIC := 0x020B
@@ -250,6 +254,11 @@ define void WritePEHeader(void* IntoBuffer, i16 Subsystem, i32 DynamicBase) {
 	
 	NewCOFF->SizeOfOptionalHeader := PE_HEADER_SIZE As i16
 	NewCOFF->Characteristics := (COFF_EXECUTABLE_IMAGE | COFF_LARGE_ADDRESS_AWARE)
+
+	if (Subsystem = IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		NewCOFF->NumberOfSections -= 1
+		NewCOFF->Characteristics := COFF_EXECUTABLE_IMAGE | COFF_LARGE_ADDRESS_AWARE | COFF_LINE_NUMBERS_STRIPPED | COFF_LOCAL_SYMBOLS_STRIPPED
+	}
 	
 	PEHeader* NewPE := (IntoBuffer + PE_HEADER_OFFSET) As PEHeader*
 	
@@ -444,10 +453,18 @@ define void ExtendBuilder(PEBuilder* BuilderToReAlloc, i32 NewSize) {
 	BuilderToReAlloc->COFF := (Buffer + COFF_HEADER_OFFSET) As COFFHeader*
 	BuilderToReAlloc->PE := (Buffer + PE_HEADER_OFFSET) As PEHeader*
 	
-	BuilderToReAlloc->RelocHeader := (Buffer + RELOC_OFFSET) As SectionHeader*
-	BuilderToReAlloc->IDataHeader := (Buffer + IDATA_OFFSET) As SectionHeader*
-	BuilderToReAlloc->DataHeader := (Buffer + DATA_OFFSET) As SectionHeader*
-	BuilderToReAlloc->TextHeader := (Buffer + TEXT_OFFSET) As SectionHeader*
+
+	if (BuilderToReAlloc->PE->Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		BuilderToReAlloc->RelocHeader := (Buffer + RELOC_OFFSET) As SectionHeader*
+		BuilderToReAlloc->IDataHeader := (Buffer + IDATA_OFFSET) As SectionHeader*
+		BuilderToReAlloc->DataHeader := (Buffer + DATA_OFFSET) As SectionHeader*
+		BuilderToReAlloc->TextHeader := (Buffer + TEXT_OFFSET) As SectionHeader*
+	}
+	else {
+		BuilderToReAlloc->RelocHeader := (Buffer + TEXT_OFFSET) As SectionHeader*
+		BuilderToReAlloc->DataHeader := (Buffer + DATA_OFFSET) As SectionHeader*
+		BuilderToReAlloc->TextHeader := (Buffer + IDATA_OFFSET) As SectionHeader*
+	}
 	
 	BuilderToReAlloc->BufferSize := NewSize
 }
@@ -474,14 +491,24 @@ define PEBuilder* BuildBuilder(i16 Subsystem, i32 DynamicBase) {
 	void* Sections := NewBuilder->Buffer
 	
 	/* Write all the sections (out of order, since they are moved around via changing XXXXX_OFFSET */
-	
-	if (DynamicBase) {
-		NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, '.reloc', SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+
+	if (Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		if (DynamicBase) {
+			NewBuilder->RelocHeader := WriteSectionHeader(Sections + RELOC_OFFSET, '.reloc', SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+		}
+		
+		NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, '.idata', SECTION_READ | SECTION_INITIALIZED_DATA)
+		NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, '.data', SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
+		NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, '.text', SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
 	}
-	
-	NewBuilder->IDataHeader := WriteSectionHeader(Sections + IDATA_OFFSET, '.idata', SECTION_READ | SECTION_INITIALIZED_DATA)
-	NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, '.data', SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
-	NewBuilder->TextHeader := WriteSectionHeader(Sections + TEXT_OFFSET, '.text', SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
+	else {
+		if (DynamicBase) {
+			NewBuilder->RelocHeader := WriteSectionHeader(Sections + TEXT_OFFSET, '.reloc', SECTION_READ | SECTION_INITIALIZED_DATA | SECTION_DISCARDABLE)
+		}
+		
+		NewBuilder->DataHeader := WriteSectionHeader(Sections + DATA_OFFSET, '.data', SECTION_READ | SECTION_WRITE | SECTION_UNINITIALIZED_DATA)
+		NewBuilder->TextHeader := WriteSectionHeader(Sections + IDATA_OFFSET, '.text', SECTION_READ | SECTION_EXECUTE | SECTION_CODE)
+	}
 	
 	/* Note: The characteristics are also hardcoded, but based on which section is being written */
 	
@@ -658,6 +685,12 @@ define void AddRelocation(PEBuilder* ToBuilder, i32 PageRVA, i16 OffsetInPage, i
 
 define void FinalizeRelocations(PEBuilder* TargetBuilder) {
 	/* Builds (and writes) .reloc into TargetBuilder->Buffer */
+
+	if (TargetBuilder->RelocationCount = 0) {
+		;TargetBuilder->COFF->Characteristics |= COFF_RELOCATIONS_STRIPPED
+		TargetBuilder->COFF->NumberOfSections -= 1
+		return
+	}
 	
 	i32 PageHeadersSize := (TargetBuilder->RelocationPageCount) * (#RelocationBlockHeader + 32)
 	i32 PageEntriesSize := (TargetBuilder->RelocationCount) * 2
@@ -987,7 +1020,14 @@ define void FinalizeBuilder(PEBuilder* Builder, i32 DynamicBase) {
 	IWriteLine(Builder->PE->BaseRelocationTableRVA) */
 	
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
-	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + /* (Builder->RelocHeader->Size) + */ (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
+
+	if (Builder->PE->Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + /* (Builder->RelocHeader->Size) + */ (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
+	}
+	else {
+		Builder->PE->SizeOfInitializedData := (Builder->TextHeader->Size)
+	}
+
 	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
 
 	i16* Buffer := Builder->Buffer
