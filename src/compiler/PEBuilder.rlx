@@ -978,4 +978,18 @@ define void FinalizeBuilder(PEBuilder* Builder, i32 DynamicBase) {
 	Builder->PE->SizeOfImage := RoundTo(Builder->NextRVA, DEFAULT_SECTION_ALIGNMENT) /* The total size when mapped into memory */
 	Builder->PE->SizeOfInitializedData := (Builder->IDataHeader->Size) + /* (Builder->RelocHeader->Size) + */ (Builder->TextHeader->Size) /* The size of initialized data when mapped into memory */
 	Builder->PE->SizeOfUninitializedData := (Builder->DataHeader->Size) /* The size of .data when allocated in memory */
+
+	i16* Buffer := Builder->Buffer
+	i32 Count := Builder->BufferSize / 2
+	i32 Checksum := 0
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		Checksum += (Buffer[Index] As i32) & 0xFFFF
+
+		if (Checksum > 0xFFFF) {
+			Checksum := (Checksum & 0xFFFF) + 1
+		}
+	}
+
+	Builder->PE->Checksum := Checksum + Builder->BufferSize
 }
