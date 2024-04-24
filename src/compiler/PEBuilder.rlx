@@ -197,32 +197,38 @@ define void WritePEHeader(void* IntoBuffer, i16 Subsystem, i32 DynamicBase) {
 	/* Some of this is probably wrong, but who's going to check? */
 	NewHeader->MagicM := 'M'
 	NewHeader->MagicZ := 'Z'
-	NewHeader->BytesInLastPage := 0x90
-	NewHeader->PageCount := 3
-	NewHeader->RelocationCount := 0
-	NewHeader->HeaderParagraphCount := 4
-	NewHeader->MinimumExtraParagraphCount := 0
-	NewHeader->MaximumExtraParagraphCount := 0xFFFF As i16
-	NewHeader->StartingSS := 0
-	NewHeader->StartingSP := 0xB8
-	NewHeader->Checksum := 0
-	NewHeader->StartingIP := 0
-	NewHeader->StartingCS := 0
-	NewHeader->RelocationTableOffset := 0x40
-	NewHeader->OverlayNumber := 0
+
+	if (Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		NewHeader->BytesInLastPage := 0x90
+		NewHeader->PageCount := 3
+		NewHeader->RelocationCount := 0
+		NewHeader->HeaderParagraphCount := 4
+		NewHeader->MinimumExtraParagraphCount := 0
+		NewHeader->MaximumExtraParagraphCount := 0xFFFF As i16
+		NewHeader->StartingSS := 0
+		NewHeader->StartingSP := 0xB8
+		NewHeader->Checksum := 0
+		NewHeader->StartingIP := 0
+		NewHeader->StartingCS := 0
+		NewHeader->RelocationTableOffset := 0x40
+		NewHeader->OverlayNumber := 0
+	}
+	
 	NewHeader->PEHeaderOffset := PE_MAGIC_OFFSET
 	
-	/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
-	
-	void* StubBuffer := IntoBuffer + MZ_HEADER_SIZE
-	
-	StubBuffer[0] := 0xCD09B4000EBA1F0E
-	StubBuffer[1] := 0x685421CD4C01B821
-	StubBuffer[2] := 0x72676F7270207369
-	StubBuffer[3] := 0x6F6E6E6163206D61
-	StubBuffer[4] := 0x6E75722065622074
-	StubBuffer[5] := 0x20534F44206E6920
-	StubBuffer[6] := 0x0000242E65646F6D
+	if (Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		/* Some of this is written incorrectly, but it doesn't matter since the DOS stub can error as much as it likes */
+		
+		void* StubBuffer := IntoBuffer + MZ_HEADER_SIZE
+		
+		StubBuffer[0] := 0xCD09B4000EBA1F0E
+		StubBuffer[1] := 0x685421CD4C01B821
+		StubBuffer[2] := 0x72676F7270207369
+		StubBuffer[3] := 0x6F6E6E6163206D61
+		StubBuffer[4] := 0x6E75722065622074
+		StubBuffer[5] := 0x20534F44206E6920
+		StubBuffer[6] := 0x0000242E65646F6D
+	}
 	
 	/* Now write the actual COFF+PE header */
 	
@@ -252,22 +258,27 @@ define void WritePEHeader(void* IntoBuffer, i16 Subsystem, i32 DynamicBase) {
 	NewPE->SectionAlignment := DEFAULT_SECTION_ALIGNMENT
 	NewPE->FileAlignment := DEFAULT_FILE_ALIGNMENT
 	
-	NewPE->MajorOSVersion := DEFAULT_MAJOR_OS_VERSION
-	NewPE->MinorOSVersion := DEFAULT_MINOR_OS_VERSION
-	NewPE->MajorSubsystemVersion := DEFAULT_MAJOR_OS_VERSION
-	NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
-	
-	NewPE->Subsystem := Subsystem
-	NewPE->DllCharacteristics := DLL_HIGH_ENTROPY_VA
-	
-	if (DynamicBase) {
-		NewPE->DllCharacteristics |= DLL_DYNAMIC_BASE
+	if (Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		NewPE->MajorOSVersion := DEFAULT_MAJOR_OS_VERSION
+		NewPE->MinorOSVersion := DEFAULT_MINOR_OS_VERSION
+		NewPE->MajorSubsystemVersion := DEFAULT_MAJOR_OS_VERSION
+		NewPE->MinorSubsystemVersion := DEFAULT_MINOR_OS_VERSION
 	}
 	
-	NewPE->SizeOfStackReserve := DEFAULT_RESERVE
-	NewPE->SizeOfStackCommit := DEFAULT_COMMIT
-	NewPE->SizeOfHeapReserve := DEFAULT_RESERVE
-	NewPE->SizeOfHeapCommit := DEFAULT_COMMIT
+	NewPE->Subsystem := Subsystem
+
+	if (Subsystem != IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+		NewPE->DllCharacteristics := DLL_HIGH_ENTROPY_VA
+		
+		if (DynamicBase) {
+			NewPE->DllCharacteristics |= DLL_DYNAMIC_BASE
+		}
+		
+		NewPE->SizeOfStackReserve := DEFAULT_RESERVE
+		NewPE->SizeOfStackCommit := DEFAULT_COMMIT
+		NewPE->SizeOfHeapReserve := DEFAULT_RESERVE
+		NewPE->SizeOfHeapCommit := DEFAULT_COMMIT
+	}
 	
 	NewPE->NumberOfDataDirectories := 16
 }
