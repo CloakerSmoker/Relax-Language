@@ -1,7 +1,12 @@
 
 enum DirectoryEntryType As i8 {
+    FIFO := 1,
+    CharacterDevice := 2,
     Directory := 4,
-    File := 8
+    BlockDevice := 6,
+    File := 8,
+    SymbolicLink := 10,
+    Socket := 12
 }
 
 struct DirectoryEntry {
