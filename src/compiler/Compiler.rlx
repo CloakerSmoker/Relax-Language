@@ -985,8 +985,13 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 		
 		Compiler->GlobalBase := Config->ImageBase + 0x2000
 		Compiler->CodeBase := 0x3000
-		
+
 		Compiler->DistanceBetweenGlobalsAndCode := 0x2000
+
+		if (Config->PESubsystem = IMAGE_SUBSYSTEM_EFI_APPLICATION) {
+			Compiler->GlobalBase := Config->ImageBase
+			Compiler->CodeBase := Config->ImageBase + 0x2000
+		}
 	}
 	
 	Compiler->InitializeDebugInfo()
@@ -1569,11 +1574,11 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	/* Set up the stack frame for this function */
-	i16 LocalSpace := FunctionToCompile~>Locals->NextOffset As i16
-	i16 LocalSpaceRemainder := (LocalSpace % 16) As i16
+	i32 LocalSpace := FunctionToCompile~>Locals->NextOffset
+	i32 LocalSpaceRemainder := LocalSpace % 16
 	
 	if (LocalSpaceRemainder) {
-		LocalSpace += 8
+		LocalSpace += 16 - LocalSpaceRemainder
 	}
 	
 	EmitPush_R64(Compiler, RBP)
@@ -1619,18 +1624,13 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		EmitPush_R64(Compiler, RAX)
 		
 		; Extend LocalSpace to account for extra offset from RBP to local variables
-		LocalSpace += 0x8
+		LocalSpace += 0x10
 	}
 	
 	if (LocalSpace) {
 		/* Only emit an instruction to allocate space for locals when we have locals */
 		
 		i32 LocalSlots := LocalSpace / 8
-		
-		if (LocalSlots % 2) {
-			LocalSpace += 8
-			LocalSlots += 1
-		}
 		
 		if (LocalSlots < 4) {
 			for (i32 Index := 0, Index < LocalSlots, Index++) {
@@ -2500,6 +2500,7 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	/* TargetFunction is only null for syscall:(), so `!TargetFunction` will short circuit before `TargetFunction->IsImported` crashes */
 	
 	i8 USE_SYSTEMV := !TargetFunction || !TargetFunction->IsImported /* (Compiler->OutputELF) || (TargetFunction->Attribute = KEYWORD_ASSEMBLY) */
+	i8 IS_VARIADIC := TargetAttributes & FUNCTION_ATTRIBUTE_VARIADIC
 	
 	if (TargetAttributes & FUNCTION_ATTRIBUTE_USE_X64) {
 		USE_SYSTEMV := false
@@ -2510,8 +2511,17 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	if (USE_SYSTEMV) {
 		REGISTER_PARAMETER_COUNT := 6
 	}
-	
-	if (ParameterCount > REGISTER_PARAMETER_COUNT) {
+
+	if (IS_VARIADIC) {
+		i32 VariadicCount := (CallNode->ParameterCount - TargetParameterCount) + 1
+
+		StackParameterCount := VariadicCount
+
+		if (TargetParameterCount > REGISTER_PARAMETER_COUNT) {
+			StackParameterCount += TargetParameterCount - REGISTER_PARAMETER_COUNT
+		}
+	}
+	else if (ParameterCount > REGISTER_PARAMETER_COUNT) {
 		StackParameterCount := ParameterCount - REGISTER_PARAMETER_COUNT
 	}
 	
@@ -2526,7 +2536,12 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 		StackIsAligned := !StackIsAligned
 	}
 
-	if (StackParameterCount % 2 != 0) {
+	if (IS_VARIADIC) {
+		if ((StackParameterCount + 1) % 2 != 0) {
+			StackIsAligned := !StackIsAligned	
+		}
+	}
+	else if (StackParameterCount % 2 != 0) {
 		StackIsAligned := !StackIsAligned
 	}
 
@@ -2566,7 +2581,6 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 	Compiler->ParameterRegistersMaxSave := RegisterParameterCount
 	
 	i8 ParameterRegister := RBX
-	i8 IS_VARIADIC := TargetAttributes & FUNCTION_ATTRIBUTE_VARIADIC
 	
 	if (ParameterCount != 0) {		
 		if (IS_VARIADIC) {
