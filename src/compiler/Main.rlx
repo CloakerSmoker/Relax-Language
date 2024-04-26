@@ -208,7 +208,6 @@ define i32 Main(i64 ArgC, i8** ArgV) {
 		else if (StringEquals(NextOption, "--standalone-elf")) {
 			Config->OutputFormat := OUTPUT_ELF
 			Config->ELFABI       := ELF_ABI_SYSTEMV
-			Config->LineEnding   := LINE_ENDING_CR
 			Config->DebugMode    |= DEBUG_EMIT_NO_START_CODE
 		}
 		else if (StringEquals(NextOption, "--platform")) {
