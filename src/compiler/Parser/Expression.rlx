@@ -545,6 +545,8 @@
 							Token* FilePathToken := this->Consume(TOKEN_TYPE_STRING, "Expected \"<path>\" for `#File` directive")
 							
 							this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACKET, "Expected closing `]` after `#File` directive")
+
+							this->Config->DefineIncludedPath(FilePathToken->StringValue, GetAbsolutePath(FilePathToken->StringValue->Buffer))
 							
 							i64 File := FileOpen(FilePathToken->StringValue->Buffer, FILE_READ)
 							
