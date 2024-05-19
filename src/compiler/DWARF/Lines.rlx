@@ -219,7 +219,7 @@ struct DWARFLineProgramBuilder {
 		Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
 		Stream->WriteULEB128(DWARF_FORM_STRING)
 		
-		Stream->WriteI8(this->DirectoryEntryCount)
+		Stream->WriteULEB128(this->DirectoryEntryCount)
 		Stream->WriteStream(this->DirectoryEntries)
 		
 		Stream->WriteI8(1)
@@ -227,7 +227,7 @@ struct DWARFLineProgramBuilder {
 		Stream->WriteULEB128(DWARF_LINE_HEADER_FORMAT_PATH)
 		Stream->WriteULEB128(DWARF_FORM_STRING)
 		
-		Stream->WriteI8(this->FileEntryCount)
+		Stream->WriteULEB128(this->FileEntryCount)
 		Stream->WriteStream(this->FileEntries)
 		
 		i32 AfterHeader := Stream->Tell()

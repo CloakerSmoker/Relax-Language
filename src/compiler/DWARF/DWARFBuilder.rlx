@@ -31,6 +31,7 @@ struct DWARFBuilder {
 	i32 BitsTypeTag
 	i32 BitsFieldTag
 	
+	i32 MainFunctionDefinitionTag
 	i32 FunctionDefinitionTag
 	i32 FunctionParameterTag
 	
@@ -116,6 +117,15 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
 		A->EndAbbreviation()
+
+		this->MainFunctionDefinitionTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_SUBPROGRAM, true)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_FRAME_BASE, DWARF_FORM_LOCATION_EXPRESSION)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_FLAG_PRESENT)
+		A->EndAbbreviation()
 		
 		this->FunctionDefinitionTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_SUBPROGRAM, true)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
@@ -123,7 +133,7 @@ struct DWARFBuilder {
 			A->AppendAttributePair(DWARF_ATTRIBUTE_FRAME_BASE, DWARF_FORM_LOCATION_EXPRESSION)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOW_ADDRESS, DWARF_FORM_ADDRESS)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_HIGH_ADDRESS, DWARF_FORM_DATA_4)
-			A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_DATA_1)
+			;A->AppendAttributePair(DWARF_ATTRIBUTE_MAIN_SUBPROGRAM, DWARF_FORM_DATA_1)
 		A->EndAbbreviation()
 		
 		this->FunctionParameterTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_PARAMETER, false)
@@ -353,7 +363,13 @@ struct DWARFBuilder {
 	}
 	
 	define i32 StartFunction(i8* Name, i32 ReturnTypeOffset, i64 StartAddress, i8 IsMain) {
-		this->DIEStream->StartEntry(this->FunctionDefinitionTag)
+		i32 Tag := this->FunctionDefinitionTag
+
+		if (IsMain) {
+			Tag := this->MainFunctionDefinitionTag
+		}
+
+		this->DIEStream->StartEntry(Tag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(ReturnTypeOffset)
 			
@@ -368,7 +384,7 @@ struct DWARFBuilder {
 			i32 SizeOffset := this->DIEStream->Stream->Tell()
 			this->DIEStream->AppendI32(0)
 			
-			this->DIEStream->AppendI8(IsMain)
+			;this->DIEStream->AppendI8(IsMain)
 		this->DIEStream->EndEntry()
 		
 		return SizeOffset
