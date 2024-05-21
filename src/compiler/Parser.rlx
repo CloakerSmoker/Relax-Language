@@ -1451,7 +1451,7 @@ struct ParserState {
 	declare Type ParseBitsAsType()
 	declare void ParseBitsFields(TypeInfo*, i16, i16)
 
-	define i16 ParseNestedStruct(TypeInfo* ForType, i8 IsUnaligned, i16 NextFieldOffset) {
+	define i16 ParseNestedStruct(TypeInfo* ForType, i8 IsUnaligned, i16 NextFieldOffset, void(void*, TypeInfo*, FunctionDefine*) OnMethod) {
 		HashMap* Fields := ForType~>Fields
 		HashMap* Methods := ForType~>Methods
 		HashMap* StaticMethods := ForType~>StaticMethods
@@ -1496,7 +1496,11 @@ struct ParserState {
 							MethodContainer := StaticMethods
 						}
 						
-						this->ParseFunctionDefinition(MethodContainer, MethodKeyword, ThisType, !IsStaticMethod)
+						FunctionDefine* Method := this->ParseFunctionDefinition(MethodContainer, MethodKeyword, ThisType, !IsStaticMethod)
+
+						if (OnMethod != null) {
+							OnMethod(this, ForType, Method)
+						}
 
 						; Ignore commas after methods, they aren't actually needed for parsing
 						this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)
@@ -1515,7 +1519,7 @@ struct ParserState {
 
 			if (InUnion && this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_STRUCT)) {
 				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' to open nested struct")
-				i16 FieldSize := this->ParseNestedStruct(ForType, IsUnaligned, NextFieldOffset) - TotalSize
+				i16 FieldSize := this->ParseNestedStruct(ForType, IsUnaligned, NextFieldOffset, OnMethod) - TotalSize
 			}
 			else if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_BITS)) {
 				Type BackingType := this->ParseBitsAsType()
@@ -1612,15 +1616,19 @@ struct ParserState {
 		return TotalSize
 	}
 
-	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned) {
+	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned, void(void*, TypeInfo*, FunctionDefine*) OnMethod) {
 		PointerArray* FieldsInOrder := PointerArray:New()
 		ForType->FieldsInOrder := FieldsInOrder
 
 		this->CurrentNamespace->DefineEntry("self", ForType)
-		i16 TotalSize := this->ParseNestedStruct(ForType, IsUnaligned, ForType->Size)
+		i16 TotalSize := this->ParseNestedStruct(ForType, IsUnaligned, ForType->Size, OnMethod)
 		this->CurrentNamespace->DeleteEntry("self")
 
 		ForType->Size := TotalSize
+	}
+
+	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned) {
+		this->ParseStructFields(ForType, IsUnaligned, null)
 	}
 	
 	define void ParseStructDefinition() {
@@ -2199,6 +2207,42 @@ struct ParserState {
 		this->AddClassInterface(ContainerType, InterfaceName~>Context, InterfaceType, IsDerived)
 	}
 
+	define void OnClassMethodDefined(TypeInfo* ForType, FunctionDefine* Current) {
+		ClassInfo* Info := ForType->ClassInfo
+		InterfaceImplementationInfo* INewImplementation := Info->Interfaces->GetPointer(this->INewType)
+
+		if (INewImplementation) {
+			if (Current->IsMethod = FUNCTION_IS_METHOD) {
+				Current->CallCount := 2
+
+				i32 ParameterCount := Current->ParameterCount - 1
+				Type* ParameterTypes := Alloc(ParameterCount * #Type)
+
+				for (i32 Index := 0, Index < ParameterCount, Index++) {
+					VariableInfo* OriginalParameter := Current->Parameters[Index + 1]
+
+					ParameterTypes[Index] := OriginalParameter->Type
+				}
+
+				FunctionDefine* DerivedWrapper := this->MakeDerivedMethod(Current~>Context, "New", ForType->AsPointer(1), ParameterCount, ParameterTypes)
+
+				DerivedWrapper->IsMethod := FUNCTION_IS_DERIVED_METHOD
+				DerivedWrapper->MethodOfTypeName := ForType->Name
+
+				DerivedWrapper->DerivedImplementationInfo := INewImplementation
+				DerivedWrapper->WrappedNewMethod := Current
+
+				HashMapElement* Last := ForType~>StaticMethods->Get("New")
+
+				if (Last) {
+					DerivedWrapper->Next := Last->Value
+				}
+
+				ForType~>StaticMethods->Set("New", DerivedWrapper)
+			}
+		}
+	}
+
 	define void ParseClass() {
 		TypeInfo* NewType := this->ParseCustomTypeName(TYPE_KIND_STRUCTURE)
 		
@@ -2255,7 +2299,7 @@ struct ParserState {
 			}
 		}
 
-		this->ParseStructFields(NewType, false)
+		this->ParseStructFields(NewType, false, &self.OnClassMethodDefined)
 
 		HashMap* Methods := NewType~>Methods
 		i32 Count := Info->InterfacesInOrder->Count()
@@ -2329,49 +2373,6 @@ struct ParserState {
 				ImplementationInfo->Methods->Push(ImplementationMethod)
 
 				ImplementationMethod->CallCount := 2
-			}
-		}
-
-		InterfaceImplementationInfo* INewImplementation := Info->Interfaces->GetPointer(this->INewType)
-
-		if (INewImplementation) {
-			HashMapElement* Element := NewType~>Methods->Get("New")
-
-			if (Element) {
-				FunctionDefine* Current := Element->Value
-
-				while (Current) {
-					if (Current->IsMethod = FUNCTION_IS_METHOD) {
-						Current->CallCount := 2
-
-						i32 ParameterCount := Current->ParameterCount - 1
-						Type* ParameterTypes := Alloc(ParameterCount * #Type)
-
-						for (i32 Index := 0, Index < ParameterCount, Index++) {
-							VariableInfo* OriginalParameter := Current->Parameters[Index + 1]
-
-							ParameterTypes[Index] := OriginalParameter->Type
-						}
-
-						FunctionDefine* DerivedWrapper := this->MakeDerivedMethod(Current~>Context, "New", NewType->AsPointer(1), ParameterCount, ParameterTypes)
-
-						DerivedWrapper->IsMethod := FUNCTION_IS_DERIVED_METHOD
-						DerivedWrapper->MethodOfTypeName := NewType->Name
-
-						DerivedWrapper->DerivedImplementationInfo := INewImplementation
-						DerivedWrapper->WrappedNewMethod := Current
-
-						HashMapElement* Last := NewType~>StaticMethods->Get("New")
-
-						if (Last) {
-							DerivedWrapper->Next := Last->Value
-						}
-
-						NewType~>StaticMethods->Set("New", DerivedWrapper)
-					}
-
-					Current := Current->Next
-				}
 			}
 		}
 		
