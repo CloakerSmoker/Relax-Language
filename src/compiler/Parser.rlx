@@ -1435,6 +1435,7 @@ struct ParserState {
 			}
 			
 			NewType->IsIncomplete := false
+			NewType->Kind := Kind
 		}
 		else {
 			; We didn't find a type by this name, so we can add it like normal
