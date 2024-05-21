@@ -550,16 +550,17 @@ struct FunctionDefine {
 	union {
 		CodeBlock* Body,
 		AssemblyBlock* AssemblyBody,
-		SafeString* ImportFileName,
-		InterfaceImplementationInfo* DerivedImplementationInfo,
-		i32 VirtualFunctionTableSlot
+		SafeString* ImportFileName
 	},
 	union {
 		i8* StringBuffer,
 		void* ConstantsBuffer,
-		SafeString* ImportFunctionName,
-		i32 DerivedMethodIndex
+		SafeString* ImportFunctionName
 	},
+
+	InterfaceImplementationInfo* DerivedImplementationInfo,
+	i32 VirtualFunctionTableSlot
+	i32 DerivedMethodIndex
 	
 	SafeString* MethodOfTypeName,
 	

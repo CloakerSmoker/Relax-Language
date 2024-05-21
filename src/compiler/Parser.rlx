@@ -1097,9 +1097,9 @@ struct ParserState {
 	define FunctionDefine* ParseFunctionDefinition(HashMap* Container, Token* FirstToken, TypeInfo* ThisType, i8 Mode, i8 ForMethod) {
 		i8 ForStatic := Mode = KEYWORD_STATIC
 		i8 ForDeclare := Mode = KEYWORD_DECLARE
-		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic
-		i8 ForImport := Mode = KEYWORD_DLLIMPORT
 		i8 ForVirtual := Mode = KEYWORD_VIRTUAL
+		i8 ForDefine := Mode = KEYWORD_DEFINE || ForStatic || ForVirtual
+		i8 ForImport := Mode = KEYWORD_DLLIMPORT
 		
 		Type ReturnType := this->ParseType()		
 		Token* NameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected function name")
@@ -1195,9 +1195,17 @@ struct ParserState {
 				}
 				
 				if (ForDefine) {
-					Token* NextParameterNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Parameter names must be identifiers")
-					NextParameter->Name := NextParameterNameToken->StringValue
-					this->AddLocal(NextParameter, NextParameterNameToken)
+					if (ForVirtual && !this->PeekNextToken()->Is(TOKEN_TYPE_IDENTIFIER)) {
+						; If we're parsing a virtual method and it doesn't look
+						;  like it has a default implementation, break early
+
+						ForDefine := false
+					}
+					else {
+						Token* NextParameterNameToken := this->Consume(TOKEN_TYPE_IDENTIFIER, "Parameter names must be identifiers")
+						NextParameter->Name := NextParameterNameToken->StringValue
+						this->AddLocal(NextParameter, NextParameterNameToken)
+					}
 				}
 				
 				NextParameter->IsGlobal := false
@@ -1360,6 +1368,10 @@ struct ParserState {
 				}
 
 				NewDefine->CallCount := 2 ; lol
+			}
+
+			if (ForVirtual && !this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+				return NewDefine
 			}
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_ASSEMBLY)) {
@@ -2258,15 +2270,25 @@ struct ParserState {
 
 			for (i32 MethodIndex := 0, MethodIndex < MethodCount, MethodIndex++) {
 				FunctionDefine* InterfaceMethod := InterfaceMethods->At(MethodIndex)
+				i8 HasDefaultImplementation := InterfaceMethod->HasFullDefinition
 
 				HashMapElement* TargetElement := Methods->Get(InterfaceMethod->Name)
+				FunctionDefine* TargetMethod := null
 
 				if (TargetElement = null) {
-					InterfaceBlame->Notify(NOTIFY_ERROR, "Interface not implemented")
-					InterfaceMethod~>Context->Error("Method not implemented")
+					if (HasDefaultImplementation) {
+						Methods->Set(InterfaceMethod->Name, InterfaceMethod)
+						TargetMethod := InterfaceMethod
+					}
+					else {
+						InterfaceBlame->Notify(NOTIFY_ERROR, "Interface not implemented")
+						InterfaceMethod~>Context->Error("Method not implemented")
+					}
+				}
+				else {
+					TargetMethod := TargetElement->Value As FunctionDefine*
 				}
 
-				FunctionDefine* TargetMethod := TargetElement->Value As FunctionDefine*
 				i32 ParameterCount := InterfaceMethod->ParameterCount
 
 				; Build a fake parameter list with the interface method's parameter types
@@ -2281,7 +2303,27 @@ struct ParserState {
 					Parameters[ParameterIndex] := ASTNode:New(NODE_TYPE_NONE, 0, ParameterType)
 				}
 
+				if (HasDefaultImplementation) {
+					; If this method has a default impl, check for overrides first
+					; If there's no overrides, insert the default impl and then
+					;  re-match against it below.
+
+					FunctionDefine* ImplementationMethod := this->MatchFunctionCall(TargetMethod, Parameters, ParameterCount, InterfaceMethod~>Context, null)
+
+					if !(ImplementationMethod) {
+						FunctionDefine* Tail := TargetMethod
+
+						while (Tail->Next) {
+							Tail := Tail->Next
+						}
+
+						Tail->Next := InterfaceMethod
+					}
+				}
+
 				FunctionDefine* ImplementationMethod := this->MatchFunctionCall(TargetMethod, Parameters, ParameterCount, InterfaceMethod~>Context, &InterfaceMatchFunctionErrors)
+
+				;ImplementationMethod~>Context->Warn("NUTS!")
 
 				ImplementationInfo->Methods->Push(ImplementationMethod)
 

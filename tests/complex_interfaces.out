@@ -5,3 +5,7 @@ INew:
 Zero   Parameter New: Complicated.New()      : 10 20
 Single Parameter New: Complicated.New(30)    : 30 40
 Double Parameter New: Complicated.New(50, 60): 50 60
+
+Default Method Implementation:
+Boring->GetFavoriteNumber(): IDefineDefaults.GetFavoriteNumber(): 70
+Opinionated->GetFavoriteNumber(): Opinionated.GetFavoriteNumber(): 80

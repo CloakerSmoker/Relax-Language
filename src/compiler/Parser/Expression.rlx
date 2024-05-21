@@ -195,6 +195,10 @@
 			; If we didn't find any functions which fit our parameters, then we need to print out a nice
 			;  error message showing each definition, and why it didn't make the cut.
 
+			if (Errors = null) {
+				return null
+			}
+
 			BlameContext->Notify(NOTIFY_ERROR, Errors->BlameOnCaller)
 			
 			Next := FoundDefine

@@ -30,6 +30,26 @@ class Complicated derives INew {
     }
 }
 
+interface IDefineDefaults {
+    virtual i32 GetFavoriteNumber() {
+        Print("IDefineDefaults.GetFavoriteNumber()")
+        return 70
+    }
+}
+
+class Boring implements IDefineDefaults, derives IAllocate {
+    define void IsBoring() {
+        Print("Boring.IsBoring()")
+    }
+}
+
+class Opinionated implements IDefineDefaults, derives IAllocate {
+    define i32 GetFavoriteNumber() {
+        Print("Opinionated.GetFavoriteNumber()")
+        return 80
+    }
+}
+
 define i32 Main() {
     Print("IAllocate:\n")
 
@@ -51,6 +71,18 @@ define i32 Main() {
     Print("Double Parameter New: ")
     Complicated* C3 := Complicated:New(50, 60)
     Print(": %i %i\n", C3->First, C3->Second)
+
+    Print("\nDefault Method Implementation:\n")
+    
+    Boring* B := Boring:Allocate()
+    Print("Boring->GetFavoriteNumber(): ")
+    i32 Favorite := B->GetFavoriteNumber()
+    Print(": %i\n", Favorite)
+
+    Opinionated* O := Opinionated:Allocate()
+    Print("Opinionated->GetFavoriteNumber(): ")
+    i32 Favorite := O->GetFavoriteNumber()
+    Print(": %i\n", Favorite)
 
     return 0
 }
