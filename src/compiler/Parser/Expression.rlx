@@ -254,16 +254,42 @@
 	
 	define ASTNode* TryParseFunctionCall(Token* NameToken, HashMap* FunctionNamespace, ASTNode* ThisParameter, i8** ErrorMessage) {
 		i8 HasFollowingColon := false
+		i8 IsTypeID := false
+
+		SafeString* Name := NameToken->StringValue
 		
 		if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON)) {
 			; `NonTypeName` followed by `:`, must be a legacy built-in call
 			
 			HasFollowingColon := true
+
+			IsTypeID := Name->Equals("typeid")
 		}
 		
 		if !(this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			*ErrorMessage := "Expected opening `(` for function call."
 			return null
+		}
+
+		if (IsTypeID) {
+			ASTNode* TargetTypeNode := this->ParseTypeNode()
+			Type TargetType := TargetTypeNode->ValueType
+			TypeInfo* TargetBase := GetBaseType(TargetType)
+
+			Token* Tail := this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_PAREN, "Expected closing parenthesis after TypeID parameter")
+
+			if (GetPointerDepth(TargetType) != 0) {
+				TargetTypeNode->Error("Expected non-pointer type")
+			}
+			else if (TargetBase->Kind != TYPE_KIND_STRUCTURE || !TargetBase->IsClass) {
+				TargetTypeNode->Error("Expected class type")
+			}
+
+			ASTNode* ResultNode := ASTNode:New(NODE_TYPE_INTEGER, TargetBase->GetTypeID(), this->i64->AsNonPointer())
+
+			ResultNode~>Context->Clone(NameToken~>Context)->Merge(Tail~>Context)
+
+			return ResultNode
 		}
 		
 		i8 ParameterCount := 0
@@ -271,7 +297,7 @@
 		if (ThisParameter != null) {
 			ParameterCount += 1
 		}
-		
+
 		ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
 		
 		SourceContext* FirstTokenContext := NameToken~>Context
@@ -283,8 +309,6 @@
 		
 		CallExpression* Result := null
 		ASTNode* ResultNode := ASTNode:NewCallNode(Parameters, ParameterCount, &Result, FirstTokenContext, this->GetCurrentTokenContext())
-		
-		SafeString* Name := NameToken->StringValue
 		
 		if (HasFollowingColon) {
 			; If we've matched the `name:` format, but not `name:other`, then we need to convert `name`

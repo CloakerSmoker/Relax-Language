@@ -2387,6 +2387,8 @@ struct ParserState {
 		InterfaceInfo* Info := InterfaceInfo:New()
 		NewType->InterfaceInfo := Info
 
+		this->AddDeriveableMethod(NewType, "TypeID", "virtual i64 TypeID()", this->i64->AsNonPointer(), NewType->AsPointer(1))
+
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for interface body")
 
 		loop {

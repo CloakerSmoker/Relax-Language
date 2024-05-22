@@ -94,7 +94,7 @@ struct TypeInfo {
 		}
 
 		i8[100] Buffer
-		i32 Length := FormatString(Buffer, 100, "%t", this)
+		i32 Length := FormatString(Buffer, 100, "%t", this->AsNonPointer())
 
 		this->CachedTypeID := FNV1A(Buffer, Length)
 

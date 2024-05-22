@@ -75,14 +75,32 @@ define i32 Main() {
     Print("\nDefault Method Implementation:\n")
     
     Boring* B := Boring:Allocate()
-    Print("Boring->GetFavoriteNumber(): ")
+    IDefineDefaults* BD := B
+    Print("B ->GetFavoriteNumber(): ")
     i32 Favorite := B->GetFavoriteNumber()
+    Print(": %i\n", Favorite)
+    Print("BO->GetFavoriteNumber(): ")
+    i32 Favorite := BD->GetFavoriteNumber()
     Print(": %i\n", Favorite)
 
     Opinionated* O := Opinionated:Allocate()
-    Print("Opinionated->GetFavoriteNumber(): ")
+    IDefineDefaults* OD := O
+    Print("O ->GetFavoriteNumber(): ")
     i32 Favorite := O->GetFavoriteNumber()
     Print(": %i\n", Favorite)
+    Print("OD->GetFavoriteNumber(): ")
+    i32 Favorite := OD->GetFavoriteNumber()
+    Print(": %i\n", Favorite)
+
+    Print("\nTypeID:\n")
+
+    Print("B->TypeID()    : %x\n", B->TypeID())
+    Print("typeid:(Boring): %x\n", typeid:(Boring))
+    Print("BD->TypeID()   : %x\n", BD->TypeID())
+
+    Print("O->TypeID()         : %x\n", O->TypeID())
+    Print("typeid:(Opinionated): %x\n", typeid:(Opinionated))
+    Print("OD->TypeID()        : %x\n", OD->TypeID())
 
     return 0
 }
