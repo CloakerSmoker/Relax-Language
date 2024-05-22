@@ -2212,7 +2212,7 @@ struct ParserState {
 		InterfaceImplementationInfo* INewImplementation := Info->Interfaces->GetPointer(this->INewType)
 
 		if (INewImplementation) {
-			if (Current->IsMethod = FUNCTION_IS_METHOD) {
+			if (Current->IsMethod = FUNCTION_IS_METHOD && Current->Name->Equals("New")) {
 				Current->CallCount := 2
 
 				i32 ParameterCount := Current->ParameterCount - 1
