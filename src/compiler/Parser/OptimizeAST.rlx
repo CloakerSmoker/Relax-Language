@@ -1,58 +1,10 @@
 
-declare void CountReferencesVisitFunction(ASTVisitor*, FunctionDefine*)
-
-define void CountReferencesVisitAssembly(ASTVisitor* Visitor, AssemblyBlock* Target) {
-	for (i32 InstructionIndex := 0, InstructionIndex < Target->InstructionCount, InstructionIndex += 1) {
-		InstructionNode* NextInstruction := Target->Instructions[InstructionIndex]
-		
-		if (NextInstruction->Type = INSTRUCTION_REGULAR) {
-			for (i32 OperandIndex := 0, OperandIndex < 2, OperandIndex += 1) {
-				InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
-				
-				if (NextOperand != null && NextOperand->ReferencesFunction) {
-					CountReferencesVisitFunction(Visitor, NextOperand->FunctionReference)
-				}
-			}
-		}
-	}
-}
+#Require "./src/compiler/Parser/ASTVisitor.rlx"
 
 define void CountReferencesVisitFunction(ASTVisitor* Visitor, FunctionDefine* Target) {
 	Target->CallCount += 1
 	
-	if (Target->IsImported = false) {
-		if (Target->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
-			CountReferencesVisitAssembly(Visitor, Target->AssemblyBody)
-		}
-		else if !(Target->HasFullDefinition) {
-			if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
-				; When we derive IAllocate, we are indirectly calling
-				;  `AllocateInstance` and `DeleteInstance` without reflecting
-				;   this relationship in the call graph.
-				; To ensure that `(Allocate|Delete)Instance` aren't eliminated
-				;  and that the functions they depend on aren't eliminated, we
-				;   need to manually "fix" the call graph here by visiting the
-				;    "true" targets of `IAllocate` instead of the derived targets.
-
-				ParserState* Parser := Visitor->GetState() As void*
-
-				if (Target->DerivedImplementationInfo->ForInterface = Parser->IAllocateType) {
-					if (Target->DerivedMethodIndex = 0) {
-						CountReferencesVisitFunction(Visitor, Parser->Allocator)
-					}
-					else if (Target->DerivedMethodIndex = 1) {
-						CountReferencesVisitFunction(Visitor, Parser->Deleter)
-					}
-				}
-			}
-			else if (Target->IsMethod != FUNCTION_IS_INTERFACE_METHOD) {
-				Target~>Context->Error("Function is declared but never defined")
-			}
-		}
-		else {
-			Visitor->VisitBlocks(Target->Body)
-		}
-	}
+	Visitor->VisitFunctionDefinition(Target)
 }
 
 define i8 IsAssignment(Token* OperatorToken) {
@@ -64,33 +16,20 @@ define i8 IsAssignment(Token* OperatorToken) {
 define void* CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 	i8 NodeType := Node->NodeType
 	
-	if (NodeType = NODE_TYPE_CALL) {
-		CallExpression* CallNode := Node->CallNode
-		
-		if (CallNode->BuiltinID = BUILTIN_NONE) {
-			CountReferencesVisitFunction(Visitor, CallNode->TargetFunction)
-		}
-		
-		Visitor->RawVisitNodes(CallNode->ParameterCount, CallNode->Parameters)
-	}
-	else if (NodeType = NODE_TYPE_UNARY) {
+	if (NodeType = NODE_TYPE_UNARY) {
 		UnaryExpression* UnaryNode := Node->UnaryNode
 		ASTNode* Operand := UnaryNode->Operand
 		
 		i8 Operator := UnaryNode->Operator->IntegerValue As i8
-		
 		i8 IsIncrementDecrement := Operator = OPERATOR_PLUS_PLUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_RIGHT || Operator = OPERATOR_MINUS_MINUS_LEFT || Operator = OPERATOR_PLUS_PLUS_LEFT
 	
-		if (Operator = OPERATOR_AND || IsIncrementDecrement) {
-			if (Operand->NodeType = NODE_TYPE_DEFINE) {
-				CountReferencesVisitFunction(Visitor, Operand->DefineNode)
-			}
-			else if (Operand->NodeType = NODE_TYPE_VARIABLE) {
+		if (IsIncrementDecrement) {
+			if (Operand->NodeType = NODE_TYPE_VARIABLE) {
 				Operand->VariableValue->SetCount += 1
 			}
 		}
 		
-		Visitor->VisitNodes(Operand)
+		Visitor->VisitChildren(Node)
 	}
 	else if (NodeType = NODE_TYPE_BINARY) {
 		ASTNode* Left := Node->BinaryNode->Left
@@ -110,43 +49,28 @@ define void* CountReferencesVisit(ASTVisitor* Visitor, ASTNode* Node) {
 			if (Right->NodeType = NODE_TYPE_CALL) {
 				LeftVariable->SetCount += 1
 			}
-			
-			Visitor->VisitNodes(Right)
 		}
-		else {
-			Visitor->VisitChildren(Node)
-		}
+		
+		Visitor->VisitChildren(Node)
 	}
 	else if (NodeType = NODE_TYPE_VARIABLE) {
 		Node->VariableValue->GetCount += 1
-	}
-	else if (NodeType = NODE_TYPE_ASSEMBLY) {
-		CountReferencesVisitAssembly(Visitor, Node->AssemblyValue)
 	}
 
 	return null
 }
 
 define void CountReferences(ParserState* Parser) {
-	ASTVisitor* Visitor := ASTVisitor:New(&CountReferencesVisit)
+	ASTVisitor* Visitor := ASTVisitor:New(Parser, &CountReferencesVisit)
 
-	Visitor->SetState(Parser As i64)
+	Visitor->SetFunctionVisitor(&CountReferencesVisitFunction)
 	
-	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_VARIABLE)
-	Visitor->AllowType(NODE_TYPE_ASSEMBLY)
 	
-	if (Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
-		CountReferencesVisitAssembly(Visitor, Parser->MainFunction->AssemblyBody)
-	}
-	else {
-		Visitor->VisitBlocks(Parser->MainFunction->Body)
-	}
-	
-	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
-	
+	Visitor->VisitProgramRoot()
+
 	Parser->MainFunction->CallCount += 1
 	
 	Free(Visitor)
@@ -191,7 +115,7 @@ define void* NodeHasSideEffectsVisitor(ASTVisitor* Visitor, ASTNode* Node) {
 }
 
 define i8 NodeHasSideEffects(ASTNode* Node) {
-	ASTVisitor* Visitor := ASTVisitor:New(&NodeHasSideEffectsVisitor)
+	ASTVisitor* Visitor := ASTVisitor:New(null, &NodeHasSideEffectsVisitor)
 	
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_UNARY)
@@ -516,7 +440,7 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 }
 
 define void FoldConstants(ParserState* Parser) {
-	ASTVisitor* Visitor := ASTVisitor:New(&FoldConstantsVisitor)
+	ASTVisitor* Visitor := ASTVisitor:New(Parser, &FoldConstantsVisitor)
 	
 	Visitor->SetBlockVisitFunction(&FoldConstantsBlockVisitor)
 	
@@ -526,12 +450,8 @@ define void FoldConstants(ParserState* Parser) {
 	Visitor->AllowType(NODE_TYPE_GET_TYPE_SIZE)
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_IF)
-	
-	if !(Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
-		Visitor->VisitBlocks(Parser->MainFunction->Body)
-	}
-	
-	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
+
+	Visitor->VisitProgramRoot()
 	
 	Free(Visitor)
 }
@@ -556,6 +476,10 @@ define i8 TypesNeedDynamicCast(Type LeftType, Type RightType) {
 	else {
 		return false
 	}
+}
+
+define void InsertClassInterfaceCastsVisitFunction(ASTVisitor* Visitor, FunctionDefine* Function) {
+	Visitor->VisitFunctionDefinition(Function)
 }
 
 define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Root) {
@@ -596,17 +520,17 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 			}
 		}
 		else if (Call->BuiltinID = BUILTIN_NONE) {
-			FunctionDefine* Definition := Call->TargetFunction
-			i32 ParameterCount := Definition->ParameterCount
+			FunctionDefine* Function := Call->TargetFunction
+			i32 ParameterCount := Function->ParameterCount
 
-			if (Definition->Attributes & FUNCTION_ATTRIBUTE_VARIADIC) {
+			if (Function->Attributes & FUNCTION_ATTRIBUTE_VARIADIC) {
 				ParameterCount -= 1
 			}
 
 			for (i32 Index := 0, Index < ParameterCount, Index++) {
 				ASTNode* ProvidedParameter := Call->Parameters[Index]
 				Type ProvidedType := ProvidedParameter->ValueType
-				Type ExpectedType := Definition->Parameters[Index]->Type
+				Type ExpectedType := Function->Parameters[Index]->Type
 
 				if (TypesNeedDynamicCast(ProvidedType, ExpectedType)) {
 					ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, ProvidedParameter, ExpectedType)
@@ -614,6 +538,8 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 					Call->Parameters[Index] := Cast
 				}
 			}
+
+			Visitor->VisitFunctionDefinition(Function)
 		}
 	}
 	else if (Root->NodeType = NODE_TYPE_BINARY) {
@@ -653,16 +579,14 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 }
 
 define void InsertClassInterfaceCasts(ParserState* Parser) {
-	ASTVisitor* Visitor := ASTVisitor:New(&InsertClassInterfaceCastsVisitNode)
+	ASTVisitor* Visitor := ASTVisitor:New(Parser, &InsertClassInterfaceCastsVisitNode)
+
+	Visitor->SetFunctionVisitor(&InsertClassInterfaceCastsVisitFunction)
 	
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_CALL)
 	
-	if !(Parser->MainFunction->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
-		Visitor->VisitBlocks(Parser->MainFunction->Body)
-	}
-	
-	Visitor->RawVisitNodes(GetArrayLength(Parser->GlobalDefaults), Parser->GlobalDefaults)
+	Visitor->VisitProgramRoot()
 	
 	Free(Visitor)
 }

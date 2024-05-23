@@ -129,6 +129,8 @@ struct ParserState {
 	TypeNamespace* RootNamespace
 	TypeNamespace* CurrentNamespace
 
+	PointerArray* Interfaces ; <TypeInfo*>
+
 	define TypeNamespace* FindOrAddNamespace(QualifiedName* Name, i8 AllowAdding, i8 OnlyQuery) {
 		TypeNamespace* Root := this->CurrentNamespace
 
@@ -262,6 +264,8 @@ struct ParserState {
 
 		this->RootNamespace := TypeNamespace:NewRoot()
 		this->CurrentNamespace := this->RootNamespace
+
+		this->Interfaces := PointerArray:New()
 		
 		this->i8   := this->DefineBuiltinType("i8"  , 1)
 		this->i16  := this->DefineBuiltinType("i16" , 2)
@@ -1982,6 +1986,7 @@ struct ParserState {
 		FunctionDefine* Method := this->MakeDerivedMethod(Context, Name, ReturnType, ParameterTypeCount, ParameterTypes)
 		
 		Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
+		Method->MethodOfType := Info
 		Method->VirtualFunctionTableSlot := Info->InterfaceInfo->Methods->Count()
 
 		Info->InterfaceInfo->Methods->Push(Method)
@@ -2162,7 +2167,7 @@ struct ParserState {
 		Info->InterfacesInOrder->Push(ImplementationInfo)
 		Info->Interfaces->InsertPointer(InterfaceType As i64, ImplementationInfo)
 
-		InterfaceType->InterfaceInfo->ImplementedBy->Insert(ContainerType As i64, null)
+		InterfaceType->InterfaceInfo->ImplementedBy->InsertPointer(ContainerType As i64, ContainerType)
 
 		StructField* Field := Alloc(#StructField)
 		
@@ -2387,6 +2392,8 @@ struct ParserState {
 		InterfaceInfo* Info := InterfaceInfo:New()
 		NewType->InterfaceInfo := Info
 
+		this->Interfaces->Push(NewType)
+
 		this->AddDeriveableMethod(NewType, "TypeID", "virtual i64 TypeID()", this->i64->AsNonPointer(), NewType->AsPointer(1))
 
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for interface body")
@@ -2401,6 +2408,7 @@ struct ParserState {
 				FunctionDefine* Method := this->ParseFunctionDefinition(NewType~>Methods, this->GetCurrentToken(), NewType, KEYWORD_VIRTUAL, true)
 
 				Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
+				Method->MethodOfType := NewType
 				Method->VirtualFunctionTableSlot := Info->Methods->Count()
 
 				Info->Methods->Push(Method)

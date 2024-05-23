@@ -171,7 +171,7 @@ struct InterfaceInfo {
 		self* this := Alloc(#self)
 
 		this->Methods := PointerArray:New()
-		this->ImplementedBy := AVLTree:New(0)
+		this->ImplementedBy := AVLTree:New(8)
 
 		return this
 	}

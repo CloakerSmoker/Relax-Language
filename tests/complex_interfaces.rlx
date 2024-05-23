@@ -50,6 +50,10 @@ class Opinionated implements IDefineDefaults, derives IAllocate {
     }
 }
 
+class CantBeEliminated implements IDefineDefaults {
+    i8 Dummy
+}
+
 define i32 Main() {
     Print("IAllocate:\n")
 

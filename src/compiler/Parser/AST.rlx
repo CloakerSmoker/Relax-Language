@@ -561,6 +561,7 @@ struct FunctionDefine {
 	InterfaceImplementationInfo* DerivedImplementationInfo,
 	i32 VirtualFunctionTableSlot
 	i32 DerivedMethodIndex
+	TypeInfo* MethodOfType
 	
 	SafeString* MethodOfTypeName,
 	
@@ -588,6 +589,8 @@ struct FunctionDefine {
 	i8 IsMethod,
 	
 	i32 CodeOffset,
+
+	i32 LastVisitor
 	
 	i8 TempValue
 	
@@ -830,145 +833,6 @@ struct ASTNode {
 	
 	define void Free() {
 		Free(this)
-	}
-}
-
-; EndRegion
-
-; ASTVisitor region
-
-i32 NextASTVisitorID := 1
-
-struct ASTVisitor {
-	void*(ASTVisitor*, ASTNode*) VisitFunction
-	void*(ASTVisitor*, CodeBlock*) BlockVisitFunction
-	i64 State
-	i32 NodeTypeMask
-	i32 ID
-	
-	static ASTVisitor* New(void*(ASTVisitor*, ASTNode*) VisitFunction) {
-		ASTVisitor* this := Alloc(#ASTVisitor)
-		
-		this->VisitFunction := VisitFunction
-		this->ID := NextASTVisitorID
-		
-		NextASTVisitorID += 1
-		
-		return this
-	}
-	
-	define i32 IsTypeAllowed(i8 NodeType) {
-		return !!(this->NodeTypeMask & (1 << NodeType))
-	}
-	define void AllowType(i8 NodeType) {
-		this->NodeTypeMask := this->NodeTypeMask | (1 << NodeType)
-	}
-	
-	define void SetState(i64 State) {
-		this->State := State
-	}
-	define i64 GetState() {
-		return this->State
-	}
-	
-	define void SetVisitFunction(void* Function) {
-		this->VisitFunction := Function
-	}
-	define void SetBlockVisitFunction(void* Function) {
-		this->BlockVisitFunction := Function
-	}
-	
-	declare void VisitNodes(...),
-	declare void RawVisitNodes(i64, ASTNode**),
-	
-	define void RawVisitBlocks(i64 Count, CodeBlock** Blocks) {
-		for (i32 Index := 0, Index < Count, Index += 1) {
-			CodeBlock* Next := Blocks[Index]
-			
-			this->RawVisitNodes(Next->StatementCount, Next->Statements)
-
-			if (this->BlockVisitFunction != null) {
-				this->BlockVisitFunction(Next)
-			}
-		}
-	}
-	define void VisitBlocks(... Blocks) {
-		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As CodeBlock**)
-	}
-	define void VisitChildren(ASTNode* Node) {
-		Node->LastVisitor := this->ID
-		
-		i8 NodeType := Node->NodeType
-		
-		if (NodeType = NODE_TYPE_UNARY) {
-			this->VisitNodes(Node->UnaryNode->Operand)
-		}
-		else if (NodeType = NODE_TYPE_BINARY) {
-			this->VisitNodes(Node->BinaryNode->Left, Node->BinaryNode->Right)
-		}
-		else if (NodeType = NODE_TYPE_CALL) {
-			this->RawVisitNodes(Node->CallNode->ParameterCount, Node->CallNode->Parameters)
-		}
-		else if (NodeType = NODE_TYPE_STRUCT_ACCESS) {
-			this->VisitNodes(Node->AccessNode->Left)
-		}
-		else if (NodeType = NODE_TYPE_IF) {
-			this->RawVisitNodes(Node->IfNode->BranchCount, Node->IfNode->Conditions)
-			this->RawVisitBlocks(Node->IfNode->BranchCount, Node->IfNode->Bodies)
-			
-			if (Node->IfNode->ElseBranch) {
-				this->VisitBlocks(Node->IfNode->ElseBranch)
-			}
-		}
-		else if (NodeType = NODE_TYPE_WHILE) {
-			this->VisitNodes(Node->WhileNode->Condition)
-			this->VisitBlocks(Node->WhileNode->Body)
-		}
-		else if (NodeType = NODE_TYPE_FOR) {
-			this->VisitNodes(Node->ForNode->Initializer, Node->ForNode->Condition, Node->ForNode->Step)
-			this->VisitBlocks(Node->ForNode->Body)
-		}
-		else if (NodeType = NODE_TYPE_LOOP) {
-			this->VisitBlocks(Node->LoopBody)
-		}
-		else if (NodeType = NODE_TYPE_RETURN) {
-			this->VisitNodes(Node->ReturnExpression)
-		}
-		else if (NodeType = NODE_TYPE_EXPRESSION) {
-			this->VisitNodes(Node->ExpressionStatement)
-		}
-		else if (NodeType = NODE_TYPE_EXPRESSION_BLOCK) {
-			this->VisitBlocks(Node->BlockValue)
-		}
-		else if (NodeType = NODE_TYPE_TRY) {
-			this->VisitBlocks(Node->TryNode->Body)
-			
-			if (Node->TryNode->CatchBody) {
-				this->VisitBlocks(Node->TryNode->CatchBody)
-			}
-		}
-	}
-	
-	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
-		for (i32 Index := 0, Index < Count, Index += 1) {
-			ASTNode* Node := Nodes[Index]
-			
-			if (Node->LastVisitor = this->ID) {
-				continue
-			}
-			
-			Node->LastVisitor := this->ID
-			
-			if (this->IsTypeAllowed(Node->NodeType)) {
-				this->VisitFunction(Node)
-			}
-			else {
-				this->VisitChildren(Node)
-			}
-		}
-	}
-	define void VisitNodes(... Nodes) {
-		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
 	}
 }
 
