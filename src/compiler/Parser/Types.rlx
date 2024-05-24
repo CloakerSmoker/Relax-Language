@@ -163,8 +163,9 @@ define i16 GetPointerDepth(Type T) {
 }
 
 struct InterfaceInfo {
-	PointerArray* Methods ; <FunctionDefine*>
+	SafeString* Name
 
+	PointerArray* Methods ; <FunctionDefine*>
 	AVLTree* ImplementedBy ; <TypeInfo*>
 
 	static self* New() {

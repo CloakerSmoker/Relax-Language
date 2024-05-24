@@ -220,3 +220,26 @@ define void PrintSafeString(SafeString* StringToPrint) {
 		PrintCharacter(NextCharacter As i8)
 	}
 }
+
+define void FormatSafeString(PrintOutputAdapterPrototype* this, i8* Format, i32* FormatIndex, void* Parameters, i32 ParameterCount, i32* ParameterIndex) {
+	SafeString* String := Parameters[*ParameterIndex] As void*
+
+	if (String = null) {
+		this->Print("<%%S null>")
+	}
+	else if (String->Buffer = null) {
+		this->Print("<%%S buffer null>")
+	}
+	else {
+		this->Print("%s", String->Buffer)
+	}
+
+	*ParameterIndex += 1
+}
+
+PrintFormatPrototype SafeStringFormatPrototype {
+	Name: "S",
+	Format: &FormatSafeString
+}
+
+i32 SAFE_STRING_FORMAT_ID := AddPrintFormat(&SafeStringFormatPrototype)

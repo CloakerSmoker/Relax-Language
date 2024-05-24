@@ -328,6 +328,18 @@ struct CompilerState {
 			}
 		}
 	}
+
+	define void RecordGeneratedFunction(i8* Name, i64 StartAddress, i32 Size) {
+		if (this->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			i32 DWARFVoid := this->DWARF->FindOrTranslateType(this->Parser->void->AsNonPointer())
+			i32 Function := this->DWARF->StartFunction(Name, DWARFVoid, StartAddress, false)
+			this->DWARF->EndFunction(Function, Size)
+		}
+	}
+
+	define i64 AddressOfCodeOffset(i32 Offset) {
+		return this->Config->ImageBase + this->CodeBase + Offset
+	}
 	
 	define i32 BeforeCompileFunction(FunctionDefine* Function) {
 		i32 Result := 0
@@ -815,6 +827,12 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	}
 
 	EmitReturn(Compiler)
+
+	i8* Name := FormatString("%func", DerivedMethod)
+	i64 Address := Compiler->AddressOfCodeOffset(DerivedMethod->CodeOffset)
+	i32 Size := Compiler->Index - DerivedMethod->CodeOffset
+
+	Compiler->RecordGeneratedFunction(Name, Address, Size)
 }
 
 define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunction, i8 IsOverload) {
@@ -888,7 +906,7 @@ define void CompileFunctionHashMap(CompilerState* Compiler, HashMap* Map) {
 	}
 }
 
-declare void CompileClassInterfaces(CompilerState*, ClassInfo*)
+declare void CompileClassInterfaces(CompilerState*, TypeInfo*)
 
 define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Container) {
 	i32 Count := Container->Entries->Count()
@@ -901,7 +919,7 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 			CompileFunctionHashMap(Compiler, Info~>StaticMethods)
 
 			if (Info->IsClass) {
-				CompileClassInterfaces(Compiler, Info->ClassInfo)
+				CompileClassInterfaces(Compiler, Info)
 			}
 		}
 	}
@@ -2272,7 +2290,8 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	}
 }
 ;/*
-define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* ForClass, InterfaceImplementationInfo* Info) {
+define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* ForType, InterfaceImplementationInfo* Info) {
+	ClassInfo* ForClass := ForType->ClassInfo
 	InterfaceInfo* ForInterface := Info->ForInterfaceInfo
 	i32 Offset := ForClass->InterfacesInOrder->Find(Info)
 
@@ -2284,9 +2303,17 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* F
 
 		;Print("Generated stub call to label %i\n", Implementation->LabelNumber)
 
+		i32 Before := Compiler->Index
 		SetLabel(Compiler, StubLabel)
 		EmitSub_R64_IX(Compiler, RDI, Offset * 8)
 		EmitJump_Label(Compiler, Implementation->LabelNumber)
+		i32 After := Compiler->Index
+
+		i8* Name := FormatString("%S.%S.%S", ForType->Name, ForInterface->Name, Implementation->Name)
+		i64 Address := Compiler->Config->ImageBase + Compiler->CodeBase + Compiler->Index
+		i32 Size := After - Before
+
+		Compiler->RecordGeneratedFunction(Name, Address, Size)
 	}
 
 	if (Compiler->Index % 2) { PushI8(Compiler, 0) }
@@ -2312,13 +2339,14 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, ClassInfo* F
 	EmitReturn(Compiler)
 }
 
-define void CompileClassInterfaces(CompilerState* Compiler, ClassInfo* Info) {
+define void CompileClassInterfaces(CompilerState* Compiler, TypeInfo* ForType) {
+	ClassInfo* Info := ForType->ClassInfo
 	i32 Count := Info->InterfacesInOrder->Count()
 
 	for (i32 Index := 0, Index < Count, Index++) {
 		InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
 
-		CompileInterfaceImplementation(Compiler, Info, ImplementationInfo)
+		CompileInterfaceImplementation(Compiler, ForType, ImplementationInfo)
 
 		Compiler->InitializerLabels->Push(ImplementationInfo->SetupVirtualFunctionTableLabel As void*)
 	}

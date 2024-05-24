@@ -1971,6 +1971,7 @@ struct ParserState {
 		NewType->Size := (MethodCount * #void*) As i16
 		NewType->Kind := TYPE_KIND_INTERFACE
 		NewType->InterfaceInfo := InterfaceInfo:New()
+		NewType->InterfaceInfo->Name := NewType->Name
 
 		this->RootNamespace->DefineEntry(Name, NewType)
 
@@ -2391,6 +2392,7 @@ struct ParserState {
 
 		InterfaceInfo* Info := InterfaceInfo:New()
 		NewType->InterfaceInfo := Info
+		Info->Name := NewType->Name
 
 		this->Interfaces->Push(NewType)
 
