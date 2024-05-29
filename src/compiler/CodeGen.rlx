@@ -48,7 +48,7 @@ define void OffsetLabel(CompilerState* Compiler, i32 Offset) {
 
 define LabelInfo* SetLabel(CompilerState* Compiler, i32 LabelNumber) {
 	/* Creates a new label which points to the current Compiler->Index */
-	
+
 	return AppendLabel(Compiler, LabelNumber, false)
 }
 

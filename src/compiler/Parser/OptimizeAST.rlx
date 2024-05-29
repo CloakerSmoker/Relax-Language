@@ -527,13 +527,6 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 				ParameterCount -= 1
 			}
 
-			i32 FirstParameter := 0
-
-			if (Function->IsMethod && Function->IsMethod != FUNCTION_IS_STATIC_METHOD) {
-				; Skip `this`
-				FirstParameter := 1
-			}
-
 			for (i32 Index := 0, Index < ParameterCount, Index++) {
 				ASTNode* ProvidedParameter := Call->Parameters[Index]
 				Type ProvidedType := ProvidedParameter->ValueType

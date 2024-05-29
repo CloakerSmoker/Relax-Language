@@ -1988,6 +1988,7 @@ struct ParserState {
 		
 		Method->IsMethod := FUNCTION_IS_INTERFACE_METHOD
 		Method->MethodOfType := Info
+		Method->MethodOfTypeName := Info->Name
 		Method->VirtualFunctionTableSlot := Info->InterfaceInfo->Methods->Count()
 
 		Info->InterfaceInfo->Methods->Push(Method)

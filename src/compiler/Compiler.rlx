@@ -689,6 +689,8 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	TypeInfo* ClassType := Implementation->ForType
 	ClassInfo* Info := ClassType->ClassInfo
 
+	;Print("SetLabel %i Derived %func @ %x\n", DerivedMethod->LabelNumber, DerivedMethod, Compiler->AddressOfCodeOffset(Compiler->Index))
+
 	SetLabel(Compiler, DerivedMethod->LabelNumber)
 	DerivedMethod->CodeOffset := Compiler->Index
 
@@ -1480,6 +1482,15 @@ declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
+
+	if (FunctionToCompile->CodeOffset) {
+		if (FunctionToCompile->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			return FunctionToCompile->CodeOffset
+		}
+		else {
+			FunctionToCompile~>Context->Error("INTERNAL: Compiled more than once")
+		}
+	}
 	
 	if (IsMain) {
 		SetLabel(Compiler, Compiler->GlobalStringsLabel)
@@ -1532,6 +1543,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
+
+	;Print("SetLabel %i %func @ %x\n", FunctionToCompile->LabelNumber, FunctionToCompile, Compiler->AddressOfCodeOffset(FunctionOffset))
 	
 	i32 DebugData := Compiler->BeforeCompileFunction(FunctionToCompile)
 	
@@ -2301,8 +2314,6 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		FunctionDefine* Implementation := Info->Methods->At(Index)
 		i32 StubLabel := Info->StubLabels[Index]
 
-		;Print("Generated stub call to label %i\n", Implementation->LabelNumber)
-
 		i32 Before := Compiler->Index
 		SetLabel(Compiler, StubLabel)
 		EmitSub_R64_IX(Compiler, RDI, Offset * 8)
@@ -2310,15 +2321,17 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		i32 After := Compiler->Index
 
 		i8* Name := FormatString("%S.%S.%S", ForType->Name, ForInterface->Name, Implementation->Name)
-		i64 Address := Compiler->Config->ImageBase + Compiler->CodeBase + Compiler->Index
+		i64 Address := Compiler->AddressOfCodeOffset(Before)
 		i32 Size := After - Before
+
+		;Print("%s: Generated stub call to label %i\n", Name, Implementation->LabelNumber)
 
 		Compiler->RecordGeneratedFunction(Name, Address, Size)
 	}
 
-	if (Compiler->Index % 2) { PushI8(Compiler, 0) }
-	if (Compiler->Index % 4) { PushI16(Compiler, 0) }
-	if (Compiler->Index % 8) { PushI32(Compiler, 0) }
+	if (Compiler->Index % 2) { PushI8(Compiler, 0x90 As i8) }
+	if (Compiler->Index % 4) { PushI16(Compiler, 0x9090 As i16) }
+	if (Compiler->Index % 8) { PushI32(Compiler, 0x90909090 As i32) }
 
 	SetLabel(Compiler, Info->VirtualFunctionTableLabel)
 
@@ -2493,6 +2506,7 @@ define void CompileCall(CompilerState* Compiler, i8 ResultRegister, ASTNode* Nod
 		TargetFunction := CallNode->TargetFunction
 
 		if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			;Print("Call to %func is interface method\n", TargetFunction)
 			IsVirtualMethodCall := true
 		}
 		
