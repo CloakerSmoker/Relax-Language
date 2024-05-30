@@ -28,7 +28,7 @@ path_join = os.path.join
 bin_dir = path_join(cwd, 'build')
 tools_dir = path_join(cwd, 'tools')
 
-all_platforms = [('windows', 'exe'), ('linux', 'elf'), ('freebsd', 'elf')]
+all_platforms = [('windows', 'exe'), ('linux', 'elf')] #, ('freebsd', 'elf')]
 
 running_on = platform.system()
 

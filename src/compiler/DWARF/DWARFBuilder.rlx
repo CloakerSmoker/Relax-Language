@@ -116,6 +116,7 @@ struct DWARFBuilder {
 		this->VariableTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_VARIABLE, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
 		A->EndAbbreviation()
 
@@ -140,6 +141,7 @@ struct DWARFBuilder {
 		this->FunctionParameterTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_PARAMETER, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_VARIABLE_PARAMETER, DWARF_FORM_FLAG_PRESENT)
 		A->EndAbbreviation()
@@ -391,10 +393,11 @@ struct DWARFBuilder {
 		return SizeOffset
 	}
 	
-	define void AddRawLocalVariable(i32 Tag, i8* Name, i32 TypeOffset, i32 StackOffset) {
+	define void AddRawLocalVariable(i32 Tag, i8* Name, i32 Size, i32 TypeOffset, i32 StackOffset) {
 		this->DIEStream->StartEntry(Tag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
+			this->DIEStream->AppendI32(Size)
 			
 			DWARFExpressionBuilder* OffsetExpression := this->DIEStream->StartAppendExpression()
 			
@@ -404,11 +407,11 @@ struct DWARFBuilder {
 		this->DIEStream->EndEntry()
 	}
 	
-	define void AddFunctionParameter(i8* Name, i32 TypeOffset, i32 StackOffset) {
-		this->AddRawLocalVariable(this->FunctionParameterTag, Name, TypeOffset, StackOffset)
+	define void AddFunctionParameter(i8* Name, i32 Size, i32 TypeOffset, i32 StackOffset) {
+		this->AddRawLocalVariable(this->FunctionParameterTag, Name, Size, TypeOffset, StackOffset)
 	}
-	define void AddLocalVariable(i8* Name, i32 TypeOffset, i32 StackOffset) {
-		this->AddRawLocalVariable(this->VariableTag, Name, TypeOffset, StackOffset)
+	define void AddLocalVariable(i8* Name, i32 Size, i32 TypeOffset, i32 StackOffset) {
+		this->AddRawLocalVariable(this->VariableTag, Name, Size, TypeOffset, StackOffset)
 	}
 	define void EndFunction(i32 SizeOffset, i32 Size) {
 		i32 CurrentOffset := this->DIEStream->Stream->Tell()
@@ -421,10 +424,11 @@ struct DWARFBuilder {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
-	define i32 AddGlobalVariable(i8* Name, i32 TypeOffset, i64 Address) {
+	define i32 AddGlobalVariable(i8* Name, i32 Size, i32 TypeOffset, i64 Address) {
 		i32 GlobalOffset := this->DIEStream->StartEntry(this->VariableTag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
+			this->DIEStream->AppendI32(Size)
 			
 			DWARFExpressionBuilder* LocationExpression := this->DIEStream->StartAppendExpression()
 			
