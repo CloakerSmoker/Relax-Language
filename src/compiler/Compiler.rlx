@@ -208,7 +208,7 @@ struct CompilerState {
 		for (i32 Index := 0, Index < Count, Index++) {
 			TypeInfo* Info := Container->Entries->PointerAt(Index)
 
-			this->DWARF->TranslateTypeInfo(Info, false)
+			this->DWARF->FindOrTranslateType(Info->AsNonPointer(), false)
 		}
 
 		i32 Count := Container->Children->Count()
@@ -658,10 +658,10 @@ define void PrintFunction(CompilerState* Compiler, FunctionDefine* TargetFunctio
 	*/
 	
 	if (TargetFunction->CallCount = 0) {
-		Print("^60	 - 	(0)	")
+		Print("^60		 - 	(0)	")
 	}
 	else {
-		Print("%x	 - %i	(%i)	", Compiler->CodeBase + TargetFunction->CodeOffset, Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
+		Print("%x	 - %i	(%i)	", Compiler->AddressOfCodeOffset(TargetFunction->CodeOffset), Compiler->Index - TargetFunction->CodeOffset, TargetFunction->CallCount)
 	}
 	
 	i32 NameBufferSize := TargetFunction->GetStringLength()
@@ -845,33 +845,35 @@ define void CompileOverload(CompilerState* Compiler, FunctionDefine* BaseFunctio
 	
 	;BaseFunction->CodeOffset := Compiler->Index
 
-	if (BaseFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
-		CompileDerivedMethod(Compiler, BaseFunction)
-	}
-	else if (BaseFunction->IsImported) {
-		if (Compiler->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
-			CompileImportStub(Compiler, BaseFunction)
+	if (BaseFunction->CodeOffset = 0) {
+		if (BaseFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+			CompileDerivedMethod(Compiler, BaseFunction)
 		}
-	}
-	else if !(BaseFunction->HasFullDefinition) {
-		BaseFunction~>Context->Error("Function is declared, but never defined.")
-	}
-	else {
-		i8 IsMain := BaseFunction->Name->Equals("Main")
-		
-		if (BaseFunction->CallCount != 0) {
-			Compiler->FunctionCount += 1
-			BaseFunction->CodeOffset := CompileFunction(Compiler, BaseFunction, IsMain)
+		else if (BaseFunction->IsImported) {
+			if (Compiler->Config->OutputFormat = OUTPUT_PE && BaseFunction->CallCount != 0) {
+				CompileImportStub(Compiler, BaseFunction)
+			}
 		}
-	}
-	
-	if (Compiler->Config->DumpInfo & DUMP_FUNCTIONS) {
-		/* If we're dumping a function in an overload chain, then print it as an overload
-			Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
-			 and still need to print it as an overload
-		*/
+		else if !(BaseFunction->HasFullDefinition) {
+			BaseFunction~>Context->Error("Function is declared, but never defined.")
+		}
+		else {
+			i8 IsMain := BaseFunction->Name->Equals("Main")
+			
+			if (BaseFunction->CallCount != 0) {
+				Compiler->FunctionCount += 1
+				BaseFunction->CodeOffset := CompileFunction(Compiler, BaseFunction, IsMain)
+			}
+		}
 		
-		PrintFunction(Compiler, BaseFunction, BaseFunction->Next != null || IsOverload)
+		if (Compiler->Config->DumpInfo & DUMP_FUNCTIONS) {
+			/* If we're dumping a function in an overload chain, then print it as an overload
+				Or, if we're dumping a single function and it has `->Next` set, then we've just started an overload chain
+				and still need to print it as an overload
+			*/
+			
+			PrintFunction(Compiler, BaseFunction, BaseFunction->Next != null || IsOverload)
+		}
 	}
 	
 	if !(IsOverload) {
@@ -941,6 +943,8 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 	CountReferences(Parser)
 	EliminateGlobals(Parser)
 	FoldConstants(Parser)
+
+	CheckTypes(Parser)
 	
 	CompilerState* Compiler := Alloc(#CompilerState)
 	
@@ -2310,6 +2314,8 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 	i32 Count := ForInterface->Methods->Count()
 
+	AVLTree* SeenMethods := AVLTree:New(8)
+
 	for (i32 Index := 0, Index < Count, Index++) {
 		FunctionDefine* Implementation := Info->Methods->At(Index)
 		i32 StubLabel := Info->StubLabels[Index]
@@ -2320,7 +2326,16 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		EmitJump_Label(Compiler, Implementation->LabelNumber)
 		i32 After := Compiler->Index
 
-		i8* Name := FormatString("%S.%S.%S", ForType->Name, ForInterface->Name, Implementation->Name)
+		i64 Hash := Implementation->Name->Hash()
+		i32 ID := 0
+
+		if (SeenMethods->Has(Hash)) {
+			ID := SeenMethods->GetPointer(Hash) As i32
+		}
+
+		SeenMethods->InsertPointer(Hash, (ID + 1) As void*)
+
+		i8* Name := FormatString("%S.%S.%S.%i", ForType->Name, ForInterface->Name, Implementation->Name, ID)
 		i64 Address := Compiler->AddressOfCodeOffset(Before)
 		i32 Size := After - Before
 
@@ -2333,12 +2348,17 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 	if (Compiler->Index % 4) { PushI16(Compiler, 0x9090 As i16) }
 	if (Compiler->Index % 8) { PushI32(Compiler, 0x90909090 As i32) }
 
+	i32 Before := Compiler->Index
 	SetLabel(Compiler, Info->VirtualFunctionTableLabel)
 
 	for (i32 Index := 0, Index < Count, Index++) {
 		PushI64(Compiler, 0)
 	}
 
+	i32 After := Compiler->Index
+	Compiler->RecordGeneratedFunction(FormatString("%S.%S.VirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
+
+	i32 Before := Compiler->Index
 	SetLabel(Compiler, Info->SetupVirtualFunctionTableLabel)
 	EmitLea_R64_Label(Compiler, RAX, Info->VirtualFunctionTableLabel)
 
@@ -2350,6 +2370,9 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 	}
 
 	EmitReturn(Compiler)
+
+	i32 After := Compiler->Index
+	Compiler->RecordGeneratedFunction(FormatString("%S.%S.MakeVirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
 }
 
 define void CompileClassInterfaces(CompilerState* Compiler, TypeInfo* ForType) {

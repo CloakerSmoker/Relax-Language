@@ -82,6 +82,8 @@ struct TypeInfo {
 
 	define void InitializeAggregate() {
 		this~>Fields->Initialize()
+		this->FieldsInOrder := PointerArray:New()
+		
 		this~>Methods->Initialize()
 		this~>StaticMethods->Initialize()
 	}

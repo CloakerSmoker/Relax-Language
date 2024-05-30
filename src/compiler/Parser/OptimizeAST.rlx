@@ -590,3 +590,27 @@ define void InsertClassInterfaceCasts(ParserState* Parser) {
 	
 	Free(Visitor)
 }
+
+define void CheckTypesInNamespace(ParserState* Parser, TypeNamespace* Container) {
+	i32 Count := Container->Entries->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		TypeInfo* Info := Container->Entries->PointerAt(Index)
+
+		if (Info->IsIncomplete) {
+			Info->DefinedAt->Error("Type remains incomplete")
+		}
+	}
+
+	i32 Count := Container->Children->Count()
+
+	for (i32 Index := 0, Index < Count, Index++) {
+		TypeNamespace* Child := Container->Children->PointerAt(Index)
+
+		CheckTypesInNamespace(Parser, Child)
+	}
+}
+
+define void CheckTypes(ParserState* Parser) {
+	CheckTypesInNamespace(Parser, Parser->RootNamespace)
+}

@@ -311,7 +311,7 @@ struct ParserState {
 				return TYPE_NONE
 			}
 			else {
-				FoundTypeInfo := this->AddType(null, TypeName, 0, TYPE_KIND_STRUCTURE, true)
+				FoundTypeInfo := this->AddType(TypeName~>Context, TypeName, 0, TYPE_KIND_STRUCTURE, true)
 			}
 		}
 		
@@ -1621,9 +1621,6 @@ struct ParserState {
 	}
 
 	define void ParseStructFields(TypeInfo* ForType, i8 IsUnaligned, void(void*, TypeInfo*, FunctionDefine*) OnMethod) {
-		PointerArray* FieldsInOrder := PointerArray:New()
-		ForType->FieldsInOrder := FieldsInOrder
-
 		this->CurrentNamespace->DefineEntry("self", ForType)
 		i16 TotalSize := this->ParseNestedStruct(ForType, IsUnaligned, ForType->Size, OnMethod)
 		this->CurrentNamespace->DeleteEntry("self")
@@ -2414,6 +2411,8 @@ struct ParserState {
 				Method->MethodOfType := NewType
 				Method->VirtualFunctionTableSlot := Info->Methods->Count()
 
+				NewType->Size += 8
+
 				Info->Methods->Push(Method)
 			}
 			else if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
@@ -2423,6 +2422,8 @@ struct ParserState {
 				this->PeekNextToken()->Error("Unexpected token in interface")
 			}
 		}
+
+		Print("%S->Size = %x\n", NewType->Name, NewType->Size)
 	}
 
 	declare i8 ParseProgramStatement()

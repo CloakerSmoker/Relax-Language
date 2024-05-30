@@ -109,6 +109,7 @@ struct DWARFBuilder {
 		this->StructFieldTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_MEMBER, false)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
+			A->AppendAttributePair(DWARF_ATTRIBUTE_BYTE_SIZE, DWARF_FORM_DATA_4)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_MEMBER_LOCATION, DWARF_FORM_LOCATION_EXPRESSION)
 		A->EndAbbreviation()
 		
@@ -179,7 +180,7 @@ struct DWARFBuilder {
 		A->EndAbbreviation()
 		
 		this->FunctionPointerTag := A->StartAbbreviation(DWARF_ABBREVIATION_TAG_FUNCTION_POINTER, true)
-			A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
+			;A->AppendAttributePair(DWARF_ATTRIBUTE_NAME, DWARF_FORM_STRING)
 			A->AppendAttributePair(DWARF_ATTRIBUTE_TYPE, DWARF_FORM_REFERENCE_4)
 		A->EndAbbreviation()
 		
@@ -275,10 +276,11 @@ struct DWARFBuilder {
 		return StructCompletionOffset
 	}
 	
-	define i32 AddStructField(i8* Name, i32 TypeOffset, i32 Offset) {
+	define i32 AddStructField(i8* Name, i32 Size, i32 TypeOffset, i32 Offset) {
 		i32 FieldOffset := this->DIEStream->StartEntry(this->StructFieldTag)
 			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(TypeOffset)
+			this->DIEStream->AppendI32(Size)
 			
 			DWARFExpressionBuilder* OffsetExpression := this->DIEStream->StartAppendExpression()
 			
@@ -335,9 +337,8 @@ struct DWARFBuilder {
 		this->DIEStream->StartEntry(DWARF_ABBREVIATION_TAG_NULL)
 	}
 	
-	define i32 StartFunctionPointer(i8* Name, i32 ReturnTypeOffset) {
+	define i32 StartFunctionPointer(i32 ReturnTypeOffset) {
 		i32 TypeOffset := this->DIEStream->StartEntry(this->FunctionPointerTag)
-			this->DIEStream->AppendString(Name)
 			this->DIEStream->AppendI32(ReturnTypeOffset)
 		this->DIEStream->EndEntry()
 		
@@ -454,42 +455,28 @@ struct DWARFBuilder {
 				return Offset
 			}
 			
-			void* Elements := T~>Fields->Elements
-			i32 MaxIndex := T~>Fields->BufferMaxCount As i32
+			i32 Count := T->FieldsInOrder->Count()
 			
-			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+			for (i32 Index := 0, Index < Count, Index++) {
 				; Ensure full definitions for any array/pointer/bits types, but only incomplete definitions
 				;  for nested struct types
-				
-				if (Elements[ElementIndex]) {
-					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-					
-					while (FoundElement) {
-						StructField* NextField := FoundElement->Value
-						
-						NextField->DWARFTypeOffset := this->FindOrTranslateType(NextField->ValueType)
-						
-						FoundElement := FoundElement->NextElement
-					}
-				}
+
+				StructField* NextField := T->FieldsInOrder->At(Index)
+
+				NextField->DWARFTypeOffset := this->FindOrTranslateType(NextField->ValueType)
 			}
 			
 			Offset := this->StartStructCompletion(AliasOffset, T->Size)
+
+			i32 Count := T->FieldsInOrder->Count()
 			
-			for (i32 ElementIndex := 0, ElementIndex < MaxIndex, ElementIndex += 1) {
+			for (i32 Index := 0, Index < Count, Index++) {
 				; Complete our earlier definition, filling in the actual size/fields
+
+				StructField* NextField := T->FieldsInOrder->At(Index)
+				i32 Size := GetTypeSize(NextField->ValueType)
 				
-				if (Elements[ElementIndex]) {
-					HashMapElement* FoundElement := Elements[ElementIndex] As HashMapElement*
-					
-					while (FoundElement) {
-						StructField* NextField := FoundElement->Value
-						
-						this->AddStructField(NextField->Name->Buffer, NextField->DWARFTypeOffset, NextField->Offset)
-						
-						FoundElement := FoundElement->NextElement
-					}
-				}
+				this->AddStructField(NextField->Name->Buffer, Size, NextField->DWARFTypeOffset, NextField->Offset)
 			}
 			
 			this->EndStruct()
@@ -593,10 +580,7 @@ struct DWARFBuilder {
 			
 			i32 ReturnTypeOffset := this->FindOrTranslateType(FunctionPointer->ReturnType)
 			
-			i8[100] NameBuffer
-			StringifyType(NameBuffer, MakeType(T, 0))
-			
-			Offset := this->StartFunctionPointer(NameBuffer, ReturnTypeOffset)
+			Offset := this->StartFunctionPointer(ReturnTypeOffset)
 			
 			for (i32 Index := 0, Index < FunctionPointer->ParameterCount, Index++) {
 				i32 ParameterTypeOffset := this->FindOrTranslateType(FunctionPointer->ParameterTypes[Index])
@@ -610,6 +594,8 @@ struct DWARFBuilder {
 			i32 AliasOffset := 0
 			
 			Offset := this->AddIncompleteStruct(&AliasOffset, T->Name->Buffer)
+			Offset := this->AddPointerType(Offset)
+
 			this~>Types->Set(T->Name, Offset)
 
 			if (MustBeIncomplete) {
@@ -625,7 +611,7 @@ struct DWARFBuilder {
 				FunctionDefine* Method := Methods->At(Index)
 
 				i32 ReturnTypeOffset := this->FindOrTranslateType(Method->ReturnType)
-				i32 MethodOffset := this->StartFunctionPointer(FormatString("%s.%s", T->Name->Buffer, Method->Name->Buffer), ReturnTypeOffset)
+				i32 MethodOffset := this->StartFunctionPointer(ReturnTypeOffset)
 
 				for (i32 ParameterIndex := 0, ParameterIndex < Method->ParameterCount, ParameterIndex++) {
 					i32 ParameterTypeOffset := this->FindOrTranslateType(Method->Parameters[ParameterIndex]->Type)
@@ -635,7 +621,7 @@ struct DWARFBuilder {
 
 				this->EndFunctionPointer()
 
-				MethodOffsets[Index] := MethodOffset
+				MethodOffsets[Index] := this->AddPointerType(MethodOffset)
 			}
 
 			Offset := this->StartStructCompletion(AliasOffset, T->Size)
@@ -643,10 +629,12 @@ struct DWARFBuilder {
 			for (i32 Index := 0, Index < MethodCount, Index++) {
 				FunctionDefine* Method := Methods->At(Index)
 
-				this->AddStructField(Method->Name->Buffer, MethodOffsets[Index], Index * 8)
+				this->AddStructField(Method->Name->Buffer, 8, MethodOffsets[Index], Index * 8)
 			}
 
 			this->EndStruct()
+
+			return Offset
 		}
 		
 		return Offset
