@@ -581,9 +581,6 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 		if (Value != null) {
 			FunctionDefine* Function := Root->ReturnNode->Function
 
-			Function~>Context->Warn("CF")
-			Root->ReturnNode->Value->Warn("Nuts")
-
 			if (TypesNeedDynamicCast(Value->ValueType, Function->ReturnType)) {
 				ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, Value, Function->ReturnType)
 

@@ -2179,6 +2179,7 @@ struct ParserState {
 		;Print("vtbl field: %s\n", Field->Name->Buffer)
 
 		ContainerType~>Fields->Set(Field->Name, Field)
+		ContainerType->FieldsInOrder->Push(Field)
 
 		return ImplementationInfo
 	}
