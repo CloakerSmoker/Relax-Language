@@ -266,7 +266,8 @@
 			else if (NextKeyword = KEYWORD_RETURN) {
 				if (this->CurrentFunction->ReturnType = this->void->AsNonPointer()) {
 					Result := ASTNode:New(NODE_TYPE_INTEGER, 0, this->i8->AsNonPointer())
-					Result := ASTNode:New(NODE_TYPE_RETURN, Result)
+					Result~>Context->Clone(FirstToken~>Context)
+					Result := ASTNode:New(NODE_TYPE_RETURN, ReturnStatement:New(Result, this->CurrentFunction))
 					
 					;if !(this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
 					;	this->ParseExpression()->Error("Unexpected expression, 'void' functions should not return a value.")
@@ -278,7 +279,7 @@
 					
 					CheckTypes(this->void, TYPE_NONE, ExpectedReturnType, ExpressionToReturn)
 					
-					Result := ASTNode:New(NODE_TYPE_RETURN, ExpressionToReturn)
+					Result := ASTNode:New(NODE_TYPE_RETURN, ReturnStatement:New(ExpressionToReturn, this->CurrentFunction))
 				}
 			}
 			else if (NextKeyword = KEYWORD_ASSEMBLY) {

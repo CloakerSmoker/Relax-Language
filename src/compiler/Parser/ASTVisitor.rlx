@@ -115,7 +115,7 @@ struct ASTVisitor {
 			this->VisitBlocks(Node->LoopBody)
 		}
 		else if (NodeType = NODE_TYPE_RETURN) {
-			this->VisitNodes(Node->ReturnExpression)
+			this->VisitNodes(Node->ReturnNode->Value)
 		}
 		else if (NodeType = NODE_TYPE_EXPRESSION) {
 			this->VisitNodes(Node->ExpressionStatement)
@@ -244,7 +244,13 @@ struct ASTVisitor {
 	}
 
 	define void VisitProgramRoot() {
-		this->VisitFunctionDefinition(this->Parser->MainFunction)
+		if (this->FunctionVisitFunction != null) {
+			this->FunctionVisitFunction(this, this->Parser->MainFunction)
+		}
+		else {
+			this->VisitFunctionDefinition(this->Parser->MainFunction)
+		}
+
 		this->RawVisitNodes(GetArrayLength(this->Parser->GlobalDefaults), this->Parser->GlobalDefaults)
 	}
 }

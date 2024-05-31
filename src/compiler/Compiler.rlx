@@ -1779,7 +1779,7 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
 		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
-			ReturnExpression := LastStatement->ReturnExpression
+			ReturnExpression := LastStatement->ReturnNode->Value
 			Body->StatementCount -= 1
 		}
 	}
@@ -1878,7 +1878,7 @@ define void Compile(CompilerState* Compiler, ASTNode* NodeToCompile) {
 	i8 NodeType := NodeToCompile->NodeType
 	
 	if (NodeType = NODE_TYPE_RETURN) {
-		CompileReturn(Compiler, NodeToCompile->ReturnExpression)
+		CompileReturn(Compiler, NodeToCompile->ReturnNode->Value)
 	}
 	else if (NodeType = NODE_TYPE_IF) {
 		CompileIf(Compiler, NodeToCompile->IfNode)

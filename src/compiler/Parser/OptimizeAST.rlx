@@ -479,6 +479,7 @@ define i8 TypesNeedDynamicCast(Type LeftType, Type RightType) {
 }
 
 define void InsertClassInterfaceCastsVisitFunction(ASTVisitor* Visitor, FunctionDefine* Function) {
+	Visitor->SetState(Function As i64)
 	Visitor->VisitFunctionDefinition(Function)
 }
 
@@ -574,6 +575,24 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 			*pValueNode := Cast
 		}
 	}
+	else if (Root->NodeType = NODE_TYPE_RETURN) {
+		ASTNode* Value := Root->ReturnNode->Value
+
+		if (Value != null) {
+			FunctionDefine* Function := Root->ReturnNode->Function
+
+			Function~>Context->Warn("CF")
+			Root->ReturnNode->Value->Warn("Nuts")
+
+			if (TypesNeedDynamicCast(Value->ValueType, Function->ReturnType)) {
+				ASTNode* Cast := ASTNode:New(NODE_TYPE_DYNAMIC_CAST, Value, Function->ReturnType)
+
+				Cast~>Context->Clone(Root~>Context)
+
+				Root->ReturnNode->Value := Cast
+			}
+		}
+	}
 
 	return null
 }
@@ -585,6 +604,7 @@ define void InsertClassInterfaceCasts(ParserState* Parser) {
 	
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_CALL)
+	Visitor->AllowType(NODE_TYPE_RETURN)
 	
 	Visitor->VisitProgramRoot()
 	

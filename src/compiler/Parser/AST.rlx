@@ -337,6 +337,20 @@ struct CodeBlock {
 
 ; Misc Control Flow Statements
 
+struct ReturnStatement {
+	ASTNode* Value
+	FunctionDefine* Function
+
+	static self* New(ASTNode* Value, FunctionDefine* Function) {
+		self* this := Alloc(#self)
+
+		this->Value := Value
+		this->Function := Function
+		
+		return this
+	}
+}
+
 struct IfGroup {
 	ASTNode** Conditions,
 	CodeBlock** Bodies,
@@ -746,7 +760,7 @@ struct ASTNode {
 		
 		FunctionDefine* DefineNode,
 		
-		ASTNode* ReturnExpression,
+		ReturnStatement* ReturnNode,
 		
 		ASTNode* ExpressionStatement,
 		
