@@ -219,6 +219,12 @@ struct ASTVisitor {
 					}
 				}
 				else if (Target->DerivedImplementationInfo->ForInterface = this->Parser->INewType) {
+					; We need to present a dependency on IAllocate::Allocate here somehow.
+					; We could find IAllocate and visit the derived implementation, or we
+					;  can cheat since both types are internal and visit `AllocateInstance`
+					;   directly.
+
+					this->OnFunction(this->Parser->Allocator)
 					this->OnFunction(Target->WrappedNewMethod)
 				}
 			}
