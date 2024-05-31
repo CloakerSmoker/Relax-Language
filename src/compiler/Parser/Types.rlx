@@ -371,6 +371,9 @@ struct TypeNamespace {
 			else if (Info->Is(TYPE_KIND_STRUCTURE)) {
 				Print("struct")
 			}
+			else if (Info->Is(TYPE_KIND_INTERFACE)) {
+				Print("interface")
+			}
 
 			Print(" %s\n", Info->Name->Buffer)
 		}

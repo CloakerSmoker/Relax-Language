@@ -483,7 +483,7 @@ define i8 TypesNeedDynamicCast(Type LeftType, Type RightType) {
 
 define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Root) {
 	Visitor->VisitChildren(Root)
-
+	
 	; Dynamic casts only need to be inserted at:
 	;  Call points: 
 	;   define void TakesInterface(IWhatever*)
@@ -592,8 +592,14 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 	return null
 }
 
+define void InsertClassInterfaceCastsVisitFunction(ASTVisitor* Visitor, FunctionDefine* Function) {
+	Visitor->VisitFunctionDefinition(Function)
+}
+
 define void InsertClassInterfaceCasts(ParserState* Parser) {
 	ASTVisitor* Visitor := ASTVisitor:New(Parser, &InsertClassInterfaceCastsVisitNode)
+
+	Visitor->SetFunctionVisitor(&InsertClassInterfaceCastsVisitFunction)
 
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_CALL)
