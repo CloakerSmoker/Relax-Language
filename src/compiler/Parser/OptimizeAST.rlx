@@ -315,6 +315,9 @@ define ASTNode* FoldConstantsVisitor(ASTVisitor* Visitor, ASTNode* Root) {
 			else if (TargetFunction->IsMethod = FUNCTION_IS_INTERFACE_METHOD || TargetFunction->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
 				; Dummy, again
 			}
+			else if !(TargetFunction->HasFullDefinition) {
+				; guess
+			}
 			else if (TargetFunction->Body->StatementCount = 0) {
 				; A call to an empty function
 				
@@ -478,11 +481,6 @@ define i8 TypesNeedDynamicCast(Type LeftType, Type RightType) {
 	}
 }
 
-define void InsertClassInterfaceCastsVisitFunction(ASTVisitor* Visitor, FunctionDefine* Function) {
-	Visitor->SetState(Function As i64)
-	Visitor->VisitFunctionDefinition(Function)
-}
-
 define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Root) {
 	Visitor->VisitChildren(Root)
 
@@ -597,8 +595,6 @@ define void* InsertClassInterfaceCastsVisitNode(ASTVisitor* Visitor, ASTNode* Ro
 define void InsertClassInterfaceCasts(ParserState* Parser) {
 	ASTVisitor* Visitor := ASTVisitor:New(Parser, &InsertClassInterfaceCastsVisitNode)
 
-	Visitor->SetFunctionVisitor(&InsertClassInterfaceCastsVisitFunction)
-	
 	Visitor->AllowType(NODE_TYPE_BINARY)
 	Visitor->AllowType(NODE_TYPE_CALL)
 	Visitor->AllowType(NODE_TYPE_RETURN)

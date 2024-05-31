@@ -2067,13 +2067,11 @@ struct ParserState {
 		if !(this->Allocator) {
 			; declare void* AllocateInstance(i64 Size, i64 TypeID)
 			this->Allocator := this->FindInternalFunction(Blame, "AllocateInstance", this->void->AsPointer(1), this->i64->AsNonPointer(), this->i64->AsNonPointer())
-			this->Allocator->CallCount := 2
 		}
 
 		if !(this->Deleter) {
 			; declare void DeleteInstance(void* Instance, i64 Size)
 			this->Deleter := this->FindInternalFunction(Blame, "DeleteInstance", this->void->AsNonPointer(), this->void->AsPointer(1), this->i64->AsNonPointer())
-			this->Deleter->CallCount := 2
 		}
 	}
 
@@ -2117,6 +2115,7 @@ struct ParserState {
 			FunctionDefine* Allocate := this->AddDerivedMethod(Implementation, 0, "Allocate", ThisType)
 			this->AddDerivedMethod(Implementation, 1, "Delete", VoidType, ThisType)
 
+			Allocate->IsStaticDerive := true
 			Target~>StaticMethods->Set(Allocate->Name, Allocate)
 		}
 		else if (Implementation->ForInterface = this->IDebugType) {
@@ -2218,8 +2217,6 @@ struct ParserState {
 
 		if (INewImplementation) {
 			if (Current->IsMethod = FUNCTION_IS_METHOD && Current->Name->Equals("New")) {
-				Current->CallCount := 2
-
 				i32 ParameterCount := Current->ParameterCount - 1
 				Type* ParameterTypes := Alloc(ParameterCount * #Type)
 
@@ -2232,6 +2229,7 @@ struct ParserState {
 				FunctionDefine* DerivedWrapper := this->MakeDerivedMethod(Current~>Context, "New", ForType->AsPointer(1), ParameterCount, ParameterTypes)
 
 				DerivedWrapper->IsMethod := FUNCTION_IS_DERIVED_METHOD
+				DerivedWrapper->IsStaticDerive := true
 				DerivedWrapper->MethodOfTypeName := ForType->Name
 
 				DerivedWrapper->DerivedImplementationInfo := INewImplementation

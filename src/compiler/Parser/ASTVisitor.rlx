@@ -49,6 +49,17 @@ struct ASTVisitor {
 	
 	declare void VisitNodes(...)
 	declare void RawVisitNodes(i64, ASTNode**)
+
+	declare void VisitFunctionDefinition(FunctionDefine*)
+
+	define void OnFunction(FunctionDefine* Target) {
+		if (this->FunctionVisitFunction != null) {
+			this->FunctionVisitFunction(this, Target)
+		}
+		else {
+			this->VisitFunctionDefinition(Target)
+		}
+	}
 	
 	define void RawVisitBlocks(i64 Count, CodeBlock** Blocks) {
 		for (i32 Index := 0, Index < Count, Index += 1) {
@@ -73,7 +84,7 @@ struct ASTVisitor {
 			if (this->FunctionVisitFunction != null) {
 				if (Node->UnaryNode->Operator->IntegerValue = OPERATOR_AND) {
 					if (Node->UnaryNode->Operand->NodeType = NODE_TYPE_DEFINE) {
-						this->FunctionVisitFunction(this, Node->UnaryNode->Operand->DefineNode)
+						this->OnFunction(Node->UnaryNode->Operand->DefineNode)
 					}
 				}
 			}
@@ -86,7 +97,7 @@ struct ASTVisitor {
 		else if (NodeType = NODE_TYPE_CALL) {
 			if (this->FunctionVisitFunction != null) {
 				if (Node->CallNode->BuiltinID = BUILTIN_NONE) {
-					this->FunctionVisitFunction(this, Node->CallNode->TargetFunction)
+					this->OnFunction(Node->CallNode->TargetFunction)
 				}
 			}
 
@@ -133,6 +144,9 @@ struct ASTVisitor {
 		else if (NodeType = NODE_TYPE_ASSEMBLY) {
 			this->VisitAssembly(Node->AssemblyValue)
 		}
+		else if (NodeType = NODE_TYPE_DYNAMIC_CAST) {
+			this->VisitNodes(Node->CastFromValue)
+		}
 	}
 	
 	define void RawVisitNodes(i64 Count, ASTNode** Nodes) {
@@ -157,8 +171,6 @@ struct ASTVisitor {
 		this->RawVisitNodes(Nodes[0], (Nodes + 8) As ASTNode**)
 	}
 
-	declare void VisitFunctionDefinition(FunctionDefine*)
-
 	define void VisitAssembly(AssemblyBlock* Target) {
 		for (i32 InstructionIndex := 0, InstructionIndex < Target->InstructionCount, InstructionIndex += 1) {
 			InstructionNode* NextInstruction := Target->Instructions[InstructionIndex]
@@ -168,9 +180,7 @@ struct ASTVisitor {
 					InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
 					
 					if (NextOperand != null && NextOperand->ReferencesFunction) {
-						if (this->FunctionVisitFunction != null) {
-							this->FunctionVisitFunction(this, NextOperand->FunctionReference)
-						}
+						this->OnFunction(NextOperand->FunctionReference)
 					}
 				}
 			}
@@ -192,46 +202,45 @@ struct ASTVisitor {
 		}
 		else if !(Target->HasFullDefinition) {
 			if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
-				if (this->FunctionVisitFunction != null) {
-					; When we derive IAllocate, we are indirectly calling
-					;  `AllocateInstance` and `DeleteInstance` without reflecting
-					;   this relationship in the call graph.
-					; To ensure that `(Allocate|Delete)Instance` aren't eliminated
-					;  and that the functions they depend on aren't eliminated, we
-					;   need to manually "fix" the call graph here by visiting the
-					;    "true" targets of `IAllocate` instead of the derived targets.
+				; When we derive IAllocate, we are indirectly calling
+				;  `AllocateInstance` and `DeleteInstance` without reflecting
+				;   this relationship in the call graph.
+				; To ensure that `(Allocate|Delete)Instance` aren't eliminated
+				;  and that the functions they depend on aren't eliminated, we
+				;   need to manually "fix" the call graph here by visiting the
+				;    "true" targets of `IAllocate` instead of the derived targets.
 
-					if (Target->DerivedImplementationInfo->ForInterface = this->Parser->IAllocateType) {
-						if (Target->DerivedMethodIndex = 0) {
-							this->FunctionVisitFunction(this, this->Parser->Allocator)
-						}
-						else if (Target->DerivedMethodIndex = 1) {
-							this->FunctionVisitFunction(this, this->Parser->Deleter)
-						}
+				if (Target->DerivedImplementationInfo->ForInterface = this->Parser->IAllocateType) {
+					if (Target->DerivedMethodIndex = 0) {
+						this->OnFunction(this->Parser->Allocator)
 					}
+					else if (Target->DerivedMethodIndex = 1) {
+						this->OnFunction(this->Parser->Deleter)
+					}
+				}
+				else if (Target->DerivedImplementationInfo->ForInterface = this->Parser->INewType) {
+					this->OnFunction(Target->WrappedNewMethod)
 				}
 			}
 			else if (Target->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
-				if (this->FunctionVisitFunction != null) {
-					; When we're visiting a call to an interface method:
-					;  Visit all possible implementations of the method, since it is
-					;   way too hard to actually figure out where the call ends up.
+				; When we're visiting a call to an interface method:
+				;  Visit all possible implementations of the method, since it is
+				;   way too hard to actually figure out where the call ends up.
 
-					TypeInfo* InterfaceType := Target->MethodOfType
-					InterfaceInfo* Info := InterfaceType->InterfaceInfo
+				TypeInfo* InterfaceType := Target->MethodOfType
+				InterfaceInfo* Info := InterfaceType->InterfaceInfo
 
-					i32 ImplementerCount := Info->ImplementedBy->Count()
+				i32 ImplementerCount := Info->ImplementedBy->Count()
 
-					for (i32 Index := 0, Index < ImplementerCount, Index++) {
-						TypeInfo* Implementer := Info->ImplementedBy->PointerAt(Index)
-						ClassInfo* ImplementerClass := Implementer->ClassInfo
+				for (i32 Index := 0, Index < ImplementerCount, Index++) {
+					TypeInfo* Implementer := Info->ImplementedBy->PointerAt(Index)
+					ClassInfo* ImplementerClass := Implementer->ClassInfo
 
-						InterfaceImplementationInfo* Implementation := ImplementerClass->Interfaces->GetPointer(InterfaceType As i64)
+					InterfaceImplementationInfo* Implementation := ImplementerClass->Interfaces->GetPointer(InterfaceType As i64)
 
-						FunctionDefine* ImplementationMethod := Implementation->Methods->At(Target->VirtualFunctionTableSlot)
-						
-						this->FunctionVisitFunction(this, ImplementationMethod)
-					}
+					FunctionDefine* ImplementationMethod := Implementation->Methods->At(Target->VirtualFunctionTableSlot)
+					
+					this->OnFunction(ImplementationMethod)
 				}
 			}
 			else {
@@ -244,13 +253,8 @@ struct ASTVisitor {
 	}
 
 	define void VisitProgramRoot() {
-		if (this->FunctionVisitFunction != null) {
-			this->FunctionVisitFunction(this, this->Parser->MainFunction)
-		}
-		else {
-			this->VisitFunctionDefinition(this->Parser->MainFunction)
-		}
-
+		this->OnFunction(this->Parser->MainFunction)
+		
 		this->RawVisitNodes(GetArrayLength(this->Parser->GlobalDefaults), this->Parser->GlobalDefaults)
 	}
 }

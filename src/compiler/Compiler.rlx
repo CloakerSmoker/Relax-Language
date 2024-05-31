@@ -941,13 +941,14 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 }
 
 define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFilePath) {
-	InsertClassInterfaceCasts(Parser)
+	CheckTypes(Parser)
 
 	CountReferences(Parser)
+	InsertClassInterfaceCasts(Parser)
+
 	EliminateGlobals(Parser)
 	FoldConstants(Parser)
 
-	CheckTypes(Parser)
 	
 	CompilerState* Compiler := Alloc(#CompilerState)
 	

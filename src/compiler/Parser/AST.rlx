@@ -576,6 +576,7 @@ struct FunctionDefine {
 	i32 VirtualFunctionTableSlot
 	i32 DerivedMethodIndex
 	TypeInfo* MethodOfType
+	i8 IsStaticDerive
 	
 	SafeString* MethodOfTypeName,
 	
@@ -654,7 +655,7 @@ struct FunctionDefine {
 		}
 		
 		if (this->IsMethod) {
-			if (this->IsMethod = FUNCTION_IS_STATIC_METHOD) {
+			if (this->IsMethod = FUNCTION_IS_STATIC_METHOD || this->IsStaticDerive) {
 				Buffer[Offset] := StaticMethodSeperatorCharacter
 			}
 			else {
@@ -676,10 +677,12 @@ struct FunctionDefine {
 		Offset += 1
 		
 		for (i32 ParameterIndex := 0, ParameterIndex < this->ParameterCount, ParameterIndex += 1) {
-			if (ParameterIndex = 0 && this->IsMethod = FUNCTION_IS_METHOD) {
-				; Skip the `this` parameter (but only if we're dealing with a plain method)
-				
-				continue
+			if (ParameterIndex = 0) {
+				if (this->IsMethod && this->IsMethod != FUNCTION_IS_STATIC_METHOD) {
+					; Skip the `this` parameter for non-static methods
+					
+					continue
+				}
 			}
 			
 			VariableInfo* NextParameter := this->Parameters[ParameterIndex]
