@@ -2422,7 +2422,7 @@ struct ParserState {
 			}
 		}
 
-		Print("%S->Size = %x\n", NewType->Name, NewType->Size)
+		;Print("%S->Size = %x\n", NewType->Name, NewType->Size)
 	}
 
 	declare i8 ParseProgramStatement()
