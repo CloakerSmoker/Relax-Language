@@ -106,5 +106,19 @@ define i32 Main() {
     Print("typeid:(Opinionated): %x\n", typeid:(Opinionated))
     Print("OD->TypeID()        : %x\n", OD->TypeID())
 
+    Print("\nNew:\n")
+
+    Print("new Complicated()        : ")
+    new Complicated()
+    Print("\n")
+
+    Print("new Complicated(i32)     : ")
+    new Complicated(80)
+    Print("\n")
+
+    Print("new Complicated(i32, i32): ")
+    new Complicated(90, 100)
+    Print("\n")
+
     return 0
 }

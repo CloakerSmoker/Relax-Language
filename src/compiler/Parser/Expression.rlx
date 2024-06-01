@@ -477,6 +477,46 @@
 		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COLON_COLON)) {
 			AnchorQualifiedName := true
 		}
+
+		if (NextToken->Type = TOKEN_TYPE_IDENTIFIER && NextToken->StringValue->Equals("new")) {
+			QualifiedName* ClassName := this->TryParseQualifiedName(&ErrorMessage)
+
+			if (ErrorMessage = null) {
+				TypeInfo* Info := this->LookupQualifiedName(ClassName)
+
+				if (Info = null) {
+					ClassName~>Context->Error("Does not name a type")
+				}
+				else if (Info->IsIncomplete || !Info->Is(TYPE_KIND_STRUCTURE) || !Info->IsClass) {
+					ClassName~>Context->Error("Does not name a class")
+				}
+
+				HashMapElement* FirstNewElement := Info~>StaticMethods->Get("New")
+
+				if !(FirstNewElement) {
+					ClassName~>Context->Error("Does not define 'New'")
+				}
+
+				FunctionDefine* FirstNew := FirstNewElement->Value
+
+				this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN, "Expected opening '(' for function call")
+
+				i8 ParameterCount := 0
+				ASTNode** Parameters := this->ParseParameterList(&ParameterCount)
+
+				CallExpression* CallNode := null
+				ASTNode* Result := ASTNode:NewCallNode(Parameters, ParameterCount, &CallNode, NextToken~>Context, this->GetCurrentTokenContext())
+
+				FunctionDefine* Match := this->MatchFunctionCall(FirstNew, Parameters, ParameterCount, Result~>Context)
+
+				CallNode->TargetFunction := Match
+				Result->ValueType := Match->ReturnType
+
+				return Result
+			}
+
+			ErrorMessage := null
+		}
 		
 		if (NextToken->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_PAREN)) {
 			; If the next token is an `(`, then parse a sub-expression and consume a closing `)`

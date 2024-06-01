@@ -19,3 +19,8 @@ BD->TypeID()   : 0x401FC6B3A30D0D4
 O->TypeID()         : 0xC43503884CB69701
 typeid:(Opinionated): 0xC43503884CB69701
 OD->TypeID()        : 0xC43503884CB69701
+
+New:
+new Complicated()        : Complicated.New()
+new Complicated(i32)     : Complicated.New(80)
+new Complicated(i32, i32): Complicated.New(90, 100)
