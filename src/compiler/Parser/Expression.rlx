@@ -494,7 +494,11 @@
 				HashMapElement* FirstNewElement := Info~>StaticMethods->Get("New")
 
 				if !(FirstNewElement) {
-					ClassName~>Context->Error("Does not define 'New'")
+					FirstNewElement := Info~>StaticMethods->Get("Allocate")
+
+					if !(FirstNewElement) {
+						ClassName~>Context->Error("Does not define 'New' or 'Allocate'")
+					}
 				}
 
 				FunctionDefine* FirstNew := FirstNewElement->Value

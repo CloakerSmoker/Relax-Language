@@ -108,17 +108,19 @@ define i32 Main() {
 
     Print("\nNew:\n")
 
-    Print("new Complicated()        : ")
+    Print("new Complicated()          : ")
     new Complicated()
     Print("\n")
 
-    Print("new Complicated(i32)     : ")
+    Print("new Complicated(i32)       : ")
     new Complicated(80)
     Print("\n")
 
-    Print("new Complicated(i32, i32): ")
+    Print("new Complicated(i32, i32)  : ")
     new Complicated(90, 100)
     Print("\n")
+
+    Print("new Opinionated()->TypeID(): %x\n", (new Opinionated())->TypeID())
 
     return 0
 }
