@@ -1031,7 +1031,11 @@ struct ParserState {
 		}
 		
 		i32 Before := this->Freeze()
+
+		SourceContext* PotentialTypeContext := Alloc(#SourceContext)
+		PotentialTypeContext->Clone(this->PeekNextToken()~>Context)
 		Type PotentialType := this->TryParseType(true, ErrorMessage)
+		PotentialTypeContext->Merge(this->GetCurrentTokenContext())
 		
 		if (PotentialType != TYPE_NONE && *ErrorMessage = null) {
 			; If we could parse a full type name, then we *might* be dealing with a variable declaration.
@@ -1070,6 +1074,17 @@ struct ParserState {
 					return this->ParseExpression()
 				}
 				else if (ForParameter = false && this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+					TypeInfo* Base := GetBaseType(PotentialType)
+
+					if !(PotentialType.IsArray) {
+						if (GetPointerDepth(PotentialType) != 0) {
+							PotentialTypeContext->Error("Can't initialize a pointer")
+						}
+						else if (Base->IsIncomplete || !Base->Is(TYPE_KIND_STRUCTURE)) {
+							PotentialTypeContext->Error("Can't initialize a non-array/incomplete/non-structure type")
+						}
+					}
+
 					ASTNode* NewVariableNode := ASTNode:New(NODE_TYPE_VARIABLE, NewVariable, PotentialType)
 					
 					ASTNode* InitializersBlock := this->ParseInitializer(NewVariableNode)

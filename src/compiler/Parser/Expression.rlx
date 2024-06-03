@@ -891,7 +891,7 @@
 
 							TypeInfo* MethodBase := this->LookupQualifiedName(MethodTypeName)
 							
-							if (MethodBase) {
+							if (MethodBase && !MethodBase->IsIncomplete) {
 								HashMapElement* MethodElement := MethodBase~>Methods->Get(MethodName->StringValue)
 								
 								if (MethodElement) {
