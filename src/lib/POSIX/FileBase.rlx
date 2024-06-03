@@ -19,9 +19,10 @@ i32 SEEK_RELATIVE := 1
 i32 SEEK_END := 2
 
 enum SeekMode {
-	Set,
-	Offset,
-	End
+	Set := 0,
+	Offset := 1,
+    Relative := 1,
+	End := 2
 }
 
 define i32 FileSeek(i64 File, i32 Offset, i32 Mode) {
