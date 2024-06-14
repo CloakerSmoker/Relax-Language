@@ -25,3 +25,6 @@ new Complicated()          : Complicated.New()
 new Complicated(i32)       : Complicated.New(80)
 new Complicated(i32, i32)  : Complicated.New(90, 100)
 new Opinionated()->TypeID(): 0xC43503884CB69701
+
+Default Methods Calling Methods
+E->GetNumber(): ICMFD.GN(): ICMFD.IGN: 200

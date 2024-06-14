@@ -2326,7 +2326,16 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 		i32 Before := Compiler->Index
 		SetLabel(Compiler, StubLabel)
-		EmitSub_R64_IX(Compiler, RDI, Offset * 8)
+
+		if (Implementation != ForInterface->Methods->At(Index)) {
+			; `this` is a `ForInterface*`, which we need to cast back to a `ForType*`
+			;  except for when `Implementation` is a default method implementation
+			;   which actually expects a `ForInterface*`. In this case, we can just
+			;    skip the cast entirely.
+
+			EmitSub_R64_IX(Compiler, RDI, Offset * 8)
+		}
+
 		EmitJump_Label(Compiler, Implementation->LabelNumber)
 		i32 After := Compiler->Index
 

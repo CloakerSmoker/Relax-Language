@@ -54,6 +54,22 @@ class CantBeEliminated implements IDefineDefaults {
     i8 Dummy
 }
 
+interface ICallMethodsFromDefaults {
+    virtual i32 InternalGetNumber() {
+        Print("ICMFD.IGN: ")
+        return 200
+    }
+
+    virtual i32 GetNumber() {
+        Print("ICMFD.GN(): ")
+        return this->InternalGetNumber()
+    }
+}
+
+class Empty implements ICallMethodsFromDefaults, derives IAllocate {
+    i8 Dummy
+}
+
 define i32 Main() {
     Print("IAllocate:\n")
 
@@ -121,6 +137,13 @@ define i32 Main() {
     Print("\n")
 
     Print("new Opinionated()->TypeID(): %x\n", (new Opinionated())->TypeID())
+
+    Print("\nDefault Methods Calling Methods\n")
+
+    Empty* E := new Empty()
+    Print("E->GetNumber(): ")
+    i32 Value := E->GetNumber()
+    Print("%i\n", Value)
 
     return 0
 }
