@@ -2284,7 +2284,9 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 		}
 	}
 	else if (ExpressionType = NODE_TYPE_DYNAMIC_CAST) {
-		ExpressionToCompile->Warn("Dynamic Cast")
+		if !(Compiler->Config->DumpInfo & DUMP_SILENT) {
+			ExpressionToCompile->Warn("Dynamic Cast")
+		}
 
 		ASTNode* Value := ExpressionToCompile->CastFromValue
 
