@@ -725,7 +725,9 @@ define void DoFunctionDefinePrint(PrintOutputAdapterPrototype* this, i8* Format,
 
 	Function->StringifyInto(Buffer, '.')
 
-	this->DoPrintCharacters(Buffer, Length - 1)
+	i32 Length := StringLength(Buffer)
+
+	this->DoPrintCharacters(Buffer, Length)
 
 	Free(Buffer)
 	
