@@ -1,0 +1,166 @@
+
+class CallGraphNode derives INew {
+    FunctionDefine* Value
+
+    AVLTree* CalledFrom ; <CallGraphNode*, CallGraphNode*>
+    AVLTree* CallsTo ; <CallGraphNode*, CallGraphNode*>
+
+    i8 Visited
+
+    define void New(FunctionDefine* Value) {
+        this->Value := Value
+
+        ;this->CalledFrom := new AVLTree(#CallGraphNode*)
+        this->CalledFrom := AVLTree:New(#CallGraphNode*)
+        ;this->CallsTo := new AVLTree(#CallGraphNode*)
+        this->CallsTo := AVLTree:New(#CallGraphNode*)
+    }
+}
+
+declare void* CallGraphVisitFunction(ASTVisitor*, FunctionDefine*)
+declare void* CallGraphVisitNode(ASTVisitor*, ASTNode*)
+
+class CallGraph derives INew {
+    ParserState* Parser
+
+    AVLTree* Functions ; <CallGraphNode*>
+    PointerArray* FunctionQueue ; <FunctionDefine*>
+
+    ASTVisitor* Visitor
+
+    define void New(ParserState* Parser) {
+        this->Parser := Parser
+
+        ;this->Functions := new AVLTree(#CallGraphNode*)
+        this->Functions := AVLTree:New(#CallGraphNode*)
+        ;this->FunctionQueue := new PointerArray()
+        this->FunctionQueue := PointerArray:New()
+
+        ;this->Visitor := new ASTVisitor(Parser, &CallGraphVisitNode)
+        this->Visitor := ASTVisitor:New(Parser, &CallGraphVisitNode)
+        this->Visitor->SetFunctionVisitor(&CallGraphVisitFunction)
+        this->Visitor->SetState(this As i64)
+    }
+
+    define CallGraphNode* FindOrAddNode(FunctionDefine* Function) {
+        CallGraphNode* Node := this->Functions->GetPointer(Function)
+
+        if !(Node) {
+            Node := new CallGraphNode(Function)
+
+            this->Functions->InsertPointer(Function, Node)
+        }
+
+        return Node
+    }
+
+    FunctionDefine* CurrentFunction
+
+    define void VisitFunction(FunctionDefine* Function) {
+        this->CurrentFunction := Function
+
+        this->Visitor->VisitFunctionDefinition(Function)
+    }
+
+    define void InsertEdge(AVLTree* Map, CallGraphNode* Node) {
+        if !(Map->Has(Node)) {
+            Map->InsertPointer(Node, Node)
+        }
+    }
+
+    define void VisitEdge(FunctionDefine* To) {
+        CallGraphNode* FromNode := this->FindOrAddNode(this->CurrentFunction)
+        CallGraphNode* ToNode := this->FindOrAddNode(To)
+
+        this->InsertEdge(FromNode->CallsTo, ToNode)
+        this->InsertEdge(ToNode->CalledFrom, FromNode)
+
+        if !(ToNode->Visited) {
+            this->FunctionQueue->Push(To)
+        }
+    }
+
+    define void VisitProgramRoot() {
+        this->VisitFunction(this->Parser->MainFunction)
+
+        ; Note: this depends on `this->CurrentFunction` being preserved to make any calls
+        ;  from global defaults appear to come from `Main`
+        this->Visitor->RawVisitNodes(GetArrayLength(this->Parser->GlobalDefaults), this->Parser->GlobalDefaults)
+
+        while (this->FunctionQueue->Count()) {
+            FunctionDefine* Next := this->FunctionQueue->Pop()
+
+            this->VisitFunction(Next)
+        }
+    }
+
+    define void DumpNode(CallGraphNode* Node) {
+        i32 CallsToFunction := Node->CalledFrom->Count()
+        i32 CallsFromFunction := Node->CallsTo->Count()
+
+        Print("%func:\n", Node->Value)
+        Print("\tIs called from %i others:\n", CallsToFunction)
+
+        for (i32 Index := 0, Index < CallsToFunction, Index++) {
+            CallGraphNode* Caller := Node->CalledFrom->PointerAt(Index)
+
+            Print("\t\t%func\n", Caller->Value)
+        }
+
+        Print("\tCalls to %i others:\n", CallsFromFunction)
+
+        for (i32 Index := 0, Index < CallsFromFunction, Index++) {
+            CallGraphNode* Called := Node->CallsTo->PointerAt(Index)
+
+            Print("\t\t%func\n", Called->Value)
+        }
+    }
+
+    define void DumpAll() {
+        i32 Count := this->Functions->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            CallGraphNode* Node := this->Functions->PointerAt(Index)
+
+            this->DumpNode(Node)
+        }
+    }
+
+    define void DumpNodeDot(CallGraphNode* Node) {
+        i32 CallsFromFunction := Node->CallsTo->Count()
+
+        Print("\t%i [label=\"%func\"];\n", Node->Value, Node->Value)
+
+        for (i32 Index := 0, Index < CallsFromFunction, Index++) {
+            CallGraphNode* Called := Node->CallsTo->PointerAt(Index)
+
+            Print("\t%i -> %i;\n", Node->Value, Called->Value)
+        }
+    }
+
+    define void DumpAllDot() {
+        Print("digraph G {\n")
+
+        i32 Count := this->Functions->Count()
+
+        for (i32 Index := 0, Index < Count, Index++) {
+            CallGraphNode* Node := this->Functions->PointerAt(Index)
+
+            this->DumpNodeDot(Node)
+        }
+
+        Print("}\n")
+    }
+}
+
+define void* CallGraphVisitFunction(ASTVisitor* Visitor, FunctionDefine* Function) {
+    CallGraph* Graph := Visitor->GetState() As void*
+
+    Graph->VisitEdge(Function)
+
+    return null
+}
+
+define void* CallGraphVisitNode(ASTVisitor* Visitor, ASTNode* Node) {
+    return null
+}
