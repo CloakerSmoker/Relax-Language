@@ -140,6 +140,8 @@ class CallGraph derives INew {
 
     define void DumpAllDot() {
         Print("digraph G {\n")
+        Print("\toverlap = false;\n")
+        Print("\tsplines = true;\n")
 
         i32 Count := this->Functions->Count()
 

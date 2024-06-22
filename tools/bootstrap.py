@@ -67,7 +67,7 @@ recursion_count = args.iterations
 if args.release:
 	print('Building for release')
 
-compile_command_format += ' ' + ' '.join(sys.argv[2:])
+compile_command_format += ' ' #+ ' '.join(sys.argv[2:])
 
 safe_compiler = path_join(bin_dir, f'{running_on.lower()}_compiler.{platform_extension}')
 
@@ -142,7 +142,9 @@ move(compiler_output, safe_compiler)
 for platform, extension in all_platforms:
     output = path_join(bin_dir, f'{platform}_new_compiler.{extension}')
     use_compiler(safe_compiler)
-    command = compile_command_format.format(output) + ' --elf --debug --' + platform
+    command = compile_command_format.format(output) + ' --debug --' + platform
+
+    #print(command)
 
     result = subprocess.run(command, cwd=cwd, shell=True, capture_output=True)
     stderr_text = result.stderr.decode('UTF-8')

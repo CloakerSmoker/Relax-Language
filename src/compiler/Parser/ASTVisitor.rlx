@@ -241,6 +241,9 @@ struct ASTVisitor {
 				this->OnFunction(ImplementationMethod)
 			}
 		}
+		else if (Target->IsImported) {
+			; No destinations to visit
+		}
 		else if !(Target->HasFullDefinition) {
 			Target~>Context->Error("Function is declared but never defined")
 		}
