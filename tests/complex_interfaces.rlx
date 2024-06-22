@@ -70,6 +70,26 @@ class Empty implements ICallMethodsFromDefaults, derives IAllocate {
     i8 Dummy
 }
 
+class DefinesGetNumber implements ICallMethodsFromDefaults {
+    define i32 GetNumber() {
+        return 400
+    }
+}
+
+class OverloadsDefaults implements ICallMethodsFromDefaults, derives IAllocate {
+    define i32 InternalGetNumber() {
+        Print("OD.IGN: ")
+        return 300
+    }
+}
+
+define void Test() {
+    OverloadsDefaults* OSD := new OverloadsDefaults()
+    Print("OSD->GetNumber(): ")
+    i32 Value := OSD->GetNumber()
+    Print("%i\n", Value)
+}
+
 define i32 Main() {
     Print("IAllocate:\n")
 
@@ -144,6 +164,8 @@ define i32 Main() {
     Print("E->GetNumber(): ")
     i32 Value := E->GetNumber()
     Print("%i\n", Value)
+
+    Test()
 
     return 0
 }

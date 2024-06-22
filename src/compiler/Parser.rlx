@@ -2103,7 +2103,7 @@ struct ParserState {
 		Definition->DerivedImplementationInfo := Info
 		Definition->DerivedMethodIndex := Index
 
-		Definition->CallCount := 2
+		;Definition->CallCount := 2
 
 		Info->Methods->Push(Definition)
 
@@ -2390,7 +2390,7 @@ struct ParserState {
 
 				ImplementationInfo->Methods->Push(ImplementationMethod)
 
-				ImplementationMethod->CallCount := 2
+				;ImplementationMethod->CallCount := 2
 			}
 		}
 		

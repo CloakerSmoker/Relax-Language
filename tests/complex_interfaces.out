@@ -28,3 +28,4 @@ new Opinionated()->TypeID(): 0xC43503884CB69701
 
 Default Methods Calling Methods
 E->GetNumber(): ICMFD.GN(): ICMFD.IGN: 200
+OSD->GetNumber(): ICMFD.GN(): OD.IGN: 300

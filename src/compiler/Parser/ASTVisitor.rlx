@@ -51,6 +51,7 @@ struct ASTVisitor {
 	declare void RawVisitNodes(i64, ASTNode**)
 
 	declare void VisitFunctionDefinition(FunctionDefine*)
+	declare void VisitFunctionDestinations(FunctionDefine*)
 
 	define void OnFunction(FunctionDefine* Target) {
 		if (this->FunctionVisitFunction != null) {
@@ -75,8 +76,12 @@ struct ASTVisitor {
 	define void VisitBlocks(... Blocks) {
 		this->RawVisitBlocks(Blocks[0], (Blocks + 8) As CodeBlock**)
 	}
+
+	ASTNode* LastNode
+
 	define void VisitChildren(ASTNode* Node) {
 		Node->LastVisitor := this->ID
+		this->LastNode := Node
 		
 		i8 NodeType := Node->NodeType
 		
@@ -84,7 +89,7 @@ struct ASTVisitor {
 			if (this->FunctionVisitFunction != null) {
 				if (Node->UnaryNode->Operator->IntegerValue = OPERATOR_AND) {
 					if (Node->UnaryNode->Operand->NodeType = NODE_TYPE_DEFINE) {
-						this->OnFunction(Node->UnaryNode->Operand->DefineNode)
+						this->VisitFunctionDestinations(Node->UnaryNode->Operand->DefineNode)
 					}
 				}
 			}
@@ -97,7 +102,7 @@ struct ASTVisitor {
 		else if (NodeType = NODE_TYPE_CALL) {
 			if (this->FunctionVisitFunction != null) {
 				if (Node->CallNode->BuiltinID = BUILTIN_NONE) {
-					this->OnFunction(Node->CallNode->TargetFunction)
+					this->VisitFunctionDestinations(Node->CallNode->TargetFunction)
 				}
 			}
 
@@ -180,10 +185,67 @@ struct ASTVisitor {
 					InstructionOperand* NextOperand := NextInstruction->Operands[OperandIndex]
 					
 					if (NextOperand != null && NextOperand->ReferencesFunction) {
-						this->OnFunction(NextOperand->FunctionReference)
+						this->VisitFunctionDestinations(NextOperand->FunctionReference)
 					}
 				}
 			}
+		}
+	}
+
+	define void VisitFunctionDestinations(FunctionDefine* Target) {
+		if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+			; When we derive IAllocate, we are indirectly calling
+			;  `AllocateInstance` and `DeleteInstance` without reflecting
+			;   this relationship in the call graph.
+			; To ensure that `(Allocate|Delete)Instance` aren't eliminated
+			;  and that the functions they depend on aren't eliminated, we
+			;   need to manually "fix" the call graph here by visiting the
+			;    "true" targets of `IAllocate` instead of the derived targets.
+
+			if (Target->DerivedImplementationInfo->ForInterface = this->Parser->IAllocateType) {
+				if (Target->DerivedMethodIndex = 0) {
+					this->OnFunction(this->Parser->Allocator)
+				}
+				else if (Target->DerivedMethodIndex = 1) {
+					this->OnFunction(this->Parser->Deleter)
+				}
+			}
+			else if (Target->DerivedImplementationInfo->ForInterface = this->Parser->INewType) {
+				; We need to present a dependency on IAllocate::Allocate here somehow.
+				; We could find IAllocate and visit the derived implementation, or we
+				;  can cheat since both types are internal and visit `AllocateInstance`
+				;   directly.
+
+				this->OnFunction(this->Parser->Allocator)
+				this->OnFunction(Target->WrappedNewMethod)
+			}
+		}
+		else if (Target->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			; When we're visiting a call to an interface method:
+			;  Visit all possible implementations of the method, since it is
+			;   way too hard to actually figure out where the call ends up.
+
+			TypeInfo* InterfaceType := Target->MethodOfType
+			InterfaceInfo* Info := InterfaceType->InterfaceInfo
+
+			i32 ImplementerCount := Info->ImplementedBy->Count()
+
+			for (i32 Index := 0, Index < ImplementerCount, Index++) {
+				TypeInfo* Implementer := Info->ImplementedBy->PointerAt(Index)
+				ClassInfo* ImplementerClass := Implementer->ClassInfo
+
+				InterfaceImplementationInfo* Implementation := ImplementerClass->Interfaces->GetPointer(InterfaceType As i64)
+
+				FunctionDefine* ImplementationMethod := Implementation->Methods->At(Target->VirtualFunctionTableSlot)
+				
+				this->OnFunction(ImplementationMethod)
+			}
+		}
+		else if !(Target->HasFullDefinition) {
+			Target~>Context->Error("Function is declared but never defined")
+		}
+		else {
+			this->OnFunction(Target)
 		}
 	}
 
@@ -200,58 +262,16 @@ struct ASTVisitor {
 		else if (Target->Attributes & FUNCTION_ATTRIBUTE_ASSEMBY) {
 			this->VisitAssembly(Target->AssemblyBody)
 		}
+		else if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+			; No definition to visit, sorry.
+		}
+		else if (Target->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
+			if (Target->HasFullDefinition) {
+				this->VisitBlocks(Target->Body)
+			}
+		}
 		else if !(Target->HasFullDefinition) {
-			if (Target->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
-				; When we derive IAllocate, we are indirectly calling
-				;  `AllocateInstance` and `DeleteInstance` without reflecting
-				;   this relationship in the call graph.
-				; To ensure that `(Allocate|Delete)Instance` aren't eliminated
-				;  and that the functions they depend on aren't eliminated, we
-				;   need to manually "fix" the call graph here by visiting the
-				;    "true" targets of `IAllocate` instead of the derived targets.
-
-				if (Target->DerivedImplementationInfo->ForInterface = this->Parser->IAllocateType) {
-					if (Target->DerivedMethodIndex = 0) {
-						this->OnFunction(this->Parser->Allocator)
-					}
-					else if (Target->DerivedMethodIndex = 1) {
-						this->OnFunction(this->Parser->Deleter)
-					}
-				}
-				else if (Target->DerivedImplementationInfo->ForInterface = this->Parser->INewType) {
-					; We need to present a dependency on IAllocate::Allocate here somehow.
-					; We could find IAllocate and visit the derived implementation, or we
-					;  can cheat since both types are internal and visit `AllocateInstance`
-					;   directly.
-
-					this->OnFunction(this->Parser->Allocator)
-					this->OnFunction(Target->WrappedNewMethod)
-				}
-			}
-			else if (Target->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
-				; When we're visiting a call to an interface method:
-				;  Visit all possible implementations of the method, since it is
-				;   way too hard to actually figure out where the call ends up.
-
-				TypeInfo* InterfaceType := Target->MethodOfType
-				InterfaceInfo* Info := InterfaceType->InterfaceInfo
-
-				i32 ImplementerCount := Info->ImplementedBy->Count()
-
-				for (i32 Index := 0, Index < ImplementerCount, Index++) {
-					TypeInfo* Implementer := Info->ImplementedBy->PointerAt(Index)
-					ClassInfo* ImplementerClass := Implementer->ClassInfo
-
-					InterfaceImplementationInfo* Implementation := ImplementerClass->Interfaces->GetPointer(InterfaceType As i64)
-
-					FunctionDefine* ImplementationMethod := Implementation->Methods->At(Target->VirtualFunctionTableSlot)
-					
-					this->OnFunction(ImplementationMethod)
-				}
-			}
-			else {
-				Target~>Context->Error("Function is declared but never defined")
-			}
+			Target~>Context->Error("Function is declared but never defined")
 		}
 		else {
 			this->VisitBlocks(Target->Body)
@@ -259,7 +279,7 @@ struct ASTVisitor {
 	}
 
 	define void VisitProgramRoot() {
-		this->OnFunction(this->Parser->MainFunction)
+		this->VisitFunctionDestinations(this->Parser->MainFunction)
 		
 		this->RawVisitNodes(GetArrayLength(this->Parser->GlobalDefaults), this->Parser->GlobalDefaults)
 	}
