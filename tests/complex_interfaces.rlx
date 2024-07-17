@@ -83,12 +83,29 @@ class OverloadsDefaults implements ICallMethodsFromDefaults, derives IAllocate {
     }
 }
 
+struct NotAClass {
+    static self* New() {
+        Print("NotAClass:New()")
+
+        return null
+    }
+
+    static self* New(i32 Value) {
+        Print("NotAClass:New(i32)")
+
+        return null
+    }
+}
+
 define void Test() {
     OverloadsDefaults* OSD := new OverloadsDefaults()
     Print("OSD->GetNumber(): ")
     i32 Value := OSD->GetNumber()
     Print("%i\n", Value)
 }
+
+#Require "$/PointerArray.rlx"
+#Require "$/AVLTree.rlx"
 
 define i32 Main() {
     Print("IAllocate:\n")
@@ -166,6 +183,23 @@ define i32 Main() {
     Print("%i\n", Value)
 
     Test()
+
+    Print("\n`new` For Non-Class Types:\n")
+    Print("new NotAClass(): ")
+    new NotAClass()
+    Print("\n")
+
+    Print("new NotAClass(350): ")
+    new NotAClass(350)
+    Print("\n")
+    
+    Print("new PointerArray()->Count(): ")
+    i32 Count := new PointerArray()->Count()
+    Print("%i\n", Count)
+
+    Print("new AVLTree(0)->Count(): ")
+    i32 Count := new AVLTree(0)->Count()
+    Print("%i\n", Count)
 
     return 0
 }

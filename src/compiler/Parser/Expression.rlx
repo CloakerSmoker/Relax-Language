@@ -479,16 +479,16 @@
 		}
 
 		if (NextToken->Type = TOKEN_TYPE_IDENTIFIER && NextToken->StringValue->Equals("new")) {
-			QualifiedName* ClassName := this->TryParseQualifiedName(&ErrorMessage)
+			QualifiedName* TypeName := this->TryParseQualifiedName(&ErrorMessage)
 
 			if (ErrorMessage = null) {
-				TypeInfo* Info := this->LookupQualifiedName(ClassName)
+				TypeInfo* Info := this->LookupQualifiedName(TypeName)
 
 				if (Info = null) {
-					ClassName~>Context->Error("Does not name a type")
+					TypeName~>Context->Error("Does not name a type")
 				}
-				else if (Info->IsIncomplete || !Info->Is(TYPE_KIND_STRUCTURE) || !Info->IsClass) {
-					ClassName~>Context->Error("Does not name a class")
+				else if (Info->IsIncomplete || !Info->Is(TYPE_KIND_STRUCTURE)) {
+					TypeName~>Context->Error("Does not name a complete struct/class")
 				}
 
 				HashMapElement* FirstNewElement := Info~>StaticMethods->Get("New")
@@ -497,7 +497,7 @@
 					FirstNewElement := Info~>StaticMethods->Get("Allocate")
 
 					if !(FirstNewElement) {
-						ClassName~>Context->Error("Does not define 'New' or 'Allocate'")
+						TypeName~>Context->Error("Does not define 'New' or 'Allocate'")
 					}
 				}
 
