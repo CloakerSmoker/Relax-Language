@@ -100,6 +100,7 @@ define void FastMoveMemory(void* To, void* From, i64 Size) asm {
 
 	std
 	rep movsb
+	cld
 
 	ret
 
