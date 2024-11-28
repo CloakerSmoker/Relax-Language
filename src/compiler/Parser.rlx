@@ -649,11 +649,12 @@ struct ParserState {
 
 		loop {
 			Token* Part := this->TryConsume(TOKEN_TYPE_IDENTIFIER, "Expected identifier", ErrorMessage)
-			Result~>Context->Merge(Part~>Context)
 
 			if *(ErrorMessage) {
 				return null
 			}
+			
+			Result~>Context->Merge(Part~>Context)
 
 			if (ExpectLocalPart) {
 				if (Result->LocalPart) {
@@ -1851,7 +1852,18 @@ struct ParserState {
 		i32 NextValue := 0
 		
 		loop {
-			Token* EnumVariableName := this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected identifier for enum field name")
+			Token* EnumFieldToken := this->GetNextToken()
+			SafeString* EnumFieldName := null
+
+			if (EnumFieldToken->Is(TOKEN_TYPE_INTEGER)) {
+				EnumFieldName := AToS(FormatString("%i", EnumFieldToken->IntegerValue))
+			}
+			else if (EnumFieldToken->Is(TOKEN_TYPE_IDENTIFIER)) {
+				EnumFieldName := EnumFieldToken->StringValue
+			}
+			else {
+				EnumFieldToken->Error("Expected identifier for enum field name")
+			}
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_OPERATOR, OPERATOR_COLON_EQUAL)) {
 				i32 NewNextValue := this->Consume(TOKEN_TYPE_INTEGER, "Expected enum field value")->IntegerValue As i32
@@ -1866,24 +1878,24 @@ struct ParserState {
 				NextValue := NewNextValue
 			}
 			
-			if (Fields->Get(EnumVariableName->StringValue)) {
-				EnumVariableName->Error("Duplicate definition")
+			if (Fields->Get(EnumFieldName)) {
+				EnumFieldToken->Error("Duplicate definition")
 			}
 
 			i32 Value := NextValue++
 			
 			StructField* MemberField := Alloc(#StructField)
 			
-			MemberField->DefinedAt := EnumVariableName~>Context
-			MemberField->Name := EnumVariableName->StringValue
+			MemberField->DefinedAt := EnumFieldToken~>Context
+			MemberField->Name := EnumFieldName
 			MemberField->ValueType := EnumType
 			MemberField->EnumValue := Value
 
-			Fields->Set(EnumVariableName->StringValue, MemberField)
+			Fields->Set(EnumFieldName, MemberField)
 			FieldsInOrder->Push(MemberField)
 			
 			i8* RawEnumGlobalName := Alloc(50)
-			i32 Length := FormatString(RawEnumGlobalName, 50, "%s_%s", BaseEnumType->Name->Buffer, EnumVariableName->StringValue->Buffer)
+			i32 Length := FormatString(RawEnumGlobalName, 50, "%s_%s", BaseEnumType->Name->Buffer, EnumFieldName->Buffer)
 
 			RawEnumGlobalName[Length] := 0
 
@@ -1901,7 +1913,7 @@ struct ParserState {
 			EnumVariable->SetCount := 1
 			EnumVariable->IsGlobal := true
 			
-			this->AddGlobal(EnumVariable, EnumVariableName)
+			this->AddGlobal(EnumVariable, EnumFieldToken)
 			
 			if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
 				continue

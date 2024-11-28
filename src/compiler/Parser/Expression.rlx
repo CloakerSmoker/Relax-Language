@@ -546,6 +546,29 @@
 
 			TypeInfo* StaticBase := null
 			QualifiedName* Name := this->TryParseQualifiedName(&ErrorMessage)
+
+			if (Name = null && this->GetCurrentToken()->Is(TOKEN_TYPE_INTEGER)) {
+				this->Unfreeze(this->Freeze() - 1)
+
+				Token* MaybeColonColon := this->GetCurrentToken()
+				
+				if (MaybeColonColon->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COLON_COLON)) {
+					Token* IntegerFieldNameToken := this->GetNextToken()
+
+					SafeString* IntegerAsString := AToS(FormatString("%i", IntegerFieldNameToken->IntegerValue))
+
+					IntegerFieldNameToken->StringValue := IntegerAsString
+					IntegerFieldNameToken->Type := TOKEN_TYPE_IDENTIFIER
+
+					this->Unfreeze(Before)
+					ErrorMessage := null
+
+					Name := this->TryParseQualifiedName(&ErrorMessage)
+
+					;IntegerFieldNameToken->Error("hyta")
+				}
+			}
+
 			StaticBase := this->TryLookupQualifiedName(Name)
 			
 			if (StaticBase && !StaticBase->IsIncomplete) {
