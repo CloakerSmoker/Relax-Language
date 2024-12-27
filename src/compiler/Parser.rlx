@@ -1508,7 +1508,7 @@ struct ParserState {
 						IsMethod := IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
 
 						if (this->NextTokenMatches(TOKEN_TYPE_KEYWORD, KEYWORD_DECLARE)) {
-							IsMethod := KEYWORD_DECLARE
+							MethodKeyword := this->GetCurrentToken()
 						}
 					}
 					
