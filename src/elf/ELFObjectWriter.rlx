@@ -441,11 +441,12 @@ struct ELFSpecialSectionEntry {
 i64 ELF_SECTION_FLAGS_WRITE_ALLOCATE := ELF_SECTION_FLAGS_WRITE | ELF_SECTION_FLAGS_ALLOCATE
 i64 ELF_SECTION_FLAGS_EXECUTE_ALLOCATE := ELF_SECTION_FLAGS_EXECUTE | ELF_SECTION_FLAGS_ALLOCATE
 
-i32 ELF_SPECIAL_SECTION_COUNT := 28
-ELFSpecialSectionEntry[28] ELF_SPECIAL_SECTIONS {
+i32 ELF_SPECIAL_SECTION_COUNT := 29
+ELFSpecialSectionEntry[29] ELF_SPECIAL_SECTIONS {
     { ".bss"          , ELF_SECTION_TYPE_NODATA              , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
     { ".comment"      , ELF_SECTION_TYPE_DATA                , 0                                  },
     { ".data"         , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
+    { ".data*"        , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
     { ".data1"        , ELF_SECTION_TYPE_DATA                , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },
     { ".debug"        , ELF_SECTION_TYPE_DATA                , 0                                  },
     { ".dynamic"      , ELF_SECTION_TYPE_DYNAMIC             , ELF_SECTION_FLAGS_WRITE_ALLOCATE   },

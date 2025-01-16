@@ -189,7 +189,11 @@ struct InterfaceImplementationInfo {
 	InterfaceInfo* ForInterfaceInfo
 
 	PointerArray* Methods ; <FunctionDefine*>
+
+	ObjectSymbol** StubSymbols
 	i32* StubLabels
+
+	ObjectSymbol* VirtualFunctionTableSymbol
 
 	i32 VirtualFunctionTableLabel
 	i32 SetupVirtualFunctionTableLabel
@@ -205,7 +209,11 @@ struct InterfaceImplementationInfo {
 		this->ForInterfaceInfo := ForInterface->InterfaceInfo
 
 		this->Methods := PointerArray:New()
-		this->StubLabels := Alloc(this->ForInterfaceInfo->Methods->Count() * #i32)
+
+		i32 MethodCount := this->ForInterfaceInfo->Methods->Count()
+
+		this->StubLabels := Alloc(MethodCount * #i32)
+		this->StubSymbols := Alloc(MethodCount * #void*)
 
 		return this
 	}

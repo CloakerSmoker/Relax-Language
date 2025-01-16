@@ -100,12 +100,15 @@ struct CompilerState {
 	ObjectSection* ReadOnlyDataSection
 	ObjectSection* DataSection
 	ObjectSection* ZeroSection
+	ObjectSection* VirtualFunctionTablesSection
 
 	ByteArray* ReadOnlyData
 
 	ObjectSymbol* CurrentFunctionSymbol
 	ObjectSymbol* GlobalStringsSymbol
 	ObjectSymbol* CurrentFunctionStringsSymbol
+
+	PointerArray* VirtualFunctionTables ; <ObjectSymbol*>
 	
 	define void Initialize(BuildConfig* Config, ParserState* Parser) {
 		this->Config := Config
@@ -128,6 +131,9 @@ struct CompilerState {
 
 			this->ZeroSection := ObjectSection:New(SECTION_TYPE_DATA, ".bss")
 			this->Object->AddNewSection(this->ZeroSection)
+
+			this->VirtualFunctionTablesSection := new ObjectSection(SECTION_TYPE_DATA, ".data.vftbl")
+			this->VirtualFunctionTables := new PointerArray()
 
 			this->ReadOnlyData := ByteArray:New()
 			
@@ -439,10 +445,23 @@ struct CompilerState {
 
 	define ObjectSymbol* FindOrAddFunctionObjectSymbol(FunctionDefine* Function) {
 		if !(Function->ObjectSymbol) {
-			i32 NameLength := Function->GetStringLength()
-			i8* NameBuffer := Alloc(NameLength + 1)
-			
-			Function->StringifyInto(NameBuffer, '.')
+			if (Function->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+				InterfaceImplementationInfo* Implementation := Function->DerivedImplementationInfo
+				
+				TypeInfo* InterfaceType := Implementation->ForInterface
+				i32 MethodIndex := Function->DerivedMethodIndex
+
+				TypeInfo* ClassType := Implementation->ForType
+				ClassInfo* Info := ClassType->ClassInfo
+
+				i8* NameBuffer := FormatString("%S.derived.%S.%S", ClassType->Name, Implementation->ForInterface->Name, Function->Name)
+			}
+			else {
+				i32 NameLength := Function->GetStringLength()
+				i8* NameBuffer := Alloc(NameLength + 1)
+				
+				Function->StringifyInto(NameBuffer, '.')
+			}
 
 			ObjectSymbol* FunctionSymbol := ObjectSymbol:New(
 				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
@@ -694,7 +713,15 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 
 	;Print("SetLabel %i Derived %func @ %x\n", DerivedMethod->LabelNumber, DerivedMethod, Compiler->AddressOfCodeOffset(Compiler->Index))
 
-	SetLabel(Compiler, DerivedMethod->LabelNumber)
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		ObjectSymbol* FunctionSymbol := Compiler->FindOrAddFunctionObjectSymbol(DerivedMethod)
+
+		FunctionSymbol->Value := Compiler->Index
+	}
+	else {
+		SetLabel(Compiler, DerivedMethod->LabelNumber)
+	}
+	
 	DerivedMethod->CodeOffset := Compiler->Index
 
 	if (InterfaceType = Compiler->Parser->IAnyType) {
@@ -709,7 +736,17 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 				; lea rbx, vtfb[Index]
 				; mov [p1 + Index * 8], rbx
 
-				EmitLea_R64_Label(Compiler, RBX, ImplementationInfo->VirtualFunctionTableLabel)
+				if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+					ObjectSymbol* VirtualFunctionTableSymbol := ImplementationInfo->VirtualFunctionTableSymbol
+
+					EmitLea_R64_REL32(Compiler, RBX, 0)
+
+					Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, VirtualFunctionTableSymbol, -4)
+				}
+				else {
+					EmitLea_R64_Label(Compiler, RBX, ImplementationInfo->VirtualFunctionTableLabel)
+				}
+
 				EmitMove_RIX_DISP8_RX(Compiler, P1, RBX, (Index * 8) As i8, 8)
 			}
 		}
@@ -728,17 +765,41 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			; Result->Initialize()
 
 			EmitMove_R32_I32(Compiler, P1, ClassType->Size)
-			EmitCall_Label(Compiler, Compiler->Parser->Allocator->LabelNumber)
+
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* AllocatorSymbol := Compiler->FindOrAddFunctionObjectSymbol(Compiler->Parser->Allocator)
+				EmitCall_REL32(Compiler, 0)
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, AllocatorSymbol, -4)
+			}
+			else {
+				EmitCall_Label(Compiler, Compiler->Parser->Allocator->LabelNumber)
+			}
+			
 			EmitPush_R64(Compiler, RAX)
 			
 			EmitMove_R64_R64(Compiler, P1, RAX)
 			FunctionDefine* IAnyInitialize := Info->IAnyImplementation->Methods->At(0)
-			EmitCall_Label(Compiler, IAnyInitialize->LabelNumber)
+
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* InitializeSymbol := Compiler->FindOrAddFunctionObjectSymbol(IAnyInitialize)
+				EmitCall_REL32(Compiler, 0)
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, InitializeSymbol, -4)
+			}
+			else {
+				EmitCall_Label(Compiler, IAnyInitialize->LabelNumber)
+			}
 
 			EmitPop_R64(Compiler, RAX)
 		}
 		else if (MethodIndex = 1) {
-			EmitCall_Label(Compiler, Compiler->Parser->Deleter->LabelNumber)
+			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+				ObjectSymbol* DeleterSymbol := Compiler->FindOrAddFunctionObjectSymbol(Compiler->Parser->Deleter)
+				EmitCall_REL32(Compiler, 0)
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, InitializeSymbol, -4)
+			}
+			else {
+				EmitCall_Label(Compiler, Compiler->Parser->Deleter->LabelNumber)
+			}
 		}
 	}
 	else if (InterfaceType = Compiler->Parser->INewType) {
@@ -778,7 +839,15 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			EmitPush_R64(Compiler, Compiler->GetParameterRegister(Index As i8))
 		}
 
-		EmitCall_Label(Compiler, IAllocateAllocate->LabelNumber)
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* AllocateSymbol := Compiler->FindOrAddFunctionObjectSymbol(IAllocateAllocate)
+			EmitCall_REL32(Compiler, 0)
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, AllocateSymbol, -4)
+		}
+		else {
+			EmitCall_Label(Compiler, IAllocateAllocate->LabelNumber)
+		}
+
 		EmitPush_R64(Compiler, RAX)
 
 		i32 NewParameterCount := DerivedMethod->ParameterCount + 1
@@ -811,7 +880,14 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			EmitPush_R64_DISP8(Compiler, RAX, (Index * 8) As i8)
 		}
 
-		EmitCall_Label(Compiler, Target->LabelNumber)
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* TargetSymbol := Compiler->FindOrAddFunctionObjectSymbol(Target)
+			EmitCall_REL32(Compiler, 0)
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, TargetSymbol, -4)
+		}
+		else {
+			EmitCall_Label(Compiler, Target->LabelNumber)
+		}
 
 		; Cleanup stack
 
@@ -836,6 +912,10 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	i8* Name := FormatString("%func", DerivedMethod)
 	i64 Address := Compiler->AddressOfCodeOffset(DerivedMethod->CodeOffset)
 	i32 Size := Compiler->Index - DerivedMethod->CodeOffset
+
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		FunctionSymbol->Size := Size
+	}
 
 	Compiler->RecordGeneratedFunction(Name, Address, Size)
 }
@@ -922,12 +1002,12 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 		TypeInfo* Info := Container->Entries->PointerAt(Index)
 
 		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS)) {
-			CompileFunctionHashMap(Compiler, Info~>Methods)
-			CompileFunctionHashMap(Compiler, Info~>StaticMethods)
-
 			if (Info->IsClass) {
 				CompileClassInterfaces(Compiler, Info)
 			}
+
+			CompileFunctionHashMap(Compiler, Info~>Methods)
+			CompileFunctionHashMap(Compiler, Info~>StaticMethods)
 		}
 	}
 
@@ -1105,6 +1185,13 @@ define void CompilerStart(BuildConfig* Config, ParserState* Parser, i8* OutputFi
 
 		Compiler->ZeroSection->Size := Parser~>Globals->NextOffset
 		Compiler->ZeroSection->Data := Alloc(Compiler->ZeroSection->Size)
+
+		if (Compiler->VirtualFunctionTables->Count()) {
+			Compiler->VirtualFunctionTablesSection->Size := Compiler->VirtualFunctionTables->Count() * 8
+			Compiler->VirtualFunctionTablesSection->Data := Alloc(Compiler->VirtualFunctionTablesSection->Size)
+
+			Compiler->Object->AddNewSection(Compiler->VirtualFunctionTablesSection)
+		}
 
 		;Compiler->Object->Dump()
 
@@ -2334,6 +2421,12 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 	InterfaceInfo* ForInterface := Info->ForInterfaceInfo
 	i32 Offset := ForClass->InterfacesInOrder->Find(Info)
 
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		;*null := 0
+	}
+
+	Print("CompileInterfaceImpl %type\n", ForType->AsNonPointer())
+
 	i32 Count := ForInterface->Methods->Count()
 
 	AVLTree* SeenMethods := AVLTree:New(8)
@@ -2373,6 +2466,18 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		i64 Address := Compiler->AddressOfCodeOffset(Before)
 		i32 Size := After - Before
 
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* StubSymbol := new ObjectSymbol(
+				SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_FUNCTION, SYMBOL_VISIBILITY_DEFAULT,
+				Compiler->CodeSection, Name,
+				Size, Address
+			)
+
+			Compiler->Object->AddSymbol(StubSymbol)
+
+			Info->StubSymbols[Index] := StubSymbol
+		}
+
 		;Print("%s: Generated stub call to label %i\n", Name, Implementation->LabelNumber)
 
 		Compiler->RecordGeneratedFunction(Name, Address, Size)
@@ -2382,37 +2487,64 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 	if (Compiler->Index % 4) { PushI16(Compiler, 0x9090 As i16) }
 	if (Compiler->Index % 8) { PushI32(Compiler, 0x90909090 As i32) }
 
-	i32 Before := Compiler->Index
-	SetLabel(Compiler, Info->VirtualFunctionTableLabel)
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+		i32 FirstSlot := Compiler->VirtualFunctionTables->Count()
 
-	for (i32 Index := 0, Index < Count, Index++) {
-		PushI64(Compiler, 0)
-	}
+		Info->VirtualFunctionTableSymbol := new ObjectSymbol(
+			SYMBOL_BINDING_LOCAL, SYMBOL_TYPE_DATA, SYMBOL_VISIBILITY_DEFAULT,
+			Compiler->VirtualFunctionTablesSection, FormatString("%S.%S", ForType->Name, ForInterface->Name),
+			Count * 8, FirstSlot * 8
+		)
 
-	i32 After := Compiler->Index
-	Compiler->RecordGeneratedFunction(FormatString("%S.%S.VirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
+		Compiler->Object->AddSymbol(Info->VirtualFunctionTableSymbol)
 
-	i32 Before := Compiler->Index
-	SetLabel(Compiler, Info->SetupVirtualFunctionTableLabel)
-	EmitLea_R64_Label(Compiler, RAX, Info->VirtualFunctionTableLabel)
+		for (i32 Index := 0, Index < Count, Index++) {
+			ObjectSymbol* StubSymbol := Info->StubSymbols[Index]
 
-	for (i32 Index := 0, Index < Count, Index++) {
-		i32 StubLabel := Info->StubLabels[Index]
+			ObjectRelocation* Relocation := new ObjectRelocation(
+				Compiler->VirtualFunctionTablesSection, RELOCATION_TYPE_ABSOLUTE_64,
+				(FirstSlot + Index) * 8, StubSymbol, 0
+			)
 
-		EmitLea_R64_Label(Compiler, RBX, StubLabel)
+			StubSymbol->ReferenceBy(Relocation)
+			Compiler->VirtualFunctionTablesSection->AddRelocation(Relocation)
 
-		if (Index >= 0x10) {
-			EmitMove_RIX_DISP32_RX(Compiler, RAX, RBX, (Index * 8), 8)
+			Compiler->VirtualFunctionTables->Push(null)
 		}
-		else {
-			EmitMove_RIX_DISP8_RX(Compiler, RAX, RBX, (Index * 8) As i8, 8)
-		}
 	}
+	else {
+		i32 Before := Compiler->Index
+		SetLabel(Compiler, Info->VirtualFunctionTableLabel)
 
-	EmitReturn(Compiler)
+		for (i32 Index := 0, Index < Count, Index++) {
+			PushI64(Compiler, 0)
+		}
 
-	i32 After := Compiler->Index
-	Compiler->RecordGeneratedFunction(FormatString("%S.%S.MakeVirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
+		i32 After := Compiler->Index
+		Compiler->RecordGeneratedFunction(FormatString("%S.%S.VirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
+
+		i32 Before := Compiler->Index
+		SetLabel(Compiler, Info->SetupVirtualFunctionTableLabel)
+		EmitLea_R64_Label(Compiler, RAX, Info->VirtualFunctionTableLabel)
+
+		for (i32 Index := 0, Index < Count, Index++) {
+			i32 StubLabel := Info->StubLabels[Index]
+
+			EmitLea_R64_Label(Compiler, RBX, StubLabel)
+
+			if (Index >= 0x10) {
+				EmitMove_RIX_DISP32_RX(Compiler, RAX, RBX, (Index * 8), 8)
+			}
+			else {
+				EmitMove_RIX_DISP8_RX(Compiler, RAX, RBX, (Index * 8) As i8, 8)
+			}
+		}
+
+		EmitReturn(Compiler)
+
+		i32 After := Compiler->Index
+		Compiler->RecordGeneratedFunction(FormatString("%S.%S.MakeVirtualFunctionTable", ForType->Name, ForInterface->Name), Compiler->AddressOfCodeOffset(Before), After - Before)
+	}
 }
 
 define void CompileClassInterfaces(CompilerState* Compiler, TypeInfo* ForType) {
@@ -2424,7 +2556,9 @@ define void CompileClassInterfaces(CompilerState* Compiler, TypeInfo* ForType) {
 
 		CompileInterfaceImplementation(Compiler, ForType, ImplementationInfo)
 
-		Compiler->InitializerLabels->Push(ImplementationInfo->SetupVirtualFunctionTableLabel As void*)
+		if !(Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			Compiler->InitializerLabels->Push(ImplementationInfo->SetupVirtualFunctionTableLabel As void*)
+		}
 	}
 }
 
