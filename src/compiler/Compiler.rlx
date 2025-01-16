@@ -795,7 +795,7 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 				ObjectSymbol* DeleterSymbol := Compiler->FindOrAddFunctionObjectSymbol(Compiler->Parser->Deleter)
 				EmitCall_REL32(Compiler, 0)
-				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, InitializeSymbol, -4)
+				Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, DeleterSymbol, -4)
 			}
 			else {
 				EmitCall_Label(Compiler, Compiler->Parser->Deleter->LabelNumber)
