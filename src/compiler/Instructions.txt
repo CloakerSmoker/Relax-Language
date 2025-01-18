@@ -49,6 +49,10 @@ and		0x80 	m,i 	OP_EXT|RM_OP1|IMM8 			4
 and		0x81 	m,i 	OP_EXT|RM_OP1|IMM32 		4
 
 add		0x01	m,r		RM_OP1						_
+add     0x03    r,m     RM_OP2                      _
+add     0x81    m,i     RM_OP1|OP_EXT|IMMX          0
+addsx   0x83    m,i8    RM_OP1|OP_EXT|IMM8          0
+
 imul	0x0FAF	r,m		RM_OP2						_
 
 mov		0xC7 	m,i 	OP_EXT|RM_OP1|IMMX			0
