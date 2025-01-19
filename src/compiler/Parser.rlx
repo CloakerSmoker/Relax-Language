@@ -2370,12 +2370,9 @@ struct ParserState {
 					if (TargetMethod->Next = null && !TargetMethod->HasFullDefinition && !TargetMethod->DerivedImplementationInfo) {
 						FunctionDefine* Next := TargetMethod->Next
 
-						;MoveMemory(TargetMethod, InterfaceMethod, #FunctionDefine)
+						MoveMemory(TargetMethod, InterfaceMethod, #FunctionDefine)
 
-						;TargetMethod->Next := Next
-
-						TargetElement->Value := InterfaceMethod
-						TargetMethod := InterfaceMethod
+						TargetMethod->Next := Next
 					}
 				}
 

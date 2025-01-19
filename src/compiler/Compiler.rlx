@@ -2440,7 +2440,9 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 		i32 CastSize := 0
 
-		if (Implementation != ForInterface->Methods->At(Index)) {
+		FunctionDefine* InterfaceMethod := ForInterface->Methods->At(Index)
+
+		if (Implementation->MethodOfTypeName != InterfaceMethod->MethodOfTypeName) {
 			; `this` is a `ForInterface*`, which we need to cast back to a `ForType*`
 			;  except for when `Implementation` is a default method implementation
 			;   which actually expects a `ForInterface*`. In this case, we can just
