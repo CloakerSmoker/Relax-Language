@@ -2366,6 +2366,14 @@ struct ParserState {
 				}
 				else {
 					TargetMethod := TargetElement->Value As FunctionDefine*
+
+					if (TargetMethod->Next = null && !TargetMethod->HasFullDefinition && !TargetMethod->DerivedImplementationInfo) {
+						FunctionDefine* Next := TargetMethod->Next
+
+						MoveMemory(TargetMethod, InterfaceMethod, #FunctionDefine)
+
+						TargetMethod->Next := Next
+					}
 				}
 
 				i32 ParameterCount := InterfaceMethod->ParameterCount
