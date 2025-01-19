@@ -754,6 +754,10 @@ define void EmitCall_REL32(CompilerState* Compiler, i32 Offset) {
 	PushByte(Compiler, 0xE8)
 	PushI32(Compiler, Offset)
 }
+define void EmitJump_REL32(CompilerState* Compiler, i32 Offset) {
+	PushByte(Compiler, 0xE9)
+	PushI32(Compiler, Offset)
+}
 define void EmitCall_R64(CompilerState* Compiler, i8 RegisterNumber) {
 	EmitBasicInstruction(Compiler, 0xFF, MODE_RTOR, 4, 2, RegisterNumber)
 }

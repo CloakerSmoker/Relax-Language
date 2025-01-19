@@ -2450,7 +2450,16 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		}
 
 		EmitSub_R64_IX(Compiler, RDI, CastSize)
-		EmitJump_Label(Compiler, Implementation->LabelNumber)
+
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
+			ObjectSymbol* ImplementationSymbol := Compiler->FindOrAddFunctionObjectSymbol(Implementation)
+			EmitJump_REL32(Compiler, 0)
+			Compiler->ReferenceSymbolFromCode(Compiler->Index - 4, ImplementationSymbol, -4)
+		}
+		else {
+			EmitJump_Label(Compiler, Implementation->LabelNumber)
+		}
+
 		i32 After := Compiler->Index
 
 		i64 Hash := Implementation->Name->Hash()
