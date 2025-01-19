@@ -1594,10 +1594,17 @@ declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 
+	;Print("CompileFunction %s %x %x %x\n", FunctionToCompile->Name->Buffer, FunctionToCompile->AliasFor, Compiler->Index, FunctionToCompile->CodeOffset)
+
 	if (FunctionToCompile->AliasFor) {
-		Print("ASDOIAUSDOIHASD")
-		Print("a: %i\n", FunctionToCompile->Body->StatementCount)
-		Print("b: %i\n", FunctionToCompile->AliasFor->Body->StatementCount)
+		;Print("ASDOIAUSDOIHASD\n")
+
+		;FunctionToCompile~>Context->Warn("A")
+		;FunctionToCompile->AliasFor~>Context->Warn("B")
+
+		;Print("a: %i\n", FunctionToCompile->Body->StatementCount)
+		;Print("b: %i\n", FunctionToCompile->AliasFor->Body->StatementCount)
+
 
 		return CompileFunction(Compiler, FunctionToCompile->AliasFor, false)
 	}
@@ -1662,6 +1669,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	
 	i32 FunctionOffset := Compiler->Index
 	SetLabel(Compiler, FunctionToCompile->LabelNumber)
+
+	FunctionToCompile->CodeOffset := Compiler->Index
 
 	;Print("SetLabel %i %func @ %x\n", FunctionToCompile->LabelNumber, FunctionToCompile, Compiler->AddressOfCodeOffset(FunctionOffset))
 	
@@ -1891,6 +1900,8 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 		ASTNode* LastStatement := Body->Statements[BodyCount - 1]
 		
 		if (LastStatement->NodeType = NODE_TYPE_RETURN) {
+			;LastStatement->Warn("LAST")
+
 			ReturnExpression := LastStatement->ReturnNode->Value
 			Body->StatementCount -= 1
 		}
@@ -2381,7 +2392,7 @@ define void CompileExpression(CompilerState* Compiler, i8 ResultRegister, ASTNod
 	}
 	else if (ExpressionType = NODE_TYPE_DYNAMIC_CAST) {
 		if !(Compiler->Config->DumpInfo & DUMP_SILENT) {
-			ExpressionToCompile->Warn("Dynamic Cast")
+			;ExpressionToCompile->Warn("Dynamic Cast")
 		}
 
 		ASTNode* Value := ExpressionToCompile->CastFromValue
@@ -2433,7 +2444,7 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		;*null := 0
 	}
 
-	Print("CompileInterfaceImpl %type\n", ForType->AsNonPointer())
+	Print("CompileInterfaceImpl %t %s\n", ForType->AsNonPointer(), ForInterface->Name->Buffer)
 
 	i32 Count := ForInterface->Methods->Count()
 
