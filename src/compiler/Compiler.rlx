@@ -1594,6 +1594,14 @@ declare void CompileAssembly(CompilerState*, AssemblyBlock*)
 define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCompile, i8 IsMain) {
 	/* Compiles a single function */
 
+	if (FunctionToCompile->AliasFor) {
+		Print("ASDOIAUSDOIHASD")
+		Print("a: %i\n", FunctionToCompile->Body->StatementCount)
+		Print("b: %i\n", FunctionToCompile->AliasFor->Body->StatementCount)
+
+		return CompileFunction(Compiler, FunctionToCompile->AliasFor, false)
+	}
+
 	if (FunctionToCompile->CodeOffset) {
 		if (FunctionToCompile->IsMethod = FUNCTION_IS_INTERFACE_METHOD) {
 			return FunctionToCompile->CodeOffset
@@ -2442,7 +2450,11 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 		FunctionDefine* InterfaceMethod := ForInterface->Methods->At(Index)
 
-		if (Implementation->MethodOfTypeName != InterfaceMethod->MethodOfTypeName) {
+		if (Implementation->AliasFor) {
+			Implementation := Implementation->AliasFor
+		}
+
+		if (Implementation != InterfaceMethod) {
 			; `this` is a `ForInterface*`, which we need to cast back to a `ForType*`
 			;  except for when `Implementation` is a default method implementation
 			;   which actually expects a `ForInterface*`. In this case, we can just

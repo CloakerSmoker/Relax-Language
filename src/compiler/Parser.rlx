@@ -2373,6 +2373,7 @@ struct ParserState {
 						MoveMemory(TargetMethod, InterfaceMethod, #FunctionDefine)
 
 						TargetMethod->Next := Next
+						TargetMethod->AliasFor := InterfaceMethod
 					}
 				}
 

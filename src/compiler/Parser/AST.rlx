@@ -577,6 +577,8 @@ struct FunctionDefine {
 	i32 DerivedMethodIndex
 	TypeInfo* MethodOfType
 	i8 IsStaticDerive
+
+	FunctionDefine* AliasFor
 	
 	SafeString* MethodOfTypeName,
 	
