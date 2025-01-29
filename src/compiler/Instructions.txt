@@ -53,6 +53,11 @@ add     0x03    r,m     RM_OP2                      _
 add     0x81    m,i     RM_OP1|OP_EXT|IMMX          0
 addsx   0x83    m,i8    RM_OP1|OP_EXT|IMM8          0
 
+sub     0x29    m,r     RM_OP1                      _
+sub     0x2B    r,m     RM_OP2                      _
+sub     0x80    m,i     RM_OP1|OP_EXT|IMMX          5
+sub     0x38    m,i8    RM_OP1|OP_EXT|IMM8          5
+
 imul	0x0FAF	r,m		RM_OP2						_
 
 mov		0xC7 	m,i 	OP_EXT|RM_OP1|IMMX			0
