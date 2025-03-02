@@ -56,9 +56,35 @@ addsx   0x83    m,i8    RM_OP1|OP_EXT|IMM8          0
 sub     0x29    m,r     RM_OP1                      _
 sub     0x2B    r,m     RM_OP2                      _
 sub     0x80    m,i     RM_OP1|OP_EXT|IMMX          5
-sub     0x38    m,i8    RM_OP1|OP_EXT|IMM8          5
+subsx   0x83    m,i8    RM_OP1|OP_EXT|IMM8          5
+
+sbb     0x19    m,r     RM_OP1                      _
+sbb     0x1B    r,m     RM_OP2                      _
+
+setb    0x0F92  r8      RM_OP1                      _
+setc    0x0F92  r8      RM_OP1                      _
+setnae  0x0F92  r8      RM_OP1                      _
+setae   0x0F93  r8      RM_OP1                      _
+sete    0x0F94  r8      RM_OP1                      _
+setbe   0x0F96  r8      RM_OP1                      _
+setna   0x0F96  r8      RM_OP1                      _
+seta    0x0F97  r8      RM_OP1                      _
+setl    0x0F9C  r8      RM_OP1                      _
+setge   0x0F9D  r8      RM_OP1                      _
+setle   0x0F9E  r8      RM_OP1                      _
+setg    0x0F9F  r8      RM_OP1                      _
+
+cmovc   0x0F42  r16,r16 RM_OP2                      _
+cmovc   0x0F42  r32,r32 RM_OP2                      _
+cmovc   0x0F42  r64,r64 RM_OP2                      _
+
+cwd     0x99    _       NEEDS_66                    _
+cdq     0x99    _       _                           _
+cqo     0x99    _       REX_W                       _
 
 imul	0x0FAF	r,m		RM_OP2						_
+
+idiv    0xF7    m       OP_EXT|RM_OP1               7
 
 mov		0xC7 	m,i 	OP_EXT|RM_OP1|IMMX			0
 mov		0xB8 	m,i64 	NO_RM|REG_IN_OPCODE|IMM64 	_
@@ -81,6 +107,10 @@ jgt		0x0F8F	l		COND_JUMP					_
 jge		0x0F8D	l		COND_JUMP					_
 jlt		0x0F8C	l		COND_JUMP					_
 jle		0x0F8E	l		COND_JUMP					_
+jno     0x0F81  l       COND_JUMP                   _
+
+clc     0xF8    _       _                           _
+stc     0xF9    _       _                           _
 
 call	0xE8	l		LABEL						_
 call	0xFF	rm64	ONE_OP_W_EXT				2

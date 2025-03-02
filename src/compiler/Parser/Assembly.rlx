@@ -27,12 +27,116 @@
 			}
 		}
 	}
+
+	define i8* LabelBits(i32 Value, i8** Labels) {
+		i8* Result := ""
+		i8 First := true
+
+		for (i32 Index := 0, Index < 4, Index++) {
+			i32 Mask := 1 << Index
+
+			if (Value & Mask) {
+				if (First) {
+					Result := Labels[Index]
+					First := false
+				}
+				else {
+					Result := FormatString("%s|%s", Result, Labels[Index])
+				}
+			}
+		}
+
+		return Result
+	}
+
+	define i8* StringifySingleOperandMask(i32 Mask, i32 Operand, i32 Shift, i8* Single, ... Labels) {
+		i8* Result := ""
+
+		Mask := Mask >> Shift
+
+		if (Mask & Operand != 0) {
+			if (Mask & Operand = Operand) {
+				Result := Single
+			}
+			else {
+				Result := this->LabelBits(Mask & Operand, (Labels + 8) As i8**)
+			}
+		}
+
+		return Result
+	}
+
+	define i8* StringifyOperandMask(i32 Mask) {
+		i8* Result := ""
+
+		Result := FormatString("%s%s", Result, this->StringifySingleOperandMask(Mask, OP_M, 4, "r", "r8", "r16", "r32", "r64"))
+		Result := FormatString("%s%s", Result, this->StringifySingleOperandMask(Mask, OP_M, 0, "m", "m8", "m16", "m32", "m64"))
+		Result := FormatString("%s%s", Result, this->StringifySingleOperandMask(Mask, OP_M, 8, "i", "i8", "i16", "i32", "i64"))
+
+		if (Mask & OP_LABEL) {
+			if (StringLength(Result) != 0) {
+				Result := FormatString("%s|L", Result)
+			}
+			else {
+				Result := "L"
+			}
+		}
+
+		return Result
+	}
+
+	define i8* StringifyOperandsMask(i32 OperandsMask) {
+		i8* Result := ""
+
+		if (OperandsMask) {
+			if (OperandsMask & 0xFFFF) {
+				;Print("Operand 1: %x\n", OperandsMask & 0xFFFF)
+
+				Result := FormatString("%s", this->StringifyOperandMask(OperandsMask & 0xFFFF))
+			}
+
+			if (OperandsMask & 0xFFFF_0000) {
+				;Print("Operand 2: %x\n", (OperandsMask >> 16) & 0xFFFF)
+
+				Result := FormatString("%s, %s", Result, this->StringifyOperandMask((OperandsMask >> 16) & 0xFFFF))
+			}
+		}
+
+		return Result
+	}
+
+	define i8* StringifyInstruction(SafeString* Name, Instruction* NextInstruction) {
+		i8* Result := FormatString("%S", Name)
+
+		i32 OperandsMask := NextInstruction->OperandMask
+
+		if (OperandsMask) {
+			Result := FormatString("%s, %s", Result, this->StringifyOperandsMask(OperandsMask))
+		}
+
+		return Result
+	}
 	
-	define Instruction* LookupInstruction(SafeString* Name, i32 EncodedOperands) {
+	define Instruction* LookupInstruction(SafeString* Name, i32 EncodedOperands, SourceContext* Blame) {
 		HashMapElement* ListHeadElement := this~>Instructions->Get(Name)
 		
 		if !(ListHeadElement) {
-			return 0 As Instruction*
+			if (Blame) {
+				TextColor(Bright | Red)
+				Print("Unknown instruction name\n")
+				ResetColors()
+			}
+
+			return null
+		}
+
+		i32 OperandsSpecified := 0
+
+		if (EncodedOperands & 0xFFFF_0000) {
+			OperandsSpecified = 2
+		}
+		else if (EncodedOperands & 0xFFFF) {
+			OperandsSpecified = 1
 		}
 		
 		InstructionListEntry* ListHead := ListHeadElement->Value As InstructionListEntry*
@@ -44,9 +148,23 @@
 				if (NextInstruction->OperandMask = 0) {
 					return NextInstruction
 				}
+				else {
+					if (Blame) {
+						TextColor(Red | Bright)
+						Print("No operands specified for: %s\n", this->StringifyInstruction(Name, NextInstruction))
+						ResetColors()
+					}
+				}
 			}
 			else if (NextInstruction->OperandMask & EncodedOperands = EncodedOperands) {
 				return NextInstruction
+			}
+			else if (Blame) {
+				Print("%x & %x = %x\n", NextInstruction->OperandMask, EncodedOperands, NextInstruction->OperandMask & EncodedOperands)
+
+				TextColor(Red | Bright)
+				Print("Invalid operands for: %s\n", this->StringifyInstruction(Name, NextInstruction))
+				ResetColors()
 			}
 			
 			ListHead := ListHead->Next
@@ -597,7 +715,7 @@
 					}
 					else if (Next->Size != OperandSize) {
 						if (NextType & O_I) {
-							Next->Type := OperandSize << OP_I_OFFSET
+							;Next->Type := OperandSize << OP_I_OFFSET
 						}
 						else {
 							Next~>Context->Error("Incompatible operand sizes, expected a %i bit operand, got a %i bit operand\n", OperandSize * 8, Next->Size * 8)
@@ -619,10 +737,12 @@
 				Result~>Context->Clone(InstructionToken~>Context)
 			}
 			
-			Instruction* Found := this->LookupInstruction(InstructionName, OperandTypes)
+			Instruction* Found := this->LookupInstruction(InstructionName, OperandTypes, null)
 			
 			if !(Found) {
-				Result~>Context->Error("No encoding for operand type(s)\n")
+				Result~>Context->Notify(NOTIFY_ERROR, "No encoding for operand type(s): %s\n", this->StringifyOperandsMask(OperandTypes))
+				this->LookupInstruction(InstructionName, OperandTypes, Result~>Context)
+				Exit(0)
 			}
 			
 			i32 LowType := OperandTypes & 0xFFFF

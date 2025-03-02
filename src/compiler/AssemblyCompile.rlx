@@ -55,6 +55,10 @@ define void EmitAssembly(CompilerState* Compiler, Instruction* I, InstructionOpe
 		}
 		else {
 			RM := ForOperand->RegisterNumber
+
+			if (RegisterRequiresREX(RM)) {
+				REX |= REX_B
+			}
 			
 			if (RM = RSP) {
 				SIB := MakeSIB(1, RSP, RSP)
