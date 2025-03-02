@@ -1822,8 +1822,14 @@ struct ParserState {
 	define void ParseEnumDefinition() {
 		TypeInfo* BaseEnumType := this->ParseCustomTypeName(TYPE_KIND_ENUMERATION)
 		BaseEnumType->Size := 4
+
 		HashMap* Fields := BaseEnumType~>Fields
+		HashMap* Methods := BaseEnumType~>Methods
+		HashMap* StaticMethods := BaseEnumType~>Methods
+
 		Fields->Initialize()
+		Methods->Initialize()
+		StaticMethods->Initialize()
 
 		BaseEnumType->FieldsInOrder := PointerArray:New()
 		PointerArray* FieldsInOrder := BaseEnumType->FieldsInOrder
@@ -1864,6 +1870,30 @@ struct ParserState {
 			}
 			else if (EnumFieldToken->Is(TOKEN_TYPE_IDENTIFIER)) {
 				EnumFieldName := EnumFieldToken->StringValue
+			}
+			else if (EnumFieldToken->Is(TOKEN_TYPE_KEYWORD)) {
+				i8 KeywordValue := EnumFieldToken->Value As i8
+
+				i8 IsStaticMethod := KeywordValue = KEYWORD_STATIC
+				i8 IsMethod := IsStaticMethod || KeywordValue = KEYWORD_DECLARE || KeywordValue = KEYWORD_DEFINE
+
+				if !(IsStaticMethod || IsMethod) {
+					EnumFieldToken->Error("Expected identifier for enum field name")
+				}
+
+				HashMap* MethodContainer := Methods
+				
+				if (IsStaticMethod) {
+					MethodContainer := StaticMethods
+				}
+
+				this->ParseFunctionDefinition(MethodContainer, EnumFieldToken, BaseEnumType, !IsStaticMethod)
+
+				if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_CLOSE_BRACE)) {
+					break
+				}
+
+				continue
 			}
 			else {
 				EnumFieldToken->Error("Expected identifier for enum field name")

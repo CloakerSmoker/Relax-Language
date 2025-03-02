@@ -1001,7 +1001,7 @@ define void CompileTypeNamespace(CompilerState* Compiler, TypeNamespace* Contain
 	for (i32 Index := 0, Index < Count, Index++) {
 		TypeInfo* Info := Container->Entries->PointerAt(Index)
 
-		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS)) {
+		if (Info->Is(TYPE_KIND_STRUCTURE) || Info->Is(TYPE_KIND_BIT_FIELDS) || Info->Is(TYPE_KIND_ENUMERATION)) {
 			if (Info->IsClass) {
 				CompileClassInterfaces(Compiler, Info)
 			}

@@ -1347,8 +1347,9 @@
 				;else if (LeftBase->Is(TYPE_KIND_STRUCTURE) = 0 || LeftBase->IsIncomplete && !LeftBase->Is(TYPE_KIND_BIT_FIELDS)) {
 				i8 IsInterface := LeftBase->Is(TYPE_KIND_INTERFACE)
 				i8 IsStructOrBits := LeftBase->Is(TYPE_KIND_STRUCTURE) || LeftBase->Is(TYPE_KIND_BIT_FIELDS)
+				i8 IsEnum := LeftBase->Is(TYPE_KIND_ENUMERATION)
 
-				if ((!IsInterface && !IsStructOrBits) || LeftBase->IsIncomplete) {
+				if ((!IsInterface && !IsStructOrBits && !IsEnum) || LeftBase->IsIncomplete) {
 					; Or, if the accessed type is not a struct, or is incomplete, it is an error
 					
 					OperatorToken->Error("Can't access field of non-struct or incomplete types")
@@ -1379,6 +1380,9 @@
 					if (ErrorMessage) {
 						this->GetCurrentToken()->Error(ErrorMessage)
 					}
+				}
+				else if (IsEnum) {
+					Left->Error("Enums can't have fields")
 				}
 				else {
 					HashMapElement* FieldElement := MaybeFieldElement
