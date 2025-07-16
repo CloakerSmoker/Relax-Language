@@ -1391,6 +1391,8 @@ struct ParserState {
 			}
 
 			if (ForVirtual && !this->PeekNextToken()->Is(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE)) {
+				this->CurrentFunction := null
+
 				return NewDefine
 			}
 			
