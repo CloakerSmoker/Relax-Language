@@ -203,6 +203,14 @@ struct ParserState {
 	define void DefineQualifiedName(QualifiedName* Name, TypeInfo* Value) {
 		TypeNamespace* Container := this->FindOrAddNamespace(Name)
 
+		QualifiedName* FullName := Container->Name->Clone()
+		FullName->LocalPart := Name->LocalPart
+		FullName->Anchored := false
+
+		;Print("Defining %qn\n", FullName)
+
+		Value->Name := AToS(FormatString("%qn", FullName))
+
 		Container->DefineEntry(Name->LocalPart, Value)
 	}
 	

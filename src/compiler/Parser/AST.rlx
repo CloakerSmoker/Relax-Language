@@ -183,6 +183,12 @@ struct QualifiedName {
 		return this
 	}
 
+	define self* Prepend(Token* Part) {
+		this->Parts->Insert(0, Part)
+
+		return this
+	}
+
 	define Token* Pop() {
 		if (this->Parts->Count() = 0) {
 			return null
