@@ -2260,7 +2260,10 @@ struct ParserState {
 		QualifiedName* InterfaceName := this->ParseQualifiedName()
 		TypeInfo* InterfaceType := this->TryLookupQualifiedName(InterfaceName)
 
-		if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
+		if (InterfaceType = null) {
+			InterfaceName~>Context->Error("Type does not exist")
+		}
+		else if (InterfaceType->Kind != TYPE_KIND_INTERFACE) {
 			InterfaceName~>Context->Error("Classes can only implement interface types")
 		}
 		else if (Info->Interfaces->Has(InterfaceType)) {
