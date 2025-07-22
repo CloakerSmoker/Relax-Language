@@ -1500,6 +1500,18 @@
 							Right := this->DowncastIntegerNode(Right)
 							RightType := Right->ValueType
 						}
+
+						; Allow enum members in bitwise operations
+
+						if (LeftBase->Is(TYPE_KIND_ENUMERATION) && LeftDepth = 0) {
+							LeftBase := LeftBase->BackingType
+							LeftType := LeftBase->AsNonPointer()
+						}
+
+						if (RightBase->Is(TYPE_KIND_ENUMERATION) && RightDepth = 0) {
+							RightBase := RightBase->BackingType
+							RightType := RightBase->AsNonPointer()
+						}
 					}
 					
 					; This is only reached for regular old operators, like + or -

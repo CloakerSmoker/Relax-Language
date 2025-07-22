@@ -59,6 +59,8 @@ struct TypeInfo {
 	i8 IsClass
 	i8 IsLinearEnumeration
 
+	TypeInfo* BackingType ; For enums
+
 /*
 	i8 IsStructType,
 	i8 IsBits,

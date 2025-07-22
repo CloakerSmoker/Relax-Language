@@ -1858,6 +1858,10 @@ struct ParserState {
 			}
 
 			BaseEnumType->Size := BackingBase->Size
+			BaseEnumType->BackingType := BackingBase
+		}
+		else {
+			BaseEnumType->BackingType := this->i32
 		}
 
 		Type EnumType := MakeType(BaseEnumType, 0)
