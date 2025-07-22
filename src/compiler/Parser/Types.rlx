@@ -59,6 +59,8 @@ struct TypeInfo {
 	i8 IsClass
 	i8 IsLinearEnumeration
 
+	TypeInfo* EnumerationBackingType
+
 /*
 	i8 IsStructType,
 	i8 IsBits,
@@ -529,6 +531,16 @@ define i8 CheckTypes(TypeInfo* VoidType, Type Source, Type Target, ASTNode* Sour
 	
 	TypeInfo* SourceBase := GetBaseType(Source)
 	TypeInfo* TargetBase := GetBaseType(Target)
+
+	if (SourceBase->Is(TYPE_KIND_ENUMERATION)) {
+		SourceBase := SourceBase->EnumerationBackingType
+		Source := SourceBase->AsPointer(GetPointerDepth(Source))
+	}
+
+	if (TargetBase->Is(TYPE_KIND_ENUMERATION)) {
+		TargetBase := TargetBase->EnumerationBackingType
+		Target := SourceBase->AsPointer(GetPointerDepth(Target))
+	}
 	
 	i16 SourceDepth := GetPointerDepth(Source)
 	i16 TargetDepth := GetPointerDepth(Target)
