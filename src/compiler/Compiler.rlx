@@ -711,6 +711,10 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	TypeInfo* ClassType := Implementation->ForType
 	ClassInfo* Info := ClassType->ClassInfo
 
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_DWARF) {
+		Compiler->MarkLineNumber(Implementation->Blame)
+	}
+
 	;Print("SetLabel %i Derived %func @ %x\n", DerivedMethod->LabelNumber, DerivedMethod, Compiler->AddressOfCodeOffset(Compiler->Index))
 
 	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
@@ -915,6 +919,10 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 
 	if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 		FunctionSymbol->Size := Size
+	}
+
+	if (Compiler->Config->DebugMode & DEBUG_EMIT_DWARF) {
+		Compiler->DWARF->LineInfo->EmitEndSequence((Compiler->CodeBase + Compiler->Index) As i32)
 	}
 
 	Compiler->RecordGeneratedFunction(Name, Address, Size)
@@ -2461,6 +2469,15 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 		FunctionDefine* InterfaceMethod := ForInterface->Methods->At(Index)
 
+		Print("InterfaceMethod %s.%s\n", ForInterface->Name->Buffer, Implementation->Name->Buffer)
+
+		if (Implementation->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
+			Compiler->MarkLineNumber(Info->Blame)
+		}
+		else {
+			Compiler->MarkLineNumber(Implementation~>Context)
+		}
+
 		if (Implementation->AliasFor) {
 			Implementation := Implementation->AliasFor
 		}
@@ -2513,6 +2530,10 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		}
 
 		;Print("%s: Generated stub call to label %i\n", Name, Implementation->LabelNumber)
+
+		if (Compiler->Config->DebugMode & DEBUG_EMIT_DWARF) {
+			Compiler->DWARF->LineInfo->EmitEndSequence((Compiler->CodeBase + After) As i32)
+		}
 
 		Compiler->RecordGeneratedFunction(Name, Address, Size)
 	}

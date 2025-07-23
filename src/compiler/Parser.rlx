@@ -2334,7 +2334,7 @@ struct ParserState {
 		ClassInfo* Info := ClassInfo:New()
 		NewType->ClassInfo := Info
 
-		Info->IAnyImplementation := this->AddClassInterface(NewType, this->MakeFakeContext("Implicit Derive", "IAny"), this->IAnyType, true)
+		Info->IAnyImplementation := this->AddClassInterface(NewType, NewType->DefinedAt, this->IAnyType, true)
 
 		i8 CanDerive := true
 

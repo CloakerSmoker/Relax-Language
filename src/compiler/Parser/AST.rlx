@@ -624,6 +624,10 @@ struct FunctionDefine {
 		if (this->MethodOfTypeName) {
 			Length += this->MethodOfTypeName->Length + 1
 		}
+
+		if (this->IsMethod = FUNCTION_IS_DERIVED_METHOD || this->IsStaticDerive) {
+			Length += StringLength("Derived")
+		}
 		
 		for (i32 Index := 0, Index < this->ParameterCount, Index += 1) {
 			if (Index = 0 && this->IsMethod = FUNCTION_IS_METHOD) {
@@ -671,6 +675,11 @@ struct FunctionDefine {
 			}
 			
 			Offset += 1
+		}
+
+		if (this->IsMethod = FUNCTION_IS_DERIVED_METHOD || this->IsStaticDerive) {
+			MoveMemory(Buffer + Offset, "Derived", StringLength("Derived"))
+			Offset += StringLength("Derived")
 		}
 		
 		i32 NameLength := this->Name->Length

@@ -909,6 +909,9 @@ define void EmitLea_R64_Label(CompilerState* Compiler, i8 TargetRegister, i32 La
 define void EmitXCHG_R64_RI64(CompilerState* Compiler, i8 Register, i8 PointerRegister) {
 	EmitBasicInstruction(Compiler, 0x87, MODE_PTOR, 8, Register, PointerRegister)
 }
+define void EmitXCHG_R64_R64_DISPX(CompilerState* Compiler, i8 Register, i8 PointerRegister, i32 Offset) {
+	EmitBasicInstructionDisplacement(Compiler, 0x87, 8, Register, PointerRegister, Offset, GetNumberSize(Offset))
+}
 define void EmitIRet(CompilerState* Compiler) {
 	PushByte(Compiler, 0x48)
 	PushByte(Compiler, 0xCF)
