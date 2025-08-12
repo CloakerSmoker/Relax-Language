@@ -676,7 +676,9 @@
 							;  and count each element in the data
 							
 							loop {
-								this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								if !(this->NextTokenMatches(TOKEN_TYPE_INTEGER)) {
+									this->Consume(TOKEN_TYPE_IDENTIFIER, "Expected integer or constant global name for constant array literal")
+								}
 								
 								ElementCount += 1
 								
@@ -706,13 +708,44 @@
 							;  each element into the (extended) constant data buffer this time
 							
 							loop {
-								Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+								i64 Value := 0
+
+								Token* Next := this->GetNextToken()
+
+								if (Next->Is(TOKEN_TYPE_INTEGER)) {
+									Value := Next->IntegerValue
+								}
+								else if (Next->Is(TOKEN_TYPE_IDENTIFIER)) {
+									VariableInfo* FoundVariable := this->FindVariable(Next)
+
+									if !(FoundVariable->IsGlobal) {
+										Next->Error("Must be a global constant to be used in a constant array literal")
+									}
+
+									if (GetPointerDepth(FoundVariable->Type) != 0) {
+										Next->Error("Must not be a pointer type to be used in a constant array literal")
+									}
+
+									TypeInfo* Base := GetBaseType(FoundVariable->Type)
+
+									if !(Base->Is(TYPE_KIND_BUILTIN) || Base->Is(TYPE_KIND_ENUMERATION)) {
+										Next->Error("Must be an integer or enumeration type to be used in a constant array literal")
+									}
+
+									ASTNode* LastValue := FoundVariable->LastValue
+
+									if (LastValue->NodeType != NODE_TYPE_INTEGER) {
+										Next->Error("Must be assigned to an integer value")
+									}
+
+									Value := LastValue->IntegerValue
+								}
 								
 								; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
 								;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
 								;   overlap zone, but those 8 bytes aren't written to the output file, and are overlapped by
 								;    any constant data following this data.
-								*(ElementBuffer + ElementIndex * ElementSize) := NextElementToken->IntegerValue
+								*(ElementBuffer + ElementIndex * ElementSize) := Value
 								ElementIndex += 1
 								
 								if (this->NextTokenMatches(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_COMMA)) {
@@ -1138,6 +1171,7 @@
 			}
 			else {
 				; Else, this fits the `{Type`
+				; 2025: what the hell is this syntax?
 				
 				if (GetBaseType(ElementType)->Is(TYPE_KIND_BUILTIN) = false || GetPointerDepth(ElementType) != 0) {
 					; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
@@ -1187,7 +1221,7 @@
 				;  each element into the (extended) constant data buffer this time
 				
 				loop {
-					NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
+					Token* NextElementToken := this->Consume(TOKEN_TYPE_INTEGER, "Expected array element value")
 					
 					; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 
 					;  overlap the extra data the previous iteration wrote. 8 extra bytes are allocated for this
@@ -1448,6 +1482,12 @@
 					
 					if !(SkipTypeCheck) {
 						CheckTypes(this->void, RightType, LeftType, Right)
+					}
+
+					if (Left->NodeType = NODE_TYPE_VARIABLE) {
+						; I am so sorry
+						
+						Left->VariableValue->LastValue := Right
 					}
 					
 					ResultType := LeftType

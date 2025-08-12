@@ -39,7 +39,10 @@ struct VariableInfo {
 	i8 IsParameter,
 	i8 IsVariadic,
 	i8 IsThis,
-	i8 IsExternal
+	i8 IsExternal,
+
+	i8 MustBeConstant
+	SourceContext* MustBeConstantBecause
 }
 
 declare i16 GetTypeStorageSize(Type)
