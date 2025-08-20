@@ -729,7 +729,7 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 	DerivedMethod->CodeOffset := Compiler->Index
 
 	if (InterfaceType = Compiler->Parser->IAnyType) {
-		if (MethodIndex = 0) {
+		if (MethodIndex = 2) {
 			i8 P1 := Compiler->GetParameterRegister(0)
 
 			i32 InterfaceCount := Info->InterfacesInOrder->Count()
@@ -754,8 +754,38 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 				EmitMove_RIX_DISP8_RX(Compiler, P1, RBX, (Index * 8) As i8, 8)
 			}
 		}
-		else if (MethodIndex = 1) {
+		else if (MethodIndex = 0) {
 			EmitMove_R64_I64(Compiler, RAX, ClassType->GetTypeID())
+		}
+		else if (MethodIndex = 1) {
+			; `IAny->As(InterfaceID)`
+
+			i8 P1 := Compiler->GetParameterRegister(0)
+			i8 P2 := Compiler->GetParameterRegister(1)
+
+			i32 End := NextLabel(Compiler)
+			i32 Next := NextLabel(Compiler)
+
+			i32 InterfaceCount := Info->InterfacesInOrder->Count()
+
+			for (i32 Index := 0, Index < InterfaceCount, Index++) {
+				InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
+
+				EmitMove_R64_I64(Compiler, RAX, ImplementationInfo->ForInterface->GetTypeID())
+				EmitCmp_RX_RX(Compiler, P2, RAX, 8)
+				EmitJNZ_Label(Compiler, Next)
+
+				EmitMove_R64_R64(Compiler, RAX, P1)
+				EmitAdd_R64_IX(Compiler, RAX, (Index * 8) As i8)
+				EmitJump_Label(Compiler, End)
+
+				SetLabel(Compiler, Next)
+
+				Next := NextLabel(Compiler)
+			}
+
+			SetLabel(Compiler, Next)
+			SetLabel(Compiler, End)
 		}
 	}
 	else if (InterfaceType = Compiler->Parser->IAllocateType) {
@@ -782,7 +812,7 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 			EmitPush_R64(Compiler, RAX)
 			
 			EmitMove_R64_R64(Compiler, P1, RAX)
-			FunctionDefine* IAnyInitialize := Info->IAnyImplementation->Methods->At(0)
+			FunctionDefine* IAnyInitialize := Info->IAnyImplementation->Methods->At(2)
 
 			if (Compiler->Config->DebugMode & DEBUG_EMIT_NEW_OBJECT) {
 				ObjectSymbol* InitializeSymbol := Compiler->FindOrAddFunctionObjectSymbol(IAnyInitialize)

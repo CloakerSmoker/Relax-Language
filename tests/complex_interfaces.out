@@ -37,3 +37,12 @@ new NotAClass(): NotAClass:New()
 new NotAClass(350): NotAClass:New(i32)
 new PointerArray()->Count(): 0
 new AVLTree(0)->Count(): 0
+
+`->As()` Method:
+Empty::TypeID                        : 0x500FD71A4232050E
+Empty->As(IAny::TypeID)->TypeID()    : 0x500FD71A4232050E
+EmptyAny->As(ICMFD::TypeID)->TypeID(): 0x500FD71A4232050E
+EmptyAny == EmptyAny2                : 1
+AnyE2->TypeID()                      : 0x500FD71A4232050E
+AnyE2 == E2                          : 1
+VoidEmpty->TypeID()                  : 0x500FD71A4232050E

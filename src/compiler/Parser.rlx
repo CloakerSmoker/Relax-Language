@@ -2085,9 +2085,10 @@ struct ParserState {
 		;this->MakeFakeContext("IAny", "IAny")
 		;this->MakeFakeContext("IAny", "define void Initialize(self* this) { derived }")
 
-		this->IAnyType := this->MakeDerivableInterface("IAny", 2)
-		this->AddDeriveableMethod(this->IAnyType, "Initialize", "virtual void Initialize(self*)", VoidType, ThisType)
+		this->IAnyType := this->MakeDerivableInterface("IAny", 3)
 		this->AddDeriveableMethod(this->IAnyType, "TypeID", "virtual i64 TypeID(self*)", this->i64->AsNonPointer(), ThisType)
+		this->AddDeriveableMethod(this->IAnyType, "As", "virtual void* As(self*, i64)", this->void->AsPointer(1), ThisType, this->i64->AsNonPointer())
+		this->AddDeriveableMethod(this->IAnyType, "Initialize", "virtual void Initialize(self*)", VoidType, ThisType)
 
 		this->IAllocateType := this->MakeDerivableInterface("IAllocate", 2)
 		this->AddDeriveableMethod(this->IAllocateType, "Allocate", "virtual self* Allocate()", ThisType)
@@ -2182,8 +2183,9 @@ struct ParserState {
 		Type ThisType := Target->AsPointer(1)
 
 		if (Implementation->ForInterface = this->IAnyType) {
-			this->AddDerivedMethod(Implementation, 0, "Initialize", VoidType, ThisType)
-			this->AddDerivedMethod(Implementation, 1, "TypeID", this->i64->AsNonPointer(), ThisType)
+			this->AddDerivedMethod(Implementation, 0, "TypeID", this->i64->AsNonPointer(), ThisType)
+			this->AddDerivedMethod(Implementation, 1, "As", this->void->AsPointer(1), ThisType, this->i64->AsNonPointer())
+			this->AddDerivedMethod(Implementation, 2, "Initialize", VoidType, ThisType)
 		}
 		else if (Implementation->ForInterface = this->IAllocateType) {
 			this->EnsureIAllocateFunctions(Blame)
@@ -2486,6 +2488,7 @@ struct ParserState {
 		this->Interfaces->Push(NewType)
 
 		this->AddDeriveableMethod(NewType, "TypeID", "virtual i64 TypeID()", this->i64->AsNonPointer(), NewType->AsPointer(1))
+		this->AddDeriveableMethod(NewType, "As", "virtual void* As(self*, i64)", this->void->AsPointer(1), NewType->AsPointer(1), this->i64->AsNonPointer())
 
 		this->Consume(TOKEN_TYPE_PUNCTUATION, PUNCTUATION_OPEN_BRACE, "Expected '{' for interface body")
 

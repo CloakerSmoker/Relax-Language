@@ -203,5 +203,30 @@ define i32 Main() {
     i32 Count := new AVLTree(0)->Count()
     Print("%i\n", Count)
 
+    Print("\n`->As()` Method:\n")
+
+    Print("Empty::TypeID                        : %x\n", Empty::TypeID)
+
+    IAny* EmptyAny := E->As(IAny::TypeID)
+    
+    Print("Empty->As(IAny::TypeID)->TypeID()    : %x\n", EmptyAny->TypeID())
+
+    ICallMethodsFromDefaults* E2 := EmptyAny->As(ICallMethodsFromDefaults::TypeID)
+
+    Print("EmptyAny->As(ICMFD::TypeID)->TypeID(): %x\n", E2->TypeID())
+
+    IAny* EmptyAny2 := E2->As(IAny::TypeID)
+
+    Print("EmptyAny == EmptyAny2                : %i\n", EmptyAny = EmptyAny2)
+
+    void* VoidE2 := (E2 As i64) As void*
+    IAny* AnyE2 := VoidE2 As IAny*
+
+    Print("AnyE2->TypeID()                      : %x\n", E2->TypeID())
+    Print("AnyE2 == E2                          : %i\n", AnyE2 = E2)
+
+    IAny* VoidEmpty := ((E As i64) As void*) As IAny*
+    Print("VoidEmpty->TypeID()                  : %x\n", VoidEmpty->TypeID())
+
     return 0
 }
