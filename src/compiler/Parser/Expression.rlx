@@ -790,6 +790,16 @@
 
 					TypeInfo* MaybeEnumType := this->TryLookupQualifiedName(MaybeEnumName)
 
+					if (MaybeEnumType && MaybeEnumType->Kind = TYPE_KIND_STRUCTURE && MaybeEnumType->IsClass) {
+						if (MaybeEnumField->Is(TOKEN_TYPE_IDENTIFIER) && MaybeEnumField->StringValue->Equals("TypeID")) {
+							Result := ASTNode:New(NODE_TYPE_INTEGER, MaybeEnumType->GetTypeID(), this->i64->AsNonPointer())
+
+							Result~>Context->Clone(MaybeEnumName~>Context)->Merge(MaybeEnumField~>Context)
+
+							return Result
+						}
+					}
+
 					if (MaybeEnumType && MaybeEnumType->Kind = TYPE_KIND_ENUMERATION) {
 						HashMapElement* EnumFieldElement := MaybeEnumType~>Fields->Get(MaybeEnumField->StringValue)
 						

@@ -153,10 +153,12 @@ define i32 Main() {
 
     Print("B->TypeID()    : %x\n", B->TypeID())
     Print("typeid:(Boring): %x\n", typeid:(Boring))
+    Print("Boring::TypeID : %x\n", Boring::TypeID)
     Print("BD->TypeID()   : %x\n", BD->TypeID())
 
     Print("O->TypeID()         : %x\n", O->TypeID())
     Print("typeid:(Opinionated): %x\n", typeid:(Opinionated))
+    Print("Opinionated::TypeID : %x\n", Opinionated::TypeID)
     Print("OD->TypeID()        : %x\n", OD->TypeID())
 
     Print("\nNew:\n")

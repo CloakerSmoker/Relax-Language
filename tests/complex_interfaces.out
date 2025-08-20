@@ -15,9 +15,11 @@ OD->GetFavoriteNumber(): Opinionated.GetFavoriteNumber(): 80
 TypeID:
 B->TypeID()    : 0x401FC6B3A30D0D4
 typeid:(Boring): 0x401FC6B3A30D0D4
+Boring::TypeID : 0x401FC6B3A30D0D4
 BD->TypeID()   : 0x401FC6B3A30D0D4
 O->TypeID()         : 0xC43503884CB69701
 typeid:(Opinionated): 0xC43503884CB69701
+Opinionated::TypeID : 0xC43503884CB69701
 OD->TypeID()        : 0xC43503884CB69701
 
 New:
