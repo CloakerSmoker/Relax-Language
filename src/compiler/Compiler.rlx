@@ -768,15 +768,21 @@ define void CompileDerivedMethod(CompilerState* Compiler, FunctionDefine* Derive
 
 			i32 InterfaceCount := Info->InterfacesInOrder->Count()
 
+			EmitXor_RX_RX(Compiler, RAX, RAX, 4)
+
 			for (i32 Index := 0, Index < InterfaceCount, Index++) {
 				InterfaceImplementationInfo* ImplementationInfo := Info->InterfacesInOrder->At(Index)
 
-				EmitMove_R64_I64(Compiler, RAX, ImplementationInfo->ForInterface->GetTypeID())
-				EmitCmp_RX_RX(Compiler, P2, RAX, 8)
+				EmitMove_R64_I64(Compiler, RBX, ImplementationInfo->ForInterface->GetTypeID())
+				EmitCmp_RX_RX(Compiler, P2, RBX, 8)
 				EmitJNZ_Label(Compiler, Next)
 
 				EmitMove_R64_R64(Compiler, RAX, P1)
-				EmitAdd_R64_IX(Compiler, RAX, (Index * 8) As i8)
+				
+				if (Index != 0) {
+					EmitAdd_R64_IX(Compiler, RAX, (Index * 8) As i8)
+				}
+
 				EmitJump_Label(Compiler, End)
 
 				SetLabel(Compiler, Next)

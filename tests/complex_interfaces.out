@@ -46,3 +46,4 @@ EmptyAny == EmptyAny2                : 1
 AnyE2->TypeID()                      : 0x500FD71A4232050E
 AnyE2 == E2                          : 1
 VoidEmpty->TypeID()                  : 0x500FD71A4232050E
+E->As(0x12345678)                    : 0x0

@@ -228,5 +228,8 @@ define i32 Main() {
     IAny* VoidEmpty := ((E As i64) As void*) As IAny*
     Print("VoidEmpty->TypeID()                  : %x\n", VoidEmpty->TypeID())
 
+    void* AsFakeInterface := E->As(0x12345678)
+    Print("E->As(0x12345678)                    : %x\n", AsFakeInterface)
+
     return 0
 }
