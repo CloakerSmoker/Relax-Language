@@ -1443,6 +1443,8 @@ struct ParserState {
 				this->MainFunction := NewDefine
 			}
 		}
+
+		this->CurrentFunction := null
 		
 		return NewDefine
 	}
