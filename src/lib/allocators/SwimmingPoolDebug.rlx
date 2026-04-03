@@ -29,7 +29,7 @@ define void PrintSwimmingPoolInfo(SwimmingPoolAllocator* this) {
 		Info.Zero()
 		Current->GetUsage(&Info)
 		
-		Print("\t%x: %x pages:\n", Current->Body(), Current~>Arena->Pages - 1)
+		Print("\t%x: %x pages:\n", Current->Body(), Current->Pages)
 		Print("\t\t%x / %x bytes used\n", Info.AllocatedBytes, Info.ReservedBytes)
 		Print("\t\t%x free bytes, %x meta bytes\n", Info.FreeBytes, Info.MetaBytes)
 		
