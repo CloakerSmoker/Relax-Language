@@ -1,21 +1,20 @@
 struct PageAllocation {
-	AllocatorArena Arena
-	
 	i64 Checksum
+	i32 Pages
 	
 	PageAllocation* Last
 	PageAllocation* Next
 	
-	define i64 CalculateChecksum() {
-		return (this~>Arena->Base As i64) ^ (this~>Arena->End As i64)
-	}
-	
 	static PageAllocation* New(i32 Pages) {
-		PageAllocation* this := AllocatorArena:New(1 + Pages)
+		PageAllocation* this := MapMemory(null, (Pages + 1) * PAGE_SIZE, MMAP_PROTECTION_READ | MMAP_PROTECTION_WRITE, MMAP_FLAG_NO_RESERVE | MMAP_FLAG_SHARED | MMAP_FLAG_ANONYMOUS)
 		
-		this->Checksum := this->CalculateChecksum()
+		this->Pages := Pages
 		
 		return this
+	}
+
+	static self* Find(void* Where) {
+		return Where - PAGE_SIZE
 	}
 	
 	define void* Body() {
@@ -23,17 +22,7 @@ struct PageAllocation {
 	}
 	
 	define i32 Size() {
-		return (this~>Arena->Pages - 1) * PAGE_SIZE
-	}
-	
-	static PageAllocation* Find(void* Where) {
-		PageAllocation* this := Where - PAGE_SIZE
-		
-		if (this->Checksum != this->CalculateChecksum()) {
-			AllocatorPanic("Bad free at PageAllocation(%x - %x, %x): expected %x, got %x", this~>Arena->Base, this~>Arena->End, Where, this->Checksum, this->CalculateChecksum())
-		}
-		
-		return this
+		return this->Pages * PAGE_SIZE
 	}
 	
 	define void Free() {
@@ -45,11 +34,11 @@ struct PageAllocation {
 			this->Last->Next := this->Next
 		}
 		
-		this~>Arena->Delete()
+		UnMapMemory(this, (this->Pages + 1) * PAGE_SIZE)
 	}
 	
 	define void GetUsage(AllocatorUsage* Out) {
-		i32 ReservedBytes := (this~>Arena->Pages - 1) * PAGE_SIZE
+		i32 ReservedBytes := this->Pages * PAGE_SIZE
 		
 		Out->MetaBytes += PAGE_SIZE
 		Out->FreeBytes += 0
