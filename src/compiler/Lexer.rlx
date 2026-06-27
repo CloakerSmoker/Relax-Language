@@ -858,6 +858,9 @@ struct LexerState {
 						else if (EscapeCharacter = 't') {
 							Replacement := "	"
 						}
+						else if (EscapeCharacter = '0') {
+							Replacement := i8[0x00]
+						}
 						else if (EscapeCharacter = 'x') {
 							if (StringIndex + 3 > StringLiteral->Length) {
 								this->AppendToken(0, null, StartingIndex + 1 + CharacterOffset, 1)->Error("Expected two hex digits after \\x")
