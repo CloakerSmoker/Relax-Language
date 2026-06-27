@@ -829,6 +829,8 @@ struct LexerState {
 				}
 				
 				i8* NewLineString := &NewLine As i8*
+
+				i32 CharacterOffset := 0
 				
 				; Now we can go through each character, and replace escape sequences
 				
@@ -840,10 +842,15 @@ struct LexerState {
 						
 						i8* Replacement := &EscapeCharacter
 						i32 ReplacementLength := 1
+
+						i32 SourceLength := 2
 						
 						if (EscapeCharacter = 'n') {
 							Replacement := NewLineString
 							ReplacementLength := NewLineLength
+						}
+						else if (EscapeCharacter = 'r') {
+							Replacement := i8[0x0D]
 						}
 						else if (EscapeCharacter = 'e') {
 							Replacement := i8[0x1B]
@@ -851,9 +858,34 @@ struct LexerState {
 						else if (EscapeCharacter = 't') {
 							Replacement := "	"
 						}
+						else if (EscapeCharacter = 'x') {
+							if (StringIndex + 3 > StringLiteral->Length) {
+								this->AppendToken(0, null, StartingIndex + 1 + CharacterOffset, 1)->Error("Expected two hex digits after \\x")
+							}
+
+							i8 HexDigit1 := StringLiteral->ASCIICharacterAt(StringIndex + 2)
+							i8 HexDigit2 := StringLiteral->ASCIICharacterAt(StringIndex + 3)
+
+							if !(IsHex(HexDigit1) && IsHex(HexDigit2)) {
+								this->AppendToken(0, null, StartingIndex + 1 + CharacterOffset, 4)->Error("Expected two hex digits after \\x")
+							}
+
+							i8 High := GetCharacterValue(HexDigit1)
+							i8 Low := GetCharacterValue(HexDigit2)
+
+							i8 HexValue := ((High << 4) | Low) As i8
+
+							Replacement := &HexValue
+							ReplacementLength := 1
+							SourceLength += 2
+						}
 						
-						StringLiteral->Replace(StringIndex, 2, Replacement, ReplacementLength)
+						StringLiteral->Replace(StringIndex, SourceLength, Replacement, ReplacementLength)
+
+						CharacterOffset += SourceLength - ReplacementLength
 					}
+
+					CharacterOffset += 1
 				}
 				
 				; Since `StringLiteral->Replace` will modify `StringLiteral` itself, the `MakeToken` call
