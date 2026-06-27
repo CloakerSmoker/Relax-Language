@@ -125,6 +125,16 @@ define i32 Main() {
 	i8* MyFavoriteString := "hi\rbye\x00\xA0\xFF\xF0\x0F\x00"
 
 	Print("%hexdump\n", MyFavoriteString, 12)
+
+	Print("\nMore forgotten escapes:\n")
+
+	i8[4] Buffer
+	Buffer[0] := '\r'
+	Buffer[1] := '\n'
+	Buffer[2] := '\e'
+	Buffer[3] := '\t'
+
+	Print("%hexdump\n", Buffer, 4)
 	
 	return 0
 }

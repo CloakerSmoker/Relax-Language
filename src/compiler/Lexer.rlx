@@ -761,6 +761,21 @@ struct LexerState {
 				
 				this->AppendToken(0, null, StartingIndex, 1)->Error("Expected close single quote for character constant")
 			}
+
+			; this sucks and hex escapes aren't supported
+
+			if (CompareMemory(LiteralValueBytes, "\\r", 3)) {
+				LiteralValue := 0x0D
+			}
+			else if (CompareMemory(LiteralValueBytes, "\\n", 3)) {
+				LiteralValue := 0x0A
+			}
+			else if (CompareMemory(LiteralValueBytes, "\\e", 3)) {
+				LiteralValue := 0x1B
+			}
+			else if (CompareMemory(LiteralValueBytes, "\\t", 3)) {
+				LiteralValue := 0x09
+			}
 			
 			return this->AppendToken(TOKEN_TYPE_INTEGER, LiteralValue)
 		}
