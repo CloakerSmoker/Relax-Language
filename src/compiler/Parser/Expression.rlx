@@ -661,11 +661,15 @@
 							FileClose(File)
 						}
 						else {
-							if (GetBaseType(TargetType)->Is(TYPE_KIND_BUILTIN) = false || GetPointerDepth(TargetType) != 0) {
+							TypeInfo* TargetBase := GetBaseType(TargetType)
+
+							i8 IsBuiltinOrEnum := TargetBase->Is(TYPE_KIND_BUILTIN) || TargetBase->Is(TYPE_KIND_ENUMERATION)
+
+							if !(IsBuiltinOrEnum && GetPointerDepth(TargetType) = 0) {
 								; Ensure that the data described isn't expected to been some funky non-builtin type that we can't
 								;  easily write into the constant buffer
 								
-								NextToken->Error("Element type must be a built in, non-pointer type")
+								NextToken->Error("Element type must be a built-in or enum, non-pointer type")
 							}
 							
 							i32 ElementSize := GetTypeSize(TargetType)
@@ -716,29 +720,42 @@
 									Value := Next->IntegerValue
 								}
 								else if (Next->Is(TOKEN_TYPE_IDENTIFIER)) {
-									VariableInfo* FoundVariable := this->FindVariable(Next)
-
-									if !(FoundVariable->IsGlobal) {
-										Next->Error("Must be a global constant to be used in a constant array literal")
+									if (TargetBase->Is(TYPE_KIND_ENUMERATION)) {
+										HashMapElement* EnumFieldElement := TargetBase~>Fields->Get(Next->StringValue)
+										
+										if !(EnumFieldElement) {
+											Next->Error("Does not name a field of the backing enumeration type")
+										}
+										
+										StructField* EnumField := EnumFieldElement->Value
+										
+										Value := EnumField->EnumValue
 									}
+									else {
+										VariableInfo* FoundVariable := this->FindVariable(Next)
 
-									if (GetPointerDepth(FoundVariable->Type) != 0) {
-										Next->Error("Must not be a pointer type to be used in a constant array literal")
+										if !(FoundVariable->IsGlobal) {
+											Next->Error("Must be a global constant to be used in a constant array literal")
+										}
+
+										if (GetPointerDepth(FoundVariable->Type) != 0) {
+											Next->Error("Must not be a pointer type to be used in a constant array literal")
+										}
+
+										TypeInfo* Base := GetBaseType(FoundVariable->Type)
+
+										if !(Base->Is(TYPE_KIND_BUILTIN) || Base->Is(TYPE_KIND_ENUMERATION)) {
+											Next->Error("Must be an integer or enumeration type to be used in a constant array literal")
+										}
+
+										ASTNode* LastValue := FoundVariable->LastValue
+
+										if (LastValue->NodeType != NODE_TYPE_INTEGER) {
+											Next->Error("Must be assigned to an integer value")
+										}
+
+										Value := LastValue->IntegerValue
 									}
-
-									TypeInfo* Base := GetBaseType(FoundVariable->Type)
-
-									if !(Base->Is(TYPE_KIND_BUILTIN) || Base->Is(TYPE_KIND_ENUMERATION)) {
-										Next->Error("Must be an integer or enumeration type to be used in a constant array literal")
-									}
-
-									ASTNode* LastValue := FoundVariable->LastValue
-
-									if (LastValue->NodeType != NODE_TYPE_INTEGER) {
-										Next->Error("Must be assigned to an integer value")
-									}
-
-									Value := LastValue->IntegerValue
 								}
 								
 								; Node: this is a 64 bit write, but since we scale based on ElementSize, each write will 

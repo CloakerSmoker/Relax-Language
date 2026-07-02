@@ -18,6 +18,16 @@ enum sparse {
 	fifty := 50
 }
 
+namespace MyFavoriteEnums {
+	enum Color {
+		red
+		green
+		blue
+		yellow
+		gray
+	}
+}
+
 #Require "$/Console.rlx"
 
 define void PrintAnimalType(animal_kind kind) {
@@ -51,6 +61,14 @@ define i32 Main() {
 	PrintSparseName(sparse::fourty)
 	PrintSparseName(sparse::fifty)
 	PrintSparseName(60 As sparse)
+
+	MyFavoriteEnums::Color* MyFavoriteColors := MyFavoriteEnums::Color[
+		gray, red, yellow, blue
+	]
+
+	for (i32 Index := 0, Index < 5, Index += 1) {
+		Print("%s ", nameof:(MyFavoriteColors[Index]))
+	}
 	
 	return 0
 }
