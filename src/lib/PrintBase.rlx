@@ -73,7 +73,7 @@ struct PrintFormatPrototype {
 	PrintFormatPrototype* Next
 }
 
-PrintFormatPrototype* FirstPrintFormat := null
+PrintFormatPrototype* FirstPrintFormat
 
 define i32 AddPrintFormat(PrintFormatPrototype* Prototype) {
 	Prototype->Next := FirstPrintFormat
