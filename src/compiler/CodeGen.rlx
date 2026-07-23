@@ -979,3 +979,9 @@ define void EmitSysCall(CompilerState* Compiler) {
 		EmitNeg_RX(Compiler, RAX, 8)
 	}
 }
+
+define void EmitRepSTOSB(CompilerState* Compiler) {
+	PushByte(Compiler, 0xF3)
+	PushByte(Compiler, 0x48) ; REW.W
+	PushByte(Compiler, 0xAA)
+}

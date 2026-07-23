@@ -1882,6 +1882,17 @@ define i32 CompileFunction(CompilerState* Compiler, FunctionDefine* FunctionToCo
 	}
 	
 	if (IsMain) {
+		if (Compiler->Config->OutputFormat = OUTPUT_PE) {
+			; EDK2 doesn't want to zero out bss, do it ourselves
+
+			i64 GlobalsOffset := Compiler->DistanceBetweenGlobalsAndCode + Compiler->Index
+
+			EmitXor_RX_RX(Compiler, RAX, RAX, 4)
+			EmitLea_R64_Offset(Compiler, RDI, (-GlobalsOffset) As i32)
+			EmitMove_R64_I64(Compiler, RCX, Compiler->Parser->Globals->NextOffset)
+			EmitRepSTOSB(Compiler)
+		}
+
 		Compiler->CurrentFunctionStringsLabel := Compiler->GlobalStringsLabel
 		Compiler->CurrentFunctionStringsSymbol := Compiler->GlobalStringsSymbol
 		
@@ -3154,7 +3165,7 @@ define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, S
 	
 	i32 FieldOffset := TargetField->Offset
 	
-	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
+	if (TargetField->BitBackingSize) {
 		if (TargetField->IsStructBitField) {
 			; byte offset + bit range
 
@@ -3171,20 +3182,33 @@ define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, S
 		}
 		
 		TargetFieldSize := TargetField->BitBackingSize
-		
-		i32 FieldSize := (TargetFieldSize * 8) - 1
-		i8 ShiftLeftBy := (FieldSize - TargetField->BitEndIndex) As i8
-		i8 ShiftRightBy := (ShiftLeftBy + TargetField->BitStartIndex) As i8
-		
-		if (ShiftLeftBy < 0) {
-			ShiftRightBy := -ShiftLeftBy
+
+		i32 BitCount := (TargetField->BitEndIndex - TargetField->BitStartIndex) + 1
+
+		if (BitCount = 1) {
+			if (TargetField->BitStartIndex = 0) {
+				EmitAnd_RX_IX(Compiler, ResultRegister, 1, TargetFieldSize)
+			}
+			else {
+				EmitSAR_RX_I8(Compiler, ResultRegister, TargetField->BitStartIndex As i8, TargetFieldSize)
+				EmitAnd_RX_IX(Compiler, ResultRegister, 1, TargetFieldSize)
+			}
 		}
-		else if (ShiftLeftBy) { 
-			EmitSAL_RX_I8(Compiler, ResultRegister, ShiftLeftBy, TargetFieldSize)
-		}
-		
-		if (ShiftRightBy) {
-			EmitSAR_RX_I8(Compiler, ResultRegister, ShiftRightBy, TargetFieldSize)
+		else {
+			i32 FieldSize := (TargetFieldSize * 8) - 1
+			i8 ShiftLeftBy := (FieldSize - TargetField->BitEndIndex) As i8
+			i8 ShiftRightBy := (ShiftLeftBy + TargetField->BitStartIndex) As i8
+			
+			if (ShiftLeftBy < 0) {
+				ShiftRightBy := -ShiftLeftBy
+			}
+			else if (ShiftLeftBy) { 
+				EmitSAL_RX_I8(Compiler, ResultRegister, ShiftLeftBy, TargetFieldSize)
+			}
+			
+			if (ShiftRightBy) {
+				EmitSAR_RX_I8(Compiler, ResultRegister, ShiftRightBy, TargetFieldSize)
+			}
 		}
 	}
 	else {
