@@ -3180,36 +3180,16 @@ define void CompileGetStructAccess(CompilerState* Compiler, i8 ResultRegister, S
 
 			CompileExpression(Compiler, ResultRegister, TargetAccess->Left)
 		}
-		
-		TargetFieldSize := TargetField->BitBackingSize
 
 		i32 BitCount := (TargetField->BitEndIndex - TargetField->BitStartIndex) + 1
+		i64 Mask := (((1 As i64) << BitCount) - 1) << TargetField->BitStartIndex
 
-		if (BitCount = 1) {
-			if (TargetField->BitStartIndex = 0) {
-				EmitAnd_RX_IX(Compiler, ResultRegister, 1, TargetFieldSize)
-			}
-			else {
-				EmitSAR_RX_I8(Compiler, ResultRegister, TargetField->BitStartIndex As i8, TargetFieldSize)
-				EmitAnd_RX_IX(Compiler, ResultRegister, 1, TargetFieldSize)
-			}
-		}
-		else {
-			i32 FieldSize := (TargetFieldSize * 8) - 1
-			i8 ShiftLeftBy := (FieldSize - TargetField->BitEndIndex) As i8
-			i8 ShiftRightBy := (ShiftLeftBy + TargetField->BitStartIndex) As i8
-			
-			if (ShiftLeftBy < 0) {
-				ShiftRightBy := -ShiftLeftBy
-			}
-			else if (ShiftLeftBy) { 
-				EmitSAL_RX_I8(Compiler, ResultRegister, ShiftLeftBy, TargetFieldSize)
-			}
-			
-			if (ShiftRightBy) {
-				EmitSAR_RX_I8(Compiler, ResultRegister, ShiftRightBy, TargetFieldSize)
-			}
-		}
+		i8 MaskRegister := PushRegisterStack(Compiler)
+
+		EmitMove_RX_IX(Compiler, MaskRegister, Mask, 8)
+		EmitPEXT_R64_R64_R64(Compiler, ResultRegister, ResultRegister, MaskRegister)
+
+		PopRegisterStack(Compiler)
 	}
 	else {
 		CompileStructAccessLeft(Compiler, ResultRegister, TargetAccess)
@@ -3237,7 +3217,7 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 	i32 FieldOffset := TargetField->Offset
 	i8 TargetFieldSize := GetTypeSize(TargetField->ValueType) As i8
 	
-	if (TargetField->BitStartIndex || TargetField->BitEndIndex) {
+	if (TargetField->BitBackingSize) {
 		if (TargetField->IsStructBitField) {
 			CompileGetStructAccessPointer(Compiler, ResultPointerRegister, TargetAccess)
 			EmitMove_RX_RIX(Compiler, ResultPointerRegister, ResultPointerRegister, TargetField->BitBackingSize) 
@@ -3245,34 +3225,22 @@ define void CompileSetStructAccess(CompilerState* Compiler, i8 ValueRegister, St
 		else {
 			CompileExpression(Compiler, ResultPointerRegister, TargetAccess->Left)
 		}
-		
-		i8 TargetBitSize := TargetField->BitBackingSize
-		
-		i8 StartIndex := TargetField->BitStartIndex
-		i8 EndIndex := TargetField->BitEndIndex
-		
-		i32 FieldSize := (TargetBitSize * 8) - 1
-		i8 ShiftLeftBy := (FieldSize - (EndIndex - StartIndex)) As i8
-		i8 ShiftRightBy := (FieldSize - EndIndex) As i8
-		
-		i64 PartialMask := ((1 As i64) << ((EndIndex + 1) As i8)) - 1
-		
-		if (EndIndex = 63) {
-			/* Since 1<<64 is undefined, the result of INT64_MAX needs to be hard coded */
-			PartialMask := 0xFFFFFFFFFFFFFFFF
-		}
-		
-		i64 Mask := ~(PartialMask >> StartIndex << StartIndex)
-		
-		EmitMove_RX_IX(Compiler, RDI, Mask, TargetBitSize)
-		EmitAnd_RX_RX(Compiler, ResultPointerRegister, RDI, TargetBitSize)
-		
-		if (ShiftLeftBy) { 
-			EmitSAL_RX_I8(Compiler, ValueRegister, ShiftLeftBy, TargetBitSize)
-		}
-		
-		EmitSAR_RX_I8(Compiler, ValueRegister, ShiftRightBy, TargetBitSize)
-		EmitOr_RX_RX(Compiler, ResultPointerRegister, ValueRegister, TargetBitSize)
+
+		i32 BitCount := (TargetField->BitEndIndex - TargetField->BitStartIndex) + 1
+		i64 Mask := (((1 As i64) << BitCount) - 1) << TargetField->BitStartIndex
+
+		i8 MaskRegister := PushRegisterStack(Compiler)
+
+		EmitMove_RX_IX(Compiler, MaskRegister, Mask, 8)
+
+		; Clear the bits of the target
+		EmitANDN_R64_R64_R64(Compiler, ResultPointerRegister, MaskRegister, ResultPointerRegister)
+		; Deposit the bits of the value into RAX
+		EmitPDEP_R64_R64_R64(Compiler, MaskRegister, ValueRegister, MaskRegister)
+		; OR the bits of the value into the target
+		EmitOr_RX_RX(Compiler, ResultPointerRegister, MaskRegister, 8)
+
+		PopRegisterStack(Compiler)
 		
 		ASTNode* Left := TargetAccess->Left
 		i8 LeftNodeType := Left->NodeType

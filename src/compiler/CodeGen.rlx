@@ -985,3 +985,67 @@ define void EmitRepSTOSB(CompilerState* Compiler) {
 	PushByte(Compiler, 0x48) ; REW.W
 	PushByte(Compiler, 0xAA)
 }
+
+define void EmitVEX(CompilerState* Compiler, i8 R, i8 X, i8 B, i8 MapSelect, i8 WE, i8 VVVV, i8 L, i8 PP) {
+	PushByte(Compiler, 0xC4)
+	PushByte(Compiler, ((R << 7) | (X << 6) | (B << 5) | MapSelect) As i8)
+	PushByte(Compiler, ((WE << 7) | (VVVV << 3) | (L << 2) | PP) As i8)
+}
+
+i8 VEX_MAP_0F := 1
+i8 VEX_MAP_0F38 := 2
+i8 VEX_MAP_0F3A := 3
+
+i8 VEX_PREFIX_NONE := 0
+i8 VEX_PREFIX_66 := 1
+i8 VEX_PREFIX_F3 := 2
+i8 VEX_PREFIX_F2 := 3
+
+; dst = left OP right
+; dst -> VEX._R + ModRM.R
+; left -> VEX._VVVV
+; right -> VEX._B + ModRM.R/M
+
+define void EmitVEX(CompilerState* Compiler, i8 DestinationRegister, i8 LeftRegister, i8 RightRegister, i8 MapSelect, i8 WE, i8 L, i8 PP) {
+	i8 _R := true
+
+	if (RegisterRequiresREX(DestinationRegister)) {
+		_R := false
+	}
+
+	i8 _B := true
+
+	if (RegisterRequiresREX(RightRegister)) {
+		_B := false
+	}
+
+	i8 _VVVV := ~LeftRegister & 0xF
+
+	EmitVEX(Compiler, _R, true, _B, MapSelect, WE, _VVVV, L, PP)
+}
+
+define void EmitPDEP_R64_R64_R64(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i8 MaskRegister) {
+	; VEX.LZ.F2.0F38.W1 F5 /r PDEP r64a, r64b, r/m64
+	; (wow)
+
+	EmitVEX(Compiler, DestinationRegister, SourceRegister, MaskRegister, VEX_MAP_0F38, 1, 0, VEX_PREFIX_F2)
+	PushByte(Compiler, 0xF5)
+	EmitModRM(Compiler, MODE_RTOR, DestinationRegister, MaskRegister)
+}
+
+define void EmitPEXT_R64_R64_R64(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i8 MaskRegister) {
+	; VEX.LZ.F3.0F38.W1 F5 /r PEXT r64a, r64b, r/m64
+	; (wow)
+
+	EmitVEX(Compiler, DestinationRegister, SourceRegister, MaskRegister, VEX_MAP_0F38, 1, 0, VEX_PREFIX_F3)
+	PushByte(Compiler, 0xF5)
+	EmitModRM(Compiler, MODE_RTOR, DestinationRegister, MaskRegister)
+}
+
+define void EmitANDN_R64_R64_R64(CompilerState* Compiler, i8 DestinationRegister, i8 LeftRegister, i8 RightRegister) {
+	; VEX.LZ. 0F38.W1 F2 /r ANDN r64a, r64b, r/m64
+
+	EmitVEX(Compiler, DestinationRegister, LeftRegister, RightRegister, VEX_MAP_0F38, 1, 0, VEX_PREFIX_NONE)
+	PushByte(Compiler, 0xF2)
+	EmitModRM(Compiler, MODE_RTOR, DestinationRegister, RightRegister)
+}
