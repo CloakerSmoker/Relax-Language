@@ -307,6 +307,9 @@ define void EmitInstruction(CompilerState* Compiler, InstructionInfo* Info, i8 D
 	else if (Info->Size = 8) {
 		REX := REX | REX_W
 	}
+	else if (Info->Mode = MODE_PTOR && SourceRegister = R13) {
+		REX := REX | REX_B
+	}
 	
 	if (Info->HasTwoByteOpcode) {
 		EmitREXBigOpcodeModRM(Compiler, OpcodeOne, OpcodeTwo, Info->Mode, DestinationRegister, SourceRegister, REX)
@@ -534,7 +537,16 @@ define void EmitMove_RX_SIB(CompilerState* Compiler, i8 DestinationRegister, i8 
 ==========================================
 */
 define void EmitMove_RX_RIX(CompilerState* Compiler, i8 DestinationRegister, i8 SourceRegister, i8 Size) {
-	EmitBasicInstruction(Compiler, 0x8B, MODE_PTOR, Size, DestinationRegister, SourceRegister)
+	if (SourceRegister = R13) {
+		; ModRM is retarded and reserves mod==00 reg==101 for RIP-relative
+		; Need to handle this special case separately with a displacement of 0
+
+		EmitBasicInstruction(Compiler, 0x8B, MODE_PTOR_DISP8, Size, DestinationRegister, SourceRegister)
+		PushI8(Compiler, 0)
+	}
+	else {
+		EmitBasicInstruction(Compiler, 0x8B, MODE_PTOR, Size, DestinationRegister, SourceRegister)
+	}
 }
 
 /*

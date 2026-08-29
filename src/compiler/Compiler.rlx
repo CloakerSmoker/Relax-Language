@@ -2499,7 +2499,7 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 		;*null := 0
 	}
 
-	Print("CompileInterfaceImpl %t %s\n", ForType->AsNonPointer(), ForInterface->Name->Buffer)
+	;Print("CompileInterfaceImpl %t %s\n", ForType->AsNonPointer(), ForInterface->Name->Buffer)
 
 	i32 Count := ForInterface->Methods->Count()
 
@@ -2516,7 +2516,7 @@ define void CompileInterfaceImplementation(CompilerState* Compiler, TypeInfo* Fo
 
 		FunctionDefine* InterfaceMethod := ForInterface->Methods->At(Index)
 
-		Print("InterfaceMethod %s.%s\n", ForInterface->Name->Buffer, Implementation->Name->Buffer)
+		;Print("InterfaceMethod %s.%s\n", ForInterface->Name->Buffer, Implementation->Name->Buffer)
 
 		if (Implementation->IsMethod = FUNCTION_IS_DERIVED_METHOD) {
 			Compiler->MarkLineNumber(Info->Blame)
